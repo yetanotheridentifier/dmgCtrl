@@ -6,7 +6,7 @@ import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffe
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets, offerAttack } from './legalMoves'
 import { collectArrivalTriggers, collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, stampChoiceSource, type TriggerPoint } from './abilities'
-import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer } from './combat'
+import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
 import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady } from './effects'
@@ -1334,7 +1334,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
         next = giveToken(next, targetInstanceId, choice.token)
         const remaining = choice.remaining - 1
-        const targets = next.players[choice.controller].units.map(u => u.instanceId).filter(id => id !== choice.exclude)
+        // A unit a Weakness token has just taken to 0 HP is still on the board until this action's
+        // state-based sweep, but it is already doomed, so it is not offered again.
+        const pool = choice.anyUnit ? inPlayUnits(next) : next.players[choice.controller].units
+        const targets = pool.filter(u => !isDoomed(next, u)).map(u => u.instanceId).filter(id => id !== choice.exclude)
         if (remaining > 0 && targets.length > 0) {
           next = pushChoice(next, { ...choice, remaining, targets })
         } else {

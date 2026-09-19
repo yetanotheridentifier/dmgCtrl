@@ -466,8 +466,9 @@ it was three times a whole unit, and a unit is now 8.
 ### Shields are invisible, and making them visible does not help
 
 A token's **stat line decides whether the evaluation can see it**. Attached upgrades add their printed
-power and HP, so Experience (1/1) and Advantage (1/0) already reach the model through `power` and
-`hp`. A Shield is printed **0/0** and works through a damage-prevention hook, so nothing any term
+power and HP, so Experience (1/1), Advantage (1/0) and Weakness (-1/-1) already reach the model through
+`power` and `hp`, and a Weakness token needs no term of its own: an enemy carrying one scores better for
+us than the same enemy without it, which a test pins. A Shield is printed **0/0** and works through a damage-prevention hook, so nothing any term
 reads changes when one is stripped: the board holds the same units at the same HP and **scores
 identically**, while the attack's cost is counted in full.
 

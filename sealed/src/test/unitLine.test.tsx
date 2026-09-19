@@ -4,7 +4,7 @@ import { render, screen, within, fireEvent } from '@testing-library/react'
 import { UnitLine } from '../components/gameScreen'
 import type { UnitInteraction } from '../components/gameScreen'
 import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
-import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
+import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS } from '../engine/tokenUpgrades'
 import { addLastingEffect } from '../engine/types'
 import type { GameState, LeaderState } from '../engine/types'
 import '../engine/cardDefinitions' // registers ASH_010's aura for the aura-token test
@@ -62,6 +62,23 @@ describe('UnitLine — on-card damage overlay', () => {
     const token = screen.getByTestId('board-unit-advantage-u1')
     expect(token).toHaveTextContent(/adv\./i)
     expect(token).toHaveTextContent('2')
+  })
+
+  it('labels a Weakness token "weak. N" with the token count', () => {
+    const u = unit('u1', 'TST_D', { upgrades: [{ cardId: TOKEN_WEAKNESS, owner: 'player' }, { cardId: TOKEN_WEAKNESS, owner: 'player' }] })
+    render(<UnitLine state={boardWith('TST_D')} unit={u} interact={noInteract} />)
+    const token = screen.getByTestId('board-unit-weakness-u1')
+    expect(token).toHaveTextContent(/weak\./i)
+    expect(token).toHaveTextContent('2')
+  })
+
+  it('shows every kind of token at once on a unit carrying all six', () => {
+    const tokens = [TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE, TOKEN_WEAKNESS].map(cardId => ({ cardId, owner: 'player' as const }))
+    const s = addLastingEffect(boardWith('TST_D'), { targetInstanceId: 'u1', power: 1 })
+    render(<UnitLine state={s} unit={unit('u1', 'TST_D', { damage: 1, upgrades: tokens })} interact={noInteract} />)
+    for (const kind of ['damage', 'mod', 'shield', 'experience', 'advantage', 'weakness']) {
+      expect(screen.getByTestId(`board-unit-${kind}-u1`)).toBeInTheDocument()
+    }
   })
 
   it('shows a +X/+Y modifier token for a unit with a "this phase" buff', () => {

@@ -170,6 +170,24 @@ was actually exhausted for a play, because payment happens before the unit exist
 remembers it (Weequay Pirate: "if no resources were paid to play this unit"). `phaseEvents.tokensCreated`
 credits the grant to the player who made it.
 
+## Weakness tokens
+
+A Weakness token is a **-1/-1 upgrade** with the Condition trait and no text (`TOKEN_WEAKNESS`). The
+comprehensive rules predate it, so its card is recorded from the publisher's card list. It is the
+Experience token with the signs flipped: the stats pipeline reads the -1/-1 off the token card,
+`giveTokens` attaches it and `mayGiveTokens` offers a target. Power never drops below 0.
+
+**A unit it takes to 0 HP is defeated by the state-based sweep** that closes every action
+(`sweepStateBasedDefeats`), not at the moment the token lands, which is the same rule Morgan Elsbeth's
+-2/-2 uses. Within one action such a unit is therefore still on the board but **doomed** (`isDoomed` in
+`engine/combat.ts`), and a distribution that re-offers targets (`distributeTokens`) leaves doomed units
+out. `distributeTokens` offers the controller's own units unless `anyUnit` is set ("among any number of
+units", Ravage).
+
+"A unit with a token upgrade on it" (Bossk) reads the card type, so Shield, Experience, Advantage and
+Weakness all qualify. A Weakness token counts as an upgrade wherever upgrades are counted, as every token
+upgrade does.
+
 ## Token units
 
 A token unit (Mandalorian, Spy, X-Wing, TIE Fighter, Clone Trooper, Battle Droid, Beast) is a built-in

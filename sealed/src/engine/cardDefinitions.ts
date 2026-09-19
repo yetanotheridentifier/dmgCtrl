@@ -4,7 +4,7 @@ import { fireBatch, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, m
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
-import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, hasToken } from './tokenUpgrades'
+import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
@@ -7899,4 +7899,159 @@ registerCard('TWI_007', mergeLeaderSides( // Captain Rex
   }),
   whenDeployed('Create a Clone Trooper token.', (s, ctx) => create(s, ctx.owner, TOKEN_CLONE_TROOPER)),
   friendlyAura(isTrait('Trooper'), { hp: 1 }, true),
+))
+
+// ══ Weakness tokens ═══════════════════════════════════════════════════
+// A Weakness token is a -1/-1 upgrade an ability attaches, so it is the Experience token with the signs
+// flipped: `giveTokens` attaches it, `mayGiveTokens` offers one target, and the stats pipeline reads the
+// -1/-1 off the token card. A unit it takes to 0 HP is defeated by the state-based sweep that closes the
+// action. These are the Weakness-shaped spellings of `expChoice` and `expWp`.
+
+/** "Give `count` Weakness tokens to a unit that ...", or nothing when nothing is eligible. */
+const weakChoice = (s: GameState, ctx: EventCtx, targets: string[], count = 1, optional = false): GameState =>
+  targets.length
+    ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_WEAKNESS, count, targets, optional })
+    : s
+/** "(If ...,) (you may) give `count` Weakness tokens to a unit that ...". */
+const weakWp = (description: string, test: Pick, count = 1, optional = false, when: When = always) =>
+  whenPlayed(description, (s, ctx) => (when(s, ctx) ? weakChoice(s, ctx, pickedIds(s, ctx, test), count, optional) : s))
+const weakened: Pick = (_s, u) => hasToken(u.upgrades, TOKEN_WEAKNESS)
+const giveWeakness = (s: GameState, id: string, count = 1): GameState => giveTokens(s, id, TOKEN_WEAKNESS, count)
+/** "While you control a <planet> base": a base's planet is its trait. */
+const controlsBaseWith = (s: GameState, owner: PlayerId, trait: string): boolean => printedTrait(s.cards[s.players[owner].base.cardId], trait)
+
+// A: a token on a chosen unit
+registerCard('HMW_197', whenPlayed('An opponent chooses a unit they control. Give a Weakness token to it.', (s, ctx) => { // Cid Scaleback
+  const opp = opponentOf(ctx.owner)
+  const targets = s.players[opp].units.map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: opp, token: TOKEN_WEAKNESS, count: 1, targets, optional: false }) : s
+}))
+registerCard('HMW_059', defeated(weakWp('You may give a Weakness token to a unit.', pickAny, 1, true))) // Clone X Assassin
+registerCard('HMW_087', defeated(weakWp('You may give a Weakness token to a damaged unit.', damaged, 1, true))) // Venomous Wyyyshokk
+registerCard('HMW_065', allOf( // Clone of the Zillo Beast
+  friendlyAura(() => true, { power: -2, hp: -2 }, true),
+  onAttack(weakWp('You may give a Weakness token to a unit.', pickAny, 1, true)),
+))
+registerCard('HMW_097', weakWp('You may give a Weakness token to a unit.', pickAny, 1, true)) // Dire Prowess
+registerCard('HMW_242', weakWp('If you control 6 or more resources, you may give a Weakness token to a unit.', pickAny, 1, true, // Occupation Officer
+  (s, ctx) => s.players[ctx.owner].resources.length >= 6))
+registerCard('HMW_040', weakWp('If an opponent played 2 or more cards this phase, you may give 2 Weakness tokens to a unit.', pickAny, 2, true, // Talzin's Shuttle
+  (s, ctx) => cardsPlayedThisPhase(s, opponentOf(ctx.owner)).length >= 2))
+registerCard('HMW_100', whenPlayed('Give a Weakness token to a unit. If you control a Naboo base, give 2 Weakness tokens to that unit instead.', (s, ctx) => // Torrent
+  weakChoice(s, ctx, pickedIds(s, ctx, pickAny), controlsBaseWith(s, ctx.owner, 'Naboo') ? 2 : 1)))
+registerCard('HMW_231', unitThenWp("You may give a Weakness token to a unit. If it's a unique unit, exhaust it.", pickAny, 'give a Weakness token to a unit', true, // Dragonboat Freighter
+  (s, ctx) => {
+    const id = ctx.targetInstanceId!
+    const given = giveWeakness(s, id)
+    const target = findUnit(given, id)?.unit
+    return target && cardOf(given, target)?.unique ? exhaustUnit(given, id) : given
+  }))
+const infernoSquad = unitThenWp('You may deal 1 damage to a unit and give a Weakness token to it.', pickAny, 'deal 1 damage to a unit and give a Weakness token to it', true,
+  (s, ctx) => {
+    const id = ctx.targetInstanceId!
+    // "And", not "if you do": a Shield that prevents the damage does not stop the token.
+    const hit = dealDamageToUnit(s, id, 1)
+    return findUnit(hit, id) ? giveWeakness(hit, id) : hit
+  })
+registerCard('HMW_202', allOf(infernoSquad, defeated(infernoSquad))) // Inferno Squad: When Played/When Defeated
+registerCard('HMW_196', defeated({ // Qimir
+  ...whenPlayed("You may discard the top card of your deck. If it's not Villainy, give a Weakness token to an enemy unit.", (s, ctx) =>
+    (s.players[ctx.owner].deck.length
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'discard the top card of your deck', then: resume(ctx) })
+      : s)),
+  ifYouDo: (s, ctx) => {
+    const [next, milled] = millTop(s, ctx.owner, 1)
+    return milled.length && !printedAspect(next.cards[milled[0]], 'Villainy') ? weakChoice(next, ctx, pickedIds(next, ctx, pickEnemy)) : next
+  },
+}))
+
+// B: tokens on several units, or on a unit that attacks
+registerCard('HMW_071', whenPlayed('Distribute up to 3 Weakness tokens among any number of units.', (s, ctx) => { // Ravage
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'distributeTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_WEAKNESS, remaining: 3, total: 3, targets, upTo: true, anyUnit: true })
+    : s
+}))
+registerCard('HMW_240', { // Sandstorm
+  costModifier: (s, owner) => (controlsBaseWith(s, owner, 'Tatooine') ? -1 : 0),
+  ...whenPlayed('Choose an arena. Give a Weakness token to each exhausted enemy unit in that arena.', (s, ctx) =>
+    chooseArena(s, ctx, 'give a Weakness token to each exhausted enemy unit in')),
+  ifYouDo: (s, ctx) => pickedIds(s, ctx, pickAll(pickEnemy, exhaustedPick, (_s, u) => u.arena === ctx.arenaChosen)).reduce((acc, id) => giveWeakness(acc, id), s),
+})
+registerCard('HMW_248', { // Defoliator Tank
+  ...attacks("If the defending unit isn't a Droid or Vehicle, you may pay 2. If you do, give 2 Weakness tokens to it.", (s, ctx) => {
+    const defender = defenderOf(s, ctx)
+    if (!defender || unitHasTrait(s, defender, 'Droid') || unitHasTrait(s, defender, 'Vehicle') || !canAfford(s.players[ctx.owner], 2)) return s
+    return pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 2, text: 'give 2 Weakness tokens to the defending unit', then: resume(ctx, undefined, defender.instanceId) })
+  }),
+  ifYouDo: (s, ctx) => (ctx.unitChosen ? giveWeakness(s, ctx.unitChosen, 2) : s),
+})
+registerCard('HMW_067', { // The Great Progenitor
+  abilities: [{ trigger: 'onAttackEnd', description: 'You may give a Weakness token to this unit. If you do, create a Beast token for each Weakness token on this unit.',
+    // Nothing to give the token to once the attack has defeated it.
+    effect: (s, ctx) => (selfOf(s, ctx)
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'give this unit a Weakness token and create a Beast token for each one on it', then: resume(ctx) })
+      : s) }],
+  ifYouDo: (s, ctx) => {
+    const given = giveWeakness(s, ctx.sourceInstanceId!)
+    const self = findUnit(given, ctx.sourceInstanceId!)?.unit
+    return self ? create(given, ctx.owner, TOKEN_BEAST, self.upgrades.filter(u => u.cardId === TOKEN_WEAKNESS).length) : given
+  },
+})
+
+// C: control, and reading the token
+registerCard('HMW_110', unitThenWp('You may take control of an enemy non-leader unit that costs 3 or less. If you do, give 2 Weakness tokens to it.', // Emperor Palpatine
+  pickAll(pickEnemy, nonLeader, costsAtMost(3)), 'take control of an enemy non-leader unit that costs 3 or less', true,
+  (s, ctx) => giveWeakness(stealTo(s, ctx.owner, ctx.targetInstanceId, 'permanent'), ctx.targetInstanceId!, 2)))
+registerCard('HMW_200', unitThenWp('Take control of an enemy non-leader unit with a Weakness token on it. At the start of the next regroup phase, its owner takes control of it.', // Rish Loo
+  pickAll(pickEnemy, nonLeader, weakened), 'take control of an enemy non-leader unit with a Weakness token on it', false,
+  // "Until the regroup phase" is the default duration of a change of control.
+  (s, ctx) => stealTo(s, ctx.owner, ctx.targetInstanceId)))
+const NUVO_ROUND_KEY = 'HMW_062#round'
+registerCard('HMW_062', { // Nuvo Vindi
+  ...weakWp('You may give a Weakness token to a unit.', pickAny, 1, true),
+  abilities: [
+    ...weakWp('You may give a Weakness token to a unit.', pickAny, 1, true).abilities,
+    { trigger: 'whenEnemyUnitDefeated', description: 'When an enemy unit with a Weakness token on it is defeated: You may give a Weakness token to a unit. Use this ability only once each round.',
+      effect: (s, ctx) => {
+        // `defeatedUnit` is the unit as it last was, so its tokens are still on it.
+        if (!ctx.defeatedUnit || !hasToken(ctx.defeatedUnit.upgrades, TOKEN_WEAKNESS) || selfOf(s, ctx)?.usedAbilities?.includes(NUVO_ROUND_KEY)) return s
+        return unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'give a Weakness token to a unit', true)
+      } },
+  ],
+  // Only a taken "may" uses up the once each round.
+  ifYouDo: (s, ctx) => markAbilityUsed(giveWeakness(s, ctx.targetInstanceId!), ctx.owner, ctx.sourceInstanceId!, NUVO_ROUND_KEY),
+})
+registerCard('HMW_199', whenPlayed('Create a Beast token. Then, give a Weakness token to a friendly unit.', (s, ctx) => { // Geonosian Picador
+  const made = create(s, ctx.owner, TOKEN_BEAST)
+  return weakChoice(made, ctx, pickedIds(made, ctx, pickFriendly))
+}))
+registerCard('HMW_237', whenPlayed('Create a Beast token. An opponent creates a Beast token. Give a Weakness token to it.', (s, ctx) => // Easy Prey
+  create(create(s, ctx.owner, TOKEN_BEAST), opponentOf(ctx.owner), TOKEN_BEAST, 1, (st, id) => giveWeakness(st, id))))
+
+// D: leaders
+const underworldOrFringe = (c: EngineCard | undefined): boolean => printedUnit(c) && (printedTrait(c, 'Underworld') || printedTrait(c, 'Fringe'))
+const mazPlay: PlayFromHandOptions = { costDelta: -1, test: underworldOrFringe, thenTokens: [TOKEN_WEAKNESS] }
+registerCard('HMW_002', { // Maz Kanata: the deployed side's Hidden is read from the card
+  ...leaderPlay('Play a Fringe or Underworld unit from your hand. It costs 1 less. Give a Weakness token to it.', mazPlay),
+  ...unitPlayAction('Play a Fringe or Underworld unit from your hand. It costs 1 less. Give a Weakness token to it.', mazPlay),
+})
+const unweakened: Pick = (s, u, ctx) => !weakened(s, u, ctx)
+registerCard('HMW_003', mergeLeaderSides( // Doctor Hemlock
+  leaderFront('Give a Weakness token to a unit without a Weakness token on it.', {
+    cost: 1,
+    usable: anyUnitPasses(unweakened),
+    effect: (s, ctx) => weakChoice(s, ctx, pickedIds(s, ctx, unweakened)),
+  }),
+  onAttack(weakWp('You may give a Weakness token to a unit.', pickAny, 1, true)),
+))
+/** "A unit with a token upgrade on it": Shield and Weakness tokens are token upgrades, as are Experience and Advantage. */
+const tokenUpgraded: Pick = (s, u) => u.upgrades.some(up => s.cards[up.cardId]?.type === 'token')
+registerCard('HMW_015', mergeLeaderSides( // Bossk
+  leaderFront('Heal 1 damage from a damaged enemy unit and give a Weakness token to it.', {
+    usable: anyUnitPasses(damagedEnemy),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, damagedEnemy), 'heal 1 damage from a damaged enemy unit and give a Weakness token to it', false),
+  }),
+  attacks('You may deal 2 damage to a unit with a token upgrade on it.', (s, ctx) => damageChoice(s, ctx, 2, picked(s, ctx, tokenUpgraded), [], true)),
+  { ifYouDo: (s, ctx) => giveWeakness(healUnit(s, ctx.targetInstanceId!, 1), ctx.targetInstanceId!) },
 ))

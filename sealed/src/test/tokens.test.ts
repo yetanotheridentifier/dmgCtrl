@@ -40,8 +40,23 @@ describe('tokenLayout — physical-token placement on unit cards', () => {
     expect(tokenLayout(1, 'landscape')[0].left).toBe(50)
   })
 
-  it('never returns more than four tokens', () => {
-    expect(tokenLayout(7, 'portrait')).toHaveLength(4)
-    expect(tokenLayout(7, 'landscape')).toHaveLength(4)
+  it('adds a third row for 5 and 6 when ready, and a second row for 5 and 6 when exhausted', () => {
+    // Six kinds can show at once (damage, a modifier, Shield, Experience, Advantage, Weakness).
+    const five = tokenLayout(5, 'portrait')
+    expect(new Set(five.map(p => p.top)).size).toBe(3)
+    expect(five[4].left).toBe(50)
+    const six = tokenLayout(6, 'portrait')
+    expect(new Set(six.map(p => `${p.left},${p.top}`)).size).toBe(6)
+    for (const n of [5, 6]) {
+      const row = tokenLayout(n, 'landscape')
+      expect(row).toHaveLength(n)
+      expect(new Set(row.map(p => p.top)).size).toBe(2)
+      expect(new Set(row.map(p => `${p.left},${p.top}`)).size).toBe(n)
+    }
+  })
+
+  it('never returns more than six tokens', () => {
+    expect(tokenLayout(7, 'portrait')).toHaveLength(6)
+    expect(tokenLayout(7, 'landscape')).toHaveLength(6)
   })
 })

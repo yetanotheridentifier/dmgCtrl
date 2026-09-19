@@ -155,8 +155,6 @@ describe('triage blockers', () => {
    */
   it.each([
     ['credit-token', 'LAW Credit', 'When Played: Create a Credit token.'],
-    ['weakness-token', 'HMW_197 Cid Scaleback', 'When Played: An opponent chooses a unit they control. Give a Weakness token to it.'],
-    ['weakness-token', 'HMW_071 Ravage', 'Distribute up to 3 Weakness tokens among any number of units.'],
     ['base-upgrade', 'HMW_061 Director Krennic', 'On Attack: If your base is upgraded, draw a card.'],
     ['base-upgrade', 'HMW_066 Carrion Spike', 'Shielded / For each upgrade on your base, this unit gets +1/+0 and gains Restore 1.'],
     ['base-upgrade', 'HMW_260 Queen Amidala', 'If you control an upgraded base, this unit costs 2 less to play.  / Restore 2'],
@@ -348,7 +346,7 @@ describe('the ASH anchor', () => {
 
   it('finds no mechanic ASH plays without, since every ASH card is built', () => {
     // A blocker firing on the implemented set is a false positive in its pattern.
-    const mechanics = ['token-unit', 'credit-token', 'disclose', 'indirect-damage', 'weakness-token', 'base-upgrade']
+    const mechanics = ['token-unit', 'credit-token', 'disclose', 'indirect-damage', 'base-upgrade']
     expect(report.blockers.filter(b => mechanics.includes(b.name))).toEqual([])
   })
 
