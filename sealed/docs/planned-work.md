@@ -172,12 +172,14 @@ Two phases:
   Disclose (#603, 19), and indirect damage (#604, 15).
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
-(with the token units, #605), the Weakness-token cards (#649), the Fortify cards (#650) and the When Played
-units and upgrades (#651, all 50) are built. 58 play
+(with the token units, #605), the Weakness-token cards (#649), the Fortify cards (#650), the When Played
+units and upgrades (#651, all 50) and the constant abilities (#652, 36 of 39) are built. 58 play
 as printed (all 16 bases are vanilla). Of the 214 with ability text, **128 are blocked by nothing** once
 four the triage passed are lifted to their mechanic's ticket, cut like Phase 1 by trigger point: the
-When Played batch is done, and constant abilities (#652, 39) and events, leaders and the remaining
-trigger points (#653, 39) are next. Each names the cards to read first, and a remainder is likely.
+When Played and constant batches are done, and events, leaders and the remaining trigger points (#653, 39)
+are next. Of the constants, Vernestra Rwoh (an additional cost from the discard pile, and borrowed When
+Played abilities) and Zam Wesell (a leader's traits while she is out of play) went to #477, and The
+Marauder (units chosen and damaged while playing it, each reducing its cost) to #473, as it is Exploit's shape.
 **70 were blocked by exactly one thing**: the 18 Fortify, 18 Weakness and 14 Beast-token cards are
 built (less two Fortify cards lifted, above), and the rest are on #463 compound triggers (3), #474 a new trigger point (3),
 #471 play from discard (2), #468 (1), #475 (1) and #477's one-offs (10). 16 are multi-blocked, on #477.
