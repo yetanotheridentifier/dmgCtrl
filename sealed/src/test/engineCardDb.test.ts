@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { normaliseCard, buildCardDb } from '../engine/cardDb'
+import { cardId } from '../data/cards'
 import type { SwuCard } from '../data/cards'
+import { isFortify } from '../engine/types'
 import type { GameState } from '../engine/types'
+import { UPGRADE_STAT_OVERRIDES } from '../engine/upgradeStatOverrides'
+import { SET_CODES, poolFor } from '../bench/setPools'
 
 const VADER_UNIT: SwuCard = {
   Set: 'SOR',
@@ -134,7 +138,50 @@ describe('buildCardDb', () => {
   })
 })
 
-describe('upgrade stat overrides — temporary ASH data gap', () => {
+/**
+ * Printed modifiers for the HMW unit upgrades the source ships without Power/HP, read from the
+ * publisher's card list (`admin.starwarsunlimited.com/api/card-list`, `upgradePower`/`upgradeHp`).
+ */
+const HMW_UPGRADE_STATS: [string, string, number, number][] = [
+  ['038', 'Bestial Bond', 2, 2],
+  ['097', 'Dire Prowess', 1, 1],
+  ['127', "Chewbacca's Bowcaster", 3, 1],
+  ['148', 'Local Support', 1, 3],
+  ['190', 'Enraged', 1, 1],
+  ['191', "Hunter's Instinct", 2, 1],
+  ['235', 'Gaderffii Stick', 2, 1],
+  ['236', 'Booma Ball', 2, 2],
+  ['252', 'Villainous Ambition', 2, 0],
+  ['264', 'Heroic Bravery', 0, 2],
+  ['265', "Twi'lek Kalikori", 2, 2],
+]
+
+describe('upgrade stat overrides: printed modifiers the source omits', () => {
+  it.each(HMW_UPGRADE_STATS)('HMW_%s %s is +%i/+%i', (number, name, power, hp) => {
+    const source = poolFor(['HMW']).find(c => c.Number === number)!
+    expect(source.Name).toBe(name)
+    const c = normaliseCard(source)
+    expect([c.power, c.hp]).toEqual([power, hp])
+  })
+
+  /**
+   * Every unit upgrade's printed modifier comes from the source or from the override table, so none
+   * plays as +0/+0 by default. A Fortify upgrade attaches to a base and prints no modifier.
+   */
+  it('covers every unit upgrade in every bundled set', () => {
+    const uncovered = poolFor(SET_CODES)
+      .filter(c => c.Type === 'Upgrade' && c.Power === undefined && c.HP === undefined)
+      .filter(c => !isFortify(normaliseCard(c)))
+      .map(c => cardId(c.Set, c.Number))
+      .filter(id => !(id in UPGRADE_STAT_OVERRIDES))
+    expect(uncovered).toEqual([])
+  })
+
+  it('has no row for a card the bundled sets do not hold', () => {
+    const ids = new Set(poolFor(SET_CODES).map(c => cardId(c.Set, c.Number)))
+    expect(Object.keys(UPGRADE_STAT_OVERRIDES).filter(id => !ids.has(id))).toEqual([])
+  })
+
   it('fills in Power/HP the source omits (Bokken Saber ASH_180 → +1/+1)', () => {
     const c = normaliseCard({ Set: 'ASH', Number: '180', Name: 'Bokken Saber', Type: 'Upgrade' })
     expect([c.power, c.hp]).toEqual([1, 1])

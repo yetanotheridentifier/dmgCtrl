@@ -46,9 +46,9 @@ function toKeywords(card: SwuCard): KeywordInstance[] {
 export function normaliseCard(card: SwuCard): EngineCard {
   const type = toType(card.Type)
   const id = cardId(card.Set, card.Number)
-  // Temporary: some sets (currently ASH) ship upgrade cards with no Power/HP in
-  // the source data, so fill in the printed modifier from a lookup. Applied only
-  // when the source omits both fields, so it auto-drops once the data is fixed.
+  // Several sets ship unit upgrades with no Power/HP in the source data, so fill
+  // in the printed modifier from a lookup. Applied only when the source omits
+  // both fields, so it auto-drops once the data is fixed.
   const override = card.Power === undefined && card.HP === undefined ? UPGRADE_STAT_OVERRIDES[id] : undefined
   const normalised: EngineCard = {
     id,
