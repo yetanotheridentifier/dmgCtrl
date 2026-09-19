@@ -384,6 +384,14 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'HMW_206', name: 'The Tarkin Doctrine' },
   { id: 'HMW_216', name: 'Insurgent Camp' },
   { id: 'HMW_271', name: 'Landing Pad' },
+  // HMW When Played: A
+  { id: 'HMW_236', name: 'Booma Ball' },
+  { id: 'HMW_252', name: 'Villainous Ambition' },
+  // HMW When Played: B
+  { id: 'HMW_127', name: "Chewbacca's Bowcaster" },
+  { id: 'HMW_148', name: 'Local Support' },
+  { id: 'HMW_264', name: 'Heroic Bravery' },
+  { id: 'HMW_265', name: "Twi'lek Kalikori" },
 ]
 
 /**
@@ -1503,6 +1511,53 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_066', name: 'Carrion Spike' },
   { id: 'HMW_260', name: 'Queen Amidala' },
   { id: 'HMW_270', name: 'Wild Space Wanderer' },
+  // HMW When Played: A
+  { id: 'HMW_042', name: 'Dooku' },
+  { id: 'HMW_046', name: 'Krrsantan' },
+  { id: 'HMW_068', name: 'Imperial Commandos' },
+  { id: 'HMW_079', name: 'Radiant VII' },
+  { id: 'HMW_086', name: 'N-1 Patroller' },
+  { id: 'HMW_092', name: 'Starlit Purrgil' },
+  { id: 'HMW_130', name: 'Emerie Karr' },
+  { id: 'HMW_158', name: 'Battle-Scarred Destroyer' },
+  { id: 'HMW_159', name: 'General Grievous' },
+  { id: 'HMW_165', name: 'Commandeered Tour Shuttle' },
+  { id: 'HMW_177', name: 'Adamant Ewoks' },
+  { id: 'HMW_186', name: 'Mining Guild Trespasser' },
+  { id: 'HMW_222', name: 'Sandcrawler Sales Team' },
+  { id: 'HMW_230', name: 'Raiding Party' },
+  { id: 'HMW_249', name: 'Frenzied Tri-Fighters' },
+  { id: 'HMW_261', name: 'Ben Kenobi' },
+  { id: 'HMW_263', name: 'Wrecker' },
+  // HMW When Played: B
+  { id: 'HMW_052', name: "A'Koba" },
+  { id: 'HMW_072', name: 'Grand Army Marine' },
+  { id: 'HMW_080', name: 'Fambaa Shield Team' },
+  { id: 'HMW_085', name: 'Remote Scout' },
+  { id: 'HMW_091', name: 'Pelta Relief Frigate' },
+  { id: 'HMW_103', name: 'Disposable B1' },
+  { id: 'HMW_111', name: 'Invasion Lander' },
+  { id: 'HMW_121', name: 'Hijacked AT-ST' },
+  { id: 'HMW_123', name: 'King Grakchawwaa' },
+  { id: 'HMW_136', name: 'Lifetree Caravan' },
+  { id: 'HMW_154', name: "Dooku's Solar Sailer" },
+  { id: 'HMW_180', name: 'Stormchaser' },
+  { id: 'HMW_189', name: 'Neebray Manta' },
+  { id: 'HMW_228', name: 'Lakeside Shaaks' },
+  { id: 'HMW_243', name: 'Sun Fac' },
+  { id: 'HMW_246', name: 'Pyke Sarisa' },
+  { id: 'HMW_247', name: 'Surveillance Cruiser' },
+  { id: 'HMW_255', name: 'C-3P0' },
+  // HMW When Played: C
+  { id: 'HMW_035', name: 'Hunter' },
+  { id: 'HMW_036', name: 'Kelnacca' },
+  { id: 'HMW_043', name: 'Darth Vader' },
+  { id: 'HMW_051', name: 'Third Sister' },
+  { id: 'HMW_078', name: 'Qui-Gon Jinn' },
+  { id: 'HMW_094', name: 'Sando Aqua Monster' },
+  { id: 'HMW_105', name: 'Nute Gunray' },
+  { id: 'HMW_221', name: 'Teeka' },
+  { id: 'HMW_232', name: 'Mon Cal Cruiser' },
 ]
 
 /**

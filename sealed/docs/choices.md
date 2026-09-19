@@ -59,6 +59,13 @@ choice with one answer is simply that answer. `multiPick` keeps its Done and `ma
 its decline, because every card using them reads "up to", "any number" or "you may", where stopping at
 zero is legal. `chooseMode` has no decline: "choose one" is never optional.
 
+A card offers only the modes that can do something as it resolves, and a mode that would raise a
+mandatory attack is offered only while an attack is possible, so picking it never strands the player.
+Most modes are engine keys resolved in `applyChosenMode`. A `chooseMode` with `then` is resolved by
+the card instead: its `ifYouDo` runs with the picked mode as `step`, and `labels` name each button
+(Teeka, Mon Cal Cruiser). Hunter's "choose two" raises its second choice once the first has resolved:
+at once after a Shield, or from the attack's end after an attack, as an attack sequence does.
+
 `resumeAfterChoice` decides what happens as the queue drains: the active player finishes theirs
 first, then control passes; round-start choices (`resumeAtInitiative`) begin the action phase with
 the initiative holder, mid-turn choices `advanceTurn`.
@@ -124,7 +131,8 @@ also damage its controller's base by the unit's cost (`thenDamageOwnBase`), give
 effect (`thenLasting`), leave a delayed effect about it (`thenDelay`), and defeat a set of units once the
 play is settled whether it was played or declined (`thenDefeat`, Consolidation of Power).
 `searchPlayFree` caps its plays with `maxPlays` (U-Wing Reinforcement's "up to 3") and takes `thenDelay`
-too; `searchDraw` with `shuffle` shuffles the deck after a search of all of it (Search Your Feelings), and
+too, caps each unit's own cost with `filter.maxCost` where there is no combined budget, and deals
+`thenDamage` to each unit as it is played (Darth Vader, Any Methods Necessary); `searchDraw` with `shuffle` shuffles the deck after a search of all of it (Search Your Feelings), and
 with `then` hands on to the card's hook once the search is settled, whether a card was drawn or not
 (Captain Vaughn puts a card from his hand back on the deck, and it can be the one just drawn).
 `nameCard` with `phaseBan` bans the name for both players until the phase ends (Transmission Jamming);
