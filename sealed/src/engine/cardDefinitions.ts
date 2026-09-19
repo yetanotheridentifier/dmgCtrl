@@ -8565,3 +8565,31 @@ registerCard('HMW_096', gains(anyHost, KW.restore(2))) // Devotion
 registerCard('HMW_190', gains(anyHost, KW.raid(2))) // Enraged
 registerCard('HMW_191', gains(isTrait('Creature'), KW.grit)) // Hunter's Instinct
 registerCard('HMW_235', { attachRestriction: (s, t) => nonVehicle(s, t) && effectivePower(s, t) <= 3 }) // Gaderffii Stick
+
+// B: auras on other units, combat and damage
+/**
+ * "A unit with no abilities": no printed text, and no keyword from its own card or its upgrades. A
+ * keyword another unit's aura hands it is not seen, since an aura must not read what the aura pass
+ * computes.
+ */
+const hasNoAbilities: Holds = (s, x) => !(cardOf(s, x)?.text ?? '').trim() && nonAuraKeywordNames(s, x).size === 0
+registerCard('HMW_039', friendlyAura(anyHost, { keywords: [KW.restore(1)] }, true)) // Mother Talzin
+registerCard('HMW_088', { preventUnitDamage: (_s, self, target, amount) => (target.instanceId === self.instanceId ? Math.min(1, amount) : 0) }) // Numa
+registerCard('HMW_141', friendlyAura(hasNoAbilities, { power: 1, hp: 1 }, false)) // Rex
+registerCard('HMW_162', friendlyAura(isTrait('Ewok'), { keywords: [HIDDEN] }, true)) // Teebo
+registerCard('HMW_212', { // The Chieftain
+  conditionalKeywords: (s, u) => {
+    const others = friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId && isTrait('Tusken')(s, x)).length
+    return others > 0 ? [KW.raid(others)] : []
+  },
+  // The Raid is read from every source but auras (`nonAuraKeywordValue`), as an aura must not read the aura pass.
+  aura: (s, _src, tgt, friendly, combat) =>
+    (friendly && combat?.defenderInstanceId === tgt.instanceId && isTrait('Tusken')(s, tgt) ? { power: nonAuraKeywordValue(s, tgt, 'Raid') } : undefined),
+})
+registerCard('HMW_233', { // Awakened Exogorth
+  aura: (_s, src, tgt, _friendly, combat) =>
+    (combat?.attackerInstanceId === src.instanceId && combat.defenderInstanceId === tgt.instanceId ? { power: -3 } : undefined),
+})
+registerCard('HMW_251', { // Blockade Ship
+  aura: (_s, _src, tgt, friendly, combat) => (!friendly && tgt.arena === 'ground' && combat?.attackerInstanceId === tgt.instanceId ? { power: -1 } : undefined),
+})

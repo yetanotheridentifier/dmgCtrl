@@ -1583,6 +1583,14 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_256', name: 'Jedi Interceptor' },
   { id: 'HMW_257', name: 'Ewok Archers' },
   { id: 'HMW_259', name: 'Pack Guardian' },
+  // HMW constant abilities: B
+  { id: 'HMW_039', name: 'Mother Talzin' },
+  { id: 'HMW_088', name: 'Numa' },
+  { id: 'HMW_141', name: 'Rex' },
+  { id: 'HMW_162', name: 'Teebo' },
+  { id: 'HMW_212', name: 'The Chieftain' },
+  { id: 'HMW_233', name: 'Awakened Exogorth' },
+  { id: 'HMW_251', name: 'Blockade Ship' },
 ]
 
 /**

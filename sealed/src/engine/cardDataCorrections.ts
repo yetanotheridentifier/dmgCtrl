@@ -51,6 +51,8 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   HMW_176: { keywords: [] }, // Village Troublemaker: Hidden and Saboteur with an Endor base
   HMW_257: { keywords: [] }, // Ewok Archers: Ambush with another unit costing 3 or less
   HMW_259: { keywords: [] }, // Pack Guardian: Sentinel while ready
+  HMW_039: { keywords: [{ name: 'Raid', value: 1 }] }, // Mother Talzin: Raid 1 is hers; Restore 1 goes to each other friendly unit
+  HMW_212: { keywords: [] }, // The Chieftain: Raid 1 per other friendly Tusken
   HMW_096: { keywords: [] }, // Devotion: Restore 2
   HMW_190: { keywords: [] }, // Enraged: Raid 2
   HMW_191: { keywords: [] }, // Hunter's Instinct: Grit on a Creature
