@@ -426,16 +426,17 @@ export function createTokenUnits(state: GameState, owner: PlayerId, tokenCardId:
 export function createTokenUnit(state: GameState, owner: PlayerId, tokenCardId: string): GameState {
   const tokenCard = state.cards[tokenCardId]
   const shielded = (tokenCard?.keywords ?? []).some(k => k.name === 'Shielded')
+  const p = state.players[owner]
+  const entersReady = p.units.some(u => abilityCardIds(u).some(id => getCardDefinition(id)?.tokensEnterReady?.(state, u) ?? false))
   const token: UnitState = {
     instanceId: `u${state.instanceCounter}`,
     cardId: tokenCardId,
     arena: tokenCard?.arena ?? 'ground',
     damage: 0,
-    exhausted: true, // created units enter exhausted (CR 1.5.4b) unless an ability says otherwise
+    exhausted: !entersReady, // created units enter exhausted (CR 1.5.4b) unless an ability says otherwise
     isLeader: false,
     upgrades: shielded ? [{ cardId: TOKEN_SHIELD, owner }] : [],
   }
-  const p = state.players[owner]
   // A created token enters play, so it counts for "units that entered play this phase" (Padmé Amidala).
   return recordUnitEntered(recordTokenCreated({
     ...state,
