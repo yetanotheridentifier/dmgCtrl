@@ -946,7 +946,7 @@ it. `coverageDecks.test.ts` asserts every sealed set builds only rule-satisfying
 Over the nine sealed sets, `--set all --games 5 --seed 42,43,44` is **214 decks and 3,210 games with
 none dropped, playing 2,094 of the 2,098 decked cards** (161 of 162 leaders deployed) in about 25
 seconds. Which few go unplayed moves with every card that lands, because a new ability changes the
-course of the random games; the count of them, not their names, is what stays small. HMW alone is 25 decks and 375 games, playing all 238 of its units, upgrades and events.
+course of the random games; the count of them, not their names, is what stays small. HMW alone is 25 decks and 375 games, playing 237 of its 238 units, upgrades and events.
 
 ### The card pools: `--fixture`
 
