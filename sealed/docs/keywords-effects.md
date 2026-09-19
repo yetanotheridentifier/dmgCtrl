@@ -170,6 +170,29 @@ was actually exhausted for a play, because payment happens before the unit exist
 remembers it (Weequay Pirate: "if no resources were paid to play this unit"). `phaseEvents.tokensCreated`
 credits the grant to the player who made it.
 
+## Token units
+
+A token unit (Mandalorian, Spy, X-Wing, TIE Fighter, Clone Trooper, Battle Droid, Beast) is a built-in
+`unit` card in `engine/tokenUnits.ts`, merged into every card db, so every stat, keyword and trait helper
+reads it like a deck card. Its id carries the `TOKEN_` prefix, which is what `isTokenCard` checks: a
+token unit that leaves play ceases to exist rather than going to a discard pile or a hand.
+
+**Printed stats are recorded, not fetched.** The card API has no token units, so the stats are read off
+the publisher's card list and pinned by test: Spy 0/2 ground with Raid 2, X-Wing 2/2 space, TIE Fighter
+1/1 space, Clone Trooper 2/2 ground, Battle Droid 1/1 ground, Beast 3/3 ground. Aspects and traits
+matter as much as the numbers (a Clone Trooper is a Heroism Republic Trooper; a Beast has no aspect and is
+a Creature).
+
+`createTokenUnits(state, owner, token, n)` makes `n` of them for `owner`, who need not be the ability's
+controller ("an opponent creates 2 Battle Droid tokens"). A created unit enters play **exhausted**
+(CR 1.5.4b) unless an ability says otherwise: "create ... and ready it" readies the ones just made, and a
+unit whose definition has `tokensEnterReady` (Chancellor Palpatine) makes every token unit its controller
+creates enter ready. A Shielded token enters with its Shield. Creating counts as entering play
+(`enteredPlayThisPhase`) but not as playing, so it fires no "When Played". It fires no
+`whenPlayOrCreateUnit` either, which only a unit arriving through a play raises: that is exactly "when
+you play another unit" (Poggle the Lesser), and it means Greef Karga's "when you play or create a unit"
+sees plays only.
+
 ## Spent tokens are defeated upgrades
 
 A Shield that soaks damage and an Advantage token that finishes a combat are both **defeats**, as

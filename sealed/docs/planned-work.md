@@ -135,7 +135,7 @@ Two phases:
 
 - **Phase 1 (#453 to #460), 926 cards blocked by nothing.** 56% of the cards with ability text are
   expressible with the primitives already in `engine/effects.ts`. Cut by trigger point. **Events are finished** as far as the engine's choices express them.
-  The rest are recorded on the ticket of what blocks them: #602 Credit, #605 token units, #603
+  The rest are recorded on the ticket of what blocks them: #602 Credit, #603
   Disclose, #604 indirect damage, #469 Smuggle, #467 Bounty, #468 (playing any card type from a zone
   other than the hand, or through an ability), #471 play from discard, and #477 for "loses all
   abilities" (One Way Out and four more), state the engine does not record, and the unique one-offs.
@@ -145,10 +145,11 @@ Two phases:
   the 14 other constant-ability cards lifted out are carried by #477. **When Defeated units are
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
   shared with another trigger point ("When Played/When Defeated") waits on #463, and Stolen AT-Hauler
-  (an opponent may play it from the discard pile) is on #471. **Leaders are finished** on both sides (#458): the 20 not built are on the ticket of what
-  blocks them, #465 pilots (7), #605 token units (2), #471 play from discard (2),
+  (an opponent may play it from the discard pile) is on #471. **Leaders are finished** on both sides (#458): the 19 not built are on the ticket of what
+  blocks them, #465 pilots (7), #471 play from discard (2),
   #466 capture, #467 Bounty, #470 Plot, #474 trigger points, #468 playing any card type, #602 Credit
-  (a friendly token of any kind) and #477 (defeat by an enemy card ability).
+  (a friendly token of any kind) and #477 (defeat by an enemy card ability, and Chancellor Palpatine,
+  the one leader that flips between two faces rather than deploying).
   **Bases are finished** (#460), which completes Phase 1: the engine gained base abilities (an Epic
   Action once a game, an aura over units in play, and the two setup numbers a base can change), and
   the eight LAW bases that play any card type from hand went to #468 with Sundari Palace to #475.
@@ -157,18 +158,23 @@ Two phases:
 - **Phase 2 (#461 to #476, #602 to #605), 585 cards blocked by exactly one thing each**, ordered by how
   many cards each unlocks on its own. **Experience tokens are finished** (#461), the largest single
   unlock: 78 of the 80 shipped, with Covert Strength on #469 (Smuggle) and Trandoshan Hunters on #467
-  (it reads a Bounty), and the two leaders #458 had lifted out built alongside them. Next is token units
-  other than the Mandalorian (#605, 76 cards: 62 plus HMW's 14 Beast tokens), then Credit tokens (#602,
+  (it reads a Bounty), and the two leaders #458 had lifted out built alongside them. **Token units are
+  finished** (#605), the second largest: Spy, X-Wing, TIE Fighter, Clone Trooper, Battle Droid and
+  HMW's Beast, with 76 cards (73 the triage blocked on them alone, and Governor Pryce, HMW's Poggle the
+  Lesser and Nameless Valor lifted onto it). Darth Vader, Victor Squadron Leader waits on #465 (his
+  back is a Pilot), and Queen Amidala (defeat a unit to prevent damage), Roger Roger (an upgrade's own
+  When Defeated) and the flipping Chancellor Palpatine are on #477. Next are Credit tokens (#602,
   29), Disclose (#603, 19), the two HMW mechanics Weakness tokens (#649, 18) and Fortify, an upgrade
   attached to a base (#650, 18), and indirect damage (#604, 15).
 
-**Homeworlds (HMW), 272 cards, is accepted and triaged** but none of its abilities are built. 58 play
+**Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities only the Beast-token
+cards are built (with the token units, #605). 58 play
 as printed (all 16 bases are vanilla). Of the 214 with ability text, **128 are blocked by nothing** once
 four the triage passed are lifted to their mechanic's ticket, cut like Phase 1 by trigger point: When
 Played units and upgrades (#651, 50), constant abilities (#652, 39), and events, leaders and the
 remaining trigger points (#653, 39). Each names the cards to read first, and a remainder is likely.
-**70 are blocked by exactly one thing**: Weakness (#649, 18) and Fortify (#650, 18) are new, Beast
-tokens join #605 (14), and the rest are on #463 compound triggers (3), #474 a new trigger point (3),
+**70 were blocked by exactly one thing**: Weakness (#649, 18) and Fortify (#650, 18) are new, the 14
+Beast-token cards are built, and the rest are on #463 compound triggers (3), #474 a new trigger point (3),
 #471 play from discard (2), #468 (1), #475 (1) and #477's one-offs (10). 16 are multi-blocked, on #477.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted into #477 and the batch
