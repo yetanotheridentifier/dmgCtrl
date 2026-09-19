@@ -1591,6 +1591,13 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_212', name: 'The Chieftain' },
   { id: 'HMW_233', name: 'Awakened Exogorth' },
   { id: 'HMW_251', name: 'Blockade Ship' },
+  // HMW constant abilities: C
+  { id: 'HMW_053', name: "Fett's Firespray" },
+  { id: 'HMW_145', name: 'Origin Tree Shyyyo' },
+  { id: 'HMW_184', name: 'Aggrocrab' },
+  { id: 'HMW_203', name: 'Victor Squadron' },
+  { id: 'HMW_208', name: 'Luke Skywalker' },
+  { id: 'HMW_234', name: 'Ritual Dragon' },
 ]
 
 /**

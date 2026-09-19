@@ -8,7 +8,7 @@ import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, hasTok
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
 import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
-import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
+import { affordableHandUnits, resourceUpgradeCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywords } from './keywords'
@@ -2071,7 +2071,7 @@ registerCard(KEYWORD_AMBUSH, {
       const u = findUnit(s, ctx.sourceInstanceId!)
       // Re-checked as the ability resolves: an earlier ability in the same batch may have cleared the
       // arena, and an Ambush with nothing to hit offers nothing.
-      if (!u || enemyAttackTargets(s, u.unit).targets.length === 0) return s
+      if (!u || !ambushHasTarget(s, u.unit, ctx.owner)) return s
       return pushChoice(s, {
         kind: 'ambush',
         id: ctx.sourceInstanceId!,
@@ -8593,3 +8593,25 @@ registerCard('HMW_233', { // Awakened Exogorth
 registerCard('HMW_251', { // Blockade Ship
   aura: (_s, _src, tgt, friendly, combat) => (!friendly && tgt.arena === 'ground' && combat?.attackerInstanceId === tgt.instanceId ? { power: -1 } : undefined),
 })
+
+// C: costs and entering play
+registerCard('HMW_184', { costModifier: (s, p) => (s.initiative === p ? -1 : 0) }) // Aggrocrab
+/**
+ * Origin Tree Shyyyo: the first, second and third units played each round cost 1, 2 and 3 less. Units are
+ * played in the action phase, so the phase's record of plays is the round's.
+ */
+const SHYYYO_DISCOUNTS = [1, 2, 3]
+registerCard('HMW_145', {
+  costDiscount: (s, source, ctx) => {
+    if (ctx.card.type !== 'unit' || !withBase('Kashyyyk')(s, source)) return 0
+    const before = cardsPlayedThisPhase(s, ctx.owner).filter(id => s.cards[id]?.type === 'unit').length
+    return -(SHYYYO_DISCOUNTS[before] ?? 0)
+  },
+})
+registerCard('HMW_203', { entersReady: () => true }) // Victor Squadron
+registerCard('HMW_208', { entersReady: s => s.round === 1 }) // Luke Skywalker: the first round of the game
+registerCard('HMW_234', { // Ritual Dragon: friendly units, itself included, enter play ready
+  entersReady: (s, p) => controlsBaseWith(s, p, 'Tatooine'),
+  unitsEnterReady: withBase('Tatooine'),
+})
+registerCard('HMW_053', { ambushAttacksBases: () => true }) // Fett's Firespray
