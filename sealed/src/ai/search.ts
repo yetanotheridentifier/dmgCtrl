@@ -760,7 +760,7 @@ export const TIE_DECISION_KINDS = ['attack', 'answer', 'play', 'resource', 'init
 function kindOfMove(m: Action): string {
   switch (m.type) {
     case 'attack': return 'attack'
-    case 'playUnit': case 'playEvent': case 'playUpgrade': return 'play'
+    case 'playUnit': case 'playEvent': case 'playUpgrade': case 'playBaseUpgrade': return 'play'
     case 'resourceCard': case 'skipResource': return 'resource'
     case 'takeInitiative': return 'initiative'
     case 'pass': return 'pass'

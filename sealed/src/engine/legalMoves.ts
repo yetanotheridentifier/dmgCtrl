@@ -1,9 +1,9 @@
 import type { Action } from './actions'
 import type { AttackerFilter, EngineCard, GameState, HandCardRef, PlayerId, ResourceUpgradeRef, UnitState } from './types'
-import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds, pushChoice } from './types'
+import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds, pushChoice, isFortify } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword, unitCannotAttack, unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
-import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, baseEpicAction } from './abilities'
+import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, baseEpicAction, usableBaseActions } from './abilities'
 import './cardDefinitions' // side effect: registers all real card behaviours
 
 type AttackTarget = Extract<Action, { type: 'attack' }>['target']
@@ -316,6 +316,11 @@ function actionPhaseMoves(state: GameState): Action[] {
     const card = state.cards[cardId]
     if (!card || card.type !== 'upgrade') return
     if (forbiddenNames.has(card.name)) return
+    // Fortify: "Attach this to your base, not a unit." Its one target is fixed, so it names none.
+    if (isFortify(card)) {
+      if (canAfford(p, effectiveCost(state, playerId, card))) moves.push({ type: 'playBaseUpgrade', handIndex })
+      return
+    }
     const restriction = getCardDefinition(card.id)?.attachRestriction
     for (const target of allUnits) {
       if (restriction && !restriction(state, target, playerId)) continue
@@ -379,6 +384,8 @@ function actionPhaseMoves(state: GameState): Action[] {
   if (baseAction && !p.base.epicActionUsed && (baseAction.usable?.(state, playerId) ?? true)) {
     moves.push({ type: 'useBaseAbility' })
   }
+  // The "Action:" abilities the base has from its upgrades.
+  for (const { cardId, index } of usableBaseActions(state, playerId)) moves.push({ type: 'useBaseAbility', cardId, index })
 
   // Take the Initiative — once per round across both players (CR 1.15.5a).
   if (state.initiativeTakenBy === null) {

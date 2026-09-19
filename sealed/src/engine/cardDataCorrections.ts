@@ -33,6 +33,9 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   // what is printed on it.
   ASH_007: { keywords: [{ name: 'Overwhelm' }] }, // Grand Admiral Sloane — Overwhelm is hers; Sentinel goes to each OTHER friendly unit
   ASH_127: { keywords: [] }, // The Twins — Sentinel is given to another friendly unit, never held
+  HMW_112: { keywords: [{ name: 'Fortify' }] }, // Military Academy: its base gives friendly units Overwhelm
+  HMW_126: { keywords: [{ name: 'Fortify' }] }, // Verdant Fortress: its base gives friendly units Raid 1
+  HMW_066: { keywords: [{ name: 'Shielded' }] }, // Carrion Spike: Shielded is real; Restore 1 per upgrade on your base
 
   // The other sealed sets, conditional keywords.
   LAW_105: { keywords: [] }, // Cinta Kaz: Sentinel while upgraded

@@ -258,6 +258,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'HMW_002', name: 'Maz Kanata', front: true, back: true },
   { id: 'HMW_003', name: 'Doctor Hemlock', front: true, back: true },
   { id: 'HMW_015', name: 'Bossk', front: true, back: true },
+  // Fortify
+  { id: 'HMW_004', name: 'Grand Moff Tarkin', front: true, back: true },
 ]
 
 /**
@@ -367,6 +369,21 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'TWI_119', name: 'Nameless Valor' },
   // Weakness tokens: A
   { id: 'HMW_097', name: 'Dire Prowess' },
+  // Fortify: upgrades on a base
+  { id: 'HMW_037', name: 'Bacta Tank' },
+  { id: 'HMW_070', name: 'Dark Sanctum' },
+  { id: 'HMW_081', name: 'Alliance Shield Generator' },
+  { id: 'HMW_095', name: 'Carbonite Chamber' },
+  { id: 'HMW_112', name: 'Military Academy' },
+  { id: 'HMW_113', name: 'Sinister War Memorial' },
+  { id: 'HMW_126', name: 'Verdant Fortress' },
+  { id: 'HMW_160', name: 'Noxious Refinery' },
+  { id: 'HMW_171', name: 'Trap Field' },
+  { id: 'HMW_172', name: 'Heavy Ion Cannon' },
+  { id: 'HMW_205', name: 'Intelligence Agency' },
+  { id: 'HMW_206', name: 'The Tarkin Doctrine' },
+  { id: 'HMW_216', name: 'Insurgent Camp' },
+  { id: 'HMW_271', name: 'Landing Pad' },
 ]
 
 /**
@@ -1481,6 +1498,11 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_231', name: 'Dragonboat Freighter' },
   { id: 'HMW_242', name: 'Occupation Officer' },
   { id: 'HMW_248', name: 'Defoliator Tank' },
+  // Fortify: units that read a base's upgrades
+  { id: 'HMW_061', name: 'Director Krennic' },
+  { id: 'HMW_066', name: 'Carrion Spike' },
+  { id: 'HMW_260', name: 'Queen Amidala' },
+  { id: 'HMW_270', name: 'Wild Space Wanderer' },
 ]
 
 /**

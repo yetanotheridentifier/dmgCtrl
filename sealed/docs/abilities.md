@@ -121,7 +121,11 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenFriendlyDamagedSurvives`, `whenEnemyAttacksBase`, `whenOwnBaseDamaged`, `whenEnemyBaseDamaged`,
-`whenFriendlyAttackEnds`, `whenDeployed`.
+`whenFriendlyAttackEnds`, `whenDeployed`, `whenPlayUpgrade`, `whenUnitEntersPlay`.
+
+`whenPlayUpgrade` ("when you play an upgrade") fires on the player's undeployed leader, base and units,
+with the card in `ctx.playedCardId`. `whenUnitEntersPlay` is collected from both players' bases only, for
+a unit either player plays or creates (Trap Field).
 
 `whenPlayUnit` ("when you play a unit") fires for a unit arriving through a play, and `whenCreateUnit`
 for a token unit being created; both fire on the player's undeployed leader and their other units, with
@@ -285,6 +289,32 @@ belongs to the player whose base zone holds it:
 Epic Actions are written through `baseEpic` in `cardDefinitions.ts`, with `basePlay` for the ones that
 play a unit from hand. The effect's source is `<cardId>-base`, so every choice it raises has a stable
 id and "another unit" excludes nothing.
+
+### Upgrades on a base (Fortify)
+
+A card with the **Fortify** keyword ("Attach this to your base, not a unit") is played with
+`playBaseUpgrade`, which names no target: it attaches to its player's own base, in `BaseState.upgrades`,
+and never to a unit. `playUpgradeCardOnto` is still the one door, so an ability that plays such a card
+from another zone sends it to the base whatever unit it named.
+
+"Attached base gains: ..." makes the upgrade's ability the base's, so the base's abilities come from
+`baseAbilityCardIds`: the base card and each upgrade on it.
+
+- A **constant** is `baseAbilities.aura` on the upgrade card (Landing Pad), folded into the aura pass.
+- A **triggered ability** is an ordinary `abilities` entry on the upgrade card, collected by
+  `collectBaseTriggers` for the base's controller wherever an undeployed leader's would be
+  (`collectPlayerTriggers`), plus friendly defeats and units entering play. Its source is `<cardId>-base`,
+  and "this upgrade" is the first copy of the card on that player's base.
+- An **action** is `baseAbilities.actions`, offered as `useBaseAbility` with the card and index. A
+  `defeatsSelf` action pays "[defeat this upgrade]" before its effect; a `oncePerPhase` one is counted per
+  copy in `PhaseEvents.baseActionsUsed`.
+- **Damage prevention on the base** is `baseAbilities.interceptDamage`, asked first by `dealDamageToBase`
+  (Alliance Shield Generator).
+
+`defeatBaseUpgrade` defeats one: a card goes to its owner's discard pile and "when a friendly upgrade is
+defeated" fires, as for an upgrade on a unit. A base upgrade has no host, so nothing that reads a unit's
+upgrades (and no "defeat an upgrade" that picks from units) sees it; the cards that read a base's upgrades
+count `BaseState.upgrades` directly.
 
 ## Once each round
 

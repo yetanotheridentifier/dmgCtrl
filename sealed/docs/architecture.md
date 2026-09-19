@@ -158,7 +158,8 @@ card database (`cards: CardDb`) hangs off the state but is **shared by reference
 between successive states, keeping cloning cheap for future tree search. Card zones
 (`hand`/`deck`/`discard`) hold card **ids**, resolved against `cards`. An
 `UpgradeAttachment` (`{ cardId, owner }`) records who owns each attached upgrade so it
-routes to the right discard on defeat. A unit controlled by someone other than its owner records the
+routes to the right discard on defeat; a unit holds them in `upgrades`, and a base holds its Fortify
+upgrades in `BaseState.upgrades`. A unit controlled by someone other than its owner records the
 owner in `UnitState.owner`, and how long that lasts in `controlUntil`: absent is until the regroup
 phase starts, `'permanent'` never ends (C-3P0, Galen Erso), and an instance id ends once that unit is
 no longer in play (Grand Moff Tarkin), which `resolve` settles once per action rather than at every

@@ -1,15 +1,15 @@
 import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
-import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds } from './types'
+import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds, isFortify, recordBaseActionUsed } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets, offerAttack } from './legalMoves'
-import { collectArrivalTriggers, collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, stampChoiceSource, type TriggerPoint } from './abilities'
+import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage } from './keywords'
@@ -103,7 +103,13 @@ function resolveAction(state: GameState, action: Action): GameState {
     case 'useLeaderAbility':
       return requirePhase(state, 'action', () => useLeaderAbility(state, action.index, action.targetInstanceId))
     case 'useBaseAbility':
-      return requirePhase(state, 'action', () => useBaseAbility(state))
+      return requirePhase(state, 'action', () => (action.cardId === undefined ? useBaseAbility(state) : useBaseUpgradeAction(state, action.cardId, action.index ?? 0)))
+    case 'playBaseUpgrade':
+      return requirePhase(state, 'action', () => {
+        const played = playBaseUpgrade(state, action.handIndex)
+        if (played.winner === null && activeChoice(played)) return resetPasses(handOffOpponentChoice(played, played.activePlayer))
+        return played.winner !== null ? played : advanceTurn(resetPasses(played))
+      })
     case 'attack':
       return requirePhase(state, 'action', () => {
         // An attack can be how a pending choice is ANSWERED. `choiceId` names which one: the
@@ -1990,22 +1996,76 @@ export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex:
  * from the resource zone and Camtono from the top of the deck. `upgradeAttachSites.test.ts` fails on a new
  * hand-built attach, so a further zone comes through here too.
  */
-function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: string, targetInstanceId: string): GameState {
+function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: string, targetInstanceId?: string): GameState {
   const card = state.cards[cardId]
-  const target = findUnit(state, targetInstanceId)
-  if (!card || card.type !== 'upgrade' || !target) return state
-  let next = attachUpgrades(state, targetInstanceId, [{ cardId: card.id, owner: playerId }], true)
+  if (!card || card.type !== 'upgrade') return state
+  // Fortify: "Attach this to your base, not a unit", whatever unit the play named.
+  const onBase = isFortify(card)
+  if (!onBase && (targetInstanceId === undefined || !findUnit(state, targetInstanceId))) return state
+  let next = onBase ? attachToBase(state, playerId, card.id) : attachUpgrades(state, targetInstanceId!, [{ cardId: card.id, owner: playerId }], true)
   next = recordCardPlayed(next, playerId, card.id) // after the cost ("the first upgrade you play each phase")
 
   // One upgrade arriving is one event: the host reacting to it attaching (Sabine Wren, and since this
   // is a play from whatever zone, "when you PLAY an upgrade on this unit" too, Gar Saxon) and the
-  // upgrade's own "When Played" (CR 6.2.0f) are simultaneous, so they are one batch.
+  // upgrade's own "When Played" (CR 6.2.0f) are simultaneous, so they are one batch. A base upgrade's
+  // source is `<cardId>-base`, so a choice its When Played raises has a stable id.
   next = fireBatch(next, [
-    ...collectUpgradeAttached(next, targetInstanceId, true),
-    ...collectCardTriggers('whenPlayed', card.id, playerId, targetInstanceId),
+    ...(onBase ? [] : collectUpgradeAttached(next, targetInstanceId!, true)),
+    ...collectCardTriggers('whenPlayed', card.id, playerId, onBase ? baseSourceId(card.id) : targetInstanceId),
+    ...collectPlayUpgrade(next, playerId, card.id),
   ])
-  next = uniqueUpgradeCheck(next, playerId) // two upgrades with the same title → defeat one
+  // Two upgrades with the same unique title → defeat one, on a base as on a unit.
+  next = onBase ? baseUniqueCheck(next, playerId, card.id) : uniqueUpgradeCheck(next, playerId)
   return checkWin(next)
+}
+
+/** Attach an upgrade card `playerId` owns to their own base. */
+function attachToBase(state: GameState, playerId: PlayerId, cardId: string): GameState {
+  const base = state.players[playerId].base
+  return updatePlayer(state, playerId, { base: { ...base, upgrades: [...(base.upgrades ?? []), { cardId, owner: playerId }] } })
+}
+
+/** The unique rule on a base: a second copy of a unique upgrade there defeats the first. */
+function baseUniqueCheck(state: GameState, playerId: PlayerId, cardId: string): GameState {
+  const copies = (state.players[playerId].base.upgrades ?? []).filter(u => u.cardId === cardId).length
+  return state.cards[cardId]?.unique && copies > 1 ? defeatBaseUpgrade(state, playerId, cardId) : state
+}
+
+/** "When you play an upgrade": the player's leader, base and units, told which card it was. */
+function collectPlayUpgrade(state: GameState, playerId: PlayerId, cardId: string): PendingTrigger[] {
+  const ctx = { playedCardId: cardId }
+  return [...collectPlayerTriggers(state, 'whenPlayUpgrade', playerId, ctx), ...collectUnitsTrigger(state, 'whenPlayUpgrade', playerId, ctx)]
+}
+
+/** Play the Fortify upgrade at `handIndex` of the active player's hand: pay for it, then attach it to their base. */
+function playBaseUpgrade(state: GameState, handIndex: number): GameState {
+  const playerId = state.activePlayer
+  const p = state.players[playerId]
+  const cardId = p.hand[handIndex]
+  const card = cardId ? state.cards[cardId] : undefined
+  if (!isFortify(card)) throw new Error(`playBaseUpgrade: hand index ${handIndex} is not a Fortify upgrade`)
+  const paid = updatePlayer(state, playerId, { ...payCost(p, effectiveCost(state, playerId, card!)), hand: p.hand.filter((_, i) => i !== handIndex) })
+  return playUpgradeCardOnto(paid, playerId, cardId)
+}
+
+/**
+ * Use an "Action:" the active player's base has from an upgrade (Heavy Ion Cannon, Bacta Tank). A
+ * "[defeat this upgrade]" cost is paid first, and a once-each-phase use is recorded; then the effect
+ * runs, with the upgrade as its card, and the turn passes unless it raised a choice.
+ */
+function useBaseUpgradeAction(state: GameState, cardId: string, index: number): GameState {
+  const owner = state.activePlayer
+  const offered = usableBaseActions(state, owner).find(a => a.cardId === cardId && a.index === index)
+  if (!offered) throw new Error(`useBaseAbility: ${cardId}#${index} is not usable`)
+  let next = state
+  if (offered.ability.defeatsSelf) next = defeatBaseUpgrade(next, owner, cardId)
+  if (offered.ability.oncePerPhase) next = recordBaseActionUsed(next, owner, baseActionKey(cardId, index))
+  const ctx = { owner, cardId, sourceInstanceId: baseSourceId(cardId) }
+  next = stampChoiceSource(next, offered.ability.effect(next, ctx), { cardId, controller: owner })
+  next = checkWin(next)
+  if (next.winner !== null) return next
+  next = handOffOpponentChoice(next, owner)
+  return hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
 }
 
 /**
@@ -2215,7 +2275,7 @@ function takeInitiative(state: GameState): GameState {
   // The taker's units carry the trigger as well as their leader (Grogu the unit).
   const before = taken
   taken = fireBatch(taken, [
-    ...collectLeaderTriggers(taken, 'whenTakeInitiative', playerId),
+    ...collectPlayerTriggers(taken, 'whenTakeInitiative', playerId),
     ...collectUnitsTrigger(taken, 'whenTakeInitiative', playerId),
   ])
   if (batchOutstanding(before, taken)) {
@@ -2264,7 +2324,7 @@ function fireAttackEnd(state: GameState, owner: PlayerId, attackerId: string, ct
   // "When a friendly unit's attack ends": every unit the attacker's controller has, plus their
   // undeployed leader. One event, so all of it is one batch.
   owed.push(...collectUnitsTrigger(state, 'whenFriendlyAttackEnds', owner, fullCtx))
-  owed.push(...collectLeaderTriggers(state, 'whenFriendlyAttackEnds', owner, fullCtx))
+  owed.push(...collectPlayerTriggers(state, 'whenFriendlyAttackEnds', owner, fullCtx))
   return fireBatch(state, owed)
 }
 
@@ -2285,7 +2345,7 @@ function batchOutstanding(before: GameState, after: GameState): boolean {
 /** `point` on every unit in play and each undeployed leader (Doctor Aphra's "when the regroup phase starts"), as one batch. */
 function fireForAllUnits(state: GameState, point: TriggerPoint): GameState {
   return fireBatch(state, (['player', 'opponent'] as PlayerId[]).flatMap(owner => [
-    ...collectLeaderTriggers(state, point, owner),
+    ...collectPlayerTriggers(state, point, owner),
     ...collectUnitsTrigger(state, point, owner),
   ]))
 }
@@ -2761,7 +2821,9 @@ function readyEverything(state: GameState, id: PlayerId): GameState {
   const readied = readyAllResources(p)
   // "This unit doesn't ready during the regroup phase unless its power is 4 or more" (Rampart): it
   // stays exhausted, and its "when this unit readies" abilities do not fire, because it did not.
-  const readies = (u: UnitState) => !unitCannotReady(state, u) && abilityCardIds(u).every(cardId => getCardDefinition(cardId)?.readiesInRegroup?.(state, u) ?? true)
+  const readies = (u: UnitState) => !unitCannotReady(state, u)
+    && !(state.lastingEffects ?? []).some(e => e.skipsRegroupReady && e.targetInstanceId === u.instanceId) // Carbonite Chamber
+    && abilityCardIds(u).every(cardId => getCardDefinition(cardId)?.readiesInRegroup?.(state, u) ?? true)
   const justReadied = p.units.filter(u => u.exhausted && readies(u)).map(u => u.instanceId)
   const next = updatePlayer(state, id, {
     resources: readied.resources,

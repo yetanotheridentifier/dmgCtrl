@@ -1,5 +1,5 @@
 import type { Arena, DelayedEffect, EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeRef } from './types'
-import { abilityCardIds } from './types'
+import { abilityCardIds, baseAbilityCardIds } from './types'
 
 /**
  * Card ability framework. Card-type-agnostic: units, leaders, events and upgrades
@@ -65,6 +65,12 @@ export type TriggerPoint =
   | 'whenCreateUnit'
   // "When Deployed": fires on a leader unit as it deploys, after its entry keywords (Shielded, Hidden).
   | 'whenDeployed'
+  // "When you play an upgrade" (The Tarkin Doctrine reads Fortification ones): fires on the player's
+  // undeployed leader, units and base, with the upgrade in `ctx.playedCardId`.
+  | 'whenPlayUpgrade'
+  // "When a unit enters play", either player's, played or created (Trap Field). Collected from both
+  // players' bases only, since no unit or leader reads it; `ctx.targetInstanceId` is the unit.
+  | 'whenUnitEntersPlay'
 
 /**
  * What one ability's effect is handed when it resolves: who owns it and which card it is on, plus the
@@ -387,6 +393,54 @@ export interface BaseAbilities {
   startingHandDelta?: number
   /** Cards the deck must hold, relative to the usual minimum (Data Vault: +10). */
   deckMinimumDelta?: number
+  /**
+   * "Action:" abilities the base has, from an upgrade attached to it (Heavy Ion Cannon, Bacta Tank).
+   * Offered as `useBaseAbility` with the card and index, taken as that player's action for the turn.
+   */
+  actions?: BaseUpgradeActionDef[]
+  /**
+   * Damage about to be dealt to this base (Alliance Shield Generator prevents 5 or more). Returns the
+   * board with the damage dealt with, prevented and paid for, or `undefined` to leave it alone.
+   */
+  interceptDamage?: (state: GameState, owner: PlayerId, amount: number) => GameState | undefined
+}
+
+/** An "Action:" a base has from one of its upgrades. `cardId` in the effect's context is the upgrade. */
+export interface BaseUpgradeActionDef {
+  description: string
+  /** "[defeat this upgrade]": the cost is the upgrade itself, defeated before the effect. */
+  defeatsSelf?: boolean
+  /** "Use this ability only once each phase", counted per copy on the base. */
+  oncePerPhase?: boolean
+  /** Offered only while this holds, so the action is never taken for nothing. */
+  usable?: (state: GameState, owner: PlayerId) => boolean
+  effect: (state: GameState, ctx: EffectContext) => GameState
+}
+
+/** The id a base's ability acts as the source of, so every choice it raises has a stable id (`<cardId>-base`). */
+export const baseSourceId = (cardId: string): string => `${cardId}-base`
+
+/** The phase-use key of a base action (`PhaseEvents.baseActionsUsed`). */
+export const baseActionKey = (cardId: string, index: number): string => `${cardId}#${index}`
+
+/**
+ * The base-upgrade actions `owner` may take now: one per distinct ability, however many copies carry
+ * it, since the copies are the same action. A once-each-phase action is spent once every copy has been
+ * used this phase.
+ */
+export function usableBaseActions(state: GameState, owner: PlayerId): { cardId: string; index: number; ability: BaseUpgradeActionDef }[] {
+  const base = state.players[owner].base
+  const used = state.phaseEvents?.baseActionsUsed?.[owner] ?? []
+  const out: { cardId: string; index: number; ability: BaseUpgradeActionDef }[] = []
+  for (const cardId of new Set(baseAbilityCardIds(base))) {
+    const copies = baseAbilityCardIds(base).filter(id => id === cardId).length
+    ;(registry.get(cardId)?.baseAbilities?.actions ?? []).forEach((ability, index) => {
+      if (ability.oncePerPhase && used.filter(k => k === baseActionKey(cardId, index)).length >= copies) return
+      if (ability.usable && !ability.usable(state, owner)) return
+      out.push({ cardId, index, ability })
+    })
+  }
+  return out
 }
 
 /**
@@ -657,9 +711,48 @@ export function collectLeaderTriggers(
 }
 
 /**
+ * A player's **base**'s triggered abilities at `point`, as data: the ones its upgrades give it ("Attached
+ * base gains: ...") and any printed on an upgrade that lives there (Insurgent Camp). The base is not a
+ * unit, so like an undeployed leader it is collected for its controller, with `<cardId>-base` as the
+ * source so a choice it raises has a stable id. Never asked about `whenPlayed`: an upgrade's own When
+ * Played is collected once, as it is played, by `collectCardTriggers`.
+ */
+export function collectBaseTriggers(
+  state: GameState,
+  point: TriggerPoint,
+  owner: PlayerId,
+  ctx?: TriggerContext,
+): PendingTrigger[] {
+  const out: PendingTrigger[] = []
+  for (const cardId of baseAbilityCardIds(state.players[owner].base)) {
+    getAbilities(cardId).forEach((ability, abilityIndex) => {
+      if (ability.trigger !== point) return
+      out.push({
+        id: `t${out.length}-base-${cardId}-${abilityIndex}`,
+        controller: owner, point, cardId, abilityIndex, layer: 0,
+        sourceInstanceId: baseSourceId(cardId),
+        ...(ctx ? { ctx } : {}),
+      })
+    })
+  }
+  return out
+}
+
+/** A player's undeployed leader and base: the two sources of abilities that are not units in play. */
+export function collectPlayerTriggers(
+  state: GameState,
+  point: TriggerPoint,
+  owner: PlayerId,
+  ctx?: TriggerContext,
+): PendingTrigger[] {
+  return [...collectLeaderTriggers(state, point, owner, ctx), ...collectBaseTriggers(state, point, owner, ctx)]
+}
+
+/**
  * Everything a unit arriving under `owner`'s control raises at `point` (`whenPlayUnit` for a play,
- * `whenCreateUnit` for a created token unit): the undeployed leader's front side and every OTHER unit
- * the player controls, each told which unit arrived in `ctx.targetInstanceId`.
+ * `whenCreateUnit` for a created token unit): the undeployed leader's front side, the base and every
+ * OTHER unit the player controls, each told which unit arrived in `ctx.targetInstanceId`. Both players'
+ * bases also see it as `whenUnitEntersPlay` (Trap Field reads any unit entering play).
  */
 export function collectArrivalTriggers(
   state: GameState,
@@ -669,8 +762,9 @@ export function collectArrivalTriggers(
 ): PendingTrigger[] {
   const ctx = { targetInstanceId: arrivedId }
   return [
-    ...collectLeaderTriggers(state, point, owner, ctx),
+    ...collectPlayerTriggers(state, point, owner, ctx),
     ...state.players[owner].units.flatMap(u => (u.instanceId === arrivedId ? [] : collectUnitTriggers(state, point, u, owner, ctx))),
+    ...(['player', 'opponent'] as PlayerId[]).flatMap(p => collectBaseTriggers(state, 'whenUnitEntersPlay', p, ctx)),
   ]
 }
 

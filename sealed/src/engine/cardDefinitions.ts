@@ -1,13 +1,13 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers } from './abilities'
-import { fireBatch, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
+import { fireBatch, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck, defeatBaseUpgrade } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
+import { isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
@@ -8055,3 +8055,157 @@ registerCard('HMW_015', mergeLeaderSides( // Bossk
   attacks('You may deal 2 damage to a unit with a token upgrade on it.', (s, ctx) => damageChoice(s, ctx, 2, picked(s, ctx, tokenUpgraded), [], true)),
   { ifYouDo: (s, ctx) => giveWeakness(healUnit(s, ctx.targetInstanceId!, 1), ctx.targetInstanceId!) },
 ))
+
+// ══ Fortify: upgrades on a base ════════════════════════════════════════
+// A Fortify upgrade attaches to its player's base (`playBaseUpgrade`), and "Attached base gains: ..." makes
+// its ability the base's. So a constant is `baseAbilities.aura`, an action is `baseAbilities.actions`, and
+// a triggered ability is an ordinary `abilities` entry, which `collectBaseTriggers` reads off the base's
+// upgrades: its source is `<cardId>-base`, and "this upgrade" is the first copy of the card on the
+// controller's base. The cards that read a base's upgrades count them off `BaseState.upgrades`.
+
+const baseUpgradeCount = (s: GameState, owner: PlayerId): number => s.players[owner].base.upgrades?.length ?? 0
+const baseUpgraded = (s: GameState, owner: PlayerId): boolean => baseUpgradeCount(s, owner) > 0
+const onBase = (s: GameState, owner: PlayerId, cardId: string): boolean => (s.players[owner].base.upgrades ?? []).some(u => u.cardId === cardId)
+/** A "Friendly units ..." constant a base upgrade hands its base. */
+const friendlyBaseAura = (test: (u: UnitState) => boolean, contribution: AuraContribution): CardDefinition => ({
+  baseAbilities: { aura: (_s, _owner, target, sameController) => (sameController && test(target) ? contribution : undefined) },
+})
+/** "You may defeat this upgrade. If you do, ...": a yes/no, then the card's `ifYouDo` with the unit it is about. */
+const mayDefeatThisUpgrade = (s: GameState, ctx: Resumable, text: string, unit: string): GameState =>
+  (onBase(s, ctx.owner, ctx.cardId) ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text, then: resume(ctx, undefined, unit) }) : s)
+/** The rest of `mayDefeatThisUpgrade`, only if the upgrade was there to defeat. */
+const ifDefeatedThisUpgrade = (then: (s: GameState, unit: string, ctx: IfYouDoContext) => GameState) => (s: GameState, ctx: IfYouDoContext): GameState =>
+  (onBase(s, ctx.owner, ctx.cardId) && ctx.unitChosen ? then(defeatBaseUpgrade(s, ctx.owner, ctx.cardId), ctx.unitChosen, ctx) : s)
+const nonVehicleUnitCard = (c: EngineCard | undefined): boolean => printedUnit(c) && !printedTrait(c, 'Vehicle')
+
+// A: constants on the base
+registerCard('HMW_271', friendlyBaseAura(u => u.arena === 'space', { power: 1 })) // Landing Pad
+registerCard('HMW_112', friendlyBaseAura(() => true, { keywords: [{ name: 'Overwhelm' }] })) // Military Academy
+registerCard('HMW_126', friendlyBaseAura(() => true, { keywords: [{ name: 'Raid', value: 1 }] })) // Verdant Fortress
+registerCard('HMW_081', { baseAbilities: { // Alliance Shield Generator
+  interceptDamage: (s, owner, amount) => (amount >= 5 && onBase(s, owner, 'HMW_081') ? drawCards(defeatBaseUpgrade(s, owner, 'HMW_081'), owner, 1) : undefined),
+} })
+
+// B: triggered abilities the base gains, or the upgrade has there
+registerCard('HMW_070', { abilities: [{ trigger: 'whenRegroupStarts', description: 'When the regroup phase starts: Draw a card and deal 2 damage to this base.', // Dark Sanctum
+  effect: (s, ctx) => dealDamageToBase(drawCards(s, ctx.owner, 1), ctx.owner, 2, { cardId: ctx.cardId, controller: ctx.owner }) }] })
+registerCard('HMW_160', { abilities: [{ trigger: 'whenRegroupStarts', description: "When the regroup phase starts: Reveal the top card of your deck. If it's Aggression, deal 1 damage to an enemy unit.", // Noxious Refinery
+  effect: (s, ctx) => (printedAspect(s.cards[s.players[ctx.owner].deck[0]], 'Aggression') ? damageChoice(s, ctx, 1, s.players[opponentOf(ctx.owner)].units) : s) }] })
+registerCard('HMW_113', { abilities: [{ trigger: 'whenFriendlyUnitDefeated', description: 'When a friendly unit is defeated: Heal 1 damage from this base.', // Sinister War Memorial
+  effect: (s, ctx) => healBase(s, ctx.owner, 1) }] })
+/**
+ * "If you control Grand Moff Tarkin". The HMW leader's two sides have different names ("Grand Moff Tarkin //
+ * The Death Star"), so his undeployed side counts by its front name and his deployed side, The Death Star,
+ * does not; any unit of that name counts as usual.
+ */
+const controlsTarkin = (s: GameState, owner: PlayerId): boolean => {
+  const leader = s.players[owner].leader
+  return (!leader.deployed && s.cards[leader.cardId]?.name.split(' // ')[0] === 'Grand Moff Tarkin') || playerControlsNamed(s, owner, 'Grand Moff Tarkin')
+}
+registerCard('HMW_206', { // The Tarkin Doctrine
+  abilities: [
+    { trigger: 'whenPlayUpgrade', description: 'When you play a Fortification upgrade: Exhaust an enemy unit.',
+      effect: (s, ctx) => (printedTrait(s.cards[ctx.playedCardId ?? ''], 'Fortification')
+        ? targetChoice(s, ctx, 'mayExhaustUnit', s.players[opponentOf(ctx.owner)].units.map(u => u.instanceId))
+        : s) },
+    ...whenPlayed('If you control Grand Moff Tarkin, give an enemy unit -3/-0 for this phase.', (s, ctx) =>
+      (controlsTarkin(s, ctx.owner) ? lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickEnemy), { power: -3 }) : s)).abilities!,
+  ],
+})
+registerCard('HMW_216', { // Insurgent Camp
+  abilities: [{ trigger: 'whenPlayUnit', description: 'When you play a unit with 3 or less power: You may defeat this upgrade. If you do, ready that unit.',
+    effect: (s, ctx) => {
+      const played = findUnit(s, ctx.targetInstanceId ?? '')?.unit
+      return played && effectivePower(s, played) <= 3 ? mayDefeatThisUpgrade(s, ctx, 'defeat Insurgent Camp to ready the unit you played', played.instanceId) : s
+    } }],
+  ifYouDo: ifDefeatedThisUpgrade((s, unit) => readyUnit(s, unit)),
+})
+registerCard('HMW_171', { // Trap Field
+  abilities: [{ trigger: 'whenUnitEntersPlay', description: 'When a non-leader ground unit enters play (including token units): You may defeat this upgrade. If you do, deal 3 damage to that unit.',
+    effect: (s, ctx) => {
+      const entered = findUnit(s, ctx.targetInstanceId ?? '')?.unit
+      return entered && entered.arena === 'ground' && nonLeader(s, entered)
+        ? mayDefeatThisUpgrade(s, ctx, 'defeat Trap Field to deal 3 damage to the unit that entered play', entered.instanceId)
+        : s
+    } }],
+  ifYouDo: ifDefeatedThisUpgrade((s, unit, ctx) => dealDamageToUnit(s, unit, 3, { cardId: ctx.cardId, controller: ctx.owner })),
+})
+
+// C: When Played, and actions the base gains
+registerCard('HMW_172', { // Heavy Ion Cannon
+  ...whenPlayed('Draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1)),
+  baseAbilities: { actions: [{
+    description: 'Action [discard a card from your hand]: Deal 2 damage to a unit. Use this ability only once each phase.',
+    oncePerPhase: true,
+    usable: (s, owner) => allUnits(s).length > 0 && s.players[owner].hand.length > 0,
+    effect: (s, ctx) => discards(s, ctx.owner, 1, ctx.sourceInstanceId!, resume(ctx)),
+  }] },
+  ifYouDo: (s, ctx) => damageChoice(s, ctx, 2, allUnits(s)),
+})
+registerCard('HMW_037', { // Bacta Tank
+  ...whenPlayed('Heal up to 3 damage from a non-Vehicle unit.', (s, ctx) =>
+    healChoice(s, ctx, 3, allUnits(s).filter(u => u.damage > 0 && nonVehicle(s, u)).map(u => u.instanceId), [], true)),
+  baseAbilities: { actions: [{
+    description: 'Action [defeat this upgrade]: Put a non-Vehicle unit from your discard pile on top of your deck.',
+    defeatsSelf: true,
+    usable: (s, owner) => s.players[owner].discard.some(id => nonVehicleUnitCard(s.cards[id])),
+    effect: (s, ctx) => cardThen(s, ctx, s.players[ctx.owner].discard.filter(id => nonVehicleUnitCard(s.cards[id])), 'put a non-Vehicle unit from your discard pile on top of your deck', false, 'deck'),
+  }] },
+  ifYouDo: (s, ctx) => {
+    const p = s.players[ctx.owner]
+    const at = ctx.cardChosen ? p.discard.indexOf(ctx.cardChosen) : -1
+    return at === -1 ? s : updatePlayer(s, ctx.owner, { discard: p.discard.filter((_, i) => i !== at), deck: [ctx.cardChosen!, ...p.deck] })
+  },
+})
+registerCard('HMW_095', { // Carbonite Chamber
+  baseAbilities: { actions: [{
+    description: "Action [defeat this upgrade]: Choose a non-Vehicle unit. It doesn't ready during the next regroup phase.",
+    defeatsSelf: true,
+    usable: s => allUnits(s).some(u => nonVehicle(s, u)),
+    effect: (s, ctx) => unitThen(s, ctx, allUnits(s).filter(u => nonVehicle(s, u)).map(u => u.instanceId), "choose a non-Vehicle unit; it doesn't ready during the next regroup phase", false),
+  }] },
+  ifYouDo: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, skipsRegroupReady: true, untilRoundEnd: true }),
+})
+registerCard('HMW_205', whenPlayed("Look at an opponent's hand. You may discard a card from it. If you do, they draw a card.", (s, ctx) => // Intelligence Agency
+  // "You may look at the top card of your deck at any time" is information the engine does not model.
+  pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, thenDraw: true })))
+
+// D: cards that read a base's upgrades
+registerCard('HMW_061', attacks('If your base is upgraded, draw a card.', (s, ctx) => (baseUpgraded(s, ctx.owner) ? drawCards(s, ctx.owner, 1) : s))) // Director Krennic
+const baseUpgradesOf = (s: GameState, u: UnitState): number => { const o = unitOwner(s, u); return o ? baseUpgradeCount(s, o) : 0 }
+registerCard('HMW_066', { // Carrion Spike
+  statModifier: (s, u) => perEach(baseUpgradesOf(s, u), 1),
+  conditionalKeywords: (s, u) => { const n = baseUpgradesOf(s, u); return n > 0 ? [{ name: 'Restore', value: n }] : [] },
+})
+registerCard('HMW_260', { costModifier: (s, owner) => (baseUpgraded(s, owner) ? -2 : 0) }) // Queen Amidala
+/** Every upgrade on either base, in a fixed order, so a pick's option index names one. */
+const allBaseUpgrades = (s: GameState): { owner: PlayerId; cardId: string }[] =>
+  (['player', 'opponent'] as PlayerId[]).flatMap(owner => (s.players[owner].base.upgrades ?? []).map(u => ({ owner, cardId: u.cardId })))
+registerCard('HMW_270', { // Wild Space Wanderer
+  ...whenPlayed('You may defeat an upgrade on a base.', (s, ctx) => {
+    const ups = allBaseUpgrades(s)
+    return ups.length ? cardThen(s, ctx, ups.map(u => u.cardId), 'defeat an upgrade on a base', true, 'base') : s
+  }),
+  ifYouDo: (s, ctx) => {
+    const picked = ctx.optionIndex === undefined ? undefined : allBaseUpgrades(s)[ctx.optionIndex]
+    return picked ? defeatBaseUpgrade(s, picked.owner, picked.cardId) : s
+  },
+})
+/** "A base with 10 or less remaining HP". Only the enemy's is offered: defeating your own loses the game. */
+const tarkinBase = (s: GameState, owner: PlayerId): boolean => {
+  const base = s.players[opponentOf(owner)].base
+  return (s.cards[base.cardId]?.hp ?? 0) - base.damage <= 10
+}
+registerCard('HMW_004', { // Grand Moff Tarkin
+  leaderAbilities: { waivesAspectPenalty: (_s, _owner, c) => isFortify(c.card) },
+  waivesAspectPenalty: (_s, _source, c) => isFortify(c.card),
+  abilities: [{ trigger: 'whenRegroupStarts', description: 'When the regroup phase starts: You may defeat a base with 10 or less remaining HP.',
+    effect: (s, ctx) => (tarkinBase(s, ctx.owner)
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: "defeat the opponent's base", then: resume(ctx) })
+      : s) }],
+  ifYouDo: (s, ctx) => {
+    const opp = opponentOf(ctx.owner)
+    const base = s.players[opp].base
+    return updatePlayer(s, opp, { base: { ...base, damage: Math.max(base.damage, s.cards[base.cardId]?.hp ?? 0) } })
+  },
+})
