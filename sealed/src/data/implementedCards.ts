@@ -9,6 +9,8 @@
  */
 
 import { REPRINTS, type Reprint } from './reprints'
+import { TOKEN_CARDS } from '../engine/tokenUpgrades'
+import { TOKEN_UNIT_CARDS } from '../engine/tokenUnits'
 
 export interface LeaderStatus {
   id: string
@@ -1431,30 +1433,50 @@ export interface SetProgress {
  * Printed card counts per set, from the SWUDB set listing (`cards/search?q=set:…`, normal variants
  * only), newest first within each group — the order the panel shows them in.
  *
- * TOKEN counts are NOT from that listing, which omits them. The API's own token data is too partial
- * to use: only `TSOR` and `TASH` exist at all, it holds no token *units* (Mandalorian, X-wing, …),
- * and some rows are findable by search but not by direct fetch. These counts are therefore recorded
- * from the printed cards — every set in the cycle prints Experience and Shield, plus its own
- * extras: Clone Trooper/Battle Droid (TWI), X-wing/TIE Fighter (JTL), Force (LOF),
- * Advantage/Mandalorian (ASH), Spy (SEC), Credit (LAW). The out-of-cycle products print none
- * of their own.
+ * The token count is not recorded here: it is the length of the set's `PRINTED_TOKENS` entry.
  *
  * IBH is counted by DISTINCT cards, not collector numbers: it reprints the same card at up to three
  * numbers (Blizzard Force AT-ST is #70, #89 and #103), so its 104 printed slots are 51 real cards,
  * and implementing one covers every printing of it.
  */
-const SET_TOTALS: { code: string; group: SetGroup; total: TypeCounts }[] = [
-  { code: 'ASH', group: 'rotation', total: { leaders: 18, bases: 8, units: 179, upgrades: 25, events: 34, tokens: 4 } },
-  { code: 'LAW', group: 'rotation', total: { leaders: 18, bases: 12, units: 182, upgrades: 14, events: 38, tokens: 3 } },
-  { code: 'SEC', group: 'rotation', total: { leaders: 18, bases: 8, units: 171, upgrades: 17, events: 50, tokens: 3 } },
-  { code: 'LOF', group: 'rotation', total: { leaders: 18, bases: 12, units: 166, upgrades: 20, events: 48, tokens: 3 } },
-  { code: 'JTL', group: 'rotation', total: { leaders: 18, bases: 13, units: 167, upgrades: 7, events: 57, tokens: 4 } },
-  { code: 'TWI', group: 'retired', total: { leaders: 18, bases: 12, units: 150, upgrades: 19, events: 58, tokens: 4 } },
-  { code: 'SHD', group: 'retired', total: { leaders: 18, bases: 8, units: 160, upgrades: 30, events: 46, tokens: 2 } },
-  { code: 'SOR', group: 'retired', total: { leaders: 18, bases: 12, units: 148, upgrades: 14, events: 60, tokens: 2 } },
-  { code: 'TS26', group: 'out-of-cycle', total: { leaders: 8, bases: 4, units: 41, upgrades: 8, events: 23, tokens: 0 } },
-  { code: 'IBH', group: 'out-of-cycle', total: { leaders: 2, bases: 2, units: 35, upgrades: 0, events: 12, tokens: 0 } },
+const SET_TOTALS: { code: string; group: SetGroup; total: Omit<TypeCounts, 'tokens'> }[] = [
+  { code: 'ASH', group: 'rotation', total: { leaders: 18, bases: 8, units: 179, upgrades: 25, events: 34 } },
+  { code: 'LAW', group: 'rotation', total: { leaders: 18, bases: 12, units: 182, upgrades: 14, events: 38 } },
+  { code: 'SEC', group: 'rotation', total: { leaders: 18, bases: 8, units: 171, upgrades: 17, events: 50 } },
+  { code: 'LOF', group: 'rotation', total: { leaders: 18, bases: 12, units: 166, upgrades: 20, events: 48 } },
+  { code: 'JTL', group: 'rotation', total: { leaders: 18, bases: 13, units: 167, upgrades: 7, events: 57 } },
+  { code: 'TWI', group: 'retired', total: { leaders: 18, bases: 12, units: 150, upgrades: 19, events: 58 } },
+  { code: 'SHD', group: 'retired', total: { leaders: 18, bases: 8, units: 160, upgrades: 30, events: 46 } },
+  { code: 'SOR', group: 'retired', total: { leaders: 18, bases: 12, units: 148, upgrades: 14, events: 60 } },
+  { code: 'TS26', group: 'out-of-cycle', total: { leaders: 8, bases: 4, units: 41, upgrades: 8, events: 23 } },
+  { code: 'IBH', group: 'out-of-cycle', total: { leaders: 2, bases: 2, units: 35, upgrades: 0, events: 12 } },
 ]
+
+/**
+ * The tokens each set prints, by the name on the card. Recorded from the printed cards: the SWUDB set
+ * listing omits tokens, and the API's own token data is too partial to use (only `TSOR` and `TASH`
+ * exist, with no token units, and some rows are findable by search but not by direct fetch). The set
+ * fixtures carry no token rows either. The out-of-cycle products print none of their own.
+ *
+ * A set is credited with a token once the engine creates it: when its name matches a built token card
+ * (`TOKEN_CARDS`, `TOKEN_UNIT_CARDS`). So a token mechanic that lands counts for every set that prints
+ * it, with no count to update here.
+ */
+export const PRINTED_TOKENS: Record<string, string[]> = {
+  ASH: ['Experience', 'Shield', 'Advantage', 'Mandalorian'],
+  LAW: ['Experience', 'Shield', 'Credit'],
+  SEC: ['Experience', 'Shield', 'Spy'],
+  LOF: ['Experience', 'Shield', 'Force'],
+  JTL: ['Experience', 'Shield', 'X-Wing', 'TIE Fighter'],
+  TWI: ['Experience', 'Shield', 'Clone Trooper', 'Battle Droid'],
+  SHD: ['Experience', 'Shield'],
+  SOR: ['Experience', 'Shield'],
+  TS26: [],
+  IBH: [],
+}
+
+/** The names of the tokens the engine creates. */
+const BUILT_TOKEN_NAMES = new Set([...Object.values(TOKEN_CARDS), ...Object.values(TOKEN_UNIT_CARDS)].map(c => c.name))
 
 /**
  * Cards that already play correctly with no engine work: vanilla ones, and keyword-only ones whose
@@ -1483,13 +1505,6 @@ export const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
   TS26: { units: 5, upgrades: 1 },
   IBH: { bases: 2, units: 19 },
 }
-
-/**
- * Tokens the engine creates, per set. ASH counts all four it prints: Shield, Advantage, Mandalorian
- * and Experience. The other sets are not counted here yet, so they read 0 of the tokens they print
- * even where the engine creates them.
- */
-const TOKENS_BUILT: Record<string, number> = { ASH: 4 }
 
 /** The set a card id belongs to: the code before its underscore (`TS26_012` is TS26). */
 export function setOf(id: string): string {
@@ -1531,14 +1546,14 @@ export function implementedCounts(code: string, manifest: Manifest, reprints: re
     units: (playable.units ?? 0) + inSet(manifest.units),
     upgrades: (playable.upgrades ?? 0) + inSet(manifest.upgrades),
     events: (playable.events ?? 0) + inSet(manifest.events),
-    tokens: TOKENS_BUILT[code] ?? 0,
+    tokens: (PRINTED_TOKENS[code] ?? []).filter(name => BUILT_TOKEN_NAMES.has(name)).length,
   }
 }
 
 export const SET_PROGRESS: SetProgress[] = SET_TOTALS.map(({ code, group, total }) => ({
   code,
   group,
-  total,
+  total: { ...total, tokens: (PRINTED_TOKENS[code] ?? []).length },
   done: implementedCounts(code, IMPLEMENTED),
 }))
 

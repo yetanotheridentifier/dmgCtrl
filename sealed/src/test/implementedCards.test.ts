@@ -3,8 +3,10 @@ import { registeredCardIds, getCardDefinition } from '../engine/abilities'
 import '../engine/cardDefinitions' // side-effect: registers every implemented card
 import {
   IMPLEMENTED, IMPLEMENTED_LEADERS, IMPLEMENTED_BASES, IMPLEMENTED_UPGRADES, IMPLEMENTED_UNITS, IMPLEMENTED_EVENTS, PLAYABLE_AS_PRINTED,
-  SET_PROGRESS, sumCounts, TOTAL_PROGRESS, UNIT_GROUPS, CARD_TYPES, implementedCounts, setOf,
+  SET_PROGRESS, sumCounts, TOTAL_PROGRESS, UNIT_GROUPS, CARD_TYPES, implementedCounts, setOf, PRINTED_TOKENS,
 } from '../data/implementedCards'
+import { TOKEN_CARDS } from '../engine/tokenUpgrades'
+import { TOKEN_UNIT_CARDS } from '../engine/tokenUnits'
 import type { CardTypeKey, Manifest, TypeCounts } from '../data/implementedCards'
 import { REPRINTS } from '../data/reprints'
 import { poolFor } from '../bench/setPools'
@@ -50,7 +52,9 @@ describe('setOf', () => {
 describe('implementedCounts', () => {
   const EMPTY: Manifest = { leaders: [], bases: [], units: [], upgrades: [], events: [] }
   const withPlayable = (code: string, over: Partial<TypeCounts>): TypeCounts => ({
-    leaders: 0, bases: 0, units: 0, upgrades: 0, events: 0, tokens: 0, ...PLAYABLE_AS_PRINTED[code], ...over,
+    leaders: 0, bases: 0, units: 0, upgrades: 0, events: 0, ...PLAYABLE_AS_PRINTED[code], ...over,
+    // Tokens do not depend on the manifest; 'implementation progress' below pins them per set.
+    tokens: implementedCounts(code, EMPTY).tokens,
   })
 
   it('credits a registered card to the set its id names, and to no other', () => {
@@ -159,6 +163,24 @@ describe('implementation progress', () => {
     // Keyword-only units + every registered unit ability.
     expect(ash.done.units).toBe(UNIT_GROUPS.find(g => g.id === 'keyword')!.units.length + inAsh(IMPLEMENTED_UNITS))
     expect(ash.done.tokens).toBe(4) // Shield, Advantage, Mandalorian and Experience: all four ASH prints
+  })
+
+  it('counts the tokens each set prints', () => {
+    const totals = Object.fromEntries(SET_PROGRESS.map(s => [s.code, s.total.tokens]))
+    expect(totals).toEqual({ ASH: 4, LAW: 3, SEC: 3, LOF: 3, JTL: 4, TWI: 4, SHD: 2, SOR: 2, TS26: 0, IBH: 0 })
+    for (const set of SET_PROGRESS) expect(set.total.tokens, set.code).toBe(PRINTED_TOKENS[set.code].length)
+  })
+
+  it('credits every set with each token it prints that the engine creates, not just ASH', () => {
+    // Every set in the cycle prints Shield and Experience, which the engine creates; the set-specific
+    // tokens it does not create yet (Force, Credit, Spy, X-Wing, ...) stay uncredited.
+    const done = Object.fromEntries(SET_PROGRESS.map(s => [s.code, s.done.tokens]))
+    expect(done).toEqual({ ASH: 4, LAW: 2, SEC: 2, LOF: 2, JTL: 2, TWI: 2, SHD: 2, SOR: 2, TS26: 0, IBH: 0 })
+  })
+
+  it('matches every token the engine creates to a token some set prints, so a renamed token cannot drop out of the count', () => {
+    const printed = new Set(Object.values(PRINTED_TOKENS).flat())
+    for (const card of [...Object.values(TOKEN_CARDS), ...Object.values(TOKEN_UNIT_CARDS)]) expect(printed, card.name).toContain(card.name)
   })
 
   it('credits every set with the cards that play as printed, and never more than it prints', () => {
