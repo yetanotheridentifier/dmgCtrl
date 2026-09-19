@@ -387,6 +387,11 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   // HMW When Played: A
   { id: 'HMW_236', name: 'Booma Ball' },
   { id: 'HMW_252', name: 'Villainous Ambition' },
+  // HMW When Played: B
+  { id: 'HMW_127', name: "Chewbacca's Bowcaster" },
+  { id: 'HMW_148', name: 'Local Support' },
+  { id: 'HMW_264', name: 'Heroic Bravery' },
+  { id: 'HMW_265', name: "Twi'lek Kalikori" },
 ]
 
 /**
@@ -1524,6 +1529,25 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_249', name: 'Frenzied Tri-Fighters' },
   { id: 'HMW_261', name: 'Ben Kenobi' },
   { id: 'HMW_263', name: 'Wrecker' },
+  // HMW When Played: B
+  { id: 'HMW_052', name: "A'Koba" },
+  { id: 'HMW_072', name: 'Grand Army Marine' },
+  { id: 'HMW_080', name: 'Fambaa Shield Team' },
+  { id: 'HMW_085', name: 'Remote Scout' },
+  { id: 'HMW_091', name: 'Pelta Relief Frigate' },
+  { id: 'HMW_103', name: 'Disposable B1' },
+  { id: 'HMW_111', name: 'Invasion Lander' },
+  { id: 'HMW_121', name: 'Hijacked AT-ST' },
+  { id: 'HMW_123', name: 'King Grakchawwaa' },
+  { id: 'HMW_136', name: 'Lifetree Caravan' },
+  { id: 'HMW_154', name: "Dooku's Solar Sailer" },
+  { id: 'HMW_180', name: 'Stormchaser' },
+  { id: 'HMW_189', name: 'Neebray Manta' },
+  { id: 'HMW_228', name: 'Lakeside Shaaks' },
+  { id: 'HMW_243', name: 'Sun Fac' },
+  { id: 'HMW_246', name: 'Pyke Sarisa' },
+  { id: 'HMW_247', name: 'Surveillance Cruiser' },
+  { id: 'HMW_255', name: 'C-3P0' },
 ]
 
 /**

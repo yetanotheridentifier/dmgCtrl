@@ -424,7 +424,8 @@ describe('HMW When Played, B: buffs, tokens, cards and resources', () => {
   })
 
   it('Lakeside Shaaks (HMW_228) readies a friendly resource', () => {
-    expect(readyCount(play(board({ resources: ready(4) }), 'HMW_228'), 'player')).toBe(1)
+    // 4 plus the aspect penalty spends all 6, and the ability readies one of them.
+    expect(readyCount(play(board({ resources: ready(6) }), 'HMW_228'), 'player')).toBe(1)
   })
 
   it('Sun Fac (HMW_243) gives a unit Grit for this phase', () => {
@@ -447,13 +448,14 @@ describe('HMW When Played, B: buffs, tokens, cards and resources', () => {
 
   it('C-3P0 (HMW_255) may give an Ewok +2/+2 and may give a Rebel +2/+2', () => {
     const s = play(board({ units: [unit('w', 'EWOK'), unit('r', 'REBEL')] }), 'HMW_255')
-    expect(unitOffers(s)).toEqual(['w'])
-    expect(declinable(s)).toBe(true)
+    const [ewokPick, rebelPick] = s.pendingChoices!
+    expect([ewokPick.kind === 'mayLastingBuff' && ewokPick.targets, ewokPick.kind === 'mayLastingBuff' && ewokPick.optional]).toEqual([['w'], true])
+    expect([rebelPick.kind === 'mayLastingBuff' && [...rebelPick.targets].sort(), rebelPick.kind === 'mayLastingBuff' && rebelPick.optional])
+      .toEqual([['r', self(s, 'HMW_255')].sort(), true])
     const ewok = accept(s, { targetInstanceId: 'w' })
     expect(power(ewok, 'w')).toBe(4)
-    expect(unitOffers(ewok)).toEqual(['r', self(s, 'HMW_255')].sort())
-    expect(declinable(ewok)).toBe(true)
     expect(power(accept(ewok, { targetInstanceId: 'r' }), 'r')).toBe(4)
+    expect(play(board({ units: [unit('r', 'REBEL')] }), 'HMW_255').pendingChoices).toHaveLength(1)
   })
 
   it('Heroic Bravery (HMW_264) shields a Heroism unit it attaches to', () => {

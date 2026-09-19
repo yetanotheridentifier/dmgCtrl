@@ -8293,3 +8293,76 @@ registerCard('HMW_263', { // Wrecker
     return [...(mine ? [mine] : []), ctx.targetInstanceId!].reduce((acc, id) => dealDamageToUnit(acc, id, 3), s)
   },
 })
+
+// B: buffs, keywords, Shields, cards drawn, resources, searches
+const PLANET_BASES = ['Endor', 'Kashyyyk', 'Naboo', 'Tatooine']
+/** "Resource the top card of your deck. Ready it." */
+const resourceTopReady = (s: GameState, owner: PlayerId): GameState => {
+  const next = resourceTopOfDeck(s, owner)
+  const resources = next.players[owner].resources
+  return resources.length > s.players[owner].resources.length
+    ? updatePlayer(next, owner, { resources: resources.map((r, i) => (i === resources.length - 1 ? { ...r, exhausted: false } : r)) })
+    : next
+}
+registerCard('HMW_052', buffWp('Give a unit +2/+0 for this phase.', pickAny, () => ({ power: 2 }), false)) // A'Koba
+registerCard('HMW_072', whenPlayed('Give a Shield token to a friendly Gungan unit.', (s, ctx) => // Grand Army Marine
+  shieldChoice(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickTrait('Gungan'))), false)))
+registerCard('HMW_080', whenPlayed('Give a Shield token to each friendly ground unit without a Shield token on it.', (s, ctx) => // Fambaa Shield Team
+  picked(s, ctx, pickAll(pickFriendly, pickGround, (_s, u) => !hasToken(u.upgrades, TOKEN_SHIELD)))
+    .reduce((acc, u) => giveToken(acc, u.instanceId, TOKEN_SHIELD), s)))
+registerCard('HMW_085', searchDrawWp('Search the top 8 cards of your deck for an upgrade, reveal it, and draw it.', 8, c => c?.type === 'upgrade')) // Remote Scout
+registerCard('HMW_091', whenPlayed('Heal 2 damage from a friendly base and 2 damage from a friendly unit.', (s, ctx) => // Pelta Relief Frigate
+  healChoice(healBase(s, ctx.owner, 2), ctx, 2, pickedIds(s, ctx, pickFriendly), [])))
+registerCard('HMW_103', whenPlayed('If another friendly unit entered play this phase (including leader and token units), draw a card.', (s, ctx) => // Disposable B1
+  (enteredPlayThisPhase(s, ctx.owner).some(id => id !== ctx.sourceInstanceId) ? drawCards(s, ctx.owner, 1) : s)))
+registerCard('HMW_111', whenPlayed('Give each other friendly unit +2/+2 for this phase.', (s, ctx) => // Invasion Lander
+  lastingOnEach(s, picked(s, ctx, pickAll(pickFriendly, pickOther)), { power: 2, hp: 2 })))
+const HIJACKED_KEY = 'HMW_121#noReady'
+registerCard('HMW_121', { // Hijacked AT-ST
+  ...whenPlayed("This unit doesn't ready during the next regroup phase.", (s, ctx) => markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, HIJACKED_KEY)),
+  // As Dryden Vos: the mark is cleared as the regroup phase readies units, so it holds for exactly the next one.
+  readiesInRegroup: (_s, u) => !(u.usedAbilities ?? []).includes(HIJACKED_KEY),
+})
+registerCard('HMW_123', whenPlayed('For each other friendly Wookiee unit, resource the top card of your deck. Ready each card resourced this way.', (s, ctx) => // King Grakchawwaa
+  picked(s, ctx, pickAll(pickFriendly, pickOther, pickTrait('Wookiee'))).reduce(acc => resourceTopReady(acc, ctx.owner), s)))
+registerCard('HMW_127', { // Chewbacca's Bowcaster
+  attachRestriction: nonVehicle,
+  ...onlyIf(hostIs('Chewbacca'), whenPlayed('If attached unit is Chewbacca, resource the top card of your deck.', (s, ctx) => resourceTopOfDeck(s, ctx.owner))),
+})
+registerCard('HMW_136', mayResourceTopWp('If you control 3 or more units (including this one), you may resource the top card of your deck.', // Lifetree Caravan
+  (s, ctx) => s.players[ctx.owner].units.length >= 3))
+registerCard('HMW_148', whenPlayed('Reveal the top card of your deck. If it shares a Trait with a friendly unit, draw it.', (s, ctx) => { // Local Support
+  const top = s.cards[s.players[ctx.owner].deck[0]]
+  if (!top) return s
+  const friendlyTraits = new Set(s.players[ctx.owner].units.flatMap(u => unitTraits(s, u).map(t => t.toLowerCase())))
+  return (top.traits ?? []).some(t => friendlyTraits.has(t.toLowerCase())) ? drawCards(s, ctx.owner, 1) : s
+}))
+registerCard('HMW_154', whenPlayed('If you control a unit that costs 1 or less, each opponent discards a card from their hand.', (s, ctx) => // Dooku's Solar Sailer
+  (youControl(s, ctx, costsAtMost(1)) ? opponentDiscards(s, ctx.owner, ctx.sourceInstanceId!) : s)))
+const isDisaster = (c: EngineCard | undefined): boolean => printedTrait(c, 'Disaster')
+registerCard('HMW_180', { // Stormchaser
+  ...whenPlayed("You may reveal a Disaster card from your hand. If you do or if there's a Disaster card in your discard pile, draw a card.", (s, ctx) => {
+    const p = s.players[ctx.owner]
+    if (p.discard.some(id => isDisaster(s.cards[id]))) return drawCards(s, ctx.owner, 1)
+    const handIndices = p.hand.flatMap((id, i) => (isDisaster(s.cards[id]) ? [i] : []))
+    return handIndices.length
+      ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices, optional: true, text: 'reveal a Disaster card from your hand to draw a card', then: resume(ctx) })
+      : s
+  }),
+  // The revealed card stays in hand: revealing is showing, not playing or discarding.
+  ifYouDo: (s, ctx) => drawCards(s, ctx.owner, 1),
+})
+registerCard('HMW_189', whenPlayed('Draw 3 cards.', (s, ctx) => drawCards(s, ctx.owner, 3))) // Neebray Manta
+registerCard('HMW_228', whenPlayed('Ready a friendly resource.', (s, ctx) => readyResource(s, ctx.owner))) // Lakeside Shaaks
+registerCard('HMW_243', buffWp('Give a unit Grit for this phase.', pickAny, () => ({ keywords: [KW.grit] }), false)) // Sun Fac
+registerCard('HMW_246', buffWp('Give a unit Sentinel for this phase.', pickAny, () => ({ keywords: [{ name: 'Sentinel' }] }), false)) // Pyke Sarisa
+registerCard('HMW_247', whenPlayed('If an opponent controls an Endor, Kashyyyk, Naboo, or Tatooine base, draw a card.', (s, ctx) => // Surveillance Cruiser
+  (PLANET_BASES.some(t => controlsBaseWith(s, opponentOf(ctx.owner), t)) ? drawCards(s, ctx.owner, 1) : s)))
+registerCard('HMW_255', whenPlayed('You may give an Ewok unit +2/+2 for this phase. You may give a Rebel unit +2/+2 for this phase.', (s, ctx) => { // C-3P0
+  const ewok = lastingBuffChoice(s, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-ewok` }, pickedIds(s, ctx, pickTrait('Ewok')), { power: 2, hp: 2 }, true)
+  return lastingBuffChoice(ewok, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-rebel` }, pickedIds(s, ctx, pickTrait('Rebel')), { power: 2, hp: 2 }, true)
+}))
+registerCard('HMW_264', onlyIf(hostIsAspect('Heroism'), whenPlayed('If attached unit is a Heroism unit, give a Shield token to it.', (s, ctx) => // Heroic Bravery
+  giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD))))
+registerCard('HMW_265', onlyIf((s, ctx) => hostPasses(s, ctx, (st, host) => unitHasTrait(st, host, "Twi'lek")) !== undefined, // Twi'lek Kalikori
+  searchPlayFreeWp("If attached unit is a Twi'lek, search the top 8 cards of your deck for any number of Twi'lek units with combined cost 5 or less and play each of them for free.", 8, 5, { trait: "Twi'lek" })))
