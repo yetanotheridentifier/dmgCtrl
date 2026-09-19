@@ -1440,6 +1440,7 @@ export interface SetProgress {
  * and implementing one covers every printing of it.
  */
 const SET_TOTALS: { code: string; group: SetGroup; total: Omit<TypeCounts, 'tokens'> }[] = [
+  { code: 'HMW', group: 'rotation', total: { leaders: 18, bases: 16, units: 180, upgrades: 27, events: 31 } },
   { code: 'ASH', group: 'rotation', total: { leaders: 18, bases: 8, units: 179, upgrades: 25, events: 34 } },
   { code: 'LAW', group: 'rotation', total: { leaders: 18, bases: 12, units: 182, upgrades: 14, events: 38 } },
   { code: 'SEC', group: 'rotation', total: { leaders: 18, bases: 8, units: 171, upgrades: 17, events: 50 } },
@@ -1456,13 +1457,15 @@ const SET_TOTALS: { code: string; group: SetGroup; total: Omit<TypeCounts, 'toke
  * The tokens each set prints, by the name on the card. Recorded from the printed cards: the SWUDB set
  * listing omits tokens, and the API's own token data is too partial to use (only `TSOR` and `TASH`
  * exist, with no token units, and some rows are findable by search but not by direct fetch). The set
- * fixtures carry no token rows either. The out-of-cycle products print none of their own.
+ * fixtures carry no token rows either. The out-of-cycle products print none of their own. HMW's are
+ * the tokens its cards create or give (Shield, Weakness, Beast): no HMW card refers to Experience.
  *
  * A set is credited with a token once the engine creates it: when its name matches a built token card
  * (`TOKEN_CARDS`, `TOKEN_UNIT_CARDS`). So a token mechanic that lands counts for every set that prints
  * it, with no count to update here.
  */
 export const PRINTED_TOKENS: Record<string, string[]> = {
+  HMW: ['Shield', 'Weakness', 'Beast'],
   ASH: ['Experience', 'Shield', 'Advantage', 'Mandalorian'],
   LAW: ['Experience', 'Shield', 'Credit'],
   SEC: ['Experience', 'Shield', 'Spy'],
@@ -1494,6 +1497,7 @@ const BUILT_TOKEN_NAMES = new Set([...Object.values(TOKEN_CARDS), ...Object.valu
  * credited, even when it is otherwise vanilla.
  */
 export const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
+  HMW: { bases: 16, units: 42 },
   ASH: { bases: 8, units: 39 },
   LAW: { units: 47 },
   SEC: { bases: 8, units: 32 },

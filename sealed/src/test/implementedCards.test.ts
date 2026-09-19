@@ -133,11 +133,11 @@ describe('implementation progress', () => {
 
   it('groups sets by legality — in rotation, out of rotation, out of cycle — newest first', () => {
     const codesIn = (group: string) => SET_PROGRESS.filter(s => s.group === group).map(s => s.code)
-    expect(codesIn('rotation')).toEqual(['ASH', 'LAW', 'SEC', 'LOF', 'JTL'])
+    expect(codesIn('rotation')).toEqual(['HMW', 'ASH', 'LAW', 'SEC', 'LOF', 'JTL'])
     expect(codesIn('retired')).toEqual(['TWI', 'SHD', 'SOR'])
     expect(codesIn('out-of-cycle')).toEqual(['TS26', 'IBH'])
     // The blocks are contiguous and in that order, so the panel can render them by filtering.
-    expect(SET_PROGRESS.map(s => s.group)).toEqual([...Array(5).fill('rotation'), ...Array(3).fill('retired'), 'out-of-cycle', 'out-of-cycle'])
+    expect(SET_PROGRESS.map(s => s.group)).toEqual([...Array(6).fill('rotation'), ...Array(3).fill('retired'), 'out-of-cycle', 'out-of-cycle'])
   })
 
   it('counts IBH by distinct cards, not collector numbers, and neither extra set prints tokens', () => {
@@ -145,6 +145,11 @@ describe('implementation progress', () => {
     expect(bySet.IBH.total).toEqual({ leaders: 2, bases: 2, units: 35, upgrades: 0, events: 12, tokens: 0 })
     expect(sumCounts(bySet.IBH.total)).toBe(51)
     expect(bySet.TS26.total).toEqual({ leaders: 8, bases: 4, units: 41, upgrades: 8, events: 23, tokens: 0 })
+  })
+
+  it('counts HMW as printed: 272 cards, and the Shield, Weakness and Beast tokens its cards create', () => {
+    expect(bySet.HMW.total).toEqual({ leaders: 18, bases: 16, units: 180, upgrades: 27, events: 31, tokens: 3 })
+    expect(PRINTED_TOKENS.HMW).toEqual(['Shield', 'Weakness', 'Beast'])
   })
 
   it('shows every set the counts of its own registered cards', () => {
@@ -167,15 +172,16 @@ describe('implementation progress', () => {
 
   it('counts the tokens each set prints', () => {
     const totals = Object.fromEntries(SET_PROGRESS.map(s => [s.code, s.total.tokens]))
-    expect(totals).toEqual({ ASH: 4, LAW: 3, SEC: 3, LOF: 3, JTL: 4, TWI: 4, SHD: 2, SOR: 2, TS26: 0, IBH: 0 })
+    expect(totals).toEqual({ HMW: 3, ASH: 4, LAW: 3, SEC: 3, LOF: 3, JTL: 4, TWI: 4, SHD: 2, SOR: 2, TS26: 0, IBH: 0 })
     for (const set of SET_PROGRESS) expect(set.total.tokens, set.code).toBe(PRINTED_TOKENS[set.code].length)
   })
 
   it('credits every set with each token it prints that the engine creates, not just ASH', () => {
-    // Every set in the cycle prints Shield and Experience, which the engine creates; the set-specific
-    // tokens it does not create yet (Force, Credit, Spy, X-Wing, ...) stay uncredited.
+    // Every set in the cycle up to ASH prints Shield and Experience, which the engine creates; the
+    // set-specific tokens it does not create yet (Force, Credit, Spy, X-Wing, Weakness, Beast, ...) stay
+    // uncredited. HMW prints Shield but no Experience.
     const done = Object.fromEntries(SET_PROGRESS.map(s => [s.code, s.done.tokens]))
-    expect(done).toEqual({ ASH: 4, LAW: 2, SEC: 2, LOF: 2, JTL: 2, TWI: 2, SHD: 2, SOR: 2, TS26: 0, IBH: 0 })
+    expect(done).toEqual({ HMW: 1, ASH: 4, LAW: 2, SEC: 2, LOF: 2, JTL: 2, TWI: 2, SHD: 2, SOR: 2, TS26: 0, IBH: 0 })
   })
 
   it('matches every token the engine creates to a token some set prints, so a renamed token cannot drop out of the count', () => {

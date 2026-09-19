@@ -1,3 +1,4 @@
+import hmwSet from '../test/fixtures/hmwSet.json'
 import ashSet from '../test/fixtures/ashSet.json'
 import lawSet from '../test/fixtures/lawSet.json'
 import secSet from '../test/fixtures/secSet.json'
@@ -22,6 +23,7 @@ import { normalPrintings } from './triage'
 export const SET_CODES: readonly string[] = SET_PROGRESS.map(s => s.code)
 
 const FIXTURES: Record<string, SwuCard[]> = {
+  HMW: hmwSet as unknown as SwuCard[],
   ASH: ashSet as unknown as SwuCard[],
   LAW: lawSet as unknown as SwuCard[],
   SEC: secSet as unknown as SwuCard[],

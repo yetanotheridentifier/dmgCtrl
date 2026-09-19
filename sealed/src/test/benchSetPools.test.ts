@@ -23,8 +23,8 @@ const ASH = ashSet as unknown as SwuCard[]
 describe('set codes', () => {
   it('lists every set the setup panel counts, in its order', () => {
     expect(SET_CODES).toEqual(SET_PROGRESS.map(s => s.code))
-    expect(SET_CODES).toHaveLength(10)
-    expect(SET_CODES[0]).toBe('ASH')
+    expect(SET_CODES).toHaveLength(11)
+    expect(SET_CODES[0]).toBe('HMW')
   })
 
   it('resolves a request into the canonical order, whatever order it was typed in', () => {
@@ -63,9 +63,9 @@ describe('sealed sets', () => {
     }
   })
 
-  it('keeps the eight booster sets and leaves out TS26 and IBH', () => {
+  it('keeps the nine booster sets and leaves out TS26 and IBH', () => {
     expect(SEALED_MIN_CARDS).toBe(200)
-    expect(SEALED_SET_CODES).toEqual(['ASH', 'LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR'])
+    expect(SEALED_SET_CODES).toEqual(['HMW', 'ASH', 'LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR'])
   })
 
   it('expands all to the sealed sets', () => {
@@ -156,6 +156,12 @@ describe('the bundled fixtures', () => {
    * reaches it, so a wrong printed cost skews every curve built around the card. The card source once
    * shipped Moff Gideon at 8.
    */
+  it('holds every HMW card once, all 272 of them, since the set prints no card twice', () => {
+    const hmw = poolFor(['HMW'])
+    expect(hmw).toHaveLength(272)
+    expect(new Set(hmw.map(c => c.Number)).size).toBe(272)
+  })
+
   it('holds Moff Gideon (ASH_097) at his printed cost of 3', () => {
     const gideon = poolFor(['ASH']).find(c => c.Number === '097')!
     expect(gideon.Name).toBe('Moff Gideon')

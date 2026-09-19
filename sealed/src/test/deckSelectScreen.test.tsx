@@ -53,7 +53,7 @@ describe('DeckSelectScreen', () => {
     const codes = SET_PROGRESS.map(s => s.code)
     const rendered = within(panel).getAllByRole('group').map(el => el.getAttribute('data-testid'))
     expect(rendered).toEqual(codes.map(c => `set-progress-${c}`))
-    expect(codes[0]).toBe('ASH') // most recent at the top
+    expect(codes[0]).toBe('HMW') // most recent at the top
 
     // Sets are blocked by legality, with the two non-current blocks labelled.
     expect(within(panel).getByTestId('set-group-rotation')).toBeInTheDocument()
@@ -61,7 +61,7 @@ describe('DeckSelectScreen', () => {
     expect(within(within(panel).getByTestId('set-group-out-of-cycle')).getByText(/other sets/i)).toBeInTheDocument()
 
     // Only the newest set is expanded.
-    expect((within(panel).getByTestId('set-progress-ASH') as HTMLDetailsElement).open).toBe(true)
+    expect((within(panel).getByTestId('set-progress-HMW') as HTMLDetailsElement).open).toBe(true)
     for (const code of codes.slice(1)) {
       expect((within(panel).getByTestId(`set-progress-${code}`) as HTMLDetailsElement).open, code).toBe(false)
     }
