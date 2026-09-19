@@ -430,11 +430,17 @@ export function createTokenUnits(state: GameState, owner: PlayerId, tokenCardId:
     : next
 }
 
+/** Whether a unit `owner` plays or creates enters play ready because of a unit they control (Ritual Dragon). */
+export function friendlyUnitsEnterReady(state: GameState, owner: PlayerId): boolean {
+  return state.players[owner].units.some(u => abilityCardIds(u).some(id => getCardDefinition(id)?.unitsEnterReady?.(state, u) ?? false))
+}
+
 export function createTokenUnit(state: GameState, owner: PlayerId, tokenCardId: string): GameState {
   const tokenCard = state.cards[tokenCardId]
   const shielded = (tokenCard?.keywords ?? []).some(k => k.name === 'Shielded')
   const p = state.players[owner]
-  const entersReady = p.units.some(u => abilityCardIds(u).some(id => getCardDefinition(id)?.tokensEnterReady?.(state, u) ?? false))
+  const entersReady = friendlyUnitsEnterReady(state, owner)
+    || p.units.some(u => abilityCardIds(u).some(id => getCardDefinition(id)?.tokensEnterReady?.(state, u) ?? false))
   const token: UnitState = {
     instanceId: `u${state.instanceCounter}`,
     cardId: tokenCardId,

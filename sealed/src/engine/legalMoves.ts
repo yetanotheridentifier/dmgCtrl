@@ -50,6 +50,20 @@ export function enemyAttackTargets(state: GameState, attacker: UnitState, owner:
 }
 
 /**
+ * Whether `owner`'s units may attack a base while using Ambush (Fett's Firespray). Ambush otherwise
+ * reads "attack an enemy unit", so the base is never on offer.
+ */
+export function ambushAttacksBases(state: GameState, owner: PlayerId): boolean {
+  return state.players[owner].units.some(u => abilityCardIds(u).some(id => getCardDefinition(id)?.ambushAttacksBases?.(state, u) ?? false))
+}
+
+/** Whether an Ambush by `unit` has anything to attack: an enemy unit, or the base where `ambushAttacksBases` allows it. */
+export function ambushHasTarget(state: GameState, unit: UnitState, owner: PlayerId = state.activePlayer): boolean {
+  const { targets, canAttackBase } = enemyAttackTargets(state, unit, owner)
+  return targets.length > 0 || (canAttackBase && ambushAttacksBases(state, owner))
+}
+
+/**
  * Whether `unit` may be the attacker for an "attack with a … unit" (Pounce: a Creature; Desperate
  * Attack: a damaged unit). Ready, unless `exhausted` lets an exhausted unit attack too. Only who may
  * attack: what it may hit is `attackMoves`.
@@ -399,7 +413,7 @@ function actionPhaseMoves(state: GameState): Action[] {
 /**
  * Moves while choices are pending. The active player resolves their own
  * simultaneous choices in any order (each is addressable by id, honouring active-player
- * trigger ordering). Ambush: the played unit may attack an enemy unit (never the base).
+ * trigger ordering). Ambush: the played unit may attack an enemy unit (the base only by `ambushAttacksBases`).
  * Support: any OTHER ready unit may attack (unit or base), gaining the support unit's
  * keywords. Pay-or-exhaust (The Conflict Within): pay if affordable, or decline. Any
  * choice can be skipped.
@@ -422,8 +436,8 @@ function choiceMoves(state: GameState): Action[] {
         const unit = p.units.find(u => u.instanceId === choice.unitId)
         // Only a ready unit can attack: it may have been exhausted (e.g. by another granted attack)
         // before this ambush was answered, matching the guards on mayAttack / mayAttackAnyUnit / support.
-        // Ambush reads "attack an enemy unit", so the base is never on offer.
-        if (unit && !unit.exhausted) moves.push(...attackMoves(state, unit, { choiceId: choice.id, includeBase: false }))
+        // Ambush reads "attack an enemy unit", so the base is on offer only where a card allows it.
+        if (unit && !unit.exhausted) moves.push(...attackMoves(state, unit, { choiceId: choice.id, includeBase: ambushAttacksBases(state, choice.controller) }))
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }

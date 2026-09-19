@@ -201,6 +201,8 @@ Card-type-agnostic, all on `CardDefinition`:
 | `searchModifier` | multiplies how many cards a **search** looks at |
 | `doublesTokenCreation` | doubles a batch of created tokens |
 | `entersReady` | the unit arrives ready, alongside Ambush and enters-ready grants |
+| `unitsEnterReady` | every unit its controller plays or creates arrives ready (Ritual Dragon) |
+| `ambushAttacksBases` | its controller's units may attack a base while using Ambush (Fett's Firespray) |
 | `grantsAbilities` | hands an ability block to the host unit |
 | `grantedTraits` | extra traits, e.g. The Darksaber granting Mandalorian |
 | `makesLeaderUnit` | the host counts as a leader unit |

@@ -205,7 +205,8 @@ a Creature).
 controller ("an opponent creates 2 Battle Droid tokens"). A created unit enters play **exhausted**
 (CR 1.5.4b) unless an ability says otherwise: "create ... and ready it" readies the ones just made, and a
 unit whose definition has `tokensEnterReady` (Chancellor Palpatine) makes every token unit its controller
-creates enter ready. A Shielded token enters with its Shield. Creating counts as entering play
+creates enter ready. `unitsEnterReady` (Ritual Dragon) goes further, to every unit its controller plays or
+creates: `friendlyUnitsEnterReady` reads it both here and in `playUnitCard`. A Shielded token enters with its Shield. Creating counts as entering play
 (`enteredPlayThisPhase`) but not as playing, so it fires no "When Played" and no `whenPlayUnit` ("when
 you play another unit", Poggle the Lesser). Each token created raises `whenCreateUnit` from
 `createTokenUnit`, the one place token units are made, so "when you play or create a unit" (Greef Karga)
@@ -284,8 +285,11 @@ may attack and what may attack it are different questions.
 `attackMoves` is the single enumeration built on that answer, and every source of an attack goes
 through it: the action phase, Ambush, Support and the two "attack with a unit" choices. They differ
 only in which units are candidates, what abilities they lend the attacker, and whether the base is
-offered at all (Ambush reads "attack an enemy unit", so it never is). One statement of a targeting
-rule therefore binds all five.
+offered at all (Ambush reads "attack an enemy unit", so it is not, unless a card in play says its
+controller's units "can attack bases while using Ambush": Fett's Firespray, read by `ambushAttacksBases`).
+One statement of a targeting rule therefore binds all five. Whether an Ambush has anything to hit, which
+decides if the unit enters ready and the choice is raised, is `ambushHasTarget`, which reads the same
+permission.
 
 **The restriction is on the target, not on the damage.** An attack declares a legal target and only
 then computes damage, so a unit that cannot attack bases still trickles Overwhelm excess onto one

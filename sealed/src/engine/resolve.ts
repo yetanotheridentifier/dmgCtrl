@@ -4,12 +4,12 @@ import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, TriggerCont
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds, isFortify, recordBaseActionUsed } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets, offerAttack } from './legalMoves'
+import { effectiveCost, affordableHandUnits, validUpgradeTargets, offerAttack, ambushHasTarget } from './legalMoves'
 import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage } from './keywords'
@@ -360,9 +360,10 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g, state, owner))
   const grantKeywords = grants.flatMap(g => g.keywords ?? [])
   // Every "enters play ready" source, in one place: a caller override (`ready`), a Neel-style grant,
-  // or the card's own condition (Elzar Mann). Both the construction below AND the revert-to-
-  // exhausted branch further down must honour all of them.
+  // the card's own condition (Elzar Mann), or a friendly unit already in play (Ritual Dragon). Both the
+  // construction below AND the revert-to-exhausted branch further down must honour all of them.
   const grantEntersReady = grants.some(g => g.entersReady) || (getCardDefinition(cardId)?.entersReady?.(state, owner) ?? false)
+    || friendlyUnitsEnterReady(state, owner)
   const entersWith = (name: string): boolean => hasKeyword(state, cardId, name) || grantKeywords.some(k => k.name === name)
   // Ambush: the unit may immediately attack an enemy unit, so it enters ready.
   const ambush = entersWith('Ambush')
@@ -409,7 +410,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // ability; the ability itself is collected with everything else the play triggered.
   const keywordAbilities: string[] = []
   if (unitHasKeyword(next, inPlay(), 'Ambush')) {
-    if (enemyAttackTargets(next, inPlay()).targets.length > 0) {
+    if (ambushHasTarget(next, inPlay(), owner)) {
       // Ambush always enters the unit ready so it can immediately attack, whether Ambush is printed
       // (already handled by `ambush` above) or only granted CONDITIONALLY once the unit is actually
       // in play (AT-ST Raider, Mandalorian Flagship, #412). The early `entersWith` check cannot see a
@@ -2259,7 +2260,7 @@ function applyDeployKeywords(state: GameState, owner: PlayerId, instanceId: stri
   const unitNow = (s: GameState) => s.players[owner].units.find(u => u.instanceId === instanceId)!
   let next = applyEntryKeywords(state, owner, instanceId)
   if (unitHasKeyword(next, unitNow(next), 'Ambush')) {
-    if (enemyAttackTargets(next, unitNow(next)).targets.length > 0) {
+    if (ambushHasTarget(next, unitNow(next), owner)) {
       next = pushChoice(next, { kind: 'ambush', id: instanceId, controller: owner, unitId: instanceId })
     }
   } else if (unitHasKeyword(next, unitNow(next), 'Support')) {

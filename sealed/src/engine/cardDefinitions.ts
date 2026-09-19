@@ -8,7 +8,7 @@ import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, hasTok
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
 import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
-import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
+import { affordableHandUnits, resourceUpgradeCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywords } from './keywords'
@@ -2071,7 +2071,7 @@ registerCard(KEYWORD_AMBUSH, {
       const u = findUnit(s, ctx.sourceInstanceId!)
       // Re-checked as the ability resolves: an earlier ability in the same batch may have cleared the
       // arena, and an Ambush with nothing to hit offers nothing.
-      if (!u || enemyAttackTargets(s, u.unit).targets.length === 0) return s
+      if (!u || !ambushHasTarget(s, u.unit, ctx.owner)) return s
       return pushChoice(s, {
         kind: 'ambush',
         id: ctx.sourceInstanceId!,
@@ -8516,3 +8516,102 @@ registerCard('HMW_232', { // Mon Cal Cruiser
     ? offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-attack`, { grantCardId: GRANT_MON_CAL_CRUISER })
     : pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, thenDraw: true })),
 })
+
+// ── Homeworlds constant abilities on units and upgrades ──────────────────────────────────────────
+// Registrations over the constant helpers of the other sets (`gains`, `statModifier`, `friendlyAura`).
+// A keyword the source lists as the card's own, when the card only gains it or gives it away, is
+// stripped in `cardDataCorrections.ts`.
+
+/** "While you control a <planet> base". */
+const withBase = (trait: string): Holds => (s, u) => { const o = unitOwner(s, u); return o !== undefined && controlsBaseWith(s, o, trait) }
+const printedCostOf = (test: (cost: number) => boolean): Holds => (s, x) => test(printedCost(s, x))
+const exhaustedResourcesOf = (s: GameState, u: UnitState): number => { const o = unitOwner(s, u); return o ? s.players[o].resources.filter(r => r.exhausted).length : 0 }
+/** Command icons among a player's units and the upgrades they own, a doubled icon counting twice. */
+const friendlyCommandIcons = (s: GameState, u: UnitState): number => {
+  const o = unitOwner(s, u)
+  if (!o) return 0
+  const icons = (cardId: string) => (s.cards[cardId]?.aspects ?? []).filter(a => a === 'Command').length
+  const upgrades = [...allUnits(s).flatMap(x => x.upgrades), ...(s.players[o].base.upgrades ?? [])].filter(up => up.owner === o)
+  return [...s.players[o].units.map(x => x.cardId), ...upgrades.map(up => up.cardId)].reduce((n, id) => n + icons(id), 0)
+}
+const HIDDEN: KeywordInstance = { name: 'Hidden' }
+
+// A: a keyword or a stat on the unit itself, or on the unit an upgrade is attached to
+registerCard('HMW_073', { statModifier: (_s, u) => (isUpgraded(u) ? { power: 1, hp: 1 } : {}) }) // Peppi Bow
+registerCard('HMW_074', gains(s => s.players.player.base.damage >= 15 || s.players.opponent.base.damage >= 15, KW.sentinel)) // Yord Fandar
+registerCard('HMW_083', { statModifier: (_s, _u, ctx) => (ctx.defending ? { power: 1 } : {}) }) // Batcher
+registerCard('HMW_084', gains((s, u) => another(isTrait('Gungan'))(s, u) || withBase('Naboo')(s, u), { name: 'Shielded' })) // Gunga City Guard
+registerCard('HMW_090', gains(withBase('Naboo'), KW.grit)) // Opee Sea Killer
+registerCard('HMW_107', { statModifier: (s, u) => (another(printedCostOf(c => c >= 3))(s, u) ? { power: 2 } : {}) }) // Stormtrooper Patrol
+registerCard('HMW_117', { // Chewbacca: "while each resource you control is exhausted" holds with none to exhaust
+  conditionalKeywords: (s, u) => {
+    const spent = exhaustedResourcesOf(s, u)
+    return [...(spent > 0 ? [KW.raid(spent)] : []), ...(spent === resourcesOf(s, u) ? [KW.overwhelm] : [])]
+  },
+})
+registerCard('HMW_118', gains((s, u) => resourcesOf(s, u) >= 6, KW.ambush, KW.overwhelm)) // Ryyk Blademaster
+registerCard('HMW_129', { statModifier: (s, u) => (friendliesOf(s, u).length >= 3 ? { power: 2 } : {}) }) // Child of Dathomir
+registerCard('HMW_131', gains(withBase('Kashyyyk'), KW.ambush)) // Soaring Can-Cell
+registerCard('HMW_133', { statModifier: (s, u) => perEach(Math.floor(resourcesOf(s, u) / 2), 1) }) // Wroshyr Rebel
+registerCard('HMW_137', gains((s, u) => friendliesOf(s, u).length >= 3, KW.sentinel)) // V-19 Skirmisher
+registerCard('HMW_138', gains((s, u) => friendlyCommandIcons(s, u) >= 3, KW.raid(4))) // Commander Gree
+registerCard('HMW_142', gains((s, u) => another(isTrait('Wookiee'))(s, u) || withBase('Kashyyyk')(s, u), KW.sentinel)) // Wookiee Rangers
+registerCard('HMW_164', { statModifier: (s, u) => perEach(friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId && isTrait('Ewok')(s, x)).length, 1) }) // Chief Chirpa
+registerCard('HMW_176', gains(withBase('Endor'), HIDDEN, KW.saboteur)) // Village Troublemaker
+registerCard('HMW_256', { statModifier: (s, u) => (resourcesOf(s, u) >= 6 ? { power: 2 } : {}) }) // Jedi Interceptor
+registerCard('HMW_257', gains(another(printedCostOf(c => c <= 3)), KW.ambush)) // Ewok Archers
+registerCard('HMW_259', gains((_s, u) => !u.exhausted, KW.sentinel)) // Pack Guardian
+registerCard('HMW_096', gains(anyHost, KW.restore(2))) // Devotion
+registerCard('HMW_190', gains(anyHost, KW.raid(2))) // Enraged
+registerCard('HMW_191', gains(isTrait('Creature'), KW.grit)) // Hunter's Instinct
+registerCard('HMW_235', { attachRestriction: (s, t) => nonVehicle(s, t) && effectivePower(s, t) <= 3 }) // Gaderffii Stick
+
+// B: auras on other units, combat and damage
+/**
+ * "A unit with no abilities": no printed text, and no keyword from its own card or its upgrades. A
+ * keyword another unit's aura hands it is not seen, since an aura must not read what the aura pass
+ * computes.
+ */
+const hasNoAbilities: Holds = (s, x) => !(cardOf(s, x)?.text ?? '').trim() && nonAuraKeywordNames(s, x).size === 0
+registerCard('HMW_039', friendlyAura(anyHost, { keywords: [KW.restore(1)] }, true)) // Mother Talzin
+registerCard('HMW_088', { preventUnitDamage: (_s, self, target, amount) => (target.instanceId === self.instanceId ? Math.min(1, amount) : 0) }) // Numa
+registerCard('HMW_141', friendlyAura(hasNoAbilities, { power: 1, hp: 1 }, false)) // Rex
+registerCard('HMW_162', friendlyAura(isTrait('Ewok'), { keywords: [HIDDEN] }, true)) // Teebo
+registerCard('HMW_212', { // The Chieftain
+  conditionalKeywords: (s, u) => {
+    const others = friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId && isTrait('Tusken')(s, x)).length
+    return others > 0 ? [KW.raid(others)] : []
+  },
+  // The Raid is read from every source but auras (`nonAuraKeywordValue`), as an aura must not read the aura pass.
+  aura: (s, _src, tgt, friendly, combat) =>
+    (friendly && combat?.defenderInstanceId === tgt.instanceId && isTrait('Tusken')(s, tgt) ? { power: nonAuraKeywordValue(s, tgt, 'Raid') } : undefined),
+})
+registerCard('HMW_233', { // Awakened Exogorth
+  aura: (_s, src, tgt, _friendly, combat) =>
+    (combat?.attackerInstanceId === src.instanceId && combat.defenderInstanceId === tgt.instanceId ? { power: -3 } : undefined),
+})
+registerCard('HMW_251', { // Blockade Ship
+  aura: (_s, _src, tgt, friendly, combat) => (!friendly && tgt.arena === 'ground' && combat?.attackerInstanceId === tgt.instanceId ? { power: -1 } : undefined),
+})
+
+// C: costs and entering play
+registerCard('HMW_184', { costModifier: (s, p) => (s.initiative === p ? -1 : 0) }) // Aggrocrab
+/**
+ * Origin Tree Shyyyo: the first, second and third units played each round cost 1, 2 and 3 less. Units are
+ * played in the action phase, so the phase's record of plays is the round's.
+ */
+const SHYYYO_DISCOUNTS = [1, 2, 3]
+registerCard('HMW_145', {
+  costDiscount: (s, source, ctx) => {
+    if (ctx.card.type !== 'unit' || !withBase('Kashyyyk')(s, source)) return 0
+    const before = cardsPlayedThisPhase(s, ctx.owner).filter(id => s.cards[id]?.type === 'unit').length
+    return -(SHYYYO_DISCOUNTS[before] ?? 0)
+  },
+})
+registerCard('HMW_203', { entersReady: () => true }) // Victor Squadron
+registerCard('HMW_208', { entersReady: s => s.round === 1 }) // Luke Skywalker: the first round of the game
+registerCard('HMW_234', { // Ritual Dragon: friendly units, itself included, enter play ready
+  entersReady: (s, p) => controlsBaseWith(s, p, 'Tatooine'),
+  unitsEnterReady: withBase('Tatooine'),
+})
+registerCard('HMW_053', { ambushAttacksBases: () => true }) // Fett's Firespray

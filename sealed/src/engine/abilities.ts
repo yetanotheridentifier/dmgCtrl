@@ -196,6 +196,13 @@ export interface CardDefinition {
   doublesTokenCreation?: (state: GameState, source: UnitState) => boolean
   /** Token units its controller creates enter play ready rather than exhausted (Chancellor Palpatine). */
   tokensEnterReady?: (state: GameState, source: UnitState) => boolean
+  /**
+   * Every unit its controller plays or creates enters play ready (Ritual Dragon). Read by
+   * `friendlyUnitsEnterReady`, beside `tokensEnterReady` for a created unit and `entersReady` for a played one.
+   */
+  unitsEnterReady?: (state: GameState, source: UnitState) => boolean
+  /** Its controller's units may attack a base while using Ambush (Fett's Firespray). Read by `ambushAttacksBases`. */
+  ambushAttacksBases?: (state: GameState, source: UnitState) => boolean
   /** This unit can't declare an attack against a base (Wicket). */
   cannotAttackBases?: (state: GameState, unit: UnitState) => boolean
   /** This unit can't currently be attacked (Tatooine Repulsor Train). Also keeps it from being a forced Sentinel target. */
