@@ -7,12 +7,12 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
+import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywords } from './keywords'
-import type { CombatContext, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PlayerId, UnitState, UpgradeRef } from './types'
+import type { CombatContext, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PlayerId, UnitState, UpgradeAttachment, UpgradeRef } from './types'
 
 /**
  * Real card definitions. Side-effect module: importing it registers every
@@ -278,6 +278,11 @@ registerCard('ASH_014', { // The Mandalorian — front take-initiative draw; dep
  * Token upgrades (Shield / Advantage / Experience) are always included: they are upgrades, they
  * cost 0, and "defeat an upgrade" can legally take one. No card in the set says otherwise, so there
  * is no cards-only option to get wrong.
+ *
+ * An upgrade on a base (Fortify) is an upgrade too, named by the host `baseHostId(owner)`, so it is
+ * offered unless the text says where the upgrade is: `on: 'unit'` for "an upgrade on a unit" or
+ * "attached to a unit", `on: 'base'` for "an upgrade on a base". `hostController` names a unit's
+ * controller, so it takes units only.
  */
 interface UpgradeFilter {
   /** The player who played the upgrade. */
@@ -286,27 +291,32 @@ interface UpgradeFilter {
   hostController?: PlayerId
   /** Printed cost cap. Tokens are cost 0, so they always satisfy one. */
   maxCost?: number
+  /** Only upgrades on a unit, or only those on a base. Omitted, both. */
+  on?: 'unit' | 'base'
 }
 
 const upgradeCandidates = (s: GameState, filter: UpgradeFilter = {}): UpgradeRef[] => {
   const out: UpgradeRef[] = []
+  const add = (hostId: string, ups: readonly UpgradeAttachment[]) => ups.forEach((up, i) => {
+    if (filter.owner !== undefined && up.owner !== filter.owner) return
+    const c = s.cards[up.cardId]
+    if (filter.maxCost !== undefined && (c?.cost ?? 0) > filter.maxCost) return
+    out.push({ unitId: hostId, upgradeIndex: i, cardId: up.cardId })
+  })
+  const units = filter.on !== 'base'
+  const bases = filter.on !== 'unit' && filter.hostController === undefined
   for (const side of ['player', 'opponent'] as PlayerId[]) {
-    if (filter.hostController !== undefined && side !== filter.hostController) continue
-    for (const u of s.players[side].units) {
-      u.upgrades.forEach((up, i) => {
-        if (filter.owner !== undefined && up.owner !== filter.owner) return
-        const c = s.cards[up.cardId]
-        if (filter.maxCost !== undefined && (c?.cost ?? 0) > filter.maxCost) return
-        out.push({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })
-      })
+    if (units && (filter.hostController === undefined || side === filter.hostController)) {
+      for (const u of s.players[side].units) add(u.instanceId, u.upgrades)
     }
+    if (bases) add(baseHostId(side), s.players[side].base.upgrades ?? [])
   }
   return out
 }
 
-/** "A friendly upgrade": every upgrade the player OWNS, card upgrades and tokens alike. */
-const friendlyUpgradeCandidates = (s: GameState, owner: PlayerId): UpgradeRef[] =>
-  upgradeCandidates(s, { owner })
+/** "A friendly upgrade": every upgrade the player OWNS, card upgrades and tokens alike, on a unit or a base. */
+const friendlyUpgradeCandidates = (s: GameState, owner: PlayerId, on?: 'unit'): UpgradeRef[] =>
+  upgradeCandidates(s, { owner, on })
 
 const BOTH_BASES: PlayerId[] = ['player', 'opponent']
 
@@ -4587,7 +4597,7 @@ registerCard('JTL_043', unitThenWp('Take control of a non-leader unit, then defe
   }))
 registerCard('JTL_175', { // System Shock
   ...whenPlayed('Defeat a non-leader upgrade attached to a unit. If you do, deal 1 damage to that unit.', (s, ctx) => {
-    const candidates = upgradeCandidates(s).filter(c => s.cards[c.cardId]?.type !== 'leader')
+    const candidates = upgradeCandidates(s, { on: 'unit' }).filter(c => s.cards[c.cardId]?.type !== 'leader')
     return candidates.length ? pushChoice(s, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, text: 'defeat a non-leader upgrade', then: resume(ctx) }) : s
   }),
   ifYouDo: (s, ctx) => {
@@ -5150,7 +5160,8 @@ registerCard('SOR_187', { // I Had No Choice
 })
 registerCard('SHD_077', { // Evidence of the Crime
   ...whenPlayed('Take control of an upgrade that costs 3 or less and attach it to an eligible unit of your choice.', (s, ctx) => {
-    const candidates = upgradeCandidates(s, { maxCost: 3 }).filter(up => s.cards[up.cardId]?.type !== 'leader' && evidenceTargets(s, up, ctx.owner).length > 0)
+    // Attached to a unit: a Fortify upgrade attaches only to a base, so one there is never offered.
+    const candidates = upgradeCandidates(s, { maxCost: 3, on: 'unit' }).filter(up => s.cards[up.cardId]?.type !== 'leader' && evidenceTargets(s, up, ctx.owner).length > 0)
     return candidates.length ? pushChoice(s, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, text: 'take control of an upgrade that costs 3 or less', then: resume(ctx) }) : s
   }),
   ifYouDo: (s, ctx) => {
@@ -6111,11 +6122,11 @@ registerCard('SOR_011', allOf( // Grand Inquisitor
 ))
 registerCard('SHD_003', { // Finn
   ...leaderFront('Defeat a friendly upgrade on a unit. If you do, give a Shield token to that unit.', {
-    usable: (s, ctx) => friendlyUpgradeCandidates(s, ctx.owner).length > 0,
-    effect: (s, ctx) => selectUpgradeThen(s, ctx, friendlyUpgradeCandidates(s, ctx.owner), 'defeat a friendly upgrade and shield its unit', false),
+    usable: (s, ctx) => friendlyUpgradeCandidates(s, ctx.owner, 'unit').length > 0,
+    effect: (s, ctx) => selectUpgradeThen(s, ctx, friendlyUpgradeCandidates(s, ctx.owner, 'unit'), 'defeat a friendly upgrade and shield its unit', false),
   }),
   ...attacks('You may defeat a friendly upgrade on a unit. If you do, give a Shield token to that unit.', (s, ctx) =>
-    selectUpgradeThen(s, ctx, friendlyUpgradeCandidates(s, ctx.owner), 'defeat a friendly upgrade and shield its unit', true)),
+    selectUpgradeThen(s, ctx, friendlyUpgradeCandidates(s, ctx.owner, 'unit'), 'defeat a friendly upgrade and shield its unit', true)),
   ifYouDo: (s, ctx) => {
     const up = ctx.upgradeChosen
     if (!up) return s
@@ -8178,19 +8189,10 @@ registerCard('HMW_066', { // Carrion Spike
   conditionalKeywords: (s, u) => { const n = baseUpgradesOf(s, u); return n > 0 ? [{ name: 'Restore', value: n }] : [] },
 })
 registerCard('HMW_260', { costModifier: (s, owner) => (baseUpgraded(s, owner) ? -2 : 0) }) // Queen Amidala
-/** Every upgrade on either base, in a fixed order, so a pick's option index names one. */
-const allBaseUpgrades = (s: GameState): { owner: PlayerId; cardId: string }[] =>
-  (['player', 'opponent'] as PlayerId[]).flatMap(owner => (s.players[owner].base.upgrades ?? []).map(u => ({ owner, cardId: u.cardId })))
-registerCard('HMW_270', { // Wild Space Wanderer
-  ...whenPlayed('You may defeat an upgrade on a base.', (s, ctx) => {
-    const ups = allBaseUpgrades(s)
-    return ups.length ? cardThen(s, ctx, ups.map(u => u.cardId), 'defeat an upgrade on a base', true, 'base') : s
-  }),
-  ifYouDo: (s, ctx) => {
-    const picked = ctx.optionIndex === undefined ? undefined : allBaseUpgrades(s)[ctx.optionIndex]
-    return picked ? defeatBaseUpgrade(s, picked.owner, picked.cardId) : s
-  },
-})
+registerCard('HMW_270', whenPlayed('You may defeat an upgrade on a base.', (s, ctx) => { // Wild Space Wanderer
+  const candidates = upgradeCandidates(s, { on: 'base' })
+  return candidates.length ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true }) : s
+}))
 /** "A base with 10 or less remaining HP". Only the enemy's is offered: defeating your own loses the game. */
 const tarkinBase = (s: GameState, owner: PlayerId): boolean => {
   const base = s.players[opponentOf(owner)].base

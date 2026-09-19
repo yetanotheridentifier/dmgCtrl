@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { describeAction } from '../utils/describeAction'
 import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import type { PendingChoice } from '../engine/types'
+import { baseHostId } from '../engine/types'
 
 /** The action-menu labels for pending "may…" choices, shown as buttons. */
 describe('describeAction — pending choice labels', () => {
@@ -139,5 +140,13 @@ describe('describeAction — pending choice labels', () => {
     const s = withChoice({ kind: 'someFutureKind', id: 'x', controller: 'player' } as unknown as PendingChoice)
     expect(describeAction(s, 'player', { type: 'skipTrigger', choiceId: 'x' })).toBe('Decline')
     expect(describeAction(s, 'player', { type: 'acceptChoice', choiceId: 'x' })).not.toMatch(/someFutureKind/)
+  })
+
+  it('names a base as the host of an upgrade on it (Fortify)', () => {
+    const pad = { PAD: card({ id: 'PAD', name: 'Landing Pad', type: 'upgrade', cost: 3 }) }
+    const ret = withChoice({ kind: 'selectUpgradeToReturn', id: 'x', controller: 'player', candidates: [{ unitId: baseHostId('opponent'), upgradeIndex: 0, cardId: 'PAD' }] }, pad)
+    expect(describeAction(ret, 'player', { type: 'acceptChoice', choiceId: 'x', optionIndex: 0 })).toBe("Return Landing Pad from the opponent's base")
+    const pick = withChoice({ kind: 'selectUpgradeThen', id: 'x', controller: 'player', candidates: [{ unitId: baseHostId('player'), upgradeIndex: 0, cardId: 'PAD' }], text: 'defeat an upgrade', then: { cardId: 'PAD', owner: 'player' } }, pad)
+    expect(describeAction(pick, 'player', { type: 'acceptChoice', choiceId: 'x', optionIndex: 0 })).toBe('Choose Landing Pad on your base')
   })
 })

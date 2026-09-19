@@ -402,12 +402,21 @@ export interface GameState {
  * resolved by the engine when the option is picked. New variants extend the `kind` union.
  * `arenaLastingBuff`: grant every unit in `arena` (both players) the given "this phase" buff.
  */
-/** Reference to a specific attached upgrade (its host unit + position), for card-select choices. */
+/**
+ * Reference to a specific attached upgrade (its host + position), for card-select choices. The host is a
+ * unit's instance id, or `baseHostId(owner)` for an upgrade on that player's base (Fortify).
+ */
 export interface UpgradeRef {
   unitId: string
   upgradeIndex: number
   cardId: string
 }
+
+/** The host id an `UpgradeRef` gives an upgrade on `owner`'s base. */
+export const baseHostId = (owner: PlayerId): string => `base:${owner}`
+/** Whose base a host id names, or undefined when it names a unit. */
+export const baseHostOwner = (hostId: string): PlayerId | undefined =>
+  hostId === 'base:player' ? 'player' : hostId === 'base:opponent' ? 'opponent' : undefined
 
 /** The current combat's roles, so combat-conditional auras (Grogu) can react to who is
  *  attacking / defending. Threaded through `StatContext` into the aura pass during damage resolution. */

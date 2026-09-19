@@ -237,7 +237,7 @@ defeated and nothing fires.
 
 ## Which upgrades an effect may target
 
-Card text asks this three ways, and hand-rolled scans conflated them, so one helper
+Card text asks this several ways, and hand-rolled scans conflated them, so one helper
 (`upgradeCandidates` in `engine/cardDefinitions.ts`) answers it:
 
 | Text | Filter |
@@ -245,9 +245,18 @@ Card text asks this three ways, and hand-rolled scans conflated them, so one hel
 | "a friendly upgrade" | `owner`, whoever played it |
 | "an upgrade on a friendly unit" | `hostController`, whoever controls the host |
 | "an upgrade" | neither |
+| "an upgrade on a unit", "attached to a unit" | `on: 'unit'` |
+| "an upgrade on a base" | `on: 'base'` |
 
 Owner and host controller genuinely differ: an opponent can attach an upgrade to your unit and it
 stays theirs, returning to **their** discard when defeated.
+
+**An upgrade on a base (Fortify) is a candidate** unless the text says where the upgrade is. Its
+`UpgradeRef` names the host `baseHostId(owner)` in place of a unit id, and `defeatUpgradeAt`,
+`returnUpgradeToHand` and `upgradeAt` read either kind of host. `hostController` is a unit's
+controller, so it offers units only, as do moves and "take control and attach it to a unit", since a
+Fortify upgrade attaches only to a base. The upgrade picker treats a base as a host like a unit: step
+one highlights it on the board.
 
 **Token upgrades are always candidates.** They are upgrades, they cost 0, and "defeat an upgrade" can
 legally take one. No card in the set says otherwise, so there is deliberately no cards-only option to

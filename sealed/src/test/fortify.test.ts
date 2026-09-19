@@ -35,10 +35,25 @@ const SHIPPED = [
 /** Scoped by the ticket, but lifted out to the tickets that own their other blocker. */
 const LIFTED = ['HMW_060', 'HMW_147']
 
-const POOL = poolFor(['HMW'])
+/**
+ * Cards from other sets that pick an upgrade, for whether they see one on a base: "an upgrade" and "a
+ * friendly upgrade" do; "an upgrade on a unit", "attached to a unit" and "on a friendly unit" do not.
+ */
+const PICKERS = [
+  'SOR_251', // Confiscate: "Defeat an upgrade."
+  'SOR_162', // Disabling Fang Fighter: "You may defeat an upgrade."
+  'ASH_246', // Exploit Advantage: "Defeat a friendly upgrade. If you do, draw 2 cards."
+  'SEC_200', // Junior Senator: "You may return an upgrade that costs 3 or less to its owner's hand."
+  'ASH_042', // Jabba the Hutt: "You may return an upgrade to its owner's hand. If it's returned to your hand, you may play it for free."
+  'JTL_175', // System Shock: "Defeat a non-leader upgrade attached to a unit."
+  'ASH_090', // Reforge: "Defeat an upgrade on a friendly unit."
+  'SHD_077', // Evidence of the Crime: "Take control of an upgrade ... and attach it to an eligible unit"
+  'LOF_248', // Jocasta Nu: "attach a friendly upgrade on a friendly unit to a different eligible unit"
+]
+
 const real = (id: string): EngineCard => {
   const [set, number] = id.split('_')
-  const row = POOL.find(c => c.Set === set && String(c.Number) === number)
+  const row = poolFor([set]).find(c => c.Set === set && String(c.Number) === number)
   if (!row) throw new Error(`${id} is not in the ${set} fixture`)
   return normaliseCard(row)
 }
@@ -46,7 +61,7 @@ const real = (id: string): EngineCard => {
 const src = (id: string, over: Partial<EngineCard> = {}) => card({ id, arena: 'ground', cost: 2, power: 2, hp: 8, ...over })
 const F: Record<string, EngineCard> = {
   ...CARDS,
-  ...Object.fromEntries([...SHIPPED, ...LIFTED].map(id => [id, real(id)])),
+  ...Object.fromEntries([...SHIPPED, ...LIFTED, ...PICKERS].map(id => [id, real(id)])),
   GRD: src('GRD'),
   SPC: src('SPC', { arena: 'space' }),
   BIG: src('BIG', { power: 4 }),
@@ -98,6 +113,15 @@ const fortify = (s: GameState, cardId: string, who: PlayerId = 'player'): GameSt
   resolve(withHand(s, cardId, who), { type: 'playBaseUpgrade', handIndex: s.players[who].hand.length })
 const play = (s: GameState, cardId: string, who: PlayerId = 'player'): GameState =>
   resolve(withHand(s, cardId, who), { type: 'playUnit', handIndex: s.players[who].hand.length })
+const playEvent = (s: GameState, cardId: string, who: PlayerId = 'player'): GameState =>
+  resolve(withHand(s, cardId, who), { type: 'playEvent', handIndex: s.players[who].hand.length })
+/** An upgrade on each unit and on each base: the player's unit `m` and base, the opponent's unit `t` and base. */
+const mixed = (mine: Side = {}) => board(
+  { units: [unit('m', 'GRD', { upgrades: [on('UPG')] })], ...fortified('HMW_113'), ...mine },
+  { units: [unit('t', 'GRD', { upgrades: [on('UPG', 'opponent')] })], ...theirFortified('HMW_271') },
+)
+/** The card ids an upgrade pick offers, sorted. */
+const offered = (s: GameState): string[] => (choice(s) as { candidates: { cardId: string }[] }).candidates.map(c => c.cardId).sort()
 const useBase = (s: GameState, cardId: string, index = 0) => resolve(s, { type: 'useBaseAbility', cardId, index })
 const baseActionOffered = (s: GameState, cardId: string) => moves(s).some(m => m.type === 'useBaseAbility' && m.cardId === cardId)
 /** Both players pass: the action phase ends and the regroup phase starts. */
@@ -206,6 +230,10 @@ describe('Fortify: cards that read a base upgrade', () => {
     noChoice(play(board(), 'HMW_270'))
   })
 
+  it('Wild Space Wanderer (HMW_270) offers the upgrades on both bases and none on a unit', () => {
+    expect(offered(play(mixed(), 'HMW_270'))).toEqual(['HMW_113', 'HMW_271'])
+  })
+
   it('Grand Moff Tarkin (HMW_004) ignores the aspect penalties on Fortify upgrades, on either side', () => {
     const lead = { cardId: 'HMW_004', deployed: false, epicActionUsed: false, exhausted: false }
     // Heavy Ion Cannon is Aggression/Heroism; an ordinary Aggression upgrade still pays its penalty.
@@ -222,6 +250,69 @@ describe('Fortify: cards that read a base upgrade', () => {
     expect(accept(s).winner).toBe('player')
     const far = toRegroup(board({ leader: lead, units: [unit('L', 'HMW_004', { isLeader: true })] }, { base: { cardId: 'TST_B', damage: 19 } }))
     expect(far.pendingChoices?.some(c => c.controller === 'player' && c.kind === 'mayPayThen') ?? false).toBe(false)
+  })
+})
+
+describe('Fortify: effects that pick an upgrade see one on a base', () => {
+  // The CR predates Fortify and puts no limit on "an upgrade", so an upgrade on a base is one; a card
+  // that says where the upgrade is ("on a unit", "attached to a unit", "on a friendly unit") excludes it.
+  const pickIndex = (s: GameState, cardId: string) => (choice(s) as { candidates: { cardId: string }[] }).candidates.findIndex(c => c.cardId === cardId)
+
+  it('Confiscate (SOR_251) offers every upgrade, both bases\' included, and defeats the one on a base to its owner\'s discard pile', () => {
+    const s = playEvent(mixed(), 'SOR_251')
+    expect(offered(s)).toEqual(['HMW_113', 'HMW_271', 'UPG', 'UPG'])
+    // The AI chooses from the legal moves, so a base upgrade is one of its options too.
+    expect(moves(s).filter(m => m.type === 'acceptChoice')).toHaveLength(4)
+    const done = accept(s, { optionIndex: pickIndex(s, 'HMW_271') })
+    expect(baseUpgrades(done, 'opponent')).toEqual([])
+    expect(done.players.opponent.discard).toEqual(['HMW_271'])
+    expect(U(done, 't')!.upgrades).toHaveLength(1)
+  })
+
+  it('Disabling Fang Fighter (SOR_162) may defeat an upgrade on a base', () => {
+    const s = play(mixed(), 'SOR_162')
+    expect(offered(s)).toEqual(['HMW_113', 'HMW_271', 'UPG', 'UPG'])
+    expect(baseUpgrades(accept(s, { optionIndex: pickIndex(s, 'HMW_113') }))).toEqual([])
+  })
+
+  it('Exploit Advantage (ASH_246) offers a friendly upgrade on your base, not one on theirs', () => {
+    const s = playEvent(mixed(), 'ASH_246')
+    expect(offered(s)).toEqual(['HMW_113', 'UPG'])
+    const done = accept(s, { optionIndex: pickIndex(s, 'HMW_113') })
+    expect(baseUpgrades(done)).toEqual([])
+    expect(done.players.player.discard).toContain('HMW_113')
+    expect(done.players.player.hand).toHaveLength(2)
+  })
+
+  it('Junior Senator (SEC_200) may return an upgrade on a base to its owner\'s hand', () => {
+    const s = play(mixed(), 'SEC_200')
+    expect(offered(s)).toContain('HMW_271')
+    const done = accept(s, { optionIndex: pickIndex(s, 'HMW_271') })
+    expect(baseUpgrades(done, 'opponent')).toEqual([])
+    expect(done.players.opponent.hand).toEqual(['HMW_271'])
+  })
+
+  it('Jabba the Hutt (ASH_042) may return your base upgrade and play it again for free, back onto your base', () => {
+    const s = play(mixed(), 'ASH_042')
+    const back = accept(s, { optionIndex: pickIndex(s, 'HMW_113') })
+    expect(baseUpgrades(back)).toEqual([])
+    const replayed = accept(back, { targetInstanceId: 'm' })
+    expect(baseUpgrades(replayed)).toEqual(['HMW_113'])
+    expect(U(replayed, 'm')!.upgrades.map(u => u.cardId)).toEqual(['UPG'])
+    expect(readyCount(replayed, 'player')).toBe(readyCount(back, 'player'))
+  })
+
+  it.each([
+    ['System Shock (JTL_175), "attached to a unit"', 'JTL_175', ['UPG', 'UPG']],
+    ['Reforge (ASH_090), "on a friendly unit"', 'ASH_090', ['UPG']],
+    ['Evidence of the Crime (SHD_077), attached to a unit', 'SHD_077', ['UPG', 'UPG']],
+  ])('%s never offers a base upgrade', (_name, cardId, expected) => {
+    expect(offered(playEvent(mixed(), cardId))).toEqual(expected)
+  })
+
+  it('Jocasta Nu (LOF_248), "a friendly upgrade on a friendly unit", never offers a base upgrade', () => {
+    const s = play(mixed({ units: [unit('m', 'GRD', { upgrades: [on('UPG')] }), unit('m2', 'GRD')] }), 'LOF_248')
+    expect(offered(s)).toEqual(['UPG'])
   })
 })
 
