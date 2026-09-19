@@ -9,7 +9,7 @@ import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, col
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage } from './keywords'
@@ -883,7 +883,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // and only then may you replay it for free.
       const pick = choice.candidates[optionIndex ?? 0]
       if (!pick) break
-      const upgradeOwner = findUnit(next, pick.unitId)?.unit.upgrades[pick.upgradeIndex]?.owner
+      const upgradeOwner = upgradeAt(next, pick.unitId, pick.upgradeIndex)?.owner
       // A token is defeated rather than returned (#401), so it never reaches a hand and must not
       // be offered for free replay: the card does not exist to replay.
       const wasToken = next.cards[pick.cardId]?.type === 'token'

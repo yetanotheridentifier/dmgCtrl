@@ -10,7 +10,7 @@ import type { Action } from '../engine/actions'
 import { describeAction, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
 import { describeChoiceParts, BOARD_TARGET_KINDS } from '../utils/describeChoice'
-import { upgradeHostIds } from '../utils/upgradeHosts'
+import { upgradeHostIds, upgradeHostName } from '../utils/upgradeHosts'
 import { buildReportMarkdown, issueUrl } from '../utils/bugReport'
 import { BugReportOverlay } from './bugReportOverlay'
 import { SettingsOverlay } from './settingsOverlay'
@@ -26,7 +26,7 @@ import { CARD_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
 import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE, TOKEN_WEAKNESS } from '../engine/tokenUpgrades'
 import { unitHasKeyword, auraContributions } from '../engine/keywords'
-import { lastingEffectTotals } from '../engine/types'
+import { baseHostId, baseHostOwner, lastingEffectTotals } from '../engine/types'
 import { useCardZoom } from './useCardZoom'
 import { CardRef, DescribedParts } from './cardRef'
 import { CardZoomPopover } from './cardZoom'
@@ -354,10 +354,9 @@ export function CardChoiceOverlay({ card, cardId, prompt, children }: {
  * rule, the Armorer's resource reveal). `disabled` items are revealed but not selectable; a Cancel
  * appears when `onCancel` is given. A thin wrapper over `CardGridOverlay`.
  */
-/** A unit's card name, whichever side controls it; falls back to "the unit" if it has left play. */
-function unitDisplayName(state: GameState, instanceId: string): string {
-  const u = [...state.players.player.units, ...state.players.opponent.units].find(x => x.instanceId === instanceId)
-  return (u && state.cards[u.cardId]?.name) || 'the unit'
+/** An upgrade host's name (a unit, or whose base); falls back to "the unit" if it has left play. */
+function hostDisplayName(state: GameState, hostId: string): string {
+  return upgradeHostName(state, hostId) || 'the unit'
 }
 
 export function CardSelectOverlay({ state, prompt, items, onPick, onCancel }: {
@@ -1665,7 +1664,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       choiceOverlay = (
         <CardSelectOverlay
           state={gameState}
-          prompt={`Choose an upgrade to defeat from ${unitDisplayName(gameState, pickedHost)}`}
+          prompt={`Choose an upgrade to defeat from ${hostDisplayName(gameState, pickedHost)}`}
           // flatMap keeps each candidate's original index as its optionIndex while dropping the
           // ones on other units.
           items={selectUpgradeChoice.candidates.flatMap((c, i) =>
@@ -1707,7 +1706,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       choiceOverlay = (
         <CardSelectOverlay
           state={gameState}
-          prompt={`You control two ${gameState.cards[uniqueChoice.cardId]?.name ?? 'copies'}, defeat the one on ${unitDisplayName(gameState, pickedHost)}`}
+          prompt={`You control two ${gameState.cards[uniqueChoice.cardId]?.name ?? 'copies'}, defeat the one on ${hostDisplayName(gameState, pickedHost)}`}
           items={uniqueChoice.candidates.flatMap((c, i) =>
             c.unitId === pickedHost ? [{ cardId: c.cardId, optionIndex: i, key: i }] : [])}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: uniqueChoice.id, optionIndex })}
@@ -1730,11 +1729,13 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           prompt={reporting || choiceOverlay
             ? undefined
             : upgradePick && pickedHost === null
-              ? ['Choose the unit to defeat an upgrade from']
+              ? [upgradeHosts.some(id => baseHostOwner(id)) ? 'Choose the unit or base to defeat an upgrade from' : 'Choose the unit to defeat an upgrade from']
               : actionPrompt ?? (anyPlayerChoice ? describeChoiceParts(gameState, anyPlayerChoice) : undefined)}
           playerInteraction={playerInteraction}
           opponentInteraction={opponentInteraction}
           baseAction={side => {
+            // Step one of an upgrade pick: a base carrying a candidate (Fortify) is a host like a unit.
+            if (upgradePick && pickedHost === null && upgradeHosts.includes(baseHostId(side))) return () => setUpgradeHost(baseHostId(side))
             if (side === 'opponent' && baseAttack) return () => actAndClear(baseAttack)
             const dmg = baseTargetActions.get(side)
             return dmg ? () => actAndClear(dmg) : undefined

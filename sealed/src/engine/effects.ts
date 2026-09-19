@@ -1,5 +1,5 @@
-import type { DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState } from './types'
-import { updatePlayer, pushChoice, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
+import type { DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
+import { baseHostId, baseHostOwner, updatePlayer, pushChoice, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint } from './abilities'
@@ -642,26 +642,40 @@ export function defeatUpgrade(state: GameState, instanceId: string, cardId: stri
  * is defeated" fires for its owner. A no-op if the upgrade is no longer there.
  */
 export function defeatBaseUpgrade(state: GameState, baseOwner: PlayerId, cardId: string): GameState {
+  return defeatUpgradeAt(state, baseHostId(baseOwner), (state.players[baseOwner].base.upgrades ?? []).findIndex(a => a.cardId === cardId))
+}
+
+/** Remove the upgrade at `index` from `baseOwner`'s base, returning it with the new state. */
+function detachBaseUpgrade(state: GameState, baseOwner: PlayerId, index: number): { next: GameState; removed?: UpgradeAttachment } {
   const base = state.players[baseOwner].base
-  const idx = (base.upgrades ?? []).findIndex(a => a.cardId === cardId)
-  if (idx === -1) return state
-  const removed = base.upgrades![idx]
-  const left = base.upgrades!.filter((_, i) => i !== idx)
-  let next = updatePlayer(state, baseOwner, { base: { ...base, upgrades: left.length > 0 ? left : undefined } })
-  if (state.cards[cardId]?.type !== 'token') {
-    const op = next.players[removed.owner]
-    next = updatePlayer(next, removed.owner, { discard: [...op.discard, cardId] })
-  }
-  return fireUpgradesDefeated(next, [removed.owner])
+  const removed = base.upgrades?.[index]
+  if (!removed) return { next: state }
+  const left = base.upgrades!.filter((_, i) => i !== index)
+  return { next: updatePlayer(state, baseOwner, { base: { ...base, upgrades: left.length > 0 ? left : undefined } }), removed }
+}
+
+/** The upgrade an `UpgradeRef`'s host and position name, on a unit or a base, if it is still there. */
+export function upgradeAt(state: GameState, hostId: string, index: number): UpgradeAttachment | undefined {
+  const baseOwner = baseHostOwner(hostId)
+  return baseOwner ? state.players[baseOwner].base.upgrades?.[index] : findUnit(state, hostId)?.unit.upgrades[index]
 }
 
 /**
- * Defeat the upgrade at position `index` on a unit — the precise-instance form of
- * `defeatUpgrade`, so a chosen upgrade (e.g. one of two identical Advantage tokens) is removed
- * exactly. A card-upgrade goes to its owner's discard; a token ceases to exist. No-op if the
- * unit or index is gone.
+ * Defeat the upgrade at position `index` on a unit or, for `baseHostId(owner)`, on that base: the
+ * precise-instance form of `defeatUpgrade`, so a chosen upgrade (e.g. one of two identical Advantage
+ * tokens) is removed exactly. A card-upgrade goes to its owner's discard; a token ceases to exist.
+ * No-op if the host or index is gone.
  */
 export function defeatUpgradeAt(state: GameState, instanceId: string, index: number): GameState {
+  const baseOwner = baseHostOwner(instanceId)
+  if (baseOwner) {
+    const { next, removed } = detachBaseUpgrade(state, baseOwner, index)
+    if (!removed) return state
+    const discarded = state.cards[removed.cardId]?.type === 'token'
+      ? next
+      : updatePlayer(next, removed.owner, { discard: [...next.players[removed.owner].discard, removed.cardId] })
+    return fireUpgradesDefeated(discarded, [removed.owner])
+  }
   const found = findUnit(state, instanceId)
   const removed = found?.unit.upgrades[index]
   if (!found || !removed) return state
@@ -683,6 +697,13 @@ export function defeatUpgradeAt(state: GameState, instanceId: string, index: num
  * that path fires no trigger.
  */
 export function returnUpgradeToHand(state: GameState, instanceId: string, index: number): GameState {
+  const baseOwner = baseHostOwner(instanceId)
+  if (baseOwner) {
+    const { next, removed } = detachBaseUpgrade(state, baseOwner, index)
+    if (!removed) return state
+    if (state.cards[removed.cardId]?.type === 'token') return defeatUpgradeAt(state, instanceId, index)
+    return updatePlayer(next, removed.owner, { hand: [...next.players[removed.owner].hand, removed.cardId] })
+  }
   const found = findUnit(state, instanceId)
   const removed = found?.unit.upgrades[index]
   if (!found || !removed) return state

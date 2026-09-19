@@ -2,6 +2,7 @@ import type { Action } from '../engine/actions'
 import type { GameState, PlayerId } from '../engine/types'
 import { opponentOf, activeChoice, findChoice } from '../engine/types'
 import { effectiveCost } from '../engine/legalMoves'
+import { upgradeHostName } from './upgradeHosts'
 
 function unitName(state: GameState, owner: PlayerId, instanceId: string): string {
   const unit = state.players[owner].units.find(u => u.instanceId === instanceId)
@@ -353,13 +354,13 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'selectUpgradeToReturn') {
         const pick = choice.candidates[action.optionIndex ?? 0]
         const name = pick ? state.cards[pick.cardId]?.name : undefined
-        const host = pick ? anyUnitName(state, pick.unitId) : undefined
+        const host = pick ? upgradeHostName(state, pick.unitId) : undefined
         return `Return ${name ?? 'upgrade'}${host ? ` from ${host}` : ''}`
       }
       if (choice.kind === 'selectUpgradeThen') {
         const pick = choice.candidates[action.optionIndex ?? 0]
         const name = pick ? state.cards[pick.cardId]?.name : undefined
-        const host = pick ? anyUnitName(state, pick.unitId) : undefined
+        const host = pick ? upgradeHostName(state, pick.unitId) : undefined
         return `Choose ${name ?? 'upgrade'}${host ? ` on ${host}` : ''}`
       }
       if (choice.kind === 'selectCardThen') {
@@ -395,7 +396,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       }
       if (choice.kind === 'selectUniqueToDefeat') {
         const pick = choice.candidates[action.optionIndex ?? 0]
-        const host = pick ? anyUnitName(state, pick.unitId) : undefined
+        const host = pick ? upgradeHostName(state, pick.unitId) : undefined
         return `Defeat the copy${host ? ` on ${host}` : ''}`
       }
       if (choice.kind === 'selectUniqueUnitToDefeat') {

@@ -312,9 +312,10 @@ from another zone sends it to the base whatever unit it named.
   (Alliance Shield Generator).
 
 `defeatBaseUpgrade` defeats one: a card goes to its owner's discard pile and "when a friendly upgrade is
-defeated" fires, as for an upgrade on a unit. A base upgrade has no host, so nothing that reads a unit's
-upgrades (and no "defeat an upgrade" that picks from units) sees it; the cards that read a base's upgrades
-count `BaseState.upgrades` directly.
+defeated" fires, as for an upgrade on a unit. An effect that picks "an upgrade" or "a friendly upgrade" sees one
+on a base, named by the host `baseHostId(owner)` (see "Which upgrades an effect may target" in
+`keywords-effects.md`); one that says "on a unit" does not. Nothing that reads a unit's upgrades counts
+a base's, and the cards that read a base's upgrades count `BaseState.upgrades` directly.
 
 ## Once each round
 
