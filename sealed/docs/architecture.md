@@ -43,7 +43,8 @@ The heart of the app is a pure function pair:
 
 Supporting modules: `types.ts` (schema), `cardDb.ts` (SWUDB payload → normalised
 static card data; two small data-patch tables feed in here: `upgradeStatOverrides.ts` *fills* the
-Power/HP the ASH upgrade data omits, and `cardDataCorrections.ts` *overrides* values the source
+Power/HP the source omits for the unit upgrades of ASH, HMW, JTL, LAW, LOF, SEC and TS26 (values from
+the publisher's card list, and a test fails if a unit upgrade in a bundled set is left uncovered), and `cardDataCorrections.ts` *overrides* values the source
 gets wrong, read off the printed card (e.g. Moff Gideon unit cost, Nebulon-C Frigate arena); both
 drop out per-card once upstream is fixed), `initGame.ts` (setup per CR §5.2: shuffle, draw 6. The game opens in a SETUP
 phase with two stages resolved through legalMoves/resolve: mulligan decisions

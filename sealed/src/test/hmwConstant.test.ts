@@ -306,8 +306,8 @@ describe('HMW constant abilities, B: auras, combat and damage', () => {
     expect([power(s, 'v'), hp(s, 'v')]).toEqual([3, 9])
     expect([power(s, 'a'), power(s, 'k'), power(s, 'e'), power(s, 'r')]).toEqual([2, 2, 2, 5])
     expect(power(s, 'c')).toBe(3)
-    // An upgrade handing it a keyword gives it an ability.
-    expect(power(board({ units: [unit('r', 'HMW_141'), unit('v', 'GRD', { upgrades: [upg('HMW_190')] })] }), 'v')).toBe(2)
+    // An upgrade handing it a keyword gives it an ability: Enraged's own +1, and no +1 from Rex.
+    expect(power(board({ units: [unit('r', 'HMW_141'), unit('v', 'GRD', { upgrades: [upg('HMW_190')] })] }), 'v')).toBe(3)
   })
 
   it('Teebo (HMW_162) gives other friendly Ewok units Hidden', () => {
