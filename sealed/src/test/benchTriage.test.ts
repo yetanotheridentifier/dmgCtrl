@@ -154,12 +154,6 @@ describe('triage blockers', () => {
    * card's, chosen because the mechanic is the only thing it needs.
    */
   it.each([
-    ['token-unit', 'TWI_237 Droid Deployment', 'Create 2 Battle Droid tokens.'],
-    ['token-unit', 'TWI Clone Trooper', 'When Played: Create a Clone Trooper token.'],
-    ['token-unit', 'SEC Spy', 'When Defeated: Create a Spy token.'],
-    ['token-unit', 'JTL X-Wing', 'When Played: Create an X-Wing token.'],
-    ['token-unit', 'JTL TIE Fighter', 'When Played: Create a TIE Fighter token.'],
-    ['token-unit', 'HMW_195 Catch the Scent', 'Create 2 Beast tokens and ready 1 of them.'],
     ['credit-token', 'LAW Credit', 'When Played: Create a Credit token.'],
     ['weakness-token', 'HMW_197 Cid Scaleback', 'When Played: An opponent chooses a unit they control. Give a Weakness token to it.'],
     ['weakness-token', 'HMW_071 Ravage', 'Distribute up to 3 Weakness tokens among any number of units.'],
@@ -178,6 +172,12 @@ describe('triage blockers', () => {
 
   it.each([
     ['the Mandalorian token unit', 'When Played: Create a Mandalorian token.'],
+    ['a Battle Droid token unit', 'Create 2 Battle Droid tokens.'],
+    ['a Clone Trooper token unit', 'When Played: Create a Clone Trooper token.'],
+    ['a Spy token unit', 'When Defeated: Create a Spy token.'],
+    ['an X-Wing token unit', 'When Played: Create an X-Wing token.'],
+    ['a TIE Fighter token unit', 'When Played: Create a TIE Fighter token.'],
+    ['a Beast token unit', 'Create 2 Beast tokens and ready 1 of them.'],
     ['a Shield token', 'When Played: Give a Shield token to a unit.'],
     ['an Advantage token', 'When Played: Give an Advantage token to a unit.'],
     ['direct damage', 'Deal 5 damage to a unit.'],
@@ -185,10 +185,9 @@ describe('triage blockers', () => {
     expect(triage([card({ FrontText: text })]).triaged[0].blockers).toEqual([])
   })
 
-  it('counts a card needing both a token unit and Disclose as touched by each, sole for neither', () => {
-    // SEC_181 Unauthorized Investigation.
-    const r = triage([card({ FrontText: 'Create a Spy token.\nYou may disclose Aggression (reveal a card from your hand with this aspect icon). If you do, create another Spy token.' })])
-    expect(r.triaged[0].blockers.sort()).toEqual(['disclose', 'token-unit'])
+  it('counts a card needing both Disclose and Indirect damage as touched by each, sole for neither', () => {
+    const r = triage([card({ FrontText: 'You may disclose Aggression (reveal a card from your hand with this aspect icon). If you do, deal 2 indirect damage to a player.' })])
+    expect(r.triaged[0].blockers.sort()).toEqual(['disclose', 'indirect-damage'])
     expect(r.blockers.every(b => b.sole === 0 && b.touched === 1)).toBe(true)
   })
 
@@ -272,14 +271,14 @@ describe('trigger heads', () => {
     ['SOR_150 Heroic Sacrifice', 'Draw a card, then attack with a unit. For this attack, it gets +2/+0 and gains: "When this unit deals combat damage: Defeat it."'],
     ['LAW_077 Shadow of Stygeon Prime', 'Attach to a non-leader unit. \nAttached unit can\'t ready. It gains: "When the regroup phase starts: Deal 2 damage to your base."'],
     ['SEC_156 Nemik\'s Manifesto', 'Attach to a non-Vehicle unit.\nAttached unit gains the Rebel trait and: “When Defeated: Deal 1 damage to each enemy base for each other friendly Rebel unit.”'],
+    ['SEC_231 Implicate', 'Choose a unit. For this phase, it gains Sentinel and: “When this unit is attacked: Create a Spy token.”'],
+    ['TWI_129 In Defense of Kamino', 'For this phase, each friendly Republic unit gains Restore 2 and: "When Defeated: Create a Clone Trooper token."'],
   ])('reads the lead-in on %s as granted-ability-block alone', (_card, text) => {
     expect(triage([card({ FrontText: text })]).triaged[0].blockers).toEqual(['granted-ability-block'])
   })
 
   it.each([
     ['LOF_098 Leia Organa', 'force-token', 'While this unit is in the space arena, she can\'t ready and gains: "Action [use the Force]: Move this unit to the ground arena and give each friendly Heroism unit +2/+2 for this phase."'],
-    ['SEC_231 Implicate', 'token-unit', 'Choose a unit. For this phase, it gains Sentinel and: “When this unit is attacked: Create a Spy token.”'],
-    ['TWI_129 In Defense of Kamino', 'token-unit', 'For this phase, each friendly Republic unit gains Restore 2 and: "When Defeated: Create a Clone Trooper token."'],
   ])('reads the lead-in on %s as granted-ability-block beside its %s blocker', (_card, other, text) => {
     expect(triage([card({ FrontText: text })]).triaged[0].blockers.sort()).toEqual([other, 'granted-ability-block'].sort())
   })

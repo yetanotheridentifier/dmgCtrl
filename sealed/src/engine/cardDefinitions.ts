@@ -1,12 +1,12 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext } from './abilities'
-import { registerCard, getCardDefinition } from './abilities'
-import { takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
+import { registerCard, getCardDefinition, collectUnitTriggers } from './abilities'
+import { fireBatch, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
-import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
+import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer } from './legalMoves'
@@ -7525,3 +7525,376 @@ function memorialOffer(s: GameState, ctx: Resumable, left: number): GameState {
     ? pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-${left}`, controller: ctx.owner, targets, text: `give an Experience token to a unit (${left} left)`, then: resume(ctx, `left:${left}`), optional: true, hookOnDecline: true })
     : s
 }
+
+// ── Token units: Spy, X-Wing, TIE Fighter, Clone Trooper, Battle Droid, Beast ──────────────────────
+// A token unit is created straight into play by `createTokenUnits` (exhausted unless Chancellor
+// Palpatine says otherwise) and ceases to exist when it leaves. The Mandalorian already worked that way,
+// so these are registrations; the helpers below are the token-unit spellings of the Experience ones.
+
+/** The ids of the units `owner` has in `after` that were not in `before`: the tokens an effect just made. */
+const newUnits = (before: GameState, after: GameState, owner: PlayerId): string[] => {
+  const had = new Set(before.players[owner].units.map(u => u.instanceId))
+  return after.players[owner].units.filter(u => !had.has(u.instanceId)).map(u => u.instanceId)
+}
+/**
+ * `owner` creates `n` `token` units; `then` is applied to each one made (ready it, damage it, buff it).
+ * A top-up offered by Moff Jerjerrod is made after this returns, so it is not among them.
+ */
+const create = (s: GameState, owner: PlayerId, token: string, n = 1, then?: (s: GameState, id: string) => GameState): GameState => {
+  if (n <= 0) return s
+  const after = createTokenUnits(s, owner, token, n)
+  return then ? newUnits(s, after, owner).reduce(then, after) : after
+}
+const readyIt = (s: GameState, id: string): GameState => readyUnit(s, id)
+/** "(If ...,) create `n` <token> tokens", as a When Played; `onAttack` retargets it. */
+const createWp = (description: string, token: string, n = 1, when: When = always) =>
+  whenPlayed(description, (s, ctx) => (when(s, ctx) ? create(s, ctx.owner, token, n) : s))
+const createWd = (description: string, token: string, n = 1) =>
+  whenDefeated(description, (s, ctx) => create(s, ctx.owner, token, n))
+const isToken: Pick = (_s, u) => isTokenCard(u.cardId)
+const readyUnits = (s: GameState): UnitState[] => allUnits(s).filter(u => !u.exhausted)
+/** "Any number" for an up-to offer: more than any board holds, and a plain number so the step serialises. */
+const ANY_NUMBER = 99
+
+// A: tokens on a trigger
+registerCard('JTL_082', createWp('Create a TIE Fighter token.', TOKEN_TIE_FIGHTER)) // Kijimi Patrollers
+registerCard('JTL_099', createWp('Create an X-Wing token.', TOKEN_X_WING)) // Veteran Fleet Officer
+registerCard('JTL_252', createWp('Create an X-Wing token.', TOKEN_X_WING)) // Tantive IV
+registerCard('JTL_243', onAttack(createWp('Create a TIE Fighter token.', TOKEN_TIE_FIGHTER))) // Quasar TIE Carrier
+registerCard('SEC_097', createWp('Create a Spy token.', TOKEN_SPY)) // Beloved Orator
+registerCard('SEC_191', createWp('Create 2 Spy tokens.', TOKEN_SPY, 2)) // Trade Federation Delegates
+registerCard('SEC_083', createWp('If a friendly unit was defeated this phase, create a Spy token.', TOKEN_SPY, 1, friendlyWasDefeated)) // ISB Shuttle
+registerCard('SEC_087', onAttack(createWp('Create a Spy token.', TOKEN_SPY))) // Dedra Meero
+registerCard('SEC_115', onAttack(createWp('If you have the initiative, create a Spy token.', TOKEN_SPY, 1, haveInitiative))) // Taylander Shuttle
+registerCard('SEC_132', createWd('Create a Spy token.', TOKEN_SPY)) // Imperial Occupier
+registerCard('SEC_175', createWp('Create a Spy token.', TOKEN_SPY)) // Ambition's Reward
+registerCard('SEC_227', { // Special Modifications
+  attachRestriction: (s, t) => unitHasTrait(s, t, 'Vehicle'),
+  ...whenPlayed('If attached unit is a Transport, you may create a Spy token.', (s, ctx) =>
+    (hostPasses(s, ctx, (st, h) => unitHasTrait(st, h, 'Transport'))
+      ? pushChoice(s, { kind: 'mayCreateToken', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_SPY, count: 1 })
+      : s)),
+})
+registerCard('TS26_23', { // Assault Lander LAAT
+  abilities: [
+    ...createWp('Create 2 Clone Trooper tokens.', TOKEN_CLONE_TROOPER, 2).abilities,
+    { trigger: 'whenRegroupStarts', description: 'Deal 4 damage to this unit.', effect: (s, ctx) => dealDamageToUnit(s, ctx.sourceInstanceId!, 4) },
+  ],
+})
+registerCard('TWI_032', createWd('Create a Battle Droid token.', TOKEN_BATTLE_DROID)) // Wartime Trade Official
+registerCard('TWI_043', { // Outspoken Representative
+  ...gains(another(isTrait('Republic')), KW.sentinel),
+  ...createWd('Create a Clone Trooper token.', TOKEN_CLONE_TROOPER),
+})
+registerCard('TWI_060', createWp('If you control a damaged unit, create a Battle Droid token.', TOKEN_BATTLE_DROID, 1, (s, ctx) => youControl(s, ctx, damaged))) // Trade Federation Shuttle
+registerCard('TWI_079', createWd('Create a Battle Droid token.', TOKEN_BATTLE_DROID)) // Confederate Courier
+registerCard('TWI_097', createWp('Create 2 Clone Trooper tokens.', TOKEN_CLONE_TROOPER, 2)) // Captain Rex
+registerCard('TWI_112', createWp('If you have the initiative, create a Battle Droid token.', TOKEN_BATTLE_DROID, 1, haveInitiative)) // Subjugating Starfighter
+registerCard('TWI_144', createWp('Create a Clone Trooper token.', TOKEN_CLONE_TROOPER)) // Batch Brothers
+registerCard('TWI_145', whenPlayed('An opponent creates 2 Battle Droid tokens.', (s, ctx) => create(s, opponentOf(ctx.owner), TOKEN_BATTLE_DROID, 2))) // Jesse
+registerCard('TWI_183', onAttack(createWp('If the defending player controls no ready resources, create a Battle Droid token.', TOKEN_BATTLE_DROID, 1, // Rush Clovis
+  (s, ctx) => readyResources(s, opponentOf(ctx.owner)) === 0)))
+registerCard('TWI_247', createWd('Create 2 Clone Trooper tokens.', TOKEN_CLONE_TROOPER, 2)) // AT-TE Vanguard
+registerCard('HMW_038', whenPlayed('If attached unit is a Creature or a Force unit, create a Beast token.', (s, ctx) => // Bestial Bond
+  (hostPasses(s, ctx, (st, h) => unitHasTrait(st, h, 'Creature') || unitHasTrait(st, h, 'Force')) ? create(s, ctx.owner, TOKEN_BEAST) : s)))
+registerCard('HMW_047', attacks('Create a Beast token and ready it.', (s, ctx) => create(s, ctx.owner, TOKEN_BEAST, 1, readyIt))) // Eravana
+registerCard('HMW_152', whenPlayed('An opponent creates a Beast token.', (s, ctx) => create(s, opponentOf(ctx.owner), TOKEN_BEAST))) // Babwa Venomor
+registerCard('HMW_250', whenPlayed('Create a Beast token and deal 1 damage to an enemy unit.', (s, ctx) => // Imperial Cavalry
+  damageChoice(create(s, ctx.owner, TOKEN_BEAST), ctx, 1, picked(s, ctx, pickEnemy))))
+registerCard('HMW_262', whenPlayed('Create a Beast token and heal 2 damage from your base.', (s, ctx) => healBase(create(s, ctx.owner, TOKEN_BEAST), ctx.owner, 2))) // Mylaya Rider
+/** "Each Republic leader you control (as a leader or unit)": the player's own leader, either side, and any unit made a leader. */
+const republicLeaders = (s: GameState, owner: PlayerId): number =>
+  (leaderTraitsOf(s, owner).some(t => t.toLowerCase() === 'republic') ? 1 : 0)
+  + s.players[owner].units.filter(u => !u.isLeader && isLeaderUnit(s, u) && unitHasTrait(s, u, 'Republic')).length
+registerCard('TS26_55', whenPlayed('For each Republic leader you control (as a leader or unit), create a Clone Trooper token and give an Experience token to it.', // Jedi General
+  (s, ctx) => create(s, ctx.owner, TOKEN_CLONE_TROOPER, republicLeaders(s, ctx.owner), (st, id) => giveToken(st, id, TOKEN_EXPERIENCE))))
+
+// B: units that do more with their tokens, or with a choice
+registerCard('HMW_153', mayPayWp('You may defeat this unit. If you do, create a Beast token and deal 1 damage to it.', 0, 'defeat this unit', // Poacher's Starfighter
+  (s, ctx) => create(defeatUnit(s, ctx.sourceInstanceId!), ctx.owner, TOKEN_BEAST, 1, (st, id) => dealDamageToUnit(st, id, 1))))
+/** A unit's "When Defeated" abilities, printed, granted or lent, collected as if it had just been defeated. */
+const whenDefeatedOf = (s: GameState, u: UnitState, owner: PlayerId) => collectUnitTriggers(s, 'whenDefeated', u, owner, { defeatedUnit: u })
+registerCard('JTL_039', allOf( // Chimaera
+  whenPlayed('You may use a "When Defeated" ability on another friendly unit.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickOther, (st, u) => whenDefeatedOf(st, u, ctx.owner).length > 0)),
+      'use a "When Defeated" ability on another friendly unit', true)),
+  // The unit stays in play and its ability resolves as if it had just been defeated. A unit with two
+  // When Defeated abilities uses the first; no card in the sealed sets has two.
+  { ifYouDo: (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    return target ? fireBatch(s, whenDefeatedOf(s, target, ctx.owner).slice(0, 1)) : s
+  } },
+  createWd('Create 2 TIE Fighter tokens.', TOKEN_TIE_FIGHTER, 2),
+))
+registerCard('SEC_198', onAttack(mayDiscardThen('You may discard a card from your hand. If you do, create a Spy token.', (s, ctx) => create(s, ctx.owner, TOKEN_SPY)))) // Bail Organa
+registerCard('TWI_080', { // Poggle the Lesser
+  // Created tokens do not fire `whenPlayOrCreateUnit` (only a unit arriving through a play does), which
+  // is exactly "when you play another unit".
+  abilities: [{ trigger: 'whenPlayOrCreateUnit', description: 'You may exhaust this unit. If you do, create a Battle Droid token.',
+    effect: (s, ctx) => (readyNow(s, ctx.sourceInstanceId)
+      ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-poggle`, controller: ctx.owner, cost: 0, text: 'exhaust this unit to create a Battle Droid token', then: resume(ctx) })
+      : s) }],
+  ifYouDo: (s, ctx) => (readyNow(s, ctx.sourceInstanceId) ? create(exhaustUnit(s, ctx.sourceInstanceId!), ctx.owner, TOKEN_BATTLE_DROID) : s),
+})
+registerCard('TWI_084', allOf( // Kraken
+  createWp('Create 2 Battle Droid tokens.', TOKEN_BATTLE_DROID, 2),
+  attacks('Give each friendly token unit +1/+1 for this phase.', (s, ctx) => lastingOnEach(s, picked(s, ctx, pickAll(pickFriendly, isToken)), { power: 1, hp: 1 })),
+))
+registerCard('TWI_094', { // Shaak Ti
+  ...friendlyAura((_s, u) => isTokenCard(u.cardId), { power: 1 }, false),
+  ...onAttack(createWp('Create a Clone Trooper token.', TOKEN_CLONE_TROOPER)),
+})
+registerCard('TWI_203', { // Chancellor Palpatine
+  tokensEnterReady: () => true,
+  ...onAttack(createWp('If a unit left play this phase, create a Clone Trooper token.', TOKEN_CLONE_TROOPER, 1, aUnitLeftPlay)),
+})
+registerCard('TWI_234', allOf( // The Invisible Hand
+  createWp('Create 4 Battle Droid tokens.', TOKEN_BATTLE_DROID, 4),
+  onAttack(eachOfUpTo("Exhaust any number of friendly Separatist units. Deal 1 damage to the defending player's base for each unit exhausted this way.", ANY_NUMBER, {
+    text: "exhaust a friendly Separatist unit for 1 damage to the defending player's base",
+    test: pickAll(pickFriendly, pickTrait('Separatist'), (_s, u) => !u.exhausted),
+    apply: (s, ctx, id) => dealDamageToBase(exhaustUnit(s, id), opponentOf(ctx.owner), 1),
+  })),
+))
+registerCard('TWI_119', { attachRestriction: (_s, t) => isTokenCard(t.cardId) }) // Nameless Valor: Overwhelm comes from its keyword data
+
+// C: events. A token created by the same event is only a target for what the card prints after it.
+registerCard('JTL_254', createWp('Create 2 X-Wing tokens.', TOKEN_X_WING, 2)) // Dedicated Wingmen
+registerCard('SEC_092', createWp('Create 5 Spy tokens.', TOKEN_SPY, 5)) // I Am the Senate
+registerCard('TWI_237', createWp('Create 2 Battle Droid tokens.', TOKEN_BATTLE_DROID, 2)) // Droid Deployment
+registerCard('TWI_251', createWp('Create 2 Clone Trooper tokens.', TOKEN_CLONE_TROOPER, 2)) // Drop In
+registerCard('TWI_190', whenPlayed('Create 3 Battle Droid tokens and ready them.', (s, ctx) => create(s, ctx.owner, TOKEN_BATTLE_DROID, 3, readyIt))) // On the Doorstep
+registerCard('HMW_058', { // Mysterious Disappearance
+  ...whenPlayed('A player chooses a non-leader unit they control. You may defeat that unit. If you do, that player creates a Beast token.', (s, ctx) =>
+    choosePlayer(s, ctx, 'choose a player to pick a non-leader unit they control', 'player')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'player') {
+      const who = ctx.playerChosen!
+      const targets = s.players[who].units.filter(u => nonLeader(s, u)).map(u => u.instanceId)
+      return targets.length
+        ? pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-pick`, controller: who, targets, text: 'choose a non-leader unit you control', then: resume(ctx, 'unit') })
+        : s
+    }
+    if (ctx.step === 'unit') {
+      return pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-defeat`, controller: ctx.owner, cost: 0, text: 'defeat that unit', then: resume(ctx, 'defeat', ctx.targetInstanceId) })
+    }
+    const found = findUnit(s, ctx.unitChosen ?? '')
+    return found ? create(defeatUnit(s, found.unit.instanceId), found.owner, TOKEN_BEAST) : s
+  },
+})
+registerCard('HMW_150', whenPlayed('For every 3 resources you control, create a Beast token.', (s, ctx) => // Migrate
+  create(s, ctx.owner, TOKEN_BEAST, Math.floor(s.players[ctx.owner].resources.length / 3))))
+registerCard('HMW_194', whenPlayed('Create a Beast token. Deal 1 damage to a friendly ground unit and 1 damage to an enemy ground unit.', (s, ctx) => { // Run Amok
+  const made = create(s, ctx.owner, TOKEN_BEAST)
+  const friendly = damageChoice(made, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-friendly` }, 1, picked(made, ctx, pickAll(pickFriendly, pickGround)))
+  return damageChoice(friendly, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-enemy` }, 1, picked(made, ctx, pickAll(pickEnemy, pickGround)))
+}))
+registerCard('HMW_195', whenPlayed('Create 2 Beast tokens and ready 1 of them.', (s, ctx) => { // Catch the Scent
+  const made = create(s, ctx.owner, TOKEN_BEAST, 2)
+  // The two are identical, so which one is readied is no choice at all.
+  const first = newUnits(s, made, ctx.owner)[0]
+  return first ? readyUnit(made, first) : made
+}))
+registerCard('HMW_241', whenPlayed("Create a Beast token. You may return a non-leader unit to its owner's hand.", (s, ctx) => { // Howl
+  const made = create(s, ctx.owner, TOKEN_BEAST)
+  return targetChoice(made, ctx, 'selectUnitToReturn', pickedIds(made, ctx, nonLeader), true)
+}))
+registerCard('HMW_272', whenPlayed('Create a Beast token. Heal 3 damage from your base. Draw a card.', (s, ctx) => // Growth
+  drawCards(healBase(create(s, ctx.owner, TOKEN_BEAST), ctx.owner, 3), ctx.owner, 1)))
+registerCard('JTL_076', whenPlayed('Create an X-Wing token. You may give a Shield token to another unit.', (s, ctx) => { // Covering the Wing
+  const made = create(s, ctx.owner, TOKEN_X_WING)
+  const xwing = newUnits(s, made, ctx.owner)
+  return shieldChoice(made, ctx, allUnits(made).filter(u => !xwing.includes(u.instanceId)).map(u => u.instanceId), true)
+}))
+registerCard('JTL_092', whenPlayed("Create 8 TIE Fighter tokens and ready them. They can't attack bases for this phase.", (s, ctx) => // Scramble Fighters
+  create(s, ctx.owner, TOKEN_TIE_FIGHTER, 8, (st, id) => addLastingEffect(readyUnit(st, id), { targetInstanceId: id, cannotAttackBases: true }))))
+registerCard('JTL_122', eachOfUpTo('Exhaust up to 2 friendly space units. For each unit exhausted this way, create an X-Wing token.', 2, { // All Wings Report In
+  text: 'exhaust a friendly space unit to create an X-Wing token (up to 2)',
+  test: pickAll(pickFriendly, pickArena('space'), (_s, u) => !u.exhausted),
+  apply: (s, ctx, id) => create(exhaustUnit(s, id), ctx.owner, TOKEN_X_WING),
+}))
+registerCard('JTL_130', whenPlayed('Choose an opponent. For every 2 resources they control, create an X-Wing token and give it Sentinel for this phase.', (s, ctx) => // Timely Reinforcements
+  create(s, ctx.owner, TOKEN_X_WING, Math.floor(s.players[opponentOf(ctx.owner)].resources.length / 2),
+    (st, id) => addLastingEffect(st, { targetInstanceId: id, keywords: [KW.sentinel] }))))
+registerCard('JTL_155', whenPlayed('An opponent creates 2 TIE Fighter tokens and readies them. Then, play a Vehicle unit from your hand. It costs 3 less.', (s, ctx) => // They Hate That Ship
+  playFromHand(create(s, opponentOf(ctx.owner), TOKEN_TIE_FIGHTER, 2, readyIt), ctx, { costDelta: -3, test: c => printedTrait(c, 'Vehicle') })))
+/** Commence Patrol: pick another card from `owner`'s discard pile to put on the bottom of their deck. */
+const patrolPick = (s: GameState, ctx: Resumable, owner: PlayerId): GameState => {
+  const pile = discardBesides(s, owner, ctx)
+  return pile.length ? cardThen(s, ctx, pile, "put a card on the bottom of its owner's deck", false, `patrol:${owner}`) : s
+}
+registerCard('JTL_205', { // Commence Patrol
+  ...whenPlayed("Put another card in a discard pile on the bottom of its owner's deck. If you do, create an X-Wing token.", (s, ctx) => {
+    const piles = BOTH_BASES.filter(p => discardBesides(s, p, ctx).length > 0)
+    if (piles.length === 2) return choosePlayer(s, ctx, 'choose whose discard pile to take a card from', 'pile')
+    return piles.length ? patrolPick(s, ctx, piles[0]) : s
+  }),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'pile') return patrolPick(s, ctx, ctx.playerChosen!)
+    const owner = splitStep(ctx.step, 'patrol:')[0] as PlayerId
+    return ctx.cardChosen ? create(discardToDeckBottom(s, owner, [ctx.cardChosen]), ctx.owner, TOKEN_X_WING) : s
+  },
+})
+registerCard('SEC_105', whenPlayed('Return a unit from your discard pile to your hand. Create 2 Spy tokens.', (s, ctx) => { // Renewed Friendship
+  const candidates = s.players[ctx.owner].discard.filter(id => printedUnit(s.cards[id]))
+  const returned = candidates.length ? pushChoice(s, { kind: 'selectFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: false }) : s
+  return create(returned, ctx.owner, TOKEN_SPY, 2)
+}))
+registerCard('SEC_128', whenPlayed('Search the top 8 cards of your deck for up to 2 Official units, reveal them, and draw them. Create a Spy token.', (s, ctx) => // Convene the Senate
+  searchDrawChoice(create(s, ctx.owner, TOKEN_SPY), ctx, 8, c => printedUnit(c) && printedTrait(c, 'Official'), 2)))
+registerCard('SEC_177', whenPlayed("You may ready a unit that didn't attack or enter play this phase. Create a Spy token.", (s, ctx) => { // It's Not Over Yet
+  const busy = new Set([...attackedThisPhase(s), ...BOTH_BASES.flatMap(p => enteredPlayThisPhase(s, p))])
+  const targets = allUnits(s).filter(u => u.exhausted && !busy.has(u.instanceId)).map(u => u.instanceId)
+  return create(targetChoice(s, ctx, 'selectUnitToReady', targets, true), ctx.owner, TOKEN_SPY)
+}))
+registerCard('SEC_178', { // Pursue the Lead
+  ...whenPlayed('Choose a player. That player discards a card from their hand. If it costs 3 or less, create a Spy token.', (s, ctx) =>
+    choosePlayer(s, ctx, 'choose a player to discard a card', 'player')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'player') return discards(s, ctx.playerChosen!, 1, `${ctx.sourceInstanceId}-discard`, resume(ctx, 'discarded'))
+    return (s.cards[ctx.cardChosen ?? '']?.cost ?? Infinity) <= 3 ? create(s, ctx.owner, TOKEN_SPY) : s
+  },
+})
+registerCard('SEC_236', { // Undercover Operation
+  // "Played", so a created token (which also enters play) is not one.
+  ...whenPlayed('Ready a unit that was played this phase. If it costs 3 or less, create a Spy token.', (s, ctx) => {
+    const played = new Set(BOTH_BASES.flatMap(p => enteredPlayThisPhase(s, p)))
+    return unitThen(s, ctx, allUnits(s).filter(u => played.has(u.instanceId) && !isTokenCard(u.cardId)).map(u => u.instanceId), 'ready a unit that was played this phase', false)
+  }),
+  ifYouDo: (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!target) return s
+    const readied = readyUnit(s, target.instanceId)
+    return printedCost(s, target) <= 3 ? create(readied, ctx.owner, TOKEN_SPY) : readied
+  },
+})
+registerCard('SEC_246', whenPlayed('Deal 2 damage to a non-Vehicle unit. Create a Spy token.', (s, ctx) => // Contempt for Culture
+  create(damageChoice(s, ctx, 2, picked(s, ctx, (st, u) => !unitHasTrait(st, u, 'Vehicle'))), ctx.owner, TOKEN_SPY)))
+registerCard('TWI_073', whenPlayed('Heal 3 damage from a unit. Create a Battle Droid token.', (s, ctx) => // Grievous Reassembly
+  create(healChoice(s, ctx, 3, allUnits(s).map(u => u.instanceId), []), ctx.owner, TOKEN_BATTLE_DROID)))
+registerCard('TWI_076', whenPlayed('Defeat a unit that costs 3 or less. Create 2 Battle Droid tokens.', (s, ctx) => // Death by Droids
+  create(targetChoice(s, ctx, 'selectUnitToDefeat', pickedIds(s, ctx, costsAtMost(3))), ctx.owner, TOKEN_BATTLE_DROID, 2)))
+/** Reprocess: pick the units one at a time from your discard pile; the picks so far ride in the step. */
+const reprocessFinish = (s: GameState, ctx: Resumable, picks: string[]): GameState =>
+  create(discardToDeckBottom(s, ctx.owner, picks), ctx.owner, TOKEN_BATTLE_DROID, picks.length)
+const reprocessPick = (s: GameState, ctx: Resumable, picks: string[]): GameState => {
+  const left = withoutEach(s.players[ctx.owner].discard.filter(id => printedUnit(s.cards[id])), picks)
+  if (picks.length >= 4 || left.length === 0) return reprocessFinish(s, ctx, picks)
+  return cardThen(s, ctx, left, 'put a unit from your discard pile on the bottom of your deck (up to 4)', true, `reprocess:${picks.join(',')}`)
+}
+registerCard('TWI_088', { // Reprocess
+  ...whenPlayed('Choose up to 4 units in your discard pile. Put them on the bottom of your deck in a random order and create that many Battle Droid tokens.', (s, ctx) =>
+    reprocessPick(s, ctx, [])),
+  ifYouDo: (s, ctx) => {
+    const picks = splitStep(ctx.step, 'reprocess:')
+    return ctx.cardChosen ? reprocessPick(s, ctx, [...picks, ctx.cardChosen]) : reprocessFinish(s, ctx, picks)
+  },
+})
+registerCard('TWI_125', { // The Clone Wars
+  ...whenPlayed('Pay any number of resources. Create that many Clone Trooper tokens. Each opponent creates that many Battle Droid tokens.', (s, ctx) =>
+    chooseNumberUpTo(s, ctx, readyResources(s, ctx.owner), 'choose how many resources to pay')),
+  ifYouDo: (s, ctx) => {
+    const n = ctx.optionIndex ?? 0
+    return create(create(payResources(s, ctx.owner, n), ctx.owner, TOKEN_CLONE_TROOPER, n), opponentOf(ctx.owner), TOKEN_BATTLE_DROID, n)
+  },
+})
+registerCard('TWI_200', whenPlayed('Exhaust a non-unique unit. Create a Clone Trooper token.', (s, ctx) => // Creative Thinking
+  create(targetChoice(s, ctx, 'mayExhaustUnit', allUnits(s).filter(u => !cardOf(s, u)?.unique).map(u => u.instanceId)), ctx.owner, TOKEN_CLONE_TROOPER)))
+registerCard('TWI_222', { // Political Pressure
+  ...whenPlayed("Choose an opponent. They may discard a random card from their hand. If they don't, create 2 Battle Droid tokens.", (s, ctx) =>
+    (s.players[opponentOf(ctx.owner)].hand.length
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: opponentOf(ctx.owner), cost: 0, text: 'discard a random card from your hand', then: resume(ctx), declineStep: 'refused' })
+      : create(s, ctx.owner, TOKEN_BATTLE_DROID, 2))),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'refused') return create(s, ctx.owner, TOKEN_BATTLE_DROID, 2)
+    const enemy = opponentOf(ctx.owner)
+    const hand = s.players[enemy].hand
+    if (!hand.length) return s
+    // Random, not chosen: the seed on the state keeps it deterministic under replay.
+    return { ...discardFromHand(s, enemy, Math.floor(seededUnit(s.rngSeed) * hand.length)), rngSeed: nextSeed(s.rngSeed) }
+  },
+})
+registerCard('TWI_239', whenPlayed('Deal 6 damage to each Jedi unit. For each unit defeated this way, its controller creates a Clone Trooper token.', s => { // Execute Order 66
+  const jedi = BOTH_BASES.flatMap(p => s.players[p].units.filter(u => unitHasTrait(s, u, 'Jedi')).map(u => [u.instanceId, p] as const))
+  const hit = jedi.reduce((acc, [id]) => dealDamageToUnit(acc, id, 6), s)
+  return jedi.reduce((acc, [id, p]) => (findUnit(acc, id) ? acc : create(acc, p, TOKEN_CLONE_TROOPER)), hit)
+}))
+
+// D: leaders. Each side's token-making step resumes into the one `ifYouDo`, so a card's hook serves both.
+registerCard('HMW_010', mergeLeaderSides( // Tarfful
+  leaderFront('Discard a card from your hand: create a Beast token.', {
+    cost: 2,
+    usable: (s, ctx) => s.players[ctx.owner].hand.length > 0,
+    effect: (s, ctx) => discards(s, ctx.owner, 1, ctx.sourceInstanceId!, resume(ctx)),
+  }),
+  onAttack(mayPayWp('You may pay 1. If you do, create a Beast token.', 1, 'pay 1 to create a Beast token', s => s)),
+  { ifYouDo: (s, ctx) => create(s, ctx.owner, TOKEN_BEAST) },
+))
+const friendlyCreature = pickAll(pickFriendly, pickTrait('Creature'))
+registerCard('HMW_012', mergeLeaderSides( // Poggle the Lesser
+  leaderFront('Ready a friendly Creature unit and deal 1 damage to it.', {
+    cost: 1,
+    usable: anyUnitPasses(friendlyCreature),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, friendlyCreature), 'ready a friendly Creature unit and deal 1 damage to it', false),
+  }),
+  whenDeployed('Create a Beast token.', (s, ctx) => create(s, ctx.owner, TOKEN_BEAST)),
+  attacks('You may ready a friendly Creature unit and deal 1 damage to it.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, friendlyCreature), 'ready a friendly Creature unit and deal 1 damage to it', true)),
+  { ifYouDo: (s, ctx) => dealDamageToUnit(readyUnit(s, ctx.targetInstanceId!), ctx.targetInstanceId!, 1) },
+))
+const readyNonLeader: Pick = (s, u) => !u.exhausted && nonLeader(s, u)
+registerCard('JTL_016', mergeLeaderSides( // Admiral Ackbar
+  leaderFront('Exhaust a non-leader unit. If you do, its controller creates an X-Wing token.', {
+    cost: 1,
+    usable: anyUnitPasses(readyNonLeader),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, readyNonLeader), 'exhaust a non-leader unit; its controller creates an X-Wing token', false),
+  }),
+  attacks('You may exhaust a unit. If you do, its controller creates an X-Wing token.', (s, ctx) =>
+    unitThen(s, ctx, readyUnits(s).map(u => u.instanceId), 'exhaust a unit; its controller creates an X-Wing token', true)),
+  { ifYouDo: (s, ctx) => {
+    const found = findUnit(s, ctx.targetInstanceId!)
+    return found && !found.unit.exhausted ? create(exhaustUnit(s, found.unit.instanceId), found.owner, TOKEN_X_WING) : s
+  } },
+))
+const exhaustedToken: Pick = (_s, u) => u.exhausted && isTokenCard(u.cardId)
+registerCard('SEC_011', mergeLeaderSides( // Governor Pryce
+  leaderFront('Ready a token unit.', {
+    cost: 1,
+    usable: anyUnitPasses(exhaustedToken),
+    effect: (s, ctx) => targetChoice(s, ctx, 'selectUnitToReady', pickedIds(s, ctx, exhaustedToken)),
+  }),
+  { statModifier: (s, u) => perEach(friendliesOf(s, u).filter(x => isTokenCard(x.cardId) && !x.exhausted).length, 1) },
+  attacks('Create a Spy token.', (s, ctx) => create(s, ctx.owner, TOKEN_SPY)),
+))
+registerCard('SEC_014', mergeLeaderSides( // Sly Moore
+  leaderFront('If there are 4 or more exhausted units in play, create a Spy token.', {
+    cost: 1,
+    usable: s => allUnits(s).filter(u => u.exhausted).length >= 4,
+    effect: (s, ctx) => create(s, ctx.owner, TOKEN_SPY),
+  }),
+  attacks('You may deal 2 damage to an exhausted unit.', (s, ctx) => damageChoice(s, ctx, 2, allUnits(s).filter(u => u.exhausted), [], true)),
+))
+registerCard('TS26_1', mergeLeaderSides( // Count Dooku
+  // Two players, so "choose 2 players" is both of them.
+  leaderFront('Choose 2 players. They each heal 1 damage from their base and create a Battle Droid token.', {
+    effect: s => BOTH_BASES.reduce((acc, p) => create(healBase(acc, p, 1), p, TOKEN_BATTLE_DROID), s),
+  }),
+  attacks('Create 2 Battle Droid tokens.', (s, ctx) => create(s, ctx.owner, TOKEN_BATTLE_DROID, 2)),
+))
+const twoFriendliesDefeated: When = (s, ctx) => defeatedThisPhase(s, ctx.owner).length >= 2
+registerCard('TWI_002', mergeLeaderSides( // Nute Gunray
+  leaderFront('If 2 or more friendly units were defeated this phase, create a Battle Droid token.', {
+    usable: twoFriendliesDefeated,
+    effect: (s, ctx) => create(s, ctx.owner, TOKEN_BATTLE_DROID),
+  }),
+  attacks('Create a Battle Droid token.', (s, ctx) => create(s, ctx.owner, TOKEN_BATTLE_DROID)),
+))
+registerCard('TWI_007', mergeLeaderSides( // Captain Rex
+  leaderFront('If a friendly unit attacked this phase, create a Clone Trooper token.', {
+    cost: 2,
+    usable: attackedWithThisPhase(pickAny),
+    effect: (s, ctx) => create(s, ctx.owner, TOKEN_CLONE_TROOPER),
+  }),
+  whenDeployed('Create a Clone Trooper token.', (s, ctx) => create(s, ctx.owner, TOKEN_CLONE_TROOPER)),
+  friendlyAura(isTrait('Trooper'), { hp: 1 }, true),
+))

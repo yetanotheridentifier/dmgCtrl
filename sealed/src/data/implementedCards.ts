@@ -245,6 +245,15 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SOR_007', name: 'Grand Moff Tarkin', front: true, back: true },
   { id: 'LAW_010', name: 'Leia Organa', front: true, back: true },
   { id: 'SOR_008', name: 'Hera Syndulla', front: true, back: true },
+  // Token units: D
+  { id: 'HMW_010', name: 'Tarfful', front: true, back: true },
+  { id: 'HMW_012', name: 'Poggle the Lesser', front: true, back: true },
+  { id: 'JTL_016', name: 'Admiral Ackbar', front: true, back: true },
+  { id: 'SEC_011', name: 'Governor Pryce', front: true, back: true },
+  { id: 'SEC_014', name: 'Sly Moore', front: true, back: true },
+  { id: 'TS26_1', name: 'Count Dooku', front: true, back: true },
+  { id: 'TWI_002', name: 'Nute Gunray', front: true, back: true },
+  { id: 'TWI_007', name: 'Captain Rex', front: true, back: true },
 ]
 
 /**
@@ -347,6 +356,11 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'TWI_219', name: 'On Top of Things' },
   // When Played, other sets: several targets
   { id: 'LAW_187', name: '"Staccato Lightning" Repeater' },
+  // Token units: A and B
+  { id: 'HMW_038', name: 'Bestial Bond' },
+  { id: 'SEC_175', name: "Ambition's Reward" },
+  { id: 'SEC_227', name: 'Special Modifications' },
+  { id: 'TWI_119', name: 'Nameless Valor' },
 ]
 
 /**
@@ -672,6 +686,37 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'JTL_055', name: "You're All Clear, Kid" },
   { id: 'JTL_091', name: 'Apology Accepted' },
   { id: 'TS26_58', name: 'Backed by the Pykes' },
+  // Token units: C
+  { id: 'HMW_058', name: 'Mysterious Disappearance' },
+  { id: 'HMW_150', name: 'Migrate' },
+  { id: 'HMW_194', name: 'Run Amok' },
+  { id: 'HMW_195', name: 'Catch the Scent' },
+  { id: 'HMW_241', name: 'Howl' },
+  { id: 'HMW_272', name: 'Growth' },
+  { id: 'JTL_076', name: 'Covering the Wing' },
+  { id: 'JTL_092', name: 'Scramble Fighters' },
+  { id: 'JTL_122', name: 'All Wings Report In' },
+  { id: 'JTL_130', name: 'Timely Reinforcements' },
+  { id: 'JTL_155', name: 'They Hate That Ship' },
+  { id: 'JTL_205', name: 'Commence Patrol' },
+  { id: 'JTL_254', name: 'Dedicated Wingmen' },
+  { id: 'SEC_092', name: 'I Am the Senate' },
+  { id: 'SEC_105', name: 'Renewed Friendship' },
+  { id: 'SEC_128', name: 'Convene the Senate' },
+  { id: 'SEC_177', name: "It's Not Over Yet" },
+  { id: 'SEC_178', name: 'Pursue the Lead' },
+  { id: 'SEC_236', name: 'Undercover Operation' },
+  { id: 'SEC_246', name: 'Contempt for Culture' },
+  { id: 'TWI_073', name: 'Grievous Reassembly' },
+  { id: 'TWI_076', name: 'Death by Droids' },
+  { id: 'TWI_088', name: 'Reprocess' },
+  { id: 'TWI_125', name: 'The Clone Wars' },
+  { id: 'TWI_190', name: 'On the Doorstep' },
+  { id: 'TWI_200', name: 'Creative Thinking' },
+  { id: 'TWI_222', name: 'Political Pressure' },
+  { id: 'TWI_237', name: 'Droid Deployment' },
+  { id: 'TWI_239', name: 'Execute Order 66' },
+  { id: 'TWI_251', name: 'Drop In' },
 ]
 
 /**
@@ -1373,6 +1418,42 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SHD_141', name: 'Kylo Ren' },
   { id: 'SOR_036', name: 'Gideon Hask' },
   { id: 'SOR_094', name: 'Bail Organa' },
+  // Token units: A
+  { id: 'HMW_047', name: 'Eravana' },
+  { id: 'HMW_152', name: 'Babwa Venomor' },
+  { id: 'HMW_250', name: 'Imperial Cavalry' },
+  { id: 'HMW_262', name: 'Mylaya Rider' },
+  { id: 'JTL_082', name: 'Kijimi Patrollers' },
+  { id: 'JTL_099', name: 'Veteran Fleet Officer' },
+  { id: 'JTL_243', name: 'Quasar TIE Carrier' },
+  { id: 'JTL_252', name: 'Tantive IV' },
+  { id: 'SEC_083', name: 'ISB Shuttle' },
+  { id: 'SEC_087', name: 'Dedra Meero' },
+  { id: 'SEC_097', name: 'Beloved Orator' },
+  { id: 'SEC_115', name: 'Taylander Shuttle' },
+  { id: 'SEC_132', name: 'Imperial Occupier' },
+  { id: 'SEC_191', name: 'Trade Federation Delegates' },
+  { id: 'TS26_23', name: 'Assault Lander LAAT' },
+  { id: 'TWI_032', name: 'Wartime Trade Official' },
+  { id: 'TWI_043', name: 'Outspoken Representative' },
+  { id: 'TWI_060', name: 'Trade Federation Shuttle' },
+  { id: 'TWI_079', name: 'Confederate Courier' },
+  { id: 'TWI_097', name: 'Captain Rex' },
+  { id: 'TWI_112', name: 'Subjugating Starfighter' },
+  { id: 'TWI_144', name: 'Batch Brothers' },
+  { id: 'TWI_145', name: 'Jesse' },
+  { id: 'TWI_183', name: 'Rush Clovis' },
+  { id: 'TWI_247', name: 'AT-TE Vanguard' },
+  { id: 'TS26_55', name: 'Jedi General' },
+  // Token units: B
+  { id: 'HMW_153', name: "Poacher's Starfighter" },
+  { id: 'JTL_039', name: 'Chimaera' },
+  { id: 'SEC_198', name: 'Bail Organa' },
+  { id: 'TWI_080', name: 'Poggle the Lesser' },
+  { id: 'TWI_084', name: 'Kraken' },
+  { id: 'TWI_094', name: 'Shaak Ti' },
+  { id: 'TWI_203', name: 'Chancellor Palpatine' },
+  { id: 'TWI_234', name: 'The Invisible Hand' },
 ]
 
 /**
@@ -1457,7 +1538,9 @@ const SET_TOTALS: { code: string; group: SetGroup; total: Omit<TypeCounts, 'toke
  * The tokens each set prints, by the name on the card. Recorded from the printed cards: the SWUDB set
  * listing omits tokens, and the API's own token data is too partial to use (only `TSOR` and `TASH`
  * exist, with no token units, and some rows are findable by search but not by direct fetch). The set
- * fixtures carry no token rows either. The out-of-cycle products print none of their own. HMW's are
+ * fixtures carry no token rows either. The publisher's card list (`admin.starwarsunlimited.com`) has
+ * every token, and is where the token units' stats in `engine/tokenUnits.ts` were read. Of the
+ * out-of-cycle products only Twin Suns prints its own (a Battle Droid and a Clone Trooper). HMW's are
  * the tokens its cards create or give (Shield, Weakness, Beast): no HMW card refers to Experience.
  *
  * A set is credited with a token once the engine creates it: when its name matches a built token card
@@ -1474,7 +1557,7 @@ export const PRINTED_TOKENS: Record<string, string[]> = {
   TWI: ['Experience', 'Shield', 'Clone Trooper', 'Battle Droid'],
   SHD: ['Experience', 'Shield'],
   SOR: ['Experience', 'Shield'],
-  TS26: [],
+  TS26: ['Battle Droid', 'Clone Trooper'],
   IBH: [],
 }
 

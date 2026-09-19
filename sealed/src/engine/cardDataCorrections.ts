@@ -55,6 +55,7 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   TWI_180: { keywords: [] }, // Separatist Commando: Raid 2 while you control another Separatist unit
   TWI_130: { keywords: [] }, // Bo-Katan Kryze: Overwhelm and Saboteur while you control another Mandalorian unit
   TWI_143: { keywords: [] }, // Jyn Erso: Saboteur while an enemy unit was defeated this phase
+  TWI_043: { keywords: [] }, // Outspoken Representative: Sentinel while you control another Republic unit
   SHD_169: { keywords: [{ name: 'Raid', value: 3 }] }, // Clan Challengers: Raid 3 is real; Overwhelm while upgraded
   SHD_112: { keywords: [] }, // Gamorrean Retainer: Sentinel while you control another Command unit
   SHD_247: { keywords: [] }, // Protector of the Throne: Sentinel while upgraded

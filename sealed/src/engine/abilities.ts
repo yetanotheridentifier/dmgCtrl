@@ -183,6 +183,8 @@ export interface CardDefinition {
    * `createTokenUnits` after the batch is made — see the 2N ≡ N-then-N note there.
    */
   doublesTokenCreation?: (state: GameState, source: UnitState) => boolean
+  /** Token units its controller creates enter play ready rather than exhausted (Chancellor Palpatine). */
+  tokensEnterReady?: (state: GameState, source: UnitState) => boolean
   /** This unit can't declare an attack against a base (Wicket). */
   cannotAttackBases?: (state: GameState, unit: UnitState) => boolean
   /** This unit can't currently be attacked (Tatooine Repulsor Train). Also keeps it from being a forced Sentinel target. */

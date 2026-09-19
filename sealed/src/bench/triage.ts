@@ -50,11 +50,8 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
  * listed is treated as already expressible.
  */
 const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
-  // Shield and Experience are implemented. The Force is printed but never granted.
+  // Shield and Experience are implemented, and so is every token unit. The Force is printed but never granted.
   ['force-token', /\bthe Force\b|\bForce token/i],
-  // `engine/tokenUnits.ts` has the Mandalorian only. The others share its creation path, so one
-  // blocker: split per type and a card creating two kinds would count as unlocked by neither.
-  ['token-unit', /\b(?:Spy|X-Wing|TIE Fighter|Clone Trooper|Battle Droid|Beast) tokens?\b/i],
   // A token that pays costs, not a unit or an upgrade.
   ['credit-token', /\bCredit tokens?\b/i],
   // A token upgrade the engine has no card for.
