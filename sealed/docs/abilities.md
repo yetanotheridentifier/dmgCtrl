@@ -118,10 +118,16 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 ### Trigger points
 
 `whenPlayed`, `onAttack`, `onAttackEnd`, `onDefense`, `whenDefeated`, `whenReadies`,
-`whenRegroupStarts`, `whenTakeInitiative`, `whenPlayOrCreateUnit`, `whenUpgradeAttached`,
+`whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenFriendlyDamagedSurvives`, `whenEnemyAttacksBase`, `whenOwnBaseDamaged`, `whenEnemyBaseDamaged`,
 `whenFriendlyAttackEnds`, `whenDeployed`.
+
+`whenPlayUnit` ("when you play a unit") fires for a unit arriving through a play, and `whenCreateUnit`
+for a token unit being created; both fire on the player's undeployed leader and their other units, with
+the new unit in `ctx.targetInstanceId` (`collectArrivalTriggers`). A card that reads "play or create"
+(Greef Karga) or "enters play" (Outcast) registers the ability on both; one that reads "play" (Maz
+Kanata, Poggle the Lesser) registers only `whenPlayUnit`, so a created token does not fire it.
 
 `whenFriendlyDamagedSurvives` fires once per damage event and names each unit that survived it, with
 how much it was dealt, in `ctx.damagedSurvivors`. `whenEnemyBaseDamaged` ("when you deal damage to an

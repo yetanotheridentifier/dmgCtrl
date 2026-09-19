@@ -3,7 +3,7 @@ import { updatePlayer, pushChoice, recordBaseDamaged, recordCardsDrawn, recordTo
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint } from './abilities'
-import { getCardDefinition, collectUnitTriggers } from './abilities'
+import { getCardDefinition, collectArrivalTriggers, collectUnitTriggers } from './abilities'
 import { enqueueTriggers, drainTriggers } from './triggerQueue'
 
 /**
@@ -438,11 +438,14 @@ export function createTokenUnit(state: GameState, owner: PlayerId, tokenCardId: 
     upgrades: shielded ? [{ cardId: TOKEN_SHIELD, owner }] : [],
   }
   // A created token enters play, so it counts for "units that entered play this phase" (Padmé Amidala).
-  return recordUnitEntered(recordTokenCreated({
+  const next = recordUnitEntered(recordTokenCreated({
     ...state,
     instanceCounter: state.instanceCounter + 1,
     players: { ...state.players, [owner]: { ...p, units: [...p.units, token] } },
   }, owner), owner, token.instanceId)
+  // Every token unit is created here, so this is the one place "when you create a unit" fires. Each
+  // token is its own arrival: "create 2" gives Greef Karga two Advantage tokens to hand out.
+  return fireBatch(next, collectArrivalTriggers(next, 'whenCreateUnit', owner, token.instanceId))
 }
 
 /** Draw `n` cards for a player (takes what's there if the deck is short). */

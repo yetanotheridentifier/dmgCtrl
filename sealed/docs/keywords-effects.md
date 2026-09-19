@@ -188,10 +188,10 @@ controller ("an opponent creates 2 Battle Droid tokens"). A created unit enters 
 (CR 1.5.4b) unless an ability says otherwise: "create ... and ready it" readies the ones just made, and a
 unit whose definition has `tokensEnterReady` (Chancellor Palpatine) makes every token unit its controller
 creates enter ready. A Shielded token enters with its Shield. Creating counts as entering play
-(`enteredPlayThisPhase`) but not as playing, so it fires no "When Played". It fires no
-`whenPlayOrCreateUnit` either, which only a unit arriving through a play raises: that is exactly "when
-you play another unit" (Poggle the Lesser), and it means Greef Karga's "when you play or create a unit"
-sees plays only.
+(`enteredPlayThisPhase`) but not as playing, so it fires no "When Played" and no `whenPlayUnit` ("when
+you play another unit", Poggle the Lesser). Each token created raises `whenCreateUnit` from
+`createTokenUnit`, the one place token units are made, so "when you play or create a unit" (Greef Karga)
+and "when a friendly unit enters play" (Outcast) see every one of them.
 
 ## Spent tokens are defeated upgrades
 

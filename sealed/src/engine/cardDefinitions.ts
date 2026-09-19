@@ -503,22 +503,24 @@ registerCard('ASH_005', { // Luke Skywalker — front/back heal on a friendly at
   }],
 })
 
+// "When you play or create a unit" is one ability on two trigger points.
+const onPlayOrCreate = (ability: Omit<AbilityDef, 'trigger'>): AbilityDef[] =>
+  (['whenPlayUnit', 'whenCreateUnit'] as const).map(trigger => ({ ...ability, trigger }))
+
 registerCard('ASH_017', { // Greef Karga — front (undeployed, optional) + deployed (mandatory)
   leaderAbilities: {
-    abilities: [{
-      trigger: 'whenPlayOrCreateUnit',
-      description: 'You may exhaust this leader to give the played unit an Advantage token.',
+    abilities: onPlayOrCreate({
+      description: 'You may exhaust this leader to give that unit an Advantage token.',
       effect: (s, ctx) =>
         s.players[ctx.owner].leader.exhausted
           ? s
           : pushChoice(s, { kind: 'mayExhaustLeaderForAdvantage', id: ctx.targetInstanceId!, controller: ctx.owner, unitId: ctx.targetInstanceId! }),
-    }],
+    }),
   },
-  abilities: [{
-    trigger: 'whenPlayOrCreateUnit',
-    description: 'Give the played unit an Advantage token.',
+  abilities: onPlayOrCreate({
+    description: 'Give that unit an Advantage token.',
     effect: (s, ctx) => giveToken(s, ctx.targetInstanceId!, TOKEN_ADVANTAGE),
-  }],
+  }),
 })
 
 const controlsUnitInEachArena = (s: GameState, owner: PlayerId): boolean =>
@@ -581,7 +583,7 @@ registerCard('ASH_018', { // Grogu — triggered deploy on a Unique 4+ unit; com
   deployCondition: () => false, // never deploys via the normal epic action — only via the trigger below
   leaderAbilities: {
     abilities: [{
-      trigger: 'whenPlayOrCreateUnit',
+      trigger: 'whenPlayUnit',
       description: 'When you play a Unique unit costing 4 or more, if Grogu is ready you may deploy him.',
       effect: (s, ctx) => {
         const played = allUnits(s).find(u => u.instanceId === ctx.targetInstanceId)
@@ -1354,14 +1356,14 @@ registerCard('ASH_144', { abilities: [{ trigger: 'whenFriendlyAttackEnds', descr
 
 registerCard('ASH_041', { // Outcast — "when a friendly unit enters play (including this one)"
   abilities: [
-    // `whenPlayOrCreateUnit` fires on the controller's OTHER units, so the "including this one" half
-    // is covered by its own whenPlayed.
+    // Played and created units both enter play. Those trigger points fire on the controller's OTHER
+    // units, so the "including this one" half is covered by its own whenPlayed.
     { trigger: 'whenPlayed', description: 'This unit gets +1/+0 for this phase.', effect: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, power: 1 }) },
-    { trigger: 'whenPlayOrCreateUnit', description: 'A friendly unit entering play gets +1/+0 for this phase.', effect: (s, ctx) => ctx.targetInstanceId ? addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId, power: 1 }) : s },
+    ...onPlayOrCreate({ description: 'A friendly unit entering play gets +1/+0 for this phase.', effect: (s, ctx) => ctx.targetInstanceId ? addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId, power: 1 }) : s }),
   ],
 })
 
-registerCard('ASH_102', { abilities: [{ trigger: 'whenPlayOrCreateUnit', description: 'You may have the entering unit deal damage equal to its power to a unit in the same arena.', effect: (s, ctx) => { // Ravager
+registerCard('ASH_102', { abilities: [{ trigger: 'whenPlayUnit', description: 'You may have the entering unit deal damage equal to its power to a unit in the same arena.', effect: (s, ctx) => { // Ravager
   const entered = ctx.targetInstanceId ? allUnits(s).find(u => u.instanceId === ctx.targetInstanceId) : undefined
   if (!entered) return s
   const amount = effectivePower(s, entered)
@@ -1394,7 +1396,7 @@ registerCard('ASH_171', whenPlayed('You may defeat a friendly upgrade. If you do
 
 registerCard('ASH_060', { // Cobb Vanth
   abilities: [{
-    trigger: 'whenPlayOrCreateUnit',
+    trigger: 'whenPlayUnit',
     description: 'You may deal 2 damage to this unit. If you do, give a Shield token to that unit.',
     effect: (s, ctx) => (ctx.targetInstanceId && findUnit(s, ctx.sourceInstanceId!) ? pushChoice(s, {
       kind: 'maySelfDamageShield',
@@ -7051,8 +7053,8 @@ registerCard('LAW_055', expSelfWp('Give an Experience token to this unit. If you
 registerCard('LOF_092', whenPlayed('If you control a Jedi unit, you may give an Experience token to this unit.', (s, ctx) => // Point Rain Reclaimer
   (youControl(s, ctx, pickTrait('Jedi')) ? expChoice(s, ctx, [ctx.sourceInstanceId!], 1, true) : s)))
 registerCard('SHD_096', { // Maz Kanata
-  // `whenPlayOrCreateUnit` fires on the controller's OTHER units, which is exactly "another unit".
-  abilities: [{ trigger: 'whenPlayOrCreateUnit', description: 'Give an Experience token to this unit.', effect: (s, ctx) => expSelf(s, ctx) }],
+  // `whenPlayUnit` fires on the controller's OTHER units, which is exactly "another unit".
+  abilities: [{ trigger: 'whenPlayUnit', description: 'Give an Experience token to this unit.', effect: (s, ctx) => expSelf(s, ctx) }],
 })
 /** How many different aspects appear among a player's units, counting both icons on a dual-aspect card. */
 const aspectsAmongUnits = (s: GameState, owner: PlayerId): number =>
@@ -7628,9 +7630,9 @@ registerCard('JTL_039', allOf( // Chimaera
 ))
 registerCard('SEC_198', onAttack(mayDiscardThen('You may discard a card from your hand. If you do, create a Spy token.', (s, ctx) => create(s, ctx.owner, TOKEN_SPY)))) // Bail Organa
 registerCard('TWI_080', { // Poggle the Lesser
-  // Created tokens do not fire `whenPlayOrCreateUnit` (only a unit arriving through a play does), which
+  // A created token raises `whenCreateUnit`, not `whenPlayUnit` (only a unit arriving through a play does), which
   // is exactly "when you play another unit".
-  abilities: [{ trigger: 'whenPlayOrCreateUnit', description: 'You may exhaust this unit. If you do, create a Battle Droid token.',
+  abilities: [{ trigger: 'whenPlayUnit', description: 'You may exhaust this unit. If you do, create a Battle Droid token.',
     effect: (s, ctx) => (readyNow(s, ctx.sourceInstanceId)
       ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-poggle`, controller: ctx.owner, cost: 0, text: 'exhaust this unit to create a Battle Droid token', then: resume(ctx) })
       : s) }],

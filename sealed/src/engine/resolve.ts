@@ -5,7 +5,7 @@ import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPe
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets, offerAttack } from './legalMoves'
-import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, stampChoiceSource, type TriggerPoint } from './abilities'
+import { collectArrivalTriggers, collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, stampChoiceSource, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
@@ -433,8 +433,8 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
 
 /**
  * Everything that triggers off a unit arriving, as one batch: any upgrades it entered with attaching
- * (a Shielded token → Sabine Wren), its own "When Played" (CR 6.2.0f), and "when you play or create a
- * unit" on the controller's undeployed leader and their other units.
+ * (a Shielded token → Sabine Wren), its own "When Played" (CR 6.2.0f), and "when you play a unit" on
+ * the controller's undeployed leader and their other units.
  */
 function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string, cardId: string, keywordAbilities: string[] = []): PendingTrigger[] {
   const entered = state.players[owner].units.find(u => u.instanceId === newUnitId)
@@ -444,11 +444,7 @@ function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string,
   owed.push(...collectCardTriggers('whenPlayed', cardId, owner, newUnitId))
   // Ambush / Support: keyword-printed When Played abilities, ordered with the rest.
   for (const kw of keywordAbilities) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId))
-  owed.push(...collectLeaderTriggers(state, 'whenPlayOrCreateUnit', owner, { targetInstanceId: newUnitId }))
-  for (const u of state.players[owner].units) {
-    if (u.instanceId === newUnitId) continue
-    owed.push(...collectUnitTriggers(state, 'whenPlayOrCreateUnit', u, owner, { targetInstanceId: newUnitId }))
-  }
+  owed.push(...collectArrivalTriggers(state, 'whenPlayUnit', owner, newUnitId))
   return owed
 }
 
@@ -1003,7 +999,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     case 'mayExhaustLeaderForAdvantage': {
-      // Greef Karga front: exhaust the leader to give the just-played unit an Advantage token.
+      // Greef Karga front: exhaust the leader to give the just-played or just-created unit an Advantage token.
       if (leaderCanExhaust(next, choice.controller)) {
         next = exhaustLeader(next, choice.controller)
         next = giveToken(next, choice.unitId, TOKEN_ADVANTAGE)

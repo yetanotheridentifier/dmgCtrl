@@ -57,7 +57,12 @@ export type TriggerPoint =
   // opponent's base was dealt damage, unless that base's own controller's card dealt it.
   | 'whenEnemyBaseDamaged'
   | 'onDefense'
-  | 'whenPlayOrCreateUnit'
+  // "When you play a unit" (Maz Kanata, Poggle the Lesser): a unit arriving through a play. Fires on the
+  // player's undeployed leader and their OTHER units, with `ctx.targetInstanceId` the played unit.
+  | 'whenPlayUnit'
+  // "When you create a unit": a token unit being created (`createTokenUnit`), fired on the same
+  // listeners as `whenPlayUnit`. "Play or create" (Greef Karga) and "enters play" (Outcast) register both.
+  | 'whenCreateUnit'
   // "When Deployed": fires on a leader unit as it deploys, after its entry keywords (Shielded, Hidden).
   | 'whenDeployed'
 
@@ -649,6 +654,24 @@ export function collectLeaderTriggers(
     })
   })
   return out
+}
+
+/**
+ * Everything a unit arriving under `owner`'s control raises at `point` (`whenPlayUnit` for a play,
+ * `whenCreateUnit` for a created token unit): the undeployed leader's front side and every OTHER unit
+ * the player controls, each told which unit arrived in `ctx.targetInstanceId`.
+ */
+export function collectArrivalTriggers(
+  state: GameState,
+  point: 'whenPlayUnit' | 'whenCreateUnit',
+  owner: PlayerId,
+  arrivedId: string,
+): PendingTrigger[] {
+  const ctx = { targetInstanceId: arrivedId }
+  return [
+    ...collectLeaderTriggers(state, point, owner, ctx),
+    ...state.players[owner].units.flatMap(u => (u.instanceId === arrivedId ? [] : collectUnitTriggers(state, point, u, owner, ctx))),
+  ]
 }
 
 /**
