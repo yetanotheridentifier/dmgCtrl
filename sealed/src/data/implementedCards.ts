@@ -392,6 +392,11 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'HMW_148', name: 'Local Support' },
   { id: 'HMW_264', name: 'Heroic Bravery' },
   { id: 'HMW_265', name: "Twi'lek Kalikori" },
+  // HMW constant abilities: A
+  { id: 'HMW_096', name: 'Devotion' },
+  { id: 'HMW_190', name: 'Enraged' },
+  { id: 'HMW_191', name: "Hunter's Instinct" },
+  { id: 'HMW_235', name: 'Gaderffii Stick' },
 ]
 
 /**
@@ -1558,6 +1563,26 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_105', name: 'Nute Gunray' },
   { id: 'HMW_221', name: 'Teeka' },
   { id: 'HMW_232', name: 'Mon Cal Cruiser' },
+  // HMW constant abilities: A
+  { id: 'HMW_073', name: 'Peppi Bow' },
+  { id: 'HMW_074', name: 'Yord Fandar' },
+  { id: 'HMW_083', name: 'Batcher' },
+  { id: 'HMW_084', name: 'Gunga City Guard' },
+  { id: 'HMW_090', name: 'Opee Sea Killer' },
+  { id: 'HMW_107', name: 'Stormtrooper Patrol' },
+  { id: 'HMW_117', name: 'Chewbacca' },
+  { id: 'HMW_118', name: 'Ryyk Blademaster' },
+  { id: 'HMW_129', name: 'Child of Dathomir' },
+  { id: 'HMW_131', name: 'Soaring Can-Cell' },
+  { id: 'HMW_133', name: 'Wroshyr Rebel' },
+  { id: 'HMW_137', name: 'V-19 Skirmisher' },
+  { id: 'HMW_138', name: 'Commander Gree' },
+  { id: 'HMW_142', name: 'Wookiee Rangers' },
+  { id: 'HMW_164', name: 'Chief Chirpa' },
+  { id: 'HMW_176', name: 'Village Troublemaker' },
+  { id: 'HMW_256', name: 'Jedi Interceptor' },
+  { id: 'HMW_257', name: 'Ewok Archers' },
+  { id: 'HMW_259', name: 'Pack Guardian' },
 ]
 
 /**

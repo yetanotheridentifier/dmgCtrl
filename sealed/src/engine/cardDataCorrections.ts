@@ -37,6 +37,24 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   HMW_126: { keywords: [{ name: 'Fortify' }] }, // Verdant Fortress: its base gives friendly units Raid 1
   HMW_066: { keywords: [{ name: 'Shielded' }] }, // Carrion Spike: Shielded is real; Restore 1 per upgrade on your base
 
+  // Homeworlds constant abilities: a keyword gained on a condition, given to other units, or given to
+  // the attached unit.
+  HMW_074: { keywords: [] }, // Yord Fandar: Sentinel while a base has 15 or more damage
+  HMW_084: { keywords: [{ name: 'Restore', value: 1 }] }, // Gunga City Guard: Restore 1 is real; Shielded is conditional
+  HMW_090: { keywords: [] }, // Opee Sea Killer: Grit while you control a Naboo base
+  HMW_117: { keywords: [] }, // Chewbacca: Raid per exhausted resource, Overwhelm while all are exhausted
+  HMW_118: { keywords: [] }, // Ryyk Blademaster: Ambush and Overwhelm at 6 resources
+  HMW_131: { keywords: [{ name: 'Raid', value: 1 }] }, // Soaring Can-Cell: Raid 1 is real; Ambush with a Kashyyyk base
+  HMW_137: { keywords: [] }, // V-19 Skirmisher: Sentinel at 3 units
+  HMW_138: { keywords: [] }, // Commander Gree: Raid 4 at 3 Command icons
+  HMW_142: { keywords: [] }, // Wookiee Rangers: Sentinel with another Wookiee or a Kashyyyk base
+  HMW_176: { keywords: [] }, // Village Troublemaker: Hidden and Saboteur with an Endor base
+  HMW_257: { keywords: [] }, // Ewok Archers: Ambush with another unit costing 3 or less
+  HMW_259: { keywords: [] }, // Pack Guardian: Sentinel while ready
+  HMW_096: { keywords: [] }, // Devotion: Restore 2
+  HMW_190: { keywords: [] }, // Enraged: Raid 2
+  HMW_191: { keywords: [] }, // Hunter's Instinct: Grit on a Creature
+
   // The other sealed sets, conditional keywords.
   LAW_105: { keywords: [] }, // Cinta Kaz: Sentinel while upgraded
   SEC_201: { keywords: [{ name: 'Hidden' }] }, // Anakin Skywalker: Hidden is real; Raid 2 while you control Padmé Amidala

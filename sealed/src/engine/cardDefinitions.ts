@@ -8516,3 +8516,52 @@ registerCard('HMW_232', { // Mon Cal Cruiser
     ? offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-attack`, { grantCardId: GRANT_MON_CAL_CRUISER })
     : pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, thenDraw: true })),
 })
+
+// ── Homeworlds constant abilities on units and upgrades ──────────────────────────────────────────
+// Registrations over the constant helpers of the other sets (`gains`, `statModifier`, `friendlyAura`).
+// A keyword the source lists as the card's own, when the card only gains it or gives it away, is
+// stripped in `cardDataCorrections.ts`.
+
+/** "While you control a <planet> base". */
+const withBase = (trait: string): Holds => (s, u) => { const o = unitOwner(s, u); return o !== undefined && controlsBaseWith(s, o, trait) }
+const printedCostOf = (test: (cost: number) => boolean): Holds => (s, x) => test(printedCost(s, x))
+const exhaustedResourcesOf = (s: GameState, u: UnitState): number => { const o = unitOwner(s, u); return o ? s.players[o].resources.filter(r => r.exhausted).length : 0 }
+/** Command icons among a player's units and the upgrades they own, a doubled icon counting twice. */
+const friendlyCommandIcons = (s: GameState, u: UnitState): number => {
+  const o = unitOwner(s, u)
+  if (!o) return 0
+  const icons = (cardId: string) => (s.cards[cardId]?.aspects ?? []).filter(a => a === 'Command').length
+  const upgrades = [...allUnits(s).flatMap(x => x.upgrades), ...(s.players[o].base.upgrades ?? [])].filter(up => up.owner === o)
+  return [...s.players[o].units.map(x => x.cardId), ...upgrades.map(up => up.cardId)].reduce((n, id) => n + icons(id), 0)
+}
+const HIDDEN: KeywordInstance = { name: 'Hidden' }
+
+// A: a keyword or a stat on the unit itself, or on the unit an upgrade is attached to
+registerCard('HMW_073', { statModifier: (_s, u) => (isUpgraded(u) ? { power: 1, hp: 1 } : {}) }) // Peppi Bow
+registerCard('HMW_074', gains(s => s.players.player.base.damage >= 15 || s.players.opponent.base.damage >= 15, KW.sentinel)) // Yord Fandar
+registerCard('HMW_083', { statModifier: (_s, _u, ctx) => (ctx.defending ? { power: 1 } : {}) }) // Batcher
+registerCard('HMW_084', gains((s, u) => another(isTrait('Gungan'))(s, u) || withBase('Naboo')(s, u), { name: 'Shielded' })) // Gunga City Guard
+registerCard('HMW_090', gains(withBase('Naboo'), KW.grit)) // Opee Sea Killer
+registerCard('HMW_107', { statModifier: (s, u) => (another(printedCostOf(c => c >= 3))(s, u) ? { power: 2 } : {}) }) // Stormtrooper Patrol
+registerCard('HMW_117', { // Chewbacca: "while each resource you control is exhausted" holds with none to exhaust
+  conditionalKeywords: (s, u) => {
+    const spent = exhaustedResourcesOf(s, u)
+    return [...(spent > 0 ? [KW.raid(spent)] : []), ...(spent === resourcesOf(s, u) ? [KW.overwhelm] : [])]
+  },
+})
+registerCard('HMW_118', gains((s, u) => resourcesOf(s, u) >= 6, KW.ambush, KW.overwhelm)) // Ryyk Blademaster
+registerCard('HMW_129', { statModifier: (s, u) => (friendliesOf(s, u).length >= 3 ? { power: 2 } : {}) }) // Child of Dathomir
+registerCard('HMW_131', gains(withBase('Kashyyyk'), KW.ambush)) // Soaring Can-Cell
+registerCard('HMW_133', { statModifier: (s, u) => perEach(Math.floor(resourcesOf(s, u) / 2), 1) }) // Wroshyr Rebel
+registerCard('HMW_137', gains((s, u) => friendliesOf(s, u).length >= 3, KW.sentinel)) // V-19 Skirmisher
+registerCard('HMW_138', gains((s, u) => friendlyCommandIcons(s, u) >= 3, KW.raid(4))) // Commander Gree
+registerCard('HMW_142', gains((s, u) => another(isTrait('Wookiee'))(s, u) || withBase('Kashyyyk')(s, u), KW.sentinel)) // Wookiee Rangers
+registerCard('HMW_164', { statModifier: (s, u) => perEach(friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId && isTrait('Ewok')(s, x)).length, 1) }) // Chief Chirpa
+registerCard('HMW_176', gains(withBase('Endor'), HIDDEN, KW.saboteur)) // Village Troublemaker
+registerCard('HMW_256', { statModifier: (s, u) => (resourcesOf(s, u) >= 6 ? { power: 2 } : {}) }) // Jedi Interceptor
+registerCard('HMW_257', gains(another(printedCostOf(c => c <= 3)), KW.ambush)) // Ewok Archers
+registerCard('HMW_259', gains((_s, u) => !u.exhausted, KW.sentinel)) // Pack Guardian
+registerCard('HMW_096', gains(anyHost, KW.restore(2))) // Devotion
+registerCard('HMW_190', gains(anyHost, KW.raid(2))) // Enraged
+registerCard('HMW_191', gains(isTrait('Creature'), KW.grit)) // Hunter's Instinct
+registerCard('HMW_235', { attachRestriction: (s, t) => nonVehicle(s, t) && effectivePower(s, t) <= 3 }) // Gaderffii Stick
