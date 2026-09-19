@@ -159,7 +159,15 @@ describe('triage blockers', () => {
     ['token-unit', 'SEC Spy', 'When Defeated: Create a Spy token.'],
     ['token-unit', 'JTL X-Wing', 'When Played: Create an X-Wing token.'],
     ['token-unit', 'JTL TIE Fighter', 'When Played: Create a TIE Fighter token.'],
+    ['token-unit', 'HMW_195 Catch the Scent', 'Create 2 Beast tokens and ready 1 of them.'],
     ['credit-token', 'LAW Credit', 'When Played: Create a Credit token.'],
+    ['weakness-token', 'HMW_197 Cid Scaleback', 'When Played: An opponent chooses a unit they control. Give a Weakness token to it.'],
+    ['weakness-token', 'HMW_071 Ravage', 'Distribute up to 3 Weakness tokens among any number of units.'],
+    ['base-upgrade', 'HMW_061 Director Krennic', 'On Attack: If your base is upgraded, draw a card.'],
+    ['base-upgrade', 'HMW_066 Carrion Spike', 'Shielded / For each upgrade on your base, this unit gets +1/+0 and gains Restore 1.'],
+    ['base-upgrade', 'HMW_260 Queen Amidala', 'If you control an upgraded base, this unit costs 2 less to play.  / Restore 2'],
+    ['base-upgrade', 'HMW_270 Wild Space Wanderer', 'When Played: You may defeat an upgrade on a base.'],
+    ['base-upgrade', 'HMW_004 Grand Moff Tarkin', 'Ignore the aspect penalties on upgrades with Fortify you play.'],
     ['disclose', 'SEC_062 Bardottan Ornithopter', 'When Played: You may disclose Vigilance (reveal a card from your hand with this aspect icon). If you do, draw a card.'],
     ['indirect-damage', 'JTL_234 Torpedo Barrage', 'Deal 5 indirect damage to a player. (They assign 5 unpreventable damage among their base and units.)'],
   ])('reports %s as the blocker on %s', (name, _card, text) => {
@@ -182,6 +190,20 @@ describe('triage blockers', () => {
     const r = triage([card({ FrontText: 'Create a Spy token.\nYou may disclose Aggression (reveal a card from your hand with this aspect icon). If you do, create another Spy token.' })])
     expect(r.triaged[0].blockers.sort()).toEqual(['disclose', 'token-unit'])
     expect(r.blockers.every(b => b.sole === 0 && b.touched === 1)).toBe(true)
+  })
+
+  it('reads the Fortify keyword as the base-upgrade mechanic, not a keyword of its own', () => {
+    // HMW_037 Bacta Tank. Fortify is how an upgrade attaches to a base, and the cards that read a base's
+    // upgrades need the same engine change, so one blocker: split, the keyword's cards would count as
+    // unlocked by neither.
+    const r = triage([card({ Type: 'Upgrade', Keywords: ['Fortify'], FrontText: 'Fortify\nWhen Played: Heal up to 3 damage from a non-Vehicle unit.' })])
+    expect(r.triaged[0].blockers).toEqual(['base-upgrade'])
+  })
+
+  it('reads "Attached base gains:" as the base-upgrade mechanic, not a unit\'s granted ability block', () => {
+    // HMW_070 Dark Sanctum.
+    const r = triage([card({ Type: 'Upgrade', Keywords: ['Fortify'], FrontText: 'Fortify (Attach this to your base, not a unit.)\nAttached base gains: "When the regroup phase starts: Draw a card and deal 2 damage to this base."' })])
+    expect(r.triaged[0].blockers).toEqual(['base-upgrade'])
   })
 
   it('does not treat an implemented keyword as a blocker', () => {
@@ -327,7 +349,7 @@ describe('the ASH anchor', () => {
 
   it('finds no mechanic ASH plays without, since every ASH card is built', () => {
     // A blocker firing on the implemented set is a false positive in its pattern.
-    const mechanics = ['token-unit', 'credit-token', 'disclose', 'indirect-damage']
+    const mechanics = ['token-unit', 'credit-token', 'disclose', 'indirect-damage', 'weakness-token', 'base-upgrade']
     expect(report.blockers.filter(b => mechanics.includes(b.name))).toEqual([])
   })
 

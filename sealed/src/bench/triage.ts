@@ -54,9 +54,14 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
   ['force-token', /\bthe Force\b|\bForce token/i],
   // `engine/tokenUnits.ts` has the Mandalorian only. The others share its creation path, so one
   // blocker: split per type and a card creating two kinds would count as unlocked by neither.
-  ['token-unit', /\b(?:Spy|X-Wing|TIE Fighter|Clone Trooper|Battle Droid) tokens?\b/i],
+  ['token-unit', /\b(?:Spy|X-Wing|TIE Fighter|Clone Trooper|Battle Droid|Beast) tokens?\b/i],
   // A token that pays costs, not a unit or an upgrade.
   ['credit-token', /\bCredit tokens?\b/i],
+  // A token upgrade the engine has no card for.
+  ['weakness-token', /\bWeakness tokens?\b/i],
+  // An upgrade attached to a base rather than a unit: the Fortify keyword (see CANONICAL_BLOCKERS), and
+  // the cards that read a base's upgrades or name the Fortification trait.
+  ['base-upgrade', /\bupgrades? on (?:your|a|this) base\b|\bupgraded base\b|\bbase is upgraded\b|\bwith Fortify\b|\bFortification\b/i],
   // Revealing cards from hand by aspect icon.
   ['disclose', /\bdisclosed?\b/i],
   // Damage the receiving player assigns among their base and units.
@@ -95,6 +100,7 @@ const CANONICAL_BLOCKERS: ReadonlyMap<string, string> = new Map([
   ['trigger:When a friendly Force unit attacks', 'force-token'],
   ['trigger:When played using Smuggle', 'kw:Smuggle'],
   ['trigger:Coordinate - When Played', 'kw:Coordinate'],
+  ['kw:Fortify', 'base-upgrade'],
 ])
 
 /**
@@ -257,7 +263,9 @@ export function triage(pool: SwuCard[]): TriageReport {
     for (const k of newKeywords) blockers.add(`kw:${k}`)
     for (const h of triggerHeads(text)) {
       const norm = h.toLowerCase()
-      if (GRANTED_ABILITY_LEAD_IN.test(h)) blockers.add('granted-ability-block')
+      // A base upgrade handing its base an ability is the base-upgrade mechanic itself, not a unit's
+      // granted ability block.
+      if (GRANTED_ABILITY_LEAD_IN.test(h)) blockers.add(/^Attached base\b/i.test(h) ? 'base-upgrade' : 'granted-ability-block')
       // A slash joins two trigger points ("When Played/On Attack").
       else if (norm.includes('/')) blockers.add('trigger:compound')
       else if (!EXISTING_TRIGGERS.has(norm)) blockers.add(`trigger:${h}`)

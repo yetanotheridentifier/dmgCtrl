@@ -943,9 +943,9 @@ ended almost at once. `all` leaves them out and naming one is refused with its c
 is a count rather than a list, so a small product released later is left out without anyone adding
 it. `coverageDecks.test.ts` asserts every sealed set builds only rule-satisfying decks.
 
-Over the eight sealed sets, `--set all --games 5 --seed 42,43,44` is **189 decks and 2,835 games with
-none dropped, playing 1,857 of the 1,860 decked cards** (143 of 144 leaders deployed) in about 15
-seconds.
+Over the nine sealed sets, `--set all --games 5 --seed 42,43,44` is **214 decks and 3,210 games with
+none dropped, playing 2,095 of the 2,098 decked cards** (161 of 162 leaders deployed) in about 25
+seconds. HMW alone is 25 decks and 375 games, playing all 238 of its units, upgrades and events.
 
 ### The card pools: `--fixture`
 
@@ -1021,6 +1021,8 @@ Experience tokens ship, delete that entry and every card it was blocking reclass
 A colon-led head that is not a trigger point but a lead-in handing a quoted ability to a unit ("Attached
 unit gains:", "For this attack, it gets +2/+0 and gains:", "it gains Sentinel and:") is read by its
 ending, not its spelling, and blocks the card on `granted-ability-block` rather than on a trigger head.
+The one exception is "Attached base gains:", which blocks on `base-upgrade`: an upgrade attached to a
+base (the Fortify keyword) handing the base an ability is that mechanic, not a unit's granted block.
 
 ### Why there are fallout probes
 

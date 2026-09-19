@@ -158,8 +158,18 @@ Two phases:
   many cards each unlocks on its own. **Experience tokens are finished** (#461), the largest single
   unlock: 78 of the 80 shipped, with Covert Strength on #469 (Smuggle) and Trandoshan Hunters on #467
   (it reads a Bounty), and the two leaders #458 had lifted out built alongside them. Next is token units
-  other than the Mandalorian (#605, 62 cards), then Credit tokens (#602, 29), Disclose (#603, 19) and
-  indirect damage (#604, 15).
+  other than the Mandalorian (#605, 76 cards: 62 plus HMW's 14 Beast tokens), then Credit tokens (#602,
+  29), Disclose (#603, 19), the two HMW mechanics Weakness tokens (#649, 18) and Fortify, an upgrade
+  attached to a base (#650, 18), and indirect damage (#604, 15).
+
+**Homeworlds (HMW), 272 cards, is accepted and triaged** but none of its abilities are built. 58 play
+as printed (all 16 bases are vanilla). Of the 214 with ability text, **128 are blocked by nothing** once
+four the triage passed are lifted to their mechanic's ticket, cut like Phase 1 by trigger point: When
+Played units and upgrades (#651, 50), constant abilities (#652, 39), and events, leaders and the
+remaining trigger points (#653, 39). Each names the cards to read first, and a remainder is likely.
+**70 are blocked by exactly one thing**: Weakness (#649, 18) and Fortify (#650, 18) are new, Beast
+tokens join #605 (14), and the rest are on #463 compound triggers (3), #474 a new trigger point (3),
+#471 play from discard (2), #468 (1), #475 (1) and #477's one-offs (10). 16 are multi-blocked, on #477.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted into #477 and the batch
 ships without it. The classification is regex triage over ability prose: it catches new nouns but not
