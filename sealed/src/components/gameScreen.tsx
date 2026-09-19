@@ -24,7 +24,7 @@ import CardFace from './cardFace'
 import { CardGridOverlay } from './cardGridOverlay'
 import { CARD_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
-import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
+import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE, TOKEN_WEAKNESS } from '../engine/tokenUpgrades'
 import { unitHasKeyword, auraContributions } from '../engine/keywords'
 import { lastingEffectTotals } from '../engine/types'
 import { useCardZoom } from './useCardZoom'
@@ -219,7 +219,7 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
 /**
  * Effect tokens (physical-token style) laid over a unit card on this
  * non-rotating wrapper, so they stay upright when the card is exhausted. Damage
- * is the first token; more effect types slot into the same 1–4 layout.
+ * is the first token; more effect types slot into the same 1–6 layout.
  */
 interface CardToken {
   key: string
@@ -271,7 +271,8 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
     })
   }
   // Token upgrades render as on-card tokens (not cards behind the unit):
-  // Shield = blue, Experience = amber (+1/+1), Advantage = gold "adv." (+1/0 next combat).
+  // Shield = blue, Experience = amber (+1/+1), Advantage = gold "adv." (+1/0 next combat),
+  // Weakness = purple "weak." (-1/-1).
   const shields = countToken(TOKEN_SHIELD)
   if (shields > 0) {
     tokens.push({ key: 'shield', label: String(shields), color: '#3b82f6', testid: `board-unit-shield-${unit.instanceId}` })
@@ -283,6 +284,10 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
   const advantage = countToken(TOKEN_ADVANTAGE)
   if (advantage > 0) {
     tokens.push({ key: 'advantage', label: String(advantage), color: '#f5c518', sub: 'adv.', textColor: '#1a1200', testid: `board-unit-advantage-${unit.instanceId}` })
+  }
+  const weakness = countToken(TOKEN_WEAKNESS)
+  if (weakness > 0) {
+    tokens.push({ key: 'weakness', label: String(weakness), color: '#7e22ce', sub: 'weak.', testid: `board-unit-weakness-${unit.instanceId}` })
   }
   if (tokens.length === 0) return null
 

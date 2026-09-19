@@ -37,6 +37,14 @@ function survivesNoHp(state: GameState, unit: UnitState): boolean {
     || abilityCardIds(unit).some(id => getCardDefinition(id)?.survivesNoHp?.(state, unit) ?? false)
 }
 
+/**
+ * True for a unit the next state-based sweep will defeat: its damage has reached its current HP, which a
+ * stat reduction (a Weakness token, Morgan Elsbeth's -2/-2) can do with no damage dealt.
+ */
+export function isDoomed(state: GameState, unit: UnitState): boolean {
+  return unit.damage >= effectiveHp(state, unit) && !survivesNoHp(state, unit)
+}
+
 /** Product of the damage multipliers the unit's card and upgrades contribute. */
 function damageMultiplier(state: GameState, unit: UnitState): number {
   let m = 1
@@ -226,7 +234,7 @@ export function sweepStateBasedDefeats(state: GameState): GameState {
     let changed = false
     for (const owner of ['player', 'opponent'] as PlayerId[]) {
       const units = next.players[owner].units
-      const doomed = units.filter(u => u.damage >= effectiveHp(next, u) && !survivesNoHp(next, u))
+      const doomed = units.filter(u => isDoomed(next, u))
       if (doomed.length === 0) continue
       const doomedIds = new Set(doomed.map(u => u.instanceId))
       // One state-based check defeats both sides at once, so the two owners fill the same batch.

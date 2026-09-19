@@ -178,10 +178,10 @@ describe('implementation progress', () => {
 
   it('credits every set with each token it prints that the engine creates, not just ASH', () => {
     // Every set in the cycle up to ASH prints Shield and Experience, which the engine creates, and so
-    // are all the token units. The tokens it does not create yet (Force, Credit, Weakness) stay
+    // are all the token units, and so is Weakness. The tokens it does not create yet (Force, Credit) stay
     // uncredited. HMW prints Shield but no Experience.
     const done = Object.fromEntries(SET_PROGRESS.map(s => [s.code, s.done.tokens]))
-    expect(done).toEqual({ HMW: 2, ASH: 4, LAW: 2, SEC: 3, LOF: 2, JTL: 4, TWI: 4, SHD: 2, SOR: 2, TS26: 2, IBH: 0 })
+    expect(done).toEqual({ HMW: 3, ASH: 4, LAW: 2, SEC: 3, LOF: 2, JTL: 4, TWI: 4, SHD: 2, SOR: 2, TS26: 2, IBH: 0 })
   })
 
   it('matches every token the engine creates to a token some set prints, so a renamed token cannot drop out of the count', () => {

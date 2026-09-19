@@ -178,7 +178,7 @@ export interface EvalWeights {
    * Per Shield token, ours minus theirs (#493).
    *
    * **The one token the evaluation cannot otherwise see, and its stat line is why.** Attached
-   * upgrades add their printed power and HP, so Experience (1/1) and Advantage (1/0) already reach
+   * upgrades add their printed power and HP, so Experience (1/1), Advantage (1/0) and Weakness (-1/-1) already reach
    * the model through `power` and `hp`. A Shield is printed **0/0** and works through a
    * damage-prevention hook, so without this term it changes nothing anything reads.
    *

@@ -254,6 +254,10 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'TS26_1', name: 'Count Dooku', front: true, back: true },
   { id: 'TWI_002', name: 'Nute Gunray', front: true, back: true },
   { id: 'TWI_007', name: 'Captain Rex', front: true, back: true },
+  // Weakness tokens: D
+  { id: 'HMW_002', name: 'Maz Kanata', front: true, back: true },
+  { id: 'HMW_003', name: 'Doctor Hemlock', front: true, back: true },
+  { id: 'HMW_015', name: 'Bossk', front: true, back: true },
 ]
 
 /**
@@ -361,6 +365,8 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'SEC_175', name: "Ambition's Reward" },
   { id: 'SEC_227', name: 'Special Modifications' },
   { id: 'TWI_119', name: 'Nameless Valor' },
+  // Weakness tokens: A
+  { id: 'HMW_097', name: 'Dire Prowess' },
 ]
 
 /**
@@ -717,6 +723,11 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'TWI_237', name: 'Droid Deployment' },
   { id: 'TWI_239', name: 'Execute Order 66' },
   { id: 'TWI_251', name: 'Drop In' },
+  // Weakness tokens: B and C
+  { id: 'HMW_071', name: 'Ravage' },
+  { id: 'HMW_100', name: 'Torrent' },
+  { id: 'HMW_237', name: 'Easy Prey' },
+  { id: 'HMW_240', name: 'Sandstorm' },
 ]
 
 /**
@@ -1454,6 +1465,22 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'TWI_094', name: 'Shaak Ti' },
   { id: 'TWI_203', name: 'Chancellor Palpatine' },
   { id: 'TWI_234', name: 'The Invisible Hand' },
+  // Weakness tokens: A, B and C
+  { id: 'HMW_040', name: "Talzin's Shuttle" },
+  { id: 'HMW_059', name: 'Clone X Assassin' },
+  { id: 'HMW_062', name: 'Nuvo Vindi' },
+  { id: 'HMW_065', name: 'Clone of the Zillo Beast' },
+  { id: 'HMW_067', name: 'The Great Progenitor' },
+  { id: 'HMW_087', name: 'Venomous Wyyyshokk' },
+  { id: 'HMW_110', name: 'Emperor Palpatine' },
+  { id: 'HMW_196', name: 'Qimir' },
+  { id: 'HMW_197', name: 'Cid Scaleback' },
+  { id: 'HMW_199', name: 'Geonosian Picador' },
+  { id: 'HMW_200', name: 'Rish Loo' },
+  { id: 'HMW_202', name: 'Inferno Squad' },
+  { id: 'HMW_231', name: 'Dragonboat Freighter' },
+  { id: 'HMW_242', name: 'Occupation Officer' },
+  { id: 'HMW_248', name: 'Defoliator Tank' },
 ]
 
 /**

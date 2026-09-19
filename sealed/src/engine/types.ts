@@ -899,7 +899,8 @@ type ChoiceVariant =
   // decline before the first token only (Helgait's "you may").
   // `exclude` keeps a unit out of the target list across re-offers ("other friendly units"), and
   // `then` chains once distribution finishes, by exhausting the pool or stopping (Elzar Mann).
-  | { kind: 'distributeTokens'; id: string; controller: PlayerId; token: string; remaining: number; total: number; targets: string[]; optional?: boolean; upTo?: boolean; exclude?: string; then?: 'opponentSearchEvent' }
+  // Re-offers go to the controller's own units unless `anyUnit` ("among any number of units", Ravage).
+  | { kind: 'distributeTokens'; id: string; controller: PlayerId; token: string; remaining: number; total: number; targets: string[]; optional?: boolean; upTo?: boolean; exclude?: string; then?: 'opponentSearchEvent'; anyUnit?: boolean }
   // Enoch: deal up to `max` damage to your own base, one at a time (`dealt` so far); stopping
   // (or reaching `max`) grants "next unit costs 1 less per 2 damage dealt". Each accept deals 1 more.
   | { kind: 'dealOwnBaseForDiscount'; id: string; controller: PlayerId; dealt: number; max: number }

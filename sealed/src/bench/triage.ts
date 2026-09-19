@@ -50,12 +50,11 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
  * listed is treated as already expressible.
  */
 const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
-  // Shield and Experience are implemented, and so is every token unit. The Force is printed but never granted.
+  // Shield, Experience, Advantage and Weakness are implemented, and so is every token unit. The Force is
+  // printed but never granted.
   ['force-token', /\bthe Force\b|\bForce token/i],
   // A token that pays costs, not a unit or an upgrade.
   ['credit-token', /\bCredit tokens?\b/i],
-  // A token upgrade the engine has no card for.
-  ['weakness-token', /\bWeakness tokens?\b/i],
   // An upgrade attached to a base rather than a unit: the Fortify keyword (see CANONICAL_BLOCKERS), and
   // the cards that read a base's upgrades or name the Fortification trait.
   ['base-upgrade', /\bupgrades? on (?:your|a|this) base\b|\bupgraded base\b|\bbase is upgraded\b|\bwith Fortify\b|\bFortification\b/i],

@@ -96,7 +96,7 @@ combat in the resolver. Combat and defeat go through `engine/stats.ts`
 (`effectivePower`/`effectiveHp`) and **`engine/combat.ts`** (`applyUnitDamage` /
 `dealDamageToUnit`, extracted so abilities can deal damage without a resolver cycle).
 Upgrades attach into `unit.upgrades`; a card upgrade routes to its **owner's**
-discard on defeat; token upgrades (Shield/Experience/Advantage) and token units live
+discard on defeat; token upgrades (Shield/Experience/Advantage/Weakness) and token units live
 there too. Optional "may…" decisions resolve through a **pending-choice queue** (`pendingChoices`),
 including a mid-combat suspend/resume (`pendingAttack`) for On Defense. Simultaneous **abilities** are a
 separate queue (`pendingTriggers`): every event collects what it triggered and resolves the batch one
@@ -162,7 +162,7 @@ routes to the right discard on defeat. A unit controlled by someone other than i
 owner in `UnitState.owner`, and how long that lasts in `controlUntil`: absent is until the regroup
 phase starts, `'permanent'` never ends (C-3P0, Galen Erso), and an instance id ends once that unit is
 no longer in play (Grand Moff Tarkin), which `resolve` settles once per action rather than at every
-way a unit can leave. Token upgrades (Shield/Experience/Advantage) and
+way a unit can leave. Token upgrades (Shield/Experience/Advantage/Weakness) and
 token units (`TOKEN_*` ids) live in the card db as built-ins. Transient per-attack
 grants (`grantedKeywords`, `grantedAbilityCardIds`), once-per-round ability usage
 (`usedAbilities`), the **pending-choice queue** (`pendingChoices`), the **triggered-ability queue**
