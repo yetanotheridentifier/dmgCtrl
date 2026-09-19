@@ -384,6 +384,9 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'HMW_206', name: 'The Tarkin Doctrine' },
   { id: 'HMW_216', name: 'Insurgent Camp' },
   { id: 'HMW_271', name: 'Landing Pad' },
+  // HMW When Played: A
+  { id: 'HMW_236', name: 'Booma Ball' },
+  { id: 'HMW_252', name: 'Villainous Ambition' },
 ]
 
 /**
@@ -1503,6 +1506,24 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_066', name: 'Carrion Spike' },
   { id: 'HMW_260', name: 'Queen Amidala' },
   { id: 'HMW_270', name: 'Wild Space Wanderer' },
+  // HMW When Played: A
+  { id: 'HMW_042', name: 'Dooku' },
+  { id: 'HMW_046', name: 'Krrsantan' },
+  { id: 'HMW_068', name: 'Imperial Commandos' },
+  { id: 'HMW_079', name: 'Radiant VII' },
+  { id: 'HMW_086', name: 'N-1 Patroller' },
+  { id: 'HMW_092', name: 'Starlit Purrgil' },
+  { id: 'HMW_130', name: 'Emerie Karr' },
+  { id: 'HMW_158', name: 'Battle-Scarred Destroyer' },
+  { id: 'HMW_159', name: 'General Grievous' },
+  { id: 'HMW_165', name: 'Commandeered Tour Shuttle' },
+  { id: 'HMW_177', name: 'Adamant Ewoks' },
+  { id: 'HMW_186', name: 'Mining Guild Trespasser' },
+  { id: 'HMW_222', name: 'Sandcrawler Sales Team' },
+  { id: 'HMW_230', name: 'Raiding Party' },
+  { id: 'HMW_249', name: 'Frenzied Tri-Fighters' },
+  { id: 'HMW_261', name: 'Ben Kenobi' },
+  { id: 'HMW_263', name: 'Wrecker' },
 ]
 
 /**

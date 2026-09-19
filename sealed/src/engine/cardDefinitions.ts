@@ -8211,3 +8211,85 @@ registerCard('HMW_004', { // Grand Moff Tarkin
     return updatePlayer(s, opp, { base: { ...base, damage: Math.max(base.damage, s.cards[base.cardId]?.hp ?? 0) } })
   },
 })
+
+// ── Homeworlds When Played units and upgrades ────────────────────────────────────────────────────
+// Registrations over the choices above. A condition on the board ("if you control a Tatooine base",
+// "if attached unit is a Villainy unit") gates the whole ability through `onlyIf`.
+
+/** The card's When Played abilities fire only while `when` holds as they resolve. */
+const onlyIf = (when: When, def: CardDefinition): CardDefinition => ({
+  ...def,
+  abilities: def.abilities?.map(a => ({ ...a, effect: (s: GameState, ctx: EffectContext) => (when(s, ctx) ? a.effect(s, ctx) : s) })),
+})
+const hostIsAspect = (aspect: string): When => (s, ctx) => hostPasses(s, ctx, (st, host) => printedAspect(cardOf(st, host), aspect)) !== undefined
+const costsAtMostUpgrade = (n: number) => (s: GameState, up: UpgradeRef): boolean => (s.cards[up.cardId]?.cost ?? 0) <= n
+const powerAtMost = (n: number): Pick => (s, u) => effectivePower(s, u) <= n
+
+// A: a chosen unit, base or upgrade is damaged, defeated, exhausted, readied or returned
+registerCard('HMW_042', unitThenWp("You may ready another unit. If you do, heal damage from a base equal to that unit's cost.", // Dooku
+  pickAll(pickOther, exhaustedPick), 'ready another unit, then heal damage from a base equal to its cost', true,
+  (s, ctx) => {
+    const readied = findUnit(s, ctx.targetInstanceId!)?.unit
+    const cost = readied ? printedCost(s, readied) : 0
+    const next = readyUnit(s, ctx.targetInstanceId!)
+    return cost > 0 ? healChoice(next, ctx, cost, [], BOTH_BASES) : next
+  }))
+registerCard('HMW_046', damageWp('You may deal damage equal to the number of resources you control minus 3 to a ground unit.', pickGround, // Krrsantan
+  (s, ctx) => s.players[ctx.owner].resources.length - 3, true))
+registerCard('HMW_068', targetWp('You may defeat a non-leader unit with 4 or less power.', 'selectUnitToDefeat', pickAll(nonLeader, powerAtMost(4)), true)) // Imperial Commandos
+registerCard('HMW_079', whenPlayed('You may deal 3 damage to this unit. If you do, give a Shield token to it.', (s, ctx) => // Radiant VII
+  pushChoice(s, { kind: 'maySelfDamageShield', id: ctx.sourceInstanceId!, controller: ctx.owner, selfId: ctx.sourceInstanceId!, targetId: ctx.sourceInstanceId!, amount: 3 })))
+registerCard('HMW_086', targetWp('You may defeat a non-leader unit with 1 or less remaining HP.', 'selectUnitToDefeat', remainingAtMost(1), true)) // N-1 Patroller
+registerCard('HMW_092', targetWp('You may exhaust a unit.', 'mayExhaustUnit', pickAny, true)) // Starlit Purrgil
+registerCard('HMW_130', unitThenWp('You may deal 1 damage to another ground unit. If you control that unit, the next unit you play this phase costs 1 less.', // Emerie Karr
+  pickAll(pickOther, pickGround), 'deal 1 damage to another ground unit', true,
+  (s, ctx) => {
+    // Read before the damage, which may defeat it: control is a fact about the unit as it was chosen.
+    const mine = s.players[ctx.owner].units.some(u => u.instanceId === ctx.targetInstanceId)
+    const dealt = dealDamageToUnit(s, ctx.targetInstanceId!, 1)
+    return mine ? grantNextUnit(dealt, ctx.owner, { costDelta: -1 }) : dealt
+  }))
+registerCard('HMW_158', damageWp('Deal 4 damage to a friendly unit.', pickFriendly, 4, false)) // Battle-Scarred Destroyer
+registerCard('HMW_159', { // General Grievous
+  suppressesBaseHealing: () => true,
+  ...whenPlayed("Bases can't be healed. Deal 4 damage to a base.", (s, ctx) => damageChoice(s, ctx, 4, [], BOTH_BASES)),
+})
+registerCard('HMW_165', targetWp('You may ready another unit with 3 or less power.', 'selectUnitToReady', pickAll(pickOther, exhaustedPick, powerAtMost(3)), true)) // Commandeered Tour Shuttle
+/** "You may deal N damage to a base and N damage to an enemy unit": one yes, then the two picks. */
+const baseAndEnemyWp = (description: string, amount: number, when: When = always): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) => (when(s, ctx)
+    ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: `deal ${amount} damage to a base and ${amount} damage to an enemy unit`, then: resume(ctx) })
+    : s)),
+  ifYouDo: (s, ctx) => {
+    const based = damageChoice(s, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-base` }, amount, [], BOTH_BASES)
+    return damageChoice(based, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-unit` }, amount, picked(s, ctx, pickEnemy))
+  },
+})
+registerCard('HMW_177', baseAndEnemyWp('If you control another Ewok unit or an Endor base, you may deal 1 damage to a base and 1 damage to an enemy unit.', 1, // Adamant Ewoks
+  (s, ctx) => youControl(s, ctx, pickOther, pickTrait('Ewok')) || controlsBaseWith(s, ctx.owner, 'Endor')))
+registerCard('HMW_186', baseAndEnemyWp('You may deal 2 damage to a base and 2 damage to an enemy unit.', 2)) // Mining Guild Trespasser
+registerCard('HMW_222', onlyIf((s, ctx) => controlsBaseWith(s, ctx.owner, 'Tatooine'), // Sandcrawler Sales Team
+  mayReturnUpgradeWp("If you control a Tatooine base, you may return an upgrade that costs 3 or less to its owner's hand.", s => upgradeCandidates(s, { maxCost: 3 }))))
+registerCard('HMW_230', targetWp('If you control another Tusken unit or a Tatooine base, you may exhaust a ground unit.', 'mayExhaustUnit', pickGround, true, // Raiding Party
+  (s, ctx) => youControl(s, ctx, pickOther, pickTrait('Tusken')) || controlsBaseWith(s, ctx.owner, 'Tatooine')))
+registerCard('HMW_236', mayReturnUpgradeWp("You may return an upgrade that costs 3 or less to its owner's hand.", s => upgradeCandidates(s, { maxCost: 3 }))) // Booma Ball
+registerCard('HMW_249', mayDefeatUpgradeWp('You may defeat an upgrade that costs 3 or less.', costsAtMostUpgrade(3))) // Frenzied Tri-Fighters
+registerCard('HMW_252', onlyIf(hostIsAspect('Villainy'), damageWp('If attached unit is a Villainy unit, you may deal 2 damage to a unit.', pickAny, 2, true))) // Villainous Ambition
+registerCard('HMW_261', allOf( // Ben Kenobi
+  targetWp('You may exhaust a unit with 3 or less power.', 'mayExhaustUnit', powerAtMost(3), true),
+  onAttack(whenPlayed('You may heal 3 damage from another unit.', (s, ctx) => healChoice(s, ctx, 3, pickedIds(s, ctx, pickOther), [], true))),
+))
+const wreckerPick = (s: GameState, ctx: Resumable, chooser: PlayerId, step: string): GameState =>
+  pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-${chooser}`, controller: chooser, targets: s.players[chooser].units.map(u => u.instanceId), text: 'choose a unit you control to be dealt 3 damage', then: resume(ctx, step) })
+registerCard('HMW_263', { // Wrecker
+  // Governor's Shuttle's shape: both picks first, then the damage lands on both at once.
+  ...whenPlayed('Each player chooses a unit they control. Deal 3 damage to each chosen unit.', (s, ctx) => {
+    if (s.players[ctx.owner].units.length) return wreckerPick(s, ctx, ctx.owner, 'mine')
+    return s.players[opponentOf(ctx.owner)].units.length ? wreckerPick(s, ctx, opponentOf(ctx.owner), 'theirs:') : s
+  }),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'mine' && s.players[opponentOf(ctx.owner)].units.length) return wreckerPick(s, ctx, opponentOf(ctx.owner), `theirs:${ctx.targetInstanceId}`)
+    const mine = ctx.step === 'mine' ? undefined : ctx.step?.slice('theirs:'.length)
+    return [...(mine ? [mine] : []), ctx.targetInstanceId!].reduce((acc, id) => dealDamageToUnit(acc, id, 3), s)
+  },
+})
