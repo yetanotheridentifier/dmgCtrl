@@ -1043,6 +1043,10 @@ fails if any count by card type differs. When a keyword lands and cards move ove
 new numbers. It also fails if a card with a registered ability is counted as playing as printed, which
 would count it twice.
 
+Tokens are not in the fixtures, so `PRINTED_TOKENS` records the token names each set prints. A set is
+credited with each one whose name matches a token card the engine builds (`TOKEN_CARDS`,
+`TOKEN_UNIT_CARDS`), and the test fails if a built token's name matches nothing any set prints.
+
 ### Card identity, variants and reprints
 
 Only Normal printings are counted. A card is printed several ways (Hyperspace, foil, showcase and
