@@ -1548,6 +1548,16 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_246', name: 'Pyke Sarisa' },
   { id: 'HMW_247', name: 'Surveillance Cruiser' },
   { id: 'HMW_255', name: 'C-3P0' },
+  // HMW When Played: C
+  { id: 'HMW_035', name: 'Hunter' },
+  { id: 'HMW_036', name: 'Kelnacca' },
+  { id: 'HMW_043', name: 'Darth Vader' },
+  { id: 'HMW_051', name: 'Third Sister' },
+  { id: 'HMW_078', name: 'Qui-Gon Jinn' },
+  { id: 'HMW_094', name: 'Sando Aqua Monster' },
+  { id: 'HMW_105', name: 'Nute Gunray' },
+  { id: 'HMW_221', name: 'Teeka' },
+  { id: 'HMW_232', name: 'Mon Cal Cruiser' },
 ]
 
 /**

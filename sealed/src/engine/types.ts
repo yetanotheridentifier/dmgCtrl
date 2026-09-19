@@ -579,6 +579,8 @@ export interface PhaseEvents {
   defeated: Record<PlayerId, string[]>
   /** Players whose base was attacked this phase (Greef Karga). */
   basesAttacked: PlayerId[]
+  /** Instance ids of the units that attacked each player's base this phase (Qui-Gon Jinn). */
+  baseAttackers?: Partial<Record<PlayerId, string[]>>
   /** Players whose base was DEALT DAMAGE this phase — combat or ability (Baylan Skoll). */
   basesDamaged: PlayerId[]
   /** Players who had an upgrade defeated this phase (Baylan Skoll). */
@@ -972,7 +974,9 @@ type ChoiceVariant =
   | { kind: 'mayPlayUnitFromDiscard'; id: string; controller: PlayerId; candidates: string[]; remaining: number; maxCost?: number; excludeTrait?: string }
   // "Choose one:", a modal effect. `modes` holds only the options the card allows right now, so a
   // mode whose condition isn't met is never offered. Mandatory: "choose one" is never optional.
-  | { kind: 'chooseMode'; id: string; controller: PlayerId; modes: string[] }
+  // With `then`, the card resolves the mode itself: its `ifYouDo` runs with the picked mode as `step`,
+  // and `labels` (one per mode) name the buttons. Without it, the mode is one of the engine's own keys.
+  | { kind: 'chooseMode'; id: string; controller: PlayerId; modes: string[]; labels?: string[]; then?: IfYouDo }
   // Treacherous Minefield: pick an arena (optionIndex 0 = ground, 1 = space); every unit there
   // gains `grantCardId`'s abilities for the phase.
   | { kind: 'selectArenaToGrant'; id: string; controller: PlayerId; grantCardId: string }
@@ -1053,7 +1057,9 @@ type ChoiceVariant =
   // less"), and then eligibility is what the player can afford rather than what fits `budget`.
   // `thenDelay` leaves a delayed effect about the unit played (Triple Dark Raid returns it to hand).
   // `maxPlays` caps how many units the budget may buy (U-Wing Reinforcement's "up to 3").
-  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean; filter?: { trait?: string; aspect?: string; arena?: Arena }; costDelta?: number; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; maxPlays?: number }
+  // `filter.maxCost` caps each unit's own cost, for a search with no combined budget ("up to 2 units that
+  // each cost 4 or less"), and `thenDamage` deals that much to each unit as it is played (Darth Vader).
+  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean; filter?: { trait?: string; aspect?: string; arena?: Arena; maxCost?: number }; costDelta?: number; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; maxPlays?: number; thenDamage?: number }
   // Rancor Keeper: "deal 1 damage to any number of bases" — repeatable, each base at most
   // once; `remaining` are the bases not yet picked. Skip finishes. `heal` heals each picked base
   // instead ("heal 2 damage from each of any number of bases", Coruscanti Spy).
@@ -1232,10 +1238,18 @@ export function recordUnitDefeated(state: GameState, owner: PlayerId, cardId: st
   return { ...state, phaseEvents: { ...events, defeated: { ...events.defeated, [owner]: [...events.defeated[owner], cardId] } } }
 }
 
-/** Note that `owner`'s base was attacked this phase (Greef Karga). */
-export function recordBaseAttacked(state: GameState, owner: PlayerId): GameState {
+/** Note that `attackerId` attacked `owner`'s base this phase (Greef Karga, Qui-Gon Jinn). */
+export function recordBaseAttacked(state: GameState, owner: PlayerId, attackerId: string): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
-  return events.basesAttacked.includes(owner) ? state : { ...state, phaseEvents: { ...events, basesAttacked: [...events.basesAttacked, owner] } }
+  const basesAttacked = events.basesAttacked.includes(owner) ? events.basesAttacked : [...events.basesAttacked, owner]
+  const attackers = events.baseAttackers?.[owner] ?? []
+  const baseAttackers = attackers.includes(attackerId) ? events.baseAttackers : { ...events.baseAttackers, [owner]: [...attackers, attackerId] }
+  return { ...state, phaseEvents: { ...events, basesAttacked, baseAttackers } }
+}
+
+/** Instance ids of the units that attacked `owner`'s base this phase. */
+export function baseAttackersThisPhase(state: GameState, owner: PlayerId): string[] {
+  return state.phaseEvents?.baseAttackers?.[owner] ?? []
 }
 
 /** Record that `owner`'s base took `amount` damage this phase. */

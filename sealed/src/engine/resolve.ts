@@ -474,7 +474,7 @@ function ackbarEligible(
   state: GameState,
   revealed: string[],
   budget: number,
-  filter?: { trait?: string; aspect?: string; arena?: 'ground' | 'space' },
+  filter?: { trait?: string; aspect?: string; arena?: 'ground' | 'space'; maxCost?: number },
   costDelta?: number,
   owner?: PlayerId,
 ): number[] {
@@ -482,6 +482,7 @@ function ackbarEligible(
     const c = state.cards[cardId]
     if (c?.type !== 'unit') return []
     if (filter?.arena && c.arena !== filter.arena) return []
+    if (filter?.maxCost !== undefined && (c.cost ?? 0) > filter.maxCost) return []
     if (filter?.trait && !(c.traits ?? []).some(t => t.toLowerCase() === filter.trait!.toLowerCase())) return []
     if (filter?.aspect && !(c.aspects ?? []).some(a => a.toLowerCase() === filter.aspect!.toLowerCase())) return []
     if (costDelta !== undefined && owner) {
@@ -1443,7 +1444,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     }
     case 'chooseMode': {
       // "Choose one:" — the card decided which modes were available; run the one picked.
-      next = applyChosenMode(next, choice.controller, choice.modes[optionIndex ?? 0], choice.id)
+      const mode = choice.modes[optionIndex ?? 0]
+      next = choice.then
+        ? runIfYouDo(next, { ...choice.then, step: mode }, { optionIndex })
+        : applyChosenMode(next, choice.controller, mode, choice.id)
       break
     }
     case 'searchPlayUpgrade': {
@@ -1700,6 +1704,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const enteredId = `u${next.instanceCounter}`
         next = playUnitCard(next, owner, cardId, choice.entersReady === true, resourcesPaid)
         if (choice.thenDelay) next = addDelayedEffect(next, { ...choice.thenDelay, owner, unitId: enteredId })
+        if (choice.thenDamage) next = dealDamageToUnit(next, enteredId, choice.thenDamage)
         next = checkWin(next)
         if (next.winner !== null) return next
         const revealed = choice.revealed.filter((_, i) => i !== deckIndex)
@@ -1708,7 +1713,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         // Eye of Sion plays exactly one; Ackbar keeps offering until the budget runs out.
         const maxPlays = choice.maxPlays === undefined ? undefined : choice.maxPlays - 1
         if (!choice.playOne && budget > 0 && eligibleIndices.length > 0 && maxPlays !== 0) {
-          next = pushChoice(next, { kind: 'searchPlayFree', id: choice.id, controller: owner, revealed, eligibleIndices, budget, filter: choice.filter, costDelta: choice.costDelta, ...(maxPlays !== undefined ? { maxPlays } : {}) })
+          next = pushChoice(next, { kind: 'searchPlayFree', id: choice.id, controller: owner, revealed, eligibleIndices, budget, filter: choice.filter, costDelta: choice.costDelta, ...(maxPlays !== undefined ? { maxPlays } : {}), ...(choice.thenDamage ? { thenDamage: choice.thenDamage } : {}) })
         } else {
           next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...revealed] }) // bottom the leftovers
         }
@@ -2456,7 +2461,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     const baseSource = { cardId: attacker.cardId, controller: playerId }
     const dealtToBase = baseDamageAfterPrevention(state, enemyId, attackerPower, baseSource)
     let next = dealDamageToBase(state, enemyId, attackerPower, baseSource)
-    next = recordBaseAttacked(next, enemyId) // "your base was attacked this phase" (Greef Karga)
+    next = recordBaseAttacked(next, enemyId, attackerId) // "your base was attacked this phase" (Greef Karga, Qui-Gon Jinn)
     // "When an enemy unit attacks your base" (Kachirho Militia) — the attacked player's units react.
     next = fireBatch(next, collectUnitsTrigger(next, 'whenEnemyAttacksBase', enemyId, { attackerInstanceId: attackerId }))
     next = consumeAdvantage(next, playerId, attackerId) // the attack completed

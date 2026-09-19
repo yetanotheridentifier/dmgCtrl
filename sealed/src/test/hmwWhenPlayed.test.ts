@@ -489,22 +489,36 @@ describe('HMW When Played, C: modes, counts and chains', () => {
     expect(second.pendingChoices!.some(c => c.kind === 'chooseMode')).toBe(false)
   })
 
+  it('Hunter (HMW_035) raises the second choice when a first-choice attack ends', () => {
+    const s = play(board({ units: [unit('f', 'GRD', { exhausted: true })] }, { units: [unit('e', 'GRD')] }), 'HMW_035')
+    const first = accept(s, { optionIndex: 1 })
+    const offer = choice(first)
+    expect(offer.kind).toBe('mayAttackAnyUnit')
+    expect(first.pendingChoices!.some(c => c.kind === 'chooseMode')).toBe(false)
+    const attacked = resolve(first, { type: 'attack', attackerId: 'f', target: { kind: 'unit', instanceId: 'e' }, choiceId: offer.id } as Action)
+    expect(U(attacked, 'e')!.damage).toBe(2)
+    expect(attacked.pendingChoices!.some(c => c.kind === 'chooseMode')).toBe(true)
+  })
+
   it('Kelnacca (HMW_036) pays 3 resources per hit, each dealing his power to an enemy unit', () => {
     const s = play(board({}, { units: [unit('e', 'GRD'), unit('e2', 'GRD')] }), 'HMW_036')
     const c = choice(s)
     expect(c.kind === 'chooseNumber' && c.max).toBe(2)
     const paid = accept(s, { optionIndex: 2 })
     expect(readyCount(paid, 'player')).toBe(0)
-    const hits = paid.pendingChoices!.filter(x => x.kind === 'selectDamageTarget')
-    expect(hits.map(h => h.kind === 'selectDamageTarget' && h.amount)).toEqual([4, 4])
-    expect(unitOffers(paid)).toEqual(['e', 'e2'])
+    expect([unitOffers(paid), declinable(paid)]).toEqual([['e', 'e2'], false])
+    const first = accept(paid, { targetInstanceId: 'e' })
+    expect(U(first, 'e')!.damage).toBe(4)
+    const second = accept(first, { targetInstanceId: 'e2' })
+    expect(U(second, 'e2')!.damage).toBe(4)
+    noChoice(second)
     const none = accept(s, { optionIndex: 0 })
     expect(readyCount(none, 'player')).toBe(6)
     noChoice(none)
   })
 
   it('Darth Vader (HMW_043) plays up to 2 units costing 4 or less from the top 8 free, and deals 2 to each', () => {
-    const s = play(board({ deck: ['GRD', 'PRICEY', 'CHEAP', 'ONE', 'EVT'] }), 'HMW_043')
+    const s = play(board({ resources: ready(13), deck: ['GRD', 'PRICEY', 'CHEAP', 'ONE', 'EVT'] }), 'HMW_043')
     const c = choice(s)
     expect(c.kind === 'searchPlayFree' && c.eligibleIndices).toEqual([0, 2, 3])
     const one = accept(s, { deckIndex: 0 })
@@ -535,7 +549,7 @@ describe('HMW When Played, C: modes, counts and chains', () => {
 
   it('Qui-Gon Jinn (HMW_078) may defeat a unit that attacked your base this phase, and dies with it if it was a leader', () => {
     const before = board({}, { units: [unit('e', 'GRD'), unit('l', 'LEADER', { isLeader: true }), unit('idle', 'GRD')] }, { activePlayer: 'opponent' })
-    const attacked = attack(attack(before, 'e'), 'l')
+    const attacked = attack({ ...attack(before, 'e'), activePlayer: 'opponent' }, 'l')
     const s = play(attacked, 'HMW_078')
     expect(unitOffers(s)).toEqual(['e', 'l'])
     expect(declinable(s)).toBe(true)

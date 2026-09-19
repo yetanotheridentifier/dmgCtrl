@@ -7,7 +7,7 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
+import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
@@ -8366,3 +8366,153 @@ registerCard('HMW_264', onlyIf(hostIsAspect('Heroism'), whenPlayed('If attached 
   giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD))))
 registerCard('HMW_265', onlyIf((s, ctx) => hostPasses(s, ctx, (st, host) => unitHasTrait(st, host, "Twi'lek")) !== undefined, // Twi'lek Kalikori
   searchPlayFreeWp("If attached unit is a Twi'lek, search the top 8 cards of your deck for any number of Twi'lek units with combined cost 5 or less and play each of them for free.", 8, 5, { trait: "Twi'lek" })))
+
+// C: a mode, a count or a chain decided as the ability resolves. A "choose" whose modes the card
+// resolves itself raises `chooseMode` with `then`, and its `ifYouDo` receives the mode as `step`.
+
+/** A mode offered only while an attack with `offer` is possible, so a mandatory attack is never stranded. */
+const canOfferAttack = (s: GameState, owner: PlayerId, offer: AttackOffer): boolean => offerAttack(s, owner, 'probe', offer) !== s
+const chooseModeThen = (s: GameState, ctx: Resumable, id: string, options: [mode: string, label: string][]): GameState =>
+  (options.length
+    ? pushChoice(s, { kind: 'chooseMode', id, controller: ctx.owner, modes: options.map(o => o[0]), labels: options.map(o => o[1]), then: resume(ctx) })
+    : s)
+
+// Hunter: "Choose two", the same option allowed twice. The second choice is raised once the first has
+// resolved: at once after a Shield, and at the end of the attack after an attack (as Rebel Assault
+// sequences its attacks), so a second attack is only offered when one is still possible. An attacker
+// defeated before its attack ends takes the second choice with it, as a sequence stops there.
+const GRANT_HUNTER = 'GRANT_HUNTER'
+const GRANT_HUNTER_FIRST = 'GRANT_HUNTER_FIRST'
+const hunterOffer = (round: number): AttackOffer => ({ exhausted: true, grantCardId: round === 1 ? GRANT_HUNTER_FIRST : GRANT_HUNTER })
+const hunterChoose = (s: GameState, ctx: Resumable, round: number): GameState =>
+  chooseModeThen(s, ctx, `${ctx.sourceInstanceId}-choice${round}`, [
+    ...(allUnits(s).length ? [[`shield${round}`, 'Give a Shield token to a unit'] as [string, string]] : []),
+    ...(canOfferAttack(s, ctx.owner, hunterOffer(round)) ? [[`attack${round}`, 'Attack with a unit, even if exhausted'] as [string, string]] : []),
+  ])
+registerCard(GRANT_HUNTER, { sourceCardId: 'HMW_035', cannotAttackBases: () => true })
+registerCard(GRANT_HUNTER_FIRST, {
+  sourceCardId: 'HMW_035',
+  cannotAttackBases: () => true,
+  abilities: [{ trigger: 'onAttackEnd', description: 'Choose the second option.', effect: (s, ctx) => hunterChoose(s, { ...ctx, cardId: 'HMW_035' }, 2) }],
+})
+registerCard('HMW_035', { // Hunter
+  ...whenPlayed("Choose two. You may choose the same option more than once: Give a Shield token to a unit. Attack with a unit, even if it's exhausted. It can't attack bases for this attack.",
+    (s, ctx) => hunterChoose(s, ctx, 1)),
+  ifYouDo: (s, ctx) => {
+    const round = ctx.step?.endsWith('1') ? 1 : 2
+    if (ctx.step?.startsWith('attack')) return offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-attack${round}`, hunterOffer(round))
+    const shielded = shieldChoice(s, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-shield${round}` }, allUnits(s).map(u => u.instanceId), false)
+    return round === 1 ? hunterChoose(shielded, ctx, 2) : shielded
+  },
+})
+registerCard('HMW_036', { // Kelnacca
+  // Paying a number of resources that is not a multiple of 3 buys nothing, so the count asked is of hits.
+  ...whenPlayed("You may pay any number of resources. For every 3 resources paid this way, deal damage equal to this unit's power to an enemy unit.",
+    (s, ctx) => chooseNumberUpTo(s, ctx, Math.floor(readyResources(s, ctx.owner) / 3), 'choose how many times to pay 3 resources', 'pay')),
+  ifYouDo: (s, ctx) => {
+    const left = ctx.step === 'pay' ? ctx.optionIndex ?? 0 : stepCount(ctx.step)
+    let next = s
+    if (ctx.step === 'pay') next = payResources(s, ctx.owner, 3 * left)
+    else if (ctx.targetInstanceId) {
+      const self = selfOf(s, ctx)
+      next = dealDamageToUnit(s, ctx.targetInstanceId, self ? effectivePower(s, self) : 0)
+    }
+    const remaining = ctx.step === 'pay' ? left : left - 1
+    return remaining > 0 ? unitThen(next, ctx, pickedIds(next, ctx, pickEnemy), "deal damage equal to this unit's power to an enemy unit", false, `left:${remaining}`) : next
+  },
+})
+registerCard('HMW_043', whenPlayed('Search the top 8 cards of your deck for up to 2 units that each cost 4 or less, play them for free, and deal 2 damage to each of them.', (s, ctx) => { // Darth Vader
+  const p = s.players[ctx.owner]
+  const revealed = p.deck.slice(0, searchCount(s, ctx.owner, 8))
+  if (revealed.length === 0) return s
+  const eligibleIndices = revealed.flatMap((id, i) => (printedUnit(s.cards[id]) && (s.cards[id]?.cost ?? 0) <= 4 ? [i] : []))
+  const pulled = updatePlayer(s, ctx.owner, { deck: p.deck.slice(revealed.length) })
+  return pushChoice(pulled, { kind: 'searchPlayFree', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices, budget: ANY_NUMBER, filter: { maxCost: 4 }, maxPlays: 2, thenDamage: 2 })
+}))
+/** Third Sister: one damage step of the chain, offered to `chooser`, who may decline and end it. */
+const sisterStep = (s: GameState, ctx: Resumable, chooser: PlayerId, amount: number): GameState => {
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-${amount}`, controller: chooser, targets, optional: true, text: `you may deal ${amount} damage to a unit`, then: resume(ctx, String(amount)) })
+    : s
+}
+registerCard('HMW_051', { // Third Sister
+  ...whenPlayed("You may deal 2 damage to a unit. If you do, that unit's controller may deal 3 damage to a unit. If they do, that unit's controller may deal 4 damage to a unit.",
+    (s, ctx) => sisterStep(s, ctx, ctx.owner, 2)),
+  ifYouDo: (s, ctx) => {
+    const amount = Number(ctx.step)
+    // The controller is read before the damage, which may defeat the unit.
+    const controller = findUnit(s, ctx.targetInstanceId!)?.owner
+    const dealt = dealDamageToUnit(s, ctx.targetInstanceId!, amount)
+    return amount < 4 && controller ? sisterStep(dealt, ctx, controller, amount + 1) : dealt
+  },
+})
+registerCard('HMW_078', unitThenWp("You may defeat a unit that attacked your base this phase. If it's a leader unit, defeat this unit.", // Qui-Gon Jinn
+  (s, u, ctx) => baseAttackersThisPhase(s, ctx.owner).includes(u.instanceId), 'defeat a unit that attacked your base this phase', true,
+  (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    const leader = target !== undefined && isLeaderUnit(s, target)
+    const defeated = defeatUnit(s, ctx.targetInstanceId!)
+    return leader ? defeatUnit(defeated, ctx.sourceInstanceId!) : defeated
+  }))
+type SandoStep = { left: number; chosen: string[]; total: number }
+const sandoFinish = (s: GameState, ctx: Resumable, st: SandoStep): GameState =>
+  (st.chosen.length ? dealDamageToUnit(defeatUnits(s, st.chosen), ctx.sourceInstanceId!, st.total) : s)
+/** Sando Aqua Monster: one more ground unit that fits the power left, or Done, which defeats the picks together. */
+const sandoOffer = (s: GameState, ctx: Resumable, st: SandoStep): GameState => {
+  const targets = pickedIds(s, ctx, pickAll(pickGround, (st2, u) => !st.chosen.includes(u.instanceId) && effectivePower(st2, u) <= st.left))
+  if (!targets.length) return sandoFinish(s, ctx, st)
+  return pushChoice(s, {
+    kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, hookOnDecline: true,
+    text: `defeat a ground unit (combined power ${st.left} left)`, then: resume(ctx, JSON.stringify(st)),
+  })
+}
+registerCard('HMW_094', { // Sando Aqua Monster
+  ...whenPlayed("If you control a Naboo base, you may defeat any number of ground units with combined power equal to or less than this unit's power. Deal damage to this unit equal to the combined power of the defeated units.",
+    (s, ctx) => {
+      const self = selfOf(s, ctx)
+      return self && controlsBaseWith(s, ctx.owner, 'Naboo') ? sandoOffer(s, ctx, { left: effectivePower(s, self), chosen: [], total: 0 }) : s
+    }),
+  ifYouDo: (s, ctx) => {
+    const st = JSON.parse(ctx.step ?? '{}') as SandoStep
+    if (!ctx.targetInstanceId) return sandoFinish(s, ctx, st)
+    const u = findUnit(s, ctx.targetInstanceId)?.unit
+    const p = u ? effectivePower(s, u) : 0
+    return sandoOffer(s, ctx, { left: st.left - p, chosen: [...st.chosen, ctx.targetInstanceId], total: st.total + p })
+  },
+})
+/** Nute Gunray: the next different enemy unit, while friendly units remain to deal the damage. */
+const nuteOffer = (s: GameState, ctx: Resumable, left: number, chosen: string[]): GameState => {
+  const targets = pickedIds(s, ctx, pickEnemy).filter(id => !chosen.includes(id))
+  return left > 0 && targets.length
+    ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, text: `choose a different enemy unit to be dealt 1 damage (${left} left)`, then: resume(ctx, JSON.stringify({ left, chosen })) })
+    : s
+}
+registerCard('HMW_105', { // Nute Gunray
+  ...whenPlayed('Each friendly unit (including this one) deals 1 damage to a different enemy unit.', (s, ctx) => nuteOffer(s, ctx, s.players[ctx.owner].units.length, [])),
+  ifYouDo: (s, ctx) => {
+    const st = JSON.parse(ctx.step ?? '{}') as { left: number; chosen: string[] }
+    return nuteOffer(dealDamageToUnit(s, ctx.targetInstanceId!, 1), ctx, st.left - 1, [...st.chosen, ctx.targetInstanceId!])
+  },
+})
+registerCard('HMW_221', { // Teeka
+  ...whenPlayed('Choose one: Give a unit Sentinel for this phase. A unit loses Sentinel for this phase.', (s, ctx) =>
+    (allUnits(s).length ? chooseModeThen(s, ctx, ctx.sourceInstanceId!, [['gain', 'Give a unit Sentinel'], ['lose', 'A unit loses Sentinel']]) : s)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'gain') return lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { keywords: [KW.sentinel] })
+    if (ctx.step === 'lose') return unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'choose a unit to lose Sentinel for this phase', false, 'lost')
+    return ctx.targetInstanceId ? addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId, removeKeywords: ['Sentinel'] }) : s
+  },
+})
+const GRANT_MON_CAL_CRUISER = 'GRANT_MON_CAL_CRUISER'
+registerCard(GRANT_MON_CAL_CRUISER, { sourceCardId: 'HMW_232', ...attackBonus(2) })
+registerCard('HMW_232', { // Mon Cal Cruiser
+  ...whenPlayed("Choose one: Attack with a unit. It gets +2/+0 for this attack. Look at an opponent's hand. You may discard a card from it. If you do, they draw a card.", (s, ctx) =>
+    chooseModeThen(s, ctx, ctx.sourceInstanceId!, [
+      ...(canOfferAttack(s, ctx.owner, { grantCardId: GRANT_MON_CAL_CRUISER }) ? [['attack', 'Attack with a unit (+2/+0)'] as [string, string]] : []),
+      ['hand', "Look at an opponent's hand"],
+    ])),
+  ifYouDo: (s, ctx) => (ctx.step === 'attack'
+    ? offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-attack`, { grantCardId: GRANT_MON_CAL_CRUISER })
+    : pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, thenDraw: true })),
+})

@@ -444,6 +444,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       // spelled out here rather than shown raw.
       if (choice.kind === 'chooseMode') {
         const mode = choice.modes[action.optionIndex ?? 0]
+        if (choice.labels) return choice.labels[action.optionIndex ?? 0] ?? 'Choose'
         if (mode === 'healBase') return 'Heal 5 from your base'
         if (mode === 'mandoToken') return 'Create a Mandalorian token'
         if (mode === 'readyResource') return 'Ready a resource'
