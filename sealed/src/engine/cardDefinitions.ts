@@ -11,7 +11,7 @@ import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDel
 import { affordableHandUnits, resourceUpgradeCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
-import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywords } from './keywords'
+import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
 import type { CombatContext, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PlayerId, UnitState, UpgradeAttachment, UpgradeRef } from './types'
 
 /**
@@ -4728,6 +4728,8 @@ type PlayFromHandOptions = {
   thenDamageIt?: number
   /** "It gains <keywords> for this phase": granted to the next unit played, so an Ambush or Hidden takes effect as it enters. */
   gains?: KeywordInstance[]
+  /** The card's own follow-up, run once the unit is in play and paid for (Grievous's second play). */
+  then?: IfYouDo
 }
 const FREE = -99
 const playableFromHand = (s: GameState, owner: PlayerId, o: PlayFromHandOptions, extraResourceCost = 0) =>
@@ -4741,6 +4743,7 @@ const playFromHand = (s: GameState, ctx: EventCtx, o: PlayFromHandOptions): Game
     kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta, entersReady: false,
     ...(o.thenTokens ? { thenTokens: o.thenTokens } : {}), ...(o.thenDamageOwnBase ? { thenDamageOwnBase: true } : {}),
     ...(o.thenDamageIt ? { thenDamageIt: o.thenDamageIt } : {}),
+    ...(o.then ? { then: o.then } : {}),
   })
 }
 registerCard('LOF_076', whenPlayed('Play a Force unit from your hand (paying its cost) and give a Shield token to it.', (s, ctx) => // Soresu Stance
@@ -4774,10 +4777,10 @@ registerCard('LAW_171', whenPlayed('Resource this event and the top card of your
 
 // Decks, draws and discard piles
 /** Choose a card from your own hand for the card's hook (`step`), or nothing with an empty hand. */
-const handCardThen = (s: GameState, ctx: Resumable, text: string, step: string, test?: (c: EngineCard | undefined) => boolean): GameState => {
+const handCardThen = (s: GameState, ctx: Resumable, text: string, step: string, test?: (c: EngineCard | undefined) => boolean, optional = false): GameState => {
   const hand = s.players[ctx.owner].hand
   const handIndices = hand.flatMap((id, i) => (!test || test(s.cards[id]) ? [i] : []))
-  return handIndices.length ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices, text, then: resume(ctx, step) }) : s
+  return handIndices.length ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices, text, then: resume(ctx, step), ...mayFlag(optional) }) : s
 }
 /** Move the hand card at `handIndex` to the top or the bottom of its owner's deck. */
 const handToDeck = (s: GameState, owner: PlayerId, handIndex: number | undefined, where: 'top' | 'bottom'): GameState => {
@@ -8615,3 +8618,371 @@ registerCard('HMW_234', { // Ritual Dragon: friendly units, itself included, ent
   unitsEnterReady: withBase('Tatooine'),
 })
 registerCard('HMW_053', { ambushAttacksBases: () => true }) // Fett's Firespray
+
+// ── Homeworlds: events, leaders and the remaining trigger points ──────────────────────────────────
+// Built on the primitives the other sets already established. The group letters follow the ticket:
+// A the events, B the units on trigger points other than When Played, C the leaders.
+
+// A: events
+
+/** The second half of Log Trap: the same unit attacks again, exhausted, and cannot reach a base. */
+const GRANT_LOG_TRAP_SECOND = 'GRANT_LOG_TRAP_SECOND'
+registerCard(GRANT_LOG_TRAP_SECOND, { sourceCardId: 'HMW_149', cannotAttackBases: () => true })
+const GRANT_LOG_TRAP = 'GRANT_LOG_TRAP'
+registerCard(GRANT_LOG_TRAP, {
+  sourceCardId: 'HMW_149',
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: "Then attack with it again, even if it's exhausted. It can't attack bases for the second attack.",
+    // `only` is the opposite of `thenAttack`'s exclude: this sequence stays with one unit.
+    effect: (s, ctx) => offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-again`, {
+      attacker: { only: [ctx.sourceInstanceId!] }, exhausted: true, grantCardId: GRANT_LOG_TRAP_SECOND,
+    }),
+  }],
+})
+registerCard('HMW_149', attackWithRider("Attack with a friendly unit. Then attack with it again, even if it's exhausted. It can't attack bases for the second attack.", GRANT_LOG_TRAP)) // Log Trap
+
+/** "It shares a Trait with another friendly unit": the attacker's live traits against its allies'. */
+const sharesTraitWithAnotherFriendly = (s: GameState, u: UnitState): boolean => {
+  const mine = unitTraits(s, u).map(t => t.toLowerCase())
+  return friendliesOf(s, u).some(x => x.instanceId !== u.instanceId && unitTraits(s, x).some(t => mine.includes(t.toLowerCase())))
+}
+const GRANT_FAMILIAR_STRATEGEM = 'GRANT_FAMILIAR_STRATEGEM'
+registerCard(GRANT_FAMILIAR_STRATEGEM, { sourceCardId: 'HMW_266', ...attackBonusIf(2, sharesTraitWithAnotherFriendly) })
+registerCard('HMW_266', attackWithRider('Attack with a unit. If it shares a Trait with another friendly unit, it gets +2/+0 for this attack.', GRANT_FAMILIAR_STRATEGEM)) // Familiar Strategem
+
+const GRANT_NIGHTFALL = 'GRANT_NIGHTFALL'
+registerCard(GRANT_NIGHTFALL, { sourceCardId: 'HMW_193', ...attackBonus(2) })
+registerCard('HMW_193', { // Nightfall
+  ...whenPlayed('Deal 1 damage to an enemy unit. If you control an Endor base, you may attack with a unit. It gets +2/+0 for this attack.', (s, ctx) => {
+    const attackOffer = (st: GameState): GameState =>
+      (controlsBaseWith(st, ctx.owner, 'Endor') ? offerAttack(st, ctx.owner, `${ctx.sourceInstanceId}-attack`, { grantCardId: GRANT_NIGHTFALL, optional: true }) : st)
+    const targets = picked(s, ctx, pickEnemy)
+    // The attack is offered after the damage choice is pushed, so it resolves after it: choices drain
+    // in the order they were raised.
+    return targets.length ? attackOffer(damageChoice(s, ctx, 1, targets)) : attackOffer(s)
+  }),
+})
+
+const GRANT_LOW_ALTITUDE_COMBAT = 'GRANT_LOW_ALTITUDE_COMBAT'
+registerCard(GRANT_LOW_ALTITUDE_COMBAT, { sourceCardId: 'HMW_050', ...attackBonus(2) })
+registerCard('HMW_050', { // Low Altitude Combat
+  ...whenPlayed("Move a space unit to the ground arena (it's now a ground unit). If you do, you may attack with a ground unit. It gets +2/+0 for this attack.", (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickArena('space')), 'move a space unit to the ground arena', false)),
+  ifYouDo: (s, ctx) => {
+    const moved = moveUnitToArena(s, ctx.targetInstanceId!, 'ground')
+    return offerAttack(moved, ctx.owner, `${ctx.sourceInstanceId}-attack`, { attacker: { arena: 'ground' }, grantCardId: GRANT_LOW_ALTITUDE_COMBAT, optional: true })
+  },
+})
+
+registerCard('HMW_102', defeatEvent('Defeat a non-leader unit with 4 or less power.', // Dragon's Might
+  (s, u) => nonLeader(s, u) && effectivePower(s, u) <= 4))
+registerCard('HMW_238', returnEvent('Return a non-leader unit with 6 or more power to its owner\'s hand.', // Exploit Confidence
+  (s, u) => nonLeader(s, u) && effectivePower(s, u) >= 6))
+
+registerCard('HMW_207', { // Maim
+  ...whenPlayed('Deal 1 damage to a unit and exhaust it.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'deal 1 damage to a unit and exhaust it', false)),
+  // One target, two effects: damage first, so a unit the damage defeats is never exhausted in its grave.
+  ifYouDo: (s, ctx) => {
+    const damaged = dealDamageToUnit(s, ctx.targetInstanceId!, 1)
+    return findUnit(damaged, ctx.targetInstanceId!) ? exhaustUnit(damaged, ctx.targetInstanceId!) : damaged
+  },
+})
+
+registerCard('HMW_218', { // New Tactics
+  ...whenPlayed("Choose a non-leader unit. Its owner puts it on the top or bottom of their deck. (It isn't defeated.)", (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, (st, u) => nonLeader(st, u)), 'choose a non-leader unit for its owner to put on their deck', false)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'top' || ctx.step === 'bottom') return unitToDeck(s, ctx.unitChosen!, ctx.step)
+    const found = findUnit(s, ctx.targetInstanceId!)
+    if (!found) return s
+    // Its owner decides, which is not always the player who played the event.
+    return pushChoice(s, {
+      kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-deck`, controller: found.unit.owner ?? found.owner, cost: 0,
+      text: `put ${s.cards[found.unit.cardId]?.name ?? 'the unit'} on the top of your deck (otherwise the bottom)`,
+      then: resume(ctx, 'top', found.unit.instanceId), declineStep: 'bottom',
+    })
+  },
+})
+
+registerCard('HMW_217', whenPlayed('Deal 3 damage to a random enemy unit.', (s, ctx) => { // Don't Touch Anything
+  // Random, so the engine picks: the seed on the state keeps a replay deterministic, and is advanced
+  // whether or not there was anything to hit, so two copies in a row do not draw the same number.
+  const enemies = s.players[opponentOf(ctx.owner)].units
+  const advanced = { ...s, rngSeed: nextSeed(s.rngSeed) }
+  if (!enemies.length) return advanced
+  const target = enemies[Math.floor(seededUnit(s.rngSeed) * enemies.length)]
+  return dealDamageToUnit(advanced, target.instanceId, 3)
+}))
+
+/** Overwhelm's spill, read against the defender before the damage lands. */
+const excessOver = (s: GameState, targetId: string, amount: number): number => {
+  const found = findUnit(s, targetId)
+  return found ? Math.max(0, amount - Math.max(0, effectiveHp(s, found.unit) - found.unit.damage)) : 0
+}
+registerCard('HMW_114', { // Breach
+  ...whenPlayed('A friendly unit deals damage equal to its power to an enemy unit in its arena. If the friendly unit has Overwhelm, deal the excess damage to an enemy base.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'choose the unit that deals the damage', false, 'dealer')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'dealer') {
+      return unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, sameArenaAs(s, ctx.targetInstanceId))), 'choose the enemy unit to damage', false, 'target', ctx.targetInstanceId)
+    }
+    const from = findUnit(s, ctx.unitChosen ?? '')?.unit
+    if (!from) return s
+    const amount = effectivePower(s, from)
+    const spill = unitHasKeyword(s, from, 'Overwhelm') ? excessOver(s, ctx.targetInstanceId!, amount) : 0
+    const dealt = dealDamageToUnit(s, ctx.targetInstanceId!, amount)
+    return spill > 0 ? dealDamageToBase(dealt, opponentOf(ctx.owner), spill) : dealt
+  },
+})
+
+registerCard('HMW_192', unitDealsWp('A friendly unit deals damage equal to its Raid to an enemy unit.', pickFriendly, pickEnemy, // Volley Fire
+  (s, u) => unitKeywordValue(s, u, 'Raid')))
+
+registerCard('HMW_151', { // Overgrowth
+  ...whenPlayed('If you control a Kashyyyk base, a friendly unit deals damage equal to its power to an enemy unit. Resource this card.', (s, ctx) => {
+    const resourced = resourceThisEvent(s, ctx)
+    if (!controlsBaseWith(resourced, ctx.owner, 'Kashyyyk')) return resourced
+    return unitThen(resourced, ctx, pickedIds(resourced, ctx, pickFriendly), 'choose the unit that deals the damage', false, 'dealer')
+  }),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'dealer') return unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), 'choose the enemy unit to damage', false, 'target', ctx.targetInstanceId)
+    const from = findUnit(s, ctx.unitChosen ?? '')?.unit
+    return from ? dealDamageToUnit(s, ctx.targetInstanceId!, effectivePower(s, from)) : s
+  },
+})
+
+registerCard('HMW_054', { // Seismic Detonation
+  ...whenPlayed('Choose an arena. At the start of the next regroup phase, deal 3 damage to each enemy unit in that arena.', (s, ctx) =>
+    chooseArena(s, ctx, 'deal 3 damage to each enemy unit at the start of the next regroup phase in')),
+  ifYouDo: (s, ctx) => addDelayedEffect(s, { cardId: ctx.cardId, owner: ctx.owner, when: 'regroupStart', arena: ctx.arenaChosen }),
+  // "Enemy" is read when it goes off, from whoever the effect's owner is facing then.
+  delayed: (s, e) => s.players[opponentOf(e.owner)].units.filter(u => u.arena === e.arena).reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 3), s),
+})
+
+/**
+ * Forced Pacification: defeat any number of friendly units, then exhaust 2 enemy units for each.
+ * Two stages carried in `step`: `defeat:<n>` counts what has been defeated so far (the units
+ * themselves cannot be counted afterwards, as they have left play), `left:<n>` the exhausts owed.
+ */
+const pacifyDefeat = (s: GameState, ctx: Resumable, sofar: number): GameState => {
+  const targets = pickedIds(s, ctx, pickFriendly)
+  return targets.length
+    ? pushChoice(s, {
+      kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true,
+      text: 'defeat a friendly unit', then: resume(ctx, `defeat:${sofar}`), hookOnDecline: true,
+    })
+    : pacifyExhaust(s, ctx, sofar * 2)
+}
+const pacifyExhaust = (s: GameState, ctx: Resumable, left: number): GameState =>
+  (left > 0 ? unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, readyUnitPick)), 'exhaust an enemy unit', false, `left:${left}`) : s)
+registerCard('HMW_253', { // Forced Pacification
+  ...whenPlayed('Defeat any number of friendly units. For each friendly unit defeated this way, exhaust 2 enemy units.', (s, ctx) => pacifyDefeat(s, ctx, 0)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step?.startsWith('left:')) {
+      const left = stepCount(ctx.step) - 1
+      return pacifyExhaust(exhaustUnit(s, ctx.targetInstanceId!), ctx, left)
+    }
+    const sofar = Number(ctx.step?.slice('defeat:'.length) ?? 0)
+    // No target means Done: the defeats stop and the exhausts begin.
+    if (!ctx.targetInstanceId) return pacifyExhaust(s, ctx, sofar * 2)
+    return pacifyDefeat(defeatUnit(s, ctx.targetInstanceId), ctx, sofar + 1)
+  },
+})
+
+registerCard('HMW_098', whenPlayed('If a friendly non-leader unit shares a Trait with a friendly leader, heal 4 damage from a unit or base.', (s, ctx) => { // Resonate
+  const leaderTraits = leaderTraitsOf(s, ctx.owner).map(t => t.toLowerCase())
+  const shares = s.players[ctx.owner].units.some(u => !isLeaderUnit(s, u) && unitTraits(s, u).some(t => leaderTraits.includes(t.toLowerCase())))
+  return shares ? healChoice(s, ctx, 4, allUnits(s).map(u => u.instanceId), BOTH_BASES) : s
+}))
+
+registerCard('HMW_101', { // Trust Yourself
+  ...whenPlayed('Give a Shield token to a unit. Search the top 3 cards of your deck for a card and draw it.', (s, ctx) =>
+    searchDrawChoice(shieldChoice(s, ctx, allUnits(s).map(u => u.instanceId), false), ctx, 3, () => true)),
+})
+
+registerCard('HMW_267', whenPlayed('You may defeat a Condition upgrade. Heal 3 damage from your base.', (s, ctx) => { // Renew
+  // The heal is not conditional on the defeat, so it is applied as the choice is raised rather than
+  // hung off it: the choice resolves later either way.
+  const candidates = upgradeCandidates(s).filter(up => printedTrait(s.cards[up.cardId], 'Condition'))
+  const offered = candidates.length
+    ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true })
+    : s
+  return healBase(offered, ctx.owner, 3)
+}))
+
+registerCard('HMW_161', whenPlayed('Each player discards all but 3 cards from their hand.', (s, ctx) => { // Raze to Ruin
+  const over = (who: PlayerId) => Math.max(0, s.players[who].hand.length - 3)
+  const mine = discards(s, ctx.owner, over(ctx.owner), `${ctx.sourceInstanceId}-mine`)
+  return discards(mine, opponentOf(ctx.owner), over(opponentOf(ctx.owner)), `${ctx.sourceInstanceId}-theirs`)
+}))
+
+/** Friendly Rebel units plus a Rebel leader, deployed or not: Rebel Operation's discount. */
+const rebelCount = (s: GameState, owner: PlayerId): number => {
+  const p = s.players[owner]
+  const units = p.units.filter(u => unitHasTrait(s, u, 'Rebel')).length
+  // A deployed leader is already one of those units, so the undeployed side is the only extra.
+  const leader = !p.leader.deployed && printedTrait(s.cards[p.leader.cardId], 'Rebel') ? 1 : 0
+  return units + leader
+}
+registerCard('HMW_173', { // Rebel Operation
+  costModifier: (s, p) => -rebelCount(s, p),
+  ...whenPlayed('This card costs 1 less to play for each friendly Rebel unit and leader. Draw 2 cards.', (s, ctx) => drawCards(s, ctx.owner, 2)),
+})
+
+registerCard('HMW_099', { // Always a Bigger Fish
+  ...whenPlayed('Defeat a friendly Creature unit. If you do, play a Creature unit that costs up to 3 more than the defeated unit from your hand for free.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickTrait('Creature'))), 'defeat a friendly Creature unit', false)),
+  ifYouDo: (s, ctx) => {
+    const found = findUnit(s, ctx.targetInstanceId!)
+    if (!found) return s
+    const budget = printedCost(s, found.unit) + 3
+    return playFromHand(defeatUnit(s, ctx.targetInstanceId!), ctx, {
+      costDelta: FREE, test: c => printedUnit(c) && printedTrait(c, 'Creature') && (c?.cost ?? 0) <= budget,
+    })
+  },
+})
+
+// B: units on trigger points other than When Played, and the base upgrade that needed one
+
+registerCard('HMW_064', onAttack(damageWp('You may deal 1 damage to an upgraded unit.', (_s, u) => isUpgraded(u), 1, true))) // Scorch
+
+registerCard('HMW_209', onAttack(mayPayWp('You may ready a resource.', 0, 'ready a resource', // Corona Squadron X-Wing
+  (s, ctx) => readyResource(s, ctx.owner))))
+
+registerCard('HMW_210', attacks('This unit gains Sentinel for this phase.', (s, ctx) => // Sol
+  addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: [KW.sentinel] })))
+
+const ARENA_NEXU_ROUND_KEY = 'HMW_182#round'
+registerCard('HMW_182', { // Arena Nexu
+  ...attacks('You may deal 3 damage to a friendly Creature unit (including this one) and ready this unit. Use this ability only once each round.', (s, ctx) => {
+    const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+    if (!self || (self.usedAbilities ?? []).includes(ARENA_NEXU_ROUND_KEY)) return s
+    const targets = pickedIds(s, ctx, pickAll(pickFriendly, pickTrait('Creature')))
+    // Marked as the offer is made rather than as it is taken: the offer is the use.
+    return targets.length
+      ? unitThen(markAbilityUsed(s, ctx.owner, self.instanceId, ARENA_NEXU_ROUND_KEY), ctx, targets, 'deal 3 damage to a friendly Creature unit and ready this unit', true)
+      : s
+  }),
+  ifYouDo: (s, ctx) => readyUnit(dealDamageToUnit(s, ctx.targetInstanceId!, 3), ctx.sourceInstanceId!),
+})
+
+/** Hand indices holding a card with this name, in order. */
+const handNamed = (s: GameState, owner: PlayerId, name: string): number[] =>
+  s.players[owner].hand.flatMap((id, i) => (s.cards[id]?.name === name ? [i] : []))
+registerCard('HMW_041', { // Keeper of Skara Nal
+  ...onAttack(whenPlayed('You may discard 2 cards named Keeper of Skara Nal from your hand. If you do, this unit gets +15/+0 and gains Overwhelm for this attack.', (s, ctx) => {
+    // Both discards are of the same named card, so there is nothing to choose between them: the
+    // only decision is whether to pay, which `mayPayThen` at cost 0 asks.
+    if (handNamed(s, ctx.owner, 'Keeper of Skara Nal').length < 2) return s
+    return pushChoice(s, {
+      kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0,
+      text: 'discard 2 cards named Keeper of Skara Nal', then: resume(ctx),
+    })
+  })),
+  ifYouDo: (s, ctx) => {
+    // Highest index first, so removing one does not shift the other.
+    const discarded = handNamed(s, ctx.owner, 'Keeper of Skara Nal').slice(0, 2).reverse()
+      .reduce((acc, i) => discardFromHand(acc, ctx.owner, i), s)
+    return addLastingEffect(discarded, { targetInstanceId: ctx.sourceInstanceId!, power: 15, keywords: [KW.overwhelm], untilEndOfAttack: true })
+  },
+})
+
+/** Put the hand card at `handIndex` into play as an exhausted resource. */
+const resourceFromHand = (s: GameState, owner: PlayerId, handIndex: number | undefined): GameState => {
+  const p = s.players[owner]
+  const cardId = handIndex === undefined ? undefined : p.hand[handIndex]
+  if (cardId === undefined) return s
+  return updatePlayer(s, owner, { hand: p.hand.filter((_, i) => i !== handIndex), resources: [...p.resources, { cardId, exhausted: true }] })
+}
+registerCard('HMW_044', { // Ima-Gun Di
+  ...defeated(whenPlayed('If you control fewer resources than an opponent, you may resource a card from your hand. If you do, resource the top card of your deck.', (s, ctx) => {
+    if (s.players[ctx.owner].resources.length >= s.players[opponentOf(ctx.owner)].resources.length) return s
+    return handCardThen(s, ctx, 'resource a card from your hand', 'resource', undefined, true)
+  })),
+  ifYouDo: (s, ctx) => resourceTopOfDeck(resourceFromHand(s, ctx.owner, ctx.handIndex), ctx.owner),
+})
+
+registerCard('HMW_056', { // Yoda
+  // The card is already in its owner's discard pile by the time its own When Defeated resolves.
+  ...defeated(whenPlayed('You may put this card from your discard pile on top of your deck. If you do, heal 2 damage from a base.', (s, ctx) =>
+    (s.players[ctx.owner].discard.includes(ctx.cardId)
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'put Yoda on top of your deck', then: resume(ctx) })
+      : s))),
+  ifYouDo: (s, ctx) => healChoice(discardToTop(s, ctx.owner, ctx.cardId), ctx, 2, [], BOTH_BASES),
+})
+
+const isUnique: Holds = (s, x) => s.cards[x.cardId]?.unique === true
+registerCard('HMW_104', { // Garnac
+  ...gains(enemyHas(isUnique), HIDDEN),
+  abilities: [thenAttack('You may attack with another unit.', { optional: true })],
+})
+
+registerCard('HMW_170', { // Han Solo
+  actionAbilities: [{
+    description: 'Ready another unit.',
+    exhaustCost: true,
+    usable: (s, self) => allUnits(s).some(u => u.instanceId !== self.instanceId && u.exhausted),
+    effect: (s, ctx) => targetChoice(s, ctx, 'selectUnitToReady', allUnits(s).filter(u => u.instanceId !== ctx.sourceInstanceId && u.exhausted).map(u => u.instanceId)),
+  }],
+})
+
+// A triggered ability on a base upgrade is an ordinary `abilities` entry: `collectBaseTriggers`
+// reads the base card and everything attached to it alike.
+registerCard('HMW_147', { // Beast Lair
+  abilities: [{
+    trigger: 'whenActionPhaseStarts',
+    description: 'When the action phase starts: You may discard a card from your hand. If you do, create a Beast token.',
+    effect: (s, ctx) => handCardThen(s, ctx, 'discard a card to create a Beast token', 'beast', undefined, true),
+  }],
+  ifYouDo: (s, ctx) => createTokenUnit(discardFromHand(s, ctx.owner, ctx.handIndex!), ctx.owner, TOKEN_BEAST),
+})
+
+// C: leaders, both sides
+
+/** Heroism is an aspect rather than a trait, so "Heroic" units are named rather than filtered. */
+const heroicOnly = (s: GameState, ctx: EventCtx): AttackOffer['attacker'] =>
+  ({ only: pickedIds(s, ctx, pickAll(pickFriendly, pickAspect('Heroism'))) })
+const GRANT_OMEGA_LEADER = 'GRANT_OMEGA_LEADER'
+registerCard(GRANT_OMEGA_LEADER, { sourceCardId: 'HMW_006', conditionalKeywords: () => [KW.grit] })
+registerCard('HMW_006', mergeLeaderSides( // Omega
+  leaderAttack('Attack with a Heroic unit. It gains Grit for this attack.',
+    (s, ctx) => ({ attacker: heroicOnly(s, ctx), grantCardId: GRANT_OMEGA_LEADER }), { cost: 1 }),
+  // Her back gives it to the OTHERS, so it is a unit-side aura only: the front grants nothing constant.
+  friendlyAura(isAspect('Heroism'), { keywords: [KW.grit] }, true),
+))
+
+registerCard('HMW_007', friendlyBothSides(printedCostOf(c => c >= 3), { keywords: [KW.raid(1)] }, false)) // Darth Vader
+
+registerCard('HMW_008', mergeLeaderSides( // General Grievous
+  leaderFront('Play 2 units from your hand (one at a time, paying their costs).', {
+    usable: (s, ctx) => playableFromHand(s, ctx.owner, {}).length > 0,
+    // The second play is chained through the choice's `then`, so its candidates are priced against
+    // the resources the first one left: two plays, not two offers made at the same moment.
+    effect: (s, ctx) => playFromHand(s, ctx, { then: resume(ctx, 'second') }),
+  }),
+  { ifYouDo: (s, ctx) => (ctx.step === 'second' ? playFromHand(s, ctx, {}) : s) },
+  { statModifier: (s, u) => (friendliesOf(s, u).length > enemiesOf(s, u).length ? { power: 3 } : {}) },
+))
+
+const GRANT_CHEWBACCA_LEADER = 'GRANT_CHEWBACCA_LEADER'
+registerCard(GRANT_CHEWBACCA_LEADER, { sourceCardId: 'HMW_009', cannotAttackBases: () => true })
+const CHEWBACCA_ROUND_KEY = 'HMW_009#round'
+const chewbaccaOffer: AttackOffer = { exhausted: true, grantCardId: GRANT_CHEWBACCA_LEADER }
+registerCard('HMW_009', mergeLeaderSides( // Chewbacca
+  leaderAttack("Attack with a unit, even if it's exhausted. It can't attack bases for this attack.", () => chewbaccaOffer, { cost: 2 }),
+  {
+    actionAbilities: [{
+      description: "Attack with a unit, even if it's exhausted. It can't attack bases for this attack. Use this ability only once each round.",
+      oncePerRound: true,
+      // No exhaust cost, so the leader unit itself is as eligible an attacker as any other.
+      usable: (s, self) => actionAttack(controllerOf(s, self), s, chewbaccaOffer),
+      effect: (s, ctx) => offerAttack(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, CHEWBACCA_ROUND_KEY), ctx.owner, `${ctx.sourceInstanceId}-attack`, chewbaccaOffer),
+    }],
+  },
+))
+
+const printedPowerAtMost = (n: number) => (c: EngineCard | undefined): boolean => printedUnit(c) && (c?.power ?? 0) <= n
+registerCard('HMW_018', leaderPlay('Play a unit with 3 or less power from your hand (paying its cost) and give it Ambush for this phase.', // The Warrior
+  { test: printedPowerAtMost(3), gains: [KW.ambush] }, 1))

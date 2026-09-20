@@ -555,6 +555,8 @@ export interface DelayedEffect {
   when: 'regroupStart' | 'actionPhaseStart' | 'takeInitiative'
   /** The unit the effect is about, when it has one (the unit Sneak Attack played). */
   unitId?: string
+  /** The arena the effect is about, when it has one (the arena Seismic Detonation chose). */
+  arena?: Arena
 }
 
 /**
@@ -876,7 +878,11 @@ type ChoiceVariant =
   // `thenDelay` leaves a delayed effect about the played unit (Sneak Attack defeats it at the regroup phase).
   // `thenLasting` gives the played unit a lasting effect (Shien Flurry's prevention). `thenDefeat` defeats
   // these units once the play is settled, played or declined (Consolidation of Power).
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenTokens?: string[]; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; thenLasting?: Omit<LastingEffect, 'targetInstanceId'>; thenDefeat?: string[] }
+  // `then` is the card's own follow-up, run once the unit is on the board and paid for, with the
+  // played card in `cardChosen` ("Play 2 units from your hand, one at a time" — General Grievous
+  // offers the second play from the state the first one left, so its cost is read against what is
+  // still ready). It does not run when the play is declined.
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenTokens?: string[]; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; thenLasting?: Omit<LastingEffect, 'targetInstanceId'>; thenDefeat?: string[]; then?: IfYouDo }
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }

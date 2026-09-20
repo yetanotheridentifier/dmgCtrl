@@ -71,6 +71,11 @@ export type TriggerPoint =
   // "When a unit enters play", either player's, played or created (Trap Field). Collected from both
   // players' bases only, since no unit or leader reads it; `ctx.targetInstanceId` is the unit.
   | 'whenUnitEntersPlay'
+  // "When the action phase starts" (Beast Lair, on a base): fired for every unit and each player's
+  // leader and base as the next round's action phase begins, alongside the `actionPhaseStart` delayed
+  // effects. The game's FIRST action phase raises nothing, which is right for every card that can
+  // read it: each has to be played during an action phase to be in play at all.
+  | 'whenActionPhaseStarts'
 
 /**
  * What one ability's effect is handed when it resolves: who owns it and which card it is on, plus the

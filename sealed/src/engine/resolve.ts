@@ -1877,6 +1877,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (choice.thenDefeat) next = defeatUnits(next, choice.thenDefeat)
         next = checkWin(next)
         if (next.winner !== null) return next
+        // The card's own follow-up, read from the state the play left: Grievous's second play prices
+        // its candidates against the resources the first one did not spend.
+        if (choice.then) next = runIfYouDo(next, choice.then, { cardChosen: cardId })
       }
       break
     }
@@ -2880,6 +2883,8 @@ function startNextRound(state: GameState): GameState {
   // "At the start of the next action phase" (The Eye of Aldhani): its choices, like a whenReadies
   // choice, are answered before play begins.
   next = runDelayed(next, 'actionPhaseStart')
+  // "When the action phase starts" (Beast Lair), on the same boundary and for the same reason.
+  next = checkWin(fireForAllUnits(next, 'whenActionPhaseStarts'))
   next = {
     ...next,
     phase: 'action',

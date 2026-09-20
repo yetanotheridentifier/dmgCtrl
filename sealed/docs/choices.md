@@ -129,7 +129,10 @@ Repairs has none), and `oneUnit` keeps every point on the first unit picked (Kas
 `discardAspects` (a card sharing an aspect with a unit, Hold For Questioning). `playUnitFromHand` can
 also damage its controller's base by the unit's cost (`thenDamageOwnBase`), give the unit a lasting
 effect (`thenLasting`), leave a delayed effect about it (`thenDelay`), and defeat a set of units once the
-play is settled whether it was played or declined (`thenDefeat`, Consolidation of Power).
+play is settled whether it was played or declined (`thenDefeat`, Consolidation of Power). With `then` it
+hands on to the card's hook once the unit is on the board and paid for, with the played card in
+`cardChosen`: General Grievous's "play 2 units from your hand (one at a time)" is two plays rather than
+two simultaneous offers, so the second prices its candidates against the resources the first one left.
 `searchPlayFree` caps its plays with `maxPlays` (U-Wing Reinforcement's "up to 3") and takes `thenDelay`
 too, caps each unit's own cost with `filter.maxCost` where there is no combined budget, and deals
 `thenDamage` to each unit as it is played (Darth Vader, Any Methods Necessary); `searchDraw` with `shuffle` shuffles the deck after a search of all of it (Search Your Feelings), and

@@ -121,11 +121,18 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenFriendlyDamagedSurvives`, `whenEnemyAttacksBase`, `whenOwnBaseDamaged`, `whenEnemyBaseDamaged`,
-`whenFriendlyAttackEnds`, `whenDeployed`, `whenPlayUpgrade`, `whenUnitEntersPlay`.
+`whenFriendlyAttackEnds`, `whenDeployed`, `whenPlayUpgrade`, `whenUnitEntersPlay`,
+`whenActionPhaseStarts`.
 
 `whenPlayUpgrade` ("when you play an upgrade") fires on the player's undeployed leader, base and units,
 with the card in `ctx.playedCardId`. `whenUnitEntersPlay` is collected from both players' bases only, for
 a unit either player plays or creates (Trap Field).
+
+`whenActionPhaseStarts` ("when the action phase starts", Beast Lair) fires for every unit in play and
+each player's leader and base as the next round's action phase begins, on the same boundary as an
+`actionPhaseStart` delayed effect and before play resumes. The game's **first** action phase raises
+nothing, which is right for every card that can read it: a card has to be played during an action
+phase to be in play to read the next one.
 
 `whenPlayUnit` ("when you play a unit") fires for a unit arriving through a play, and `whenCreateUnit`
 for a token unit being created; both fire on the player's undeployed leader and their other units, with

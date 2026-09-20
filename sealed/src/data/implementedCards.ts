@@ -260,6 +260,12 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'HMW_015', name: 'Bossk', front: true, back: true },
   // Fortify
   { id: 'HMW_004', name: 'Grand Moff Tarkin', front: true, back: true },
+  // Homeworlds leaders
+  { id: 'HMW_006', name: 'Omega', front: true, back: true },
+  { id: 'HMW_007', name: 'Darth Vader', front: true, back: true },
+  { id: 'HMW_008', name: 'General Grievous', front: true, back: true },
+  { id: 'HMW_009', name: 'Chewbacca', front: true, back: true },
+  { id: 'HMW_018', name: 'The Warrior', front: true, back: true },
 ]
 
 /**
@@ -397,6 +403,7 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'HMW_190', name: 'Enraged' },
   { id: 'HMW_191', name: "Hunter's Instinct" },
   { id: 'HMW_235', name: 'Gaderffii Stick' },
+  { id: 'HMW_147', name: 'Beast Lair' },
 ]
 
 /**
@@ -758,6 +765,27 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'HMW_100', name: 'Torrent' },
   { id: 'HMW_237', name: 'Easy Prey' },
   { id: 'HMW_240', name: 'Sandstorm' },
+  // Homeworlds events (HMW_239 Pounce is a reprint of LOF_224 and is listed under that id)
+  { id: 'HMW_050', name: 'Low Altitude Combat' },
+  { id: 'HMW_054', name: 'Seismic Detonation' },
+  { id: 'HMW_098', name: 'Resonate' },
+  { id: 'HMW_099', name: 'Always a Bigger Fish' },
+  { id: 'HMW_101', name: 'Trust Yourself' },
+  { id: 'HMW_102', name: "Dragon's Might" },
+  { id: 'HMW_114', name: 'Breach' },
+  { id: 'HMW_149', name: 'Log Trap' },
+  { id: 'HMW_151', name: 'Overgrowth' },
+  { id: 'HMW_161', name: 'Raze to Ruin' },
+  { id: 'HMW_173', name: 'Rebel Operation' },
+  { id: 'HMW_192', name: 'Volley Fire' },
+  { id: 'HMW_193', name: 'Nightfall' },
+  { id: 'HMW_207', name: 'Maim' },
+  { id: 'HMW_217', name: "Don't Touch Anything" },
+  { id: 'HMW_218', name: 'New Tactics' },
+  { id: 'HMW_238', name: 'Exploit Confidence' },
+  { id: 'HMW_253', name: 'Forced Pacification' },
+  { id: 'HMW_266', name: 'Familiar Strategem' },
+  { id: 'HMW_267', name: 'Renew' },
 ]
 
 /**
@@ -1598,6 +1626,17 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_203', name: 'Victor Squadron' },
   { id: 'HMW_208', name: 'Luke Skywalker' },
   { id: 'HMW_234', name: 'Ritual Dragon' },
+
+  // Homeworlds units on trigger points other than When Played
+  { id: 'HMW_041', name: 'Keeper of Skara Nal' },
+  { id: 'HMW_044', name: 'Ima-Gun Di' },
+  { id: 'HMW_056', name: 'Yoda' },
+  { id: 'HMW_064', name: 'Scorch' },
+  { id: 'HMW_104', name: 'Garnac' },
+  { id: 'HMW_170', name: 'Han Solo' },
+  { id: 'HMW_182', name: 'Arena Nexu' },
+  { id: 'HMW_209', name: 'Corona Squadron X-Wing' },
+  { id: 'HMW_210', name: 'Sol' },
 ]
 
 /**

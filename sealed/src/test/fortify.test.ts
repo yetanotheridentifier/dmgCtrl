@@ -32,8 +32,12 @@ const SHIPPED = [
   // Touched by the ticket for a one-off trigger head, which ships with them.
   'HMW_171', 'HMW_216',
 ]
-/** Scoped by the ticket, but lifted out to the tickets that own their other blocker. */
-const LIFTED = ['HMW_060', 'HMW_147']
+/**
+ * Scoped by the ticket, but lifted out to the tickets that own their other blocker. Beast Lair
+ * (HMW_147) has since shipped with the action-phase-start trigger it was waiting on, and its
+ * behaviour is covered in `hmwEventsLeaders.test.ts`.
+ */
+const LIFTED = ['HMW_060']
 
 /**
  * Cards from other sets that pick an upgrade, for whether they see one on a base: "an upgrade" and "a
