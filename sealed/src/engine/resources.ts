@@ -15,21 +15,31 @@ export function canAfford(player: PlayerState, cost: number): boolean {
   return readyResourceCount(player) >= cost
 }
 
-/** Exhaust `cost` ready resources. Throws if unaffordable — callers guard via legal moves. */
-export function payCost(player: PlayerState, cost: number): PlayerState {
+/**
+ * Exhaust `cost` ready resources. Throws if unaffordable — callers guard via legal moves.
+ *
+ * **Which ones is not a player decision.** CR 1.7.4: a player may rearrange their resources at any
+ * time up to the point a specific resource is chosen as part of an action, and may change which of
+ * them are ready or exhausted so long as the ready and exhausted counts are unchanged. Only the
+ * counts are game state, so a payment cannot strand a particular card by taking the wrong ones, and
+ * there is nothing here to put to the player.
+ *
+ * The one place it bites is a card about to leave the zone by being played out of it: exhausting
+ * that card costs its controller nothing, while exhausting any other one costs a ready resource.
+ * `prefer` names those indices, and `payCost` takes them first. Everything else is array order.
+ */
+export function payCost(player: PlayerState, cost: number, prefer: number[] = []): PlayerState {
   if (cost === 0) return player
   if (!canAfford(player, cost)) {
     throw new Error(`Cannot afford cost ${cost} with ${readyResourceCount(player)} ready resources`)
   }
-  let remaining = cost
-  const resources = player.resources.map(r => {
-    if (remaining > 0 && !r.exhausted) {
-      remaining--
-      return { ...r, exhausted: true }
-    }
-    return r
-  })
-  return { ...player, resources }
+  const order = [...prefer, ...player.resources.map((_, i) => i).filter(i => !prefer.includes(i))]
+  const exhausting = new Set<number>()
+  for (const i of order) {
+    if (exhausting.size === cost) break
+    if (!player.resources[i]?.exhausted) exhausting.add(i)
+  }
+  return { ...player, resources: player.resources.map((r, i) => (exhausting.has(i) ? { ...r, exhausted: true } : r)) }
 }
 
 /** Move a card from hand into the resource zone (facedown, exhausted). */

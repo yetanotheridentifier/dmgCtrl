@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { nameableCardNames } from '../engine/legalMoves'
+import { nameableCardNames, zoneCards } from '../engine/legalMoves'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
@@ -1447,13 +1447,13 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === fromDiscardChoice.id)
       : []
 
-    // The Armorer: "look at your resources" — a card picker over the player's resources,
-    // upgrades selectable, the rest revealed but dimmed. Resolved in the overlay, not the menu.
-    const resourceUpgradeChoice = gameState.pendingChoices?.find(
-      (c): c is Extract<PendingChoice, { kind: 'selectResourceUpgrade' }> => c.kind === 'selectResourceUpgrade' && c.controller === 'player',
+    // Playing a card out of a zone (The Armorer, Osha, a Smuggle): a card picker over that zone,
+    // playable cards selectable and the rest revealed but dimmed. In the overlay, not the menu.
+    const playFromChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'playCardFrom' }> => c.kind === 'playCardFrom' && c.controller === 'player',
     )
-    const resourceUpgradeActions = resourceUpgradeChoice
-      ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === resourceUpgradeChoice.id)
+    const playFromActions = playFromChoice
+      ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === playFromChoice.id)
       : []
 
     // Unique rule: pick which duplicate upgrade to defeat (mandatory) — a centre-screen picker.
@@ -1487,7 +1487,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !discardTopActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !searchUpgradeActions.includes(a) && !nameCardActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !discardTopActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !searchUpgradeActions.includes(a) && !nameCardActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !playFromActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
       : []
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
@@ -1673,19 +1673,22 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           onCancel={() => setUpgradeHost(null)}
         />
       )
-    } else if (resourceUpgradeChoice) {
-      // Reveal every resource; upgrades that can be played are selectable, the rest are dimmed.
-      const cancel = resourceUpgradeActions.find(a => a.type === 'skipTrigger')
-      const items = gameState.players.player.resources.map((r, resIdx) => {
-        const optionIndex = resourceUpgradeChoice.candidates.findIndex(c => c.resourceIndex === resIdx)
-        return { cardId: r.cardId, optionIndex, disabled: optionIndex === -1, key: resIdx }
+    } else if (playFromChoice) {
+      // Reveal the whole zone; the cards that can be played are selectable, the rest are dimmed.
+      // An offered candidate can still be unplayable (its cost moved, its host left), so the dimming
+      // reads the legal moves rather than the candidate list.
+      const cancel = playFromActions.find(a => a.type === 'skipTrigger')
+      const playable = new Set(playFromActions.flatMap(a => (a.type === 'acceptChoice' && a.optionIndex !== undefined ? [a.optionIndex] : [])))
+      const items = zoneCards(gameState, 'player', playFromChoice.zone).map((cardId, i) => {
+        const optionIndex = playFromChoice.candidates.findIndex(c => c.index === i)
+        return { cardId, optionIndex, disabled: optionIndex === -1 || !playable.has(optionIndex), key: i }
       })
       choiceOverlay = (
         <CardSelectOverlay
           state={gameState}
-          prompt="Play an upgrade from your resources"
+          prompt={describeChoiceParts(gameState, playFromChoice).map(part => (typeof part === 'string' ? part : part.text)).join('')}
           items={items}
-          onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: resourceUpgradeChoice.id, optionIndex })}
+          onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: playFromChoice.id, optionIndex })}
           onCancel={cancel ? () => actAndClear(cancel) : undefined}
         />
       )

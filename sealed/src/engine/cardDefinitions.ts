@@ -8,11 +8,11 @@ import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
 import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
-import { affordableHandUnits, resourceUpgradeCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
-import type { AttackOffer } from './legalMoves'
+import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
+import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
-import type { CombatContext, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PlayerId, UnitState, UpgradeAttachment, UpgradeRef } from './types'
+import type { CombatContext, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PlayerId, PlayFromTail, PlayFromZone, UnitState, UpgradeAttachment, UpgradeRef } from './types'
 
 /**
  * Real card definitions. Side-effect module: importing it registers every
@@ -358,20 +358,50 @@ registerCard('ASH_012', { // Vane — front (undeployed) + deployed (On Attack)
   }],
 })
 
+/**
+ * "Play a card from <zone> …" as a card writes it: which zone, which cards of it are eligible, what
+ * it costs and what follows. `zone` defaults to the resource zone, the one this door was built for.
+ */
+type PlayFromZoneOptions = PlayFromTerms & {
+  zone?: PlayFromZone
+  /** Overrides the raising card's own choice id, where one card raises two of these. */
+  id?: string
+  optional?: boolean
+  test?: (c: EngineCard | undefined) => boolean
+  /** Units an upgrade played this way may attach to; every unit in play when absent. */
+  targetUnits?: (s: GameState, owner: PlayerId) => string[]
+  then?: PlayFromTail
+  /**
+   * Raise the choice even with nothing playable, so the player still sees what they looked at and
+   * whatever the decline leads to still happens (Improvise's "if you don't, you may discard it").
+   * Only ever with `optional`, since a choice with no candidates has no other way out.
+   */
+  always?: boolean
+}
+
+/** "Play a card from <zone> …": the general door, with the cards this one offers and its tail. */
+const playFromZoneChoice = (s: GameState, ctx: EventCtx, o: PlayFromZoneOptions): GameState => {
+  const zone = o.zone ?? 'resources'
+  const targetUnits = o.targetUnits?.(s, ctx.owner)
+  const candidates = playFromCandidates(s, ctx.owner, zone, o, o.test, targetUnits)
+  return candidates.length === 0 && !o.always ? s : pushChoice(s, {
+    kind: 'playCardFrom', id: o.id ?? ctx.sourceInstanceId!, controller: ctx.owner, zone, candidates,
+    ...(o.optional ? { optional: true } : {}), ...(o.free ? { free: true } : {}),
+    ...(o.costDelta ? { costDelta: o.costDelta } : {}), ...(o.waive ? { waive: o.waive } : {}),
+    ...(targetUnits ? { targetUnits } : {}), ...(o.then ? { then: o.then } : {}),
+  })
+}
+/** Whether that play has anything to offer, for an ability's `usable`. `cost` is the ability's own. */
+const canPlayFromZone = (s: GameState, owner: PlayerId, o: PlayFromZoneOptions, cost = 0): boolean =>
+  playFromCandidates(s, owner, o.zone ?? 'resources', o, o.test, o.targetUnits?.(s, owner), cost).length > 0
+
 registerCard('ASH_001', { // The Armorer — play an upgrade from your resources, then resource the top of your deck
   // Front (undeployed): pay the upgrade's cost, target a unit that entered play this phase.
   leaderAbilities: {
     actions: [{
       description: 'Play an upgrade from your resources on a unit that entered play this phase (paying its cost); resource the top of your deck.',
-      usable: (s, owner) => resourceUpgradeCandidates(s, owner, true, enteredPlayThisPhase(s, owner)).length > 0,
-      effect: (s, ctx) => pushChoice(s, {
-        kind: 'selectResourceUpgrade',
-        id: `${ctx.cardId}-resUpgrade`,
-        controller: ctx.owner,
-        candidates: resourceUpgradeCandidates(s, ctx.owner, true, enteredPlayThisPhase(s, ctx.owner)),
-        optional: false,
-        then: { payCost: true, targetUnits: enteredPlayThisPhase(s, ctx.owner) },
-      }),
+      usable: (s, owner) => canPlayFromZone(s, owner, armorer(s, owner)),
+      effect: (s, ctx) => playFromZoneChoice(s, ctx, { ...armorer(s, ctx.owner), id: `${ctx.cardId}-resUpgrade` }),
     }],
   },
   // Deployed (back): When Attack Ends, may play an upgrade from resources on any friendly unit,
@@ -379,14 +409,15 @@ registerCard('ASH_001', { // The Armorer — play an upgrade from your resources
   abilities: [{
     trigger: 'onAttackEnd',
     description: 'You may play an upgrade from your resources (paying its cost) on a friendly unit; resource the top of your deck.',
-    effect: (s, ctx) => {
-      const friendly = s.players[ctx.owner].units.map(u => u.instanceId)
-      const candidates = resourceUpgradeCandidates(s, ctx.owner, true, friendly)
-      return candidates.length === 0
-        ? s
-        : pushChoice(s, { kind: 'selectResourceUpgrade', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, then: { payCost: true, targetUnits: friendly } })
-    },
+    effect: (s, ctx) => playFromZoneChoice(s, ctx, {
+      test: isUpgradeCard, optional: true, targetUnits: (st, owner) => st.players[owner].units.map(u => u.instanceId), then: { resourceTop: ctx.owner },
+    }),
   }],
+})
+const isUpgradeCard = (c: EngineCard | undefined): boolean => c?.type === 'upgrade'
+/** The front's narrower form: only a unit that entered play this phase may be upgraded. */
+const armorer = (s: GameState, owner: PlayerId): PlayFromZoneOptions => ({
+  test: isUpgradeCard, targetUnits: () => enteredPlayThisPhase(s, owner), then: { resourceTop: owner },
 })
 
 const imperialDefeatedThisPhase = (s: GameState, owner: PlayerId): boolean =>
@@ -9069,3 +9100,164 @@ registerCard('TWI_033', alsoAt(whenPlayed('This unit gains Sentinel for this pha
   addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: [KW.sentinel] })), 'whenFriendlyUnitDefeated'))
 registerCard('LOF_207', alsoAt(targetWp('You may exhaust a ground unit.', 'mayExhaustUnit', pickGround, true), 'whenDefeated')) // Loth-Cat
 registerCard('SEC_055', alsoAt(whenPlayed('Heal 1 damage from your base.', (s, ctx) => healBase(s, ctx.owner, 1)), 'whenDefeated')) // Dhani Pilgrim
+
+// ══ Playing a card from somewhere other than the Play a Card action ═══════════════════════════
+// All of these go through `playFromZoneChoice` (see `PlayFromZoneOptions` beside The Armorer, the
+// first card through that door): which zone the card comes out of, which of its cards are eligible,
+// what the play costs, and what follows. Only the options differ from card to card.
+
+/** "Play a Villainy unit from your resources, ignoring its Villainy aspect penalties." */
+const oshaPlay: PlayFromZoneOptions = {
+  test: c => c?.type === 'unit' && printedAspect(c, 'Villainy'),
+  waive: { aspects: ['Villainy'] },
+  then: { mayResourceFromHand: true },
+}
+/** "If a friendly Heroism unit was defeated this phase" — by the unit's aspect icons, not its traits. */
+const heroismUnitLost = (s: GameState, owner: PlayerId): boolean =>
+  defeatedThisPhase(s, owner).some(id => printedAspect(s.cards[id], 'Heroism'))
+const OSHA_TEXT = 'Play a Villainy unit from your resources, ignoring its Villainy aspect penalties. If you do, you may resource a card from your hand.'
+registerCard('HMW_017', mergeLeaderSides( // Osha — the deployed side's Saboteur is read from the card
+  leaderFront(`If a friendly Heroism unit was defeated this phase, ${OSHA_TEXT[0].toLowerCase()}${OSHA_TEXT.slice(1)}`, {
+    usable: (s, ctx) => heroismUnitLost(s, ctx.owner) && canPlayFromZone(s, ctx.owner, oshaPlay),
+    effect: (s, ctx) => playFromZoneChoice(s, ctx, oshaPlay),
+  }),
+  {
+    actionAbilities: [{
+      description: OSHA_TEXT,
+      usable: (s, self) => canPlayFromZone(s, controllerOf(s, self), oshaPlay),
+      effect: (s, ctx) => playFromZoneChoice(s, ctx, oshaPlay),
+    }],
+  },
+))
+
+/** "Play a card from your hand, ignoring its aspect penalties": any type, the penalty forgiven. */
+const noPenaltyFromHand: PlayFromZoneOptions = { zone: 'hand', waive: { all: true } }
+registerCard('LAW_264', whenPlayed('Play a card from your hand, ignoring its aspect penalties.', (s, ctx) => // From a Certain Point of View
+  playFromZoneChoice(s, ctx, noPenaltyFromHand)))
+registerCard('LAW_003', mergeLeaderSides( // Agent Kallus
+  leaderFront('Play a card from your hand, ignoring its aspect penalties.', {
+    cost: 1,
+    usable: (s, ctx) => canPlayFromZone(s, ctx.owner, noPenaltyFromHand, 1),
+    effect: (s, ctx) => playFromZoneChoice(s, ctx, noPenaltyFromHand),
+  }),
+  {
+    // The back is the same action without the exhaust, so it can be used again each round.
+    actionAbilities: [{
+      description: 'Play a card from your hand, ignoring its aspect penalties.',
+      cost: 1,
+      usable: (s, self) => canPlayFromZone(s, controllerOf(s, self), noPenaltyFromHand, 1),
+      effect: (s, ctx) => playFromZoneChoice(s, ctx, noPenaltyFromHand),
+    }],
+    // Deployed-side only: an undeployed leader fires `leaderAbilities.abilities`, never these.
+    abilities: [{
+      trigger: 'whenPlayCard',
+      description: 'When you play a Heroism card: Heal 2 damage from your base.',
+      effect: (s, ctx) => (printedAspect(s.cards[ctx.playedCardId ?? ''], 'Heroism') ? healBase(s, ctx.owner, 2) : s),
+    }],
+  },
+))
+
+/**
+ * "Epic Action: Play a card from your hand, ignoring 1 of its Vigilance, Command, Aggression, or
+ * Cunning aspect penalties." Eight LAW bases print exactly this, so it is one registration repeated.
+ *
+ * The "1 of" needs no pick from the player: every aspect penalty is the same 2 resources (CR 8.1),
+ * so whichever of the four is forgiven the card costs the same 2 less, and a card with two of them
+ * unprovided still pays for the second.
+ */
+const WAIVE_ONE_OF_FOUR: PlayFromZoneOptions = {
+  zone: 'hand',
+  waive: { aspects: ['Vigilance', 'Command', 'Aggression', 'Cunning'], one: true },
+}
+const basePlayWaivingOne = baseEpic('Play a card from your hand, ignoring 1 of its Vigilance, Command, Aggression, or Cunning aspect penalties.', {
+  usable: (s, ctx) => canPlayFromZone(s, ctx.owner, WAIVE_ONE_OF_FOUR),
+  effect: (s, ctx) => playFromZoneChoice(s, ctx, WAIVE_ONE_OF_FOUR),
+})
+registerCard('LAW_020', basePlayWaivingOne) // Daimyo's Palace
+registerCard('LAW_021', basePlayWaivingOne) // Coaxium Mine
+registerCard('LAW_022', basePlayWaivingOne) // Aldhani Garrison
+registerCard('LAW_024', basePlayWaivingOne) // Imperial Command Complex
+registerCard('LAW_025', basePlayWaivingOne) // Contested Caverns
+registerCard('LAW_027', basePlayWaivingOne) // Stygeon Spire
+registerCard('LAW_028', basePlayWaivingOne) // Canto Bight
+registerCard('LAW_030', basePlayWaivingOne) // Partisan Hideout
+
+const eventFromHandCheaper: PlayFromZoneOptions = { zone: 'hand', test: c => c?.type === 'event', costDelta: -1 }
+registerCard('SOR_177', { // Bib Fortuna — Shielded is read from the card
+  actionAbilities: [{
+    description: 'Play an event from your hand. It costs 1 less.',
+    exhaustCost: true,
+    usable: (s, self) => canPlayFromZone(s, controllerOf(s, self), eventFromHandCheaper),
+    effect: (s, ctx) => playFromZoneChoice(s, ctx, eventFromHandCheaper),
+  }],
+})
+
+/** "A card named It's Worse from your hand or resources for free": one play out of either zone. */
+const itsWorseFree: PlayFromZoneOptions = {
+  zone: 'handOrResources',
+  test: c => c?.name === "It's Worse",
+  free: true,
+  optional: true,
+}
+registerCard('LOF_222', { // A Precarious Predicament
+  ...whenPlayed('Return an enemy non-leader unit to its owner\'s hand unless its controller says, "It could be worse." If they do, you may play a card named It\'s Worse from your hand or resources for free.', (s, ctx) => {
+    const targets = pickedIds(s, ctx, pickAll(pickEnemy, nonLeader))
+    return targets.length ? unitThen(s, ctx, targets, 'choose an enemy non-leader unit', false, 'target') : s
+  }),
+  // The unit's controller answers: saying it saves the unit and hands the caster the free play,
+  // and saying nothing returns the unit. Either way the ability goes on, so the decline has a step.
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'said') return playFromZoneChoice(s, ctx, itsWorseFree)
+    if (ctx.step === 'silent') return returnUnitToHand(s, ctx.unitChosen!)
+    const found = findUnit(s, ctx.targetInstanceId!)
+    return found
+      ? pushChoice(s, {
+        kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-answer`, controller: found.owner, cost: 0,
+        text: 'say "It could be worse" and keep the unit, letting your opponent play It\'s Worse for free',
+        then: resume(ctx, 'said', found.unit.instanceId), declineStep: 'silent',
+      })
+      : s
+  },
+})
+
+// ── The top card of your deck ──────────────────────────────────────────────────────────────────
+// "Look at the top card of your deck. You may play it": one candidate, the card on top, which the
+// zone reads live so a card that moved in between is simply no longer there.
+
+registerCard('LAW_242', whenPlayed('Look at the top card of your deck. You may play it. It costs 1 less. If you don\'t, you may discard it.', (s, ctx) => // Improvise
+  // Raised even when the top card cannot be paid for, because the discard is offered on the decline
+  // and would otherwise be lost with it.
+  playFromZoneChoice(s, ctx, { zone: 'deckTop', costDelta: -1, optional: true, always: true, then: { elseMayDiscardTop: true } })))
+
+/** Remaining HP on a base: what the card prints, less the damage on it. */
+const baseHpLeft = (s: GameState, owner: PlayerId): number =>
+  (s.cards[s.players[owner].base.cardId]?.hp ?? 0) - s.players[owner].base.damage
+registerCard('SOR_246', whenPlayed('Look at the top card of your deck. You may play it. It costs 5 less. If your base has 5 or less remaining HP, you may play it for free instead.', (s, ctx) => { // You're My Only Hope
+  // "For free instead" is never worse than 5 less (CR 8.5 bypasses the aspect penalty as well), so
+  // the better of the two needs no pick from the player.
+  const free = baseHpLeft(s, ctx.owner) <= 5
+  return playFromZoneChoice(s, ctx, { zone: 'deckTop', optional: true, ...(free ? { free: true } : { costDelta: -5 }) })
+}))
+
+const topCardPaid: PlayFromZoneOptions = { zone: 'deckTop' }
+registerCard('LAW_094', { // Hondo Ohnaka
+  // "You may look at the top card of your deck at any time" is information rather than a rule: it
+  // changes nothing in the game state, and showing it is a UI affordance this card does not have.
+  actionAbilities: [{
+    description: 'Play the top card of your deck (paying its cost). Use this ability only once each round.',
+    oncePerRound: true,
+    usable: (s, self) => canPlayFromZone(s, controllerOf(s, self), topCardPaid),
+    effect: (s, ctx) => playFromZoneChoice(s, ctx, topCardPaid),
+  }],
+})
+
+// ── Somebody else's resource zone, and any number of your own ──────────────────────────────────
+
+registerCard('LAW_066', whenPlayed("Look at all of an opponent's resources. You may play 1 of those cards for free. If you do, that opponent resources the top card of their deck.", (s, ctx) => // Tear This Ship Apart
+  playFromZoneChoice(s, ctx, { zone: 'opponentResources', free: true, optional: true, then: { resourceTop: opponentOf(ctx.owner) } })))
+
+registerCard('SHD_109', whenPlayed('Reveal any number of resources you control. Play each unit revealed this way for free (one at a time).', (s, ctx) => // Endless Legions
+  // "Reveal any number … play each unit revealed" is a free play repeated for as long as the player
+  // wants one, which is what the re-offer does. A non-unit revealed this way does nothing, so only
+  // the units are candidates.
+  playFromZoneChoice(s, ctx, { test: c => c?.type === 'unit', free: true, optional: true, then: { again: true } })))

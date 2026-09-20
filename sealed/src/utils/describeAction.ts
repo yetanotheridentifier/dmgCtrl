@@ -172,7 +172,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'playUnitFromHand') return "Don't play"
       if (choice.kind === 'mayDefeatSelfSearch') return "Don't"
       if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'selectUnitToDefeat' || choice.kind === 'selectDiscard') return 'Decline'
-      if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade' || choice.kind === 'selectFromDiscard') return 'Cancel'
+      if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'playCardFrom' || choice.kind === 'selectFromDiscard') return 'Cancel'
+      if (choice.kind === 'mayResourceFromHand') return "Don't resource"
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
       if (choice.kind === 'mayResourceTop' || choice.kind === 'mayPayThen') return "Don't"
@@ -297,13 +298,17 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Exhaust ${target ?? 'unit'}`
       }
-      if (choice.kind === 'selectResourceUpgrade') {
+      if (choice.kind === 'playCardFrom') {
         const pick = choice.candidates[action.optionIndex ?? 0]
-        return `Play ${pick ? state.cards[pick.cardId]?.name ?? pick.cardId : 'upgrade'}`
+        return `Play ${pick ? state.cards[pick.cardId]?.name ?? pick.cardId : 'card'}`
       }
-      if (choice.kind === 'attachResourceUpgrade') {
+      if (choice.kind === 'attachPlayedCard') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Attach ${state.cards[choice.cardId]?.name ?? choice.cardId} to ${target ?? 'unit'}`
+      }
+      if (choice.kind === 'mayResourceFromHand') {
+        const cardId = action.handIndex !== undefined ? state.players[by].hand[action.handIndex] : undefined
+        return `Resource ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
       }
       if (choice.kind === 'selectDiscard') {
         const cardId = action.handIndex !== undefined ? state.players[by].hand[action.handIndex] : undefined

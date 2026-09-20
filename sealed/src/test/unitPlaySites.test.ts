@@ -52,7 +52,10 @@ const body = (f: string, fn: string): string => {
 describe('unit play sites', () => {
   it('each door records the card as played', () => {
     expect(body('resolve.ts', 'playUnitCard')).toContain('recordCardPlayed(')
-    expect(body('resolve.ts', 'playEvent')).toContain('recordCardPlayed(')
+    // `playEventCard`, not `playEvent`: an event is played from the resource zone and from the top
+    // of a deck as well as from hand, so the door is the half that takes a card whose cost is
+    // already paid, exactly as `playUnitCard` and `playUpgradeCardOnto` are.
+    expect(body('resolve.ts', 'playEventCard')).toContain('recordCardPlayed(')
     expect(body('resolve.ts', 'playUpgradeCardOnto')).toContain('recordCardPlayed(')
   })
 

@@ -76,6 +76,8 @@ Players alternate single actions. When both players pass consecutively, the roun
 
 A card put into your resource zone **by a card ability** (Long Live the Empire, The Armorer) arrives **exhausted**, exactly as one you bank yourself does. It pays for something from the next round, not the action that created it, so ramp buys you a bigger future turn rather than a bigger current one. Only a card that says otherwise in its own text gives you a ready resource.
 
+Some cards **play a card back out of a resource zone** (The Armorer, Osha), or out of the top of your deck or an opponent's resources. When one does, you get a picker showing that whole zone, with the cards you can play highlighted and the rest dimmed. **A resource you play helps pay for itself**: it is still a resource while you pay, so a 5-cost card is playable out of a zone holding exactly 5 ready resources, one of which is that card. It leaves the zone as it enters play, and a card that says so replaces it with the top card of your deck.
+
 ### Winning
 
 Deal damage to the opponent's base until it reaches its health before they do the same to you. Each base shows a **large number over the card**: by default the **damage it has taken**, counting up to its printed health (which varies from base to base), or the **health remaining** counting down if you've switched **Base health** in **Settings**. If a single action defeats **both** bases at once, the game is a **draw**. If your deck runs out, drawing deals 3 damage to your own base per missed card, so don't dawdle.

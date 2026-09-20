@@ -121,12 +121,14 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenFriendlyDamagedSurvives`, `whenEnemyAttacksBase`, `whenOwnBaseDamaged`, `whenEnemyBaseDamaged`,
-`whenFriendlyAttackEnds`, `whenDeployed`, `whenPlayUpgrade`, `whenUnitEntersPlay`,
+`whenFriendlyAttackEnds`, `whenDeployed`, `whenPlayUpgrade`, `whenPlayCard`, `whenUnitEntersPlay`,
 `whenActionPhaseStarts`.
 
 `whenPlayUpgrade` ("when you play an upgrade") fires on the player's undeployed leader, base and units,
-with the card in `ctx.playedCardId`. `whenUnitEntersPlay` is collected from both players' bases only, for
-a unit either player plays or creates (Trap Field).
+with the card in `ctx.playedCardId`. `whenPlayCard` ("when you play a Heroism card", Agent Kallus) has
+the same listeners but covers a card of **any** type, so it fires from all three play doors; the card
+is in `ctx.playedCardId` and the condition on it belongs to the registering card. `whenUnitEntersPlay`
+is collected from both players' bases only, for a unit either player plays or creates (Trap Field).
 
 `whenActionPhaseStarts` ("when the action phase starts", Beast Lair) fires for every unit in play and
 each player's leader and base as the next round's action phase begins, on the same boundary as an

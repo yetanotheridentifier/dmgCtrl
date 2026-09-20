@@ -459,18 +459,38 @@ export interface PlayFromHandSpec {
   entersReady: boolean
 }
 
-/** An upgrade sitting in the resource zone, offered for play — its position + card id. */
-export interface ResourceUpgradeRef {
-  resourceIndex: number
+/**
+ * The zone a `playCardFrom` play takes its card out of. `hand` is there because an ability that
+ * plays a card of any type from hand is the same play as one out of the resource zone, differing
+ * only in where the card is picked up: the Play a Card action itself does not come through here.
+ */
+export type PlayFromZone = 'hand' | 'resources' | 'opponentResources' | 'deckTop' | 'handOrResources'
+
+/** A card offered for play, with its index in the zone it is played out of. */
+export interface PlayFromRef {
+  index: number
   cardId: string
 }
 
-/** Parameters for a "play an upgrade from your resources" step. */
-export interface PlayResourceUpgradeSpec {
-  /** Front pays the upgrade's cost from remaining resources; the deployed back plays it free. */
-  payCost: boolean
-  /** Eligible target unit instance ids (front: entered this phase; back: any friendly). */
-  targetUnits: string[]
+/**
+ * Aspect penalties a play ignores: every one ("ignoring its aspect penalties"), every one from the
+ * named icons (Osha's "ignoring its Villainy aspect penalties"), or exactly one penalty from the
+ * named icons (the LAW bases' "ignoring 1 of its Vigilance, Command, Aggression, or Cunning aspect
+ * penalties"). Each penalty is 2 resources, so "one" is a flat 2 off a card that has any of them
+ * unprovided, which is why it needs no pick from the player.
+ */
+export type AspectWaiver = { all: true } | { aspects: string[]; one?: boolean }
+
+/** What follows a `playCardFrom` play, once the card is in play or its event has resolved. */
+export interface PlayFromTail {
+  /** "If you do, that player resources the top card of their deck" (Smuggle, Plot, LAW_066). */
+  resourceTop?: PlayerId
+  /** "If you do, you may resource a card from your hand" (Osha). */
+  mayResourceFromHand?: boolean
+  /** "Play each … (one at a time)": re-offer whatever is left of the same candidates (SHD_109). */
+  again?: boolean
+  /** "If you don't, you may discard it" (LAW_242): offered on a decline, never on a play. */
+  elseMayDiscardTop?: boolean
 }
 
 /** A follow-up "deal N damage to a unit or a base" selection. */
@@ -886,11 +906,15 @@ type ChoiceVariant =
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
-  // The Armorer: look at your resources and pick an upgrade to play (by candidate index); the
-  // `then` spec carries how it plays. `optional` = the deployed "may" version (a Cancel is offered).
-  | { kind: 'selectResourceUpgrade'; id: string; controller: PlayerId; candidates: ResourceUpgradeRef[]; optional: boolean; then: PlayResourceUpgradeSpec }
-  // Follow-up: attach the chosen resource upgrade to one of `targets`. Mandatory.
-  | { kind: 'attachResourceUpgrade'; id: string; controller: PlayerId; resourceIndex: number; cardId: string; targets: string[]; payCost: boolean }
+  // The one door for playing a card out of somewhere other than the Play a Card action: any card
+  // type, out of `zone`, answered by `optionIndex` into `candidates`. `free` bypasses the cost and
+  // the aspect penalty (CR 8.5); `costDelta` adjusts it; `waive` forgives aspect penalties. An
+  // upgrade cannot be priced until its host is known, so it goes on to `attachPlayedCard`.
+  | { kind: 'playCardFrom'; id: string; controller: PlayerId; zone: PlayFromZone; candidates: PlayFromRef[]; optional?: boolean; free?: boolean; costDelta?: number; waive?: AspectWaiver; targetUnits?: string[]; then?: PlayFromTail }
+  // Follow-up: attach the upgrade picked above to one of `targets`, paying for it there. Mandatory.
+  | { kind: 'attachPlayedCard'; id: string; controller: PlayerId; zone: PlayFromZone; index: number; cardId: string; targets: string[]; free?: boolean; costDelta?: number; waive?: AspectWaiver; then?: PlayFromTail }
+  // "You may resource a card from your hand" (Osha), answered by `handIndex`. Always a may.
+  | { kind: 'mayResourceFromHand'; id: string; controller: PlayerId }
   // Optionally pay `cost` to draw `draw` cards (Mandalorian). `cost` 0 = a free "may draw".
   // `thenDiscard` (Mos Espa Watermonger): after drawing, discard that many cards from hand —
   // but only if a card was actually drawn ("you may draw a card. If you do, discard a card").

@@ -42,6 +42,9 @@ const SHIPPED = [
   'SOR_001', 'SHD_001', 'LAW_009', 'SEC_009', 'TWI_001', 'TS26_5',
   // F: one small engine addition each
   'SEC_005', 'SEC_010', 'LAW_011', 'LAW_016', 'SOR_013', 'SOR_004', 'TS26_6', 'SEC_002',
+  // G: playing a card of any type from hand. Covered in `playFromZone.test.ts` with the rest of
+  // that door, since what is new about it is the play and not the leader.
+  'LAW_003',
 ]
 /**
  * Scoped by the triage but lifted out to the ticket that owns their blocker. LAW_010 and SOR_008 were
@@ -50,7 +53,7 @@ const SHIPPED = [
  */
 const LIFTED = [
   'JTL_001', 'JTL_003', 'JTL_011', 'JTL_012', 'JTL_015', 'JTL_017', 'JTL_018', 'TWI_017',
-  'SEC_003', 'LOF_001', 'SHD_006', 'SHD_010', 'SEC_001', 'SEC_006', 'LAW_003', 'LAW_017', 'SEC_012',
+  'SEC_003', 'LOF_001', 'SHD_006', 'SHD_010', 'SEC_001', 'SEC_006', 'LAW_017', 'SEC_012',
 ]
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])

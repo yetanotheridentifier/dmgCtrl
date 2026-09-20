@@ -68,6 +68,10 @@ export type TriggerPoint =
   // "When you play an upgrade" (The Tarkin Doctrine reads Fortification ones): fires on the player's
   // undeployed leader, units and base, with the upgrade in `ctx.playedCardId`.
   | 'whenPlayUpgrade'
+  // "When you play a <kind of> card" (Agent Kallus reads Heroism ones): the same listeners as
+  // `whenPlayUpgrade`, but for a card of ANY type, so it fires from all three play doors. The card
+  // is in `ctx.playedCardId`, and the condition is the registering card's to apply.
+  | 'whenPlayCard'
   // "When a unit enters play", either player's, played or created (Trap Field). Collected from both
   // players' bases only, since no unit or leader reads it; `ctx.targetInstanceId` is the unit.
   | 'whenUnitEntersPlay'
