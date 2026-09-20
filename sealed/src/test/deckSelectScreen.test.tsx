@@ -609,6 +609,49 @@ describe('DeckSelectScreen', () => {
       await waitFor(() => expect(leaderSelect.value).toBe(''))
       expect(within(leaderSelect).queryByRole('option', { name: /Maz Kanata/ })).toBeNull()
     })
+
+    /**
+     * The two columns want the picker in two different shapes, so each call site says which it wants
+     * and these pin both. In the player panel the picker shares a row with Generate and Play, so its
+     * label goes beside the control: stacked, the label-plus-select is centred as one unit and the
+     * select alone sits below the buttons' line. jsdom applies no CSS, so the classes that decide
+     * the layout are what there is to assert on.
+     */
+    it('puts the player label beside the control, on the buttons\' row', async () => {
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      const select = await screen.findByTestId('player-set-select')
+      const label = select.closest('label')!
+
+      expect(label.className).toContain('flex')
+      expect(label.className).toContain('items-center')
+      // The margin that pushes the control onto a second line is what makes it sit low.
+      expect(select.className).not.toContain('mt-1')
+      // Same row as both buttons, not merely the same panel.
+      const row = screen.getByTestId('generate-deck-button').parentElement
+      expect(row).toBe(label.parentElement)
+      expect(screen.getByTestId('play-generated-button').parentElement).toBe(row)
+      // Wrapping the label text must not cost the control its accessible name.
+      expect(within(screen.getByTestId('generated-deck-panel')).getByLabelText('Set')).toBe(select)
+    })
+
+    /**
+     * The opponent picker sits above Leader and Base aspect, which are stacked by design, so it stays
+     * stacked: inline there would start three controls at three different x positions behind labels
+     * of three different widths.
+     */
+    it('keeps the opponent label above the control, like its leader and base aspect selects', async () => {
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      const panel = await screen.findByTestId('opponent-generation-panel')
+      const select = within(panel).getByTestId('opponent-set-select')
+      const label = select.closest('label')!
+
+      expect(label.className).toContain('block')
+      expect(label.className).not.toContain('flex')
+      expect(select.className).toContain('mt-1')
+      expect(within(panel).getByTestId('opponent-leader-select').closest('label')!.className)
+        .toContain('block')
+      expect(within(panel).getByLabelText('Set')).toBe(select)
+    })
   })
 
   it('imports a full card set and reports the count', async () => {

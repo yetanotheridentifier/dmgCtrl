@@ -121,21 +121,28 @@ const SELECT_CLASS = 'w-full bg-transparent border-2 border-accent rounded-xl px
 /**
  * One generator's set picker. Each side has its own, so a deck from one set can be played against an
  * opponent from another, and choosing a set that is not cached yet caches it.
+ *
+ * `layout` has no default so that every call site states the shape it wants rather than inheriting
+ * one: `inline` sets the label beside the control, for a picker sharing a row with buttons, where a
+ * stacked label centres the pair as one unit and leaves the control alone below the buttons' line;
+ * `stacked` sets it above, which is how a column of selects reads.
  */
-function SetSelect({ testId, value, onChange, className = '' }: {
+function SetSelect({ testId, value, onChange, layout, className = '' }: {
   testId: string
   value: string
   onChange: (code: string) => void
+  layout: 'inline' | 'stacked'
   className?: string
 }) {
+  const inline = layout === 'inline'
   return (
-    <label className={`block text-xs text-ink-dim ${className}`}>
-      Set
+    <label className={`text-xs text-ink-dim ${inline ? 'flex items-center gap-2' : 'block'} ${className}`}>
+      <span>Set</span>
       <select
         data-testid={testId}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className={`mt-1 ${SELECT_CLASS}`}
+        className={`${inline ? 'flex-1 min-w-0' : 'mt-1'} ${SELECT_CLASS}`}
       >
         {SET_CODES.map(code => <option key={code} value={code}>{code}</option>)}
       </select>
@@ -431,6 +438,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
           </div>
           <SetSelect
             testId="player-set-select"
+            layout="inline"
             value={playerSet}
             onChange={code => {
               // A deck built from the set chosen a moment ago is not a deck from this one, so the
@@ -440,7 +448,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
               setCannotBuild(false)
               void chooseSet(code, setPlayerSet)
             }}
-            className="w-24 shrink-0"
+            className="w-32 shrink-0"
           />
           <button
             data-testid="generate-deck-button"
@@ -587,6 +595,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
           <legend className="px-1 text-accent text-xs uppercase tracking-[0.12em] font-light">Generated opponent</legend>
           <SetSelect
             testId="opponent-set-select"
+            layout="stacked"
             value={opponentSet}
             onChange={code => void chooseSet(code, setOpponentSet)}
           />
