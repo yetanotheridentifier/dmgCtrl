@@ -54,7 +54,10 @@ describe('DeckSelectScreen', () => {
     // Reset rather than left set by whichever test ran last: a cached pool changes what the screen
     // renders, so leaking one makes the order of these tests matter.
     withCache({})
-    vi.mocked(importSet).mockClear()
+    // Reset rather than cleared: several tests queue a one-off implementation, and the screen now
+    // fetches on open, so a leaked pending or rejecting mock would change what the next test renders.
+    vi.mocked(importSet).mockReset()
+    vi.mocked(importSet).mockResolvedValue({ cached: 264, total: 264 })
   })
 
   it('shows an empty state when no decks are saved', () => {
@@ -159,7 +162,7 @@ describe('DeckSelectScreen', () => {
     await user.paste(validDeckJson())
     await user.click(screen.getByTestId('deck-import-btn'))
 
-    expect(syncCatalogue).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(syncCatalogue).toHaveBeenCalledTimes(1))
     const refs = vi.mocked(syncCatalogue).mock.calls[0][0]
     // leader + base + 30 deck cards
     expect(refs).toHaveLength(32)
@@ -191,7 +194,8 @@ describe('DeckSelectScreen', () => {
   /**
    * Three columns: the deck you play with, the deck the bot plays, and the card catalogue. The
    * opponent gets a column of its own because choosing what the bot plays is now a panel rather than a
-   * single dropdown, and the set import sits above the table it fills.
+   * single dropdown, and the catalogue is a reference column: it explains what gets cached and
+   * reports what is built, with nothing to operate.
    */
   it('lays the screen out as your deck, the opponent, then the card catalogue', async () => {
     withCache(SETS)
@@ -208,9 +212,7 @@ describe('DeckSelectScreen', () => {
     expect(within(player).getByTestId('deck-import-textarea')).toBeInTheDocument()
 
     const catalogue = screen.getByTestId('catalogue-column')
-    const setImport = within(catalogue).getByTestId('set-import-input')
-    const implemented = within(catalogue).getByTestId('implemented-cards')
-    expect(setImport.compareDocumentPosition(implemented) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(catalogue).getByTestId('implemented-cards')).toBeInTheDocument()
   })
 
   it('plays against an explicitly selected opponent deck', async () => {
@@ -244,10 +246,11 @@ describe('DeckSelectScreen', () => {
   describe('the generated deck', () => {
     const withPool = () => withCache(SETS)
 
-    it('offers nothing to generate until the chosen set is cached', async () => {
+    /** The panel caches the set itself now, so there is nothing to generate only while that runs. */
+    it('offers nothing to generate while its set is still being cached', async () => {
+      vi.mocked(importSet).mockImplementationOnce(() => new Promise(() => { /* still caching */ }))
       render(<DeckSelectScreen onPlay={vi.fn()} />)
-      expect(await screen.findByTestId('generated-deck-subtitle'))
-        .toHaveTextContent('No HMW cards cached: import it in the card catalogue')
+      expect(await screen.findByTestId('generated-deck-subtitle')).toHaveTextContent('Caching HMW…')
       expect(screen.getByTestId('generate-deck-button')).toBeDisabled()
       expect(screen.getByTestId('play-generated-button')).toBeDisabled()
     })
@@ -513,11 +516,12 @@ describe('DeckSelectScreen', () => {
         .toEqual(SET_PROGRESS.map(s => s.code))
     })
 
-    /** Both controls exist before anything is cached, since choosing a set is how you cache one. */
+    /** Both controls exist before anything is cached, each side saying what its own set is doing. */
     it('offers the controls with nothing cached, saying so per side', async () => {
+      vi.mocked(importSet).mockImplementationOnce(() => new Promise(() => { /* still caching */ }))
       render(<DeckSelectScreen onPlay={vi.fn()} />)
       expect(await screen.findByTestId('player-set-select')).toBeInTheDocument()
-      expect(screen.getByTestId('opponent-pool-summary')).toHaveTextContent('No HMW cards cached')
+      expect(screen.getByTestId('opponent-pool-summary')).toHaveTextContent('Caching HMW')
     })
 
     it('picks the player and opponent sets independently, each line naming its own set', async () => {
@@ -563,18 +567,19 @@ describe('DeckSelectScreen', () => {
       await user.selectOptions(await screen.findByTestId('opponent-set-select'), 'LOF')
 
       expect(importSet).toHaveBeenCalledWith('LOF', expect.anything())
-      expect(await screen.findByTestId('set-import-status')).toHaveTextContent(/264 cards cached for LOF/i)
+      // Reported on the panel that asked for it, not in a status span in another column.
+      expect(await screen.findByTestId('opponent-pool-summary')).toHaveTextContent(/264 cards cached for LOF/i)
     })
 
-    /** While that import is running the panel says so, rather than telling you to go and import it. */
-    it('says the set is importing while it is being cached', async () => {
+    /** While that fetch is running the panel says so, rather than telling you to go and import it. */
+    it('says the set is caching while it is being cached', async () => {
       withCache(SETS)
-      vi.mocked(importSet).mockImplementationOnce(() => new Promise(() => { /* still importing */ }))
+      vi.mocked(importSet).mockImplementationOnce(() => new Promise(() => { /* still caching */ }))
       const user = userEvent.setup()
       render(<DeckSelectScreen onPlay={vi.fn()} />)
       await user.selectOptions(await screen.findByTestId('opponent-set-select'), 'LOF')
 
-      expect(screen.getByTestId('opponent-pool-summary')).toHaveTextContent('Importing LOF…')
+      expect(screen.getByTestId('opponent-pool-summary')).toHaveTextContent('Caching LOF…')
       // The other generator is untouched: it is still on its own set.
       expect(screen.getByTestId('generated-deck-subtitle')).toHaveTextContent('Built from HMW')
     })
@@ -654,31 +659,98 @@ describe('DeckSelectScreen', () => {
     })
   })
 
-  it('imports a full card set and reports the count', async () => {
-    const user = userEvent.setup()
-    render(<DeckSelectScreen onPlay={vi.fn()} />)
+  /**
+   * Caching follows what is on the screen. There is no set-code box: each generator caches the set
+   * it is pointed at, and each deck list caches the cards it names, so a completely cold cache
+   * reaches a playable deck with nothing asked of the player.
+   */
+  describe('caching what the screen needs', () => {
+    it('caches the set the generators start on, from a cold cache', async () => {
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await waitFor(() => expect(importSet).toHaveBeenCalledWith('HMW', expect.anything()))
+    })
 
-    await user.type(screen.getByTestId('set-import-input'), 'ash')
-    await user.click(screen.getByTestId('set-import-btn'))
+    /**
+     * Both generators default to the same set. #659 dodged this by fetching nothing on open; now
+     * that opening fetches, one set asked for twice must still be one fetch.
+     */
+    it('fetches once when both generators are on the same set', async () => {
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      // Wait for the fetch to have finished reporting, so a second one would have landed by now.
+      await waitFor(() => expect(screen.getByTestId('opponent-pool-summary'))
+        .toHaveTextContent('264 cards cached for HMW'))
+      expect(vi.mocked(importSet).mock.calls.map(c => c[0])).toEqual(['HMW'])
+    })
 
-    expect(importSet).toHaveBeenCalledWith('ash', expect.anything())
-    expect(await screen.findByTestId('set-import-status')).toHaveTextContent(/264 cards cached for ASH/i)
-  })
+    /** Each generator's own set, and no other: opening the screen is not a reason to cache the shelf. */
+    it('fetches each generator\'s own set and nothing else', async () => {
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await waitFor(() => expect(importSet).toHaveBeenCalledWith('HMW', expect.anything()))
 
-  it('shows a set-import failure with its detail', async () => {
-    vi.mocked(importSet).mockRejectedValueOnce(new Error('Set ZZZ could not be fetched (SWUDB 502)'))
-    const user = userEvent.setup()
-    render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await user.selectOptions(screen.getByTestId('opponent-set-select'), 'ASH')
 
-    await user.type(screen.getByTestId('set-import-input'), 'zzz')
-    await user.click(screen.getByTestId('set-import-btn'))
+      await waitFor(() => expect(importSet).toHaveBeenCalledWith('ASH', expect.anything()))
+      expect(vi.mocked(importSet).mock.calls.map(c => c[0])).toEqual(['HMW', 'ASH'])
+    })
 
-    expect(await screen.findByTestId('set-import-status')).toHaveTextContent(/could not be fetched/i)
-  })
+    it('fetches nothing when the set both generators are on is already cached', async () => {
+      withCache(SETS)
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await waitFor(() => expect(screen.getByTestId('generated-deck-subtitle')).toHaveTextContent('Built from HMW'))
+      expect(importSet).not.toHaveBeenCalled()
+    })
 
-  it('disables the set import button until a set code is entered', () => {
-    render(<DeckSelectScreen onPlay={vi.fn()} />)
-    expect(screen.getByTestId('set-import-btn')).toBeDisabled()
+    /** A failure is reported where the fetch was asked for, not swallowed into a disabled button. */
+    it('reports a failed fetch on the panel that asked for it', async () => {
+      vi.mocked(importSet).mockRejectedValueOnce(new Error('Set HMW could not be fetched (SWUDB 502)'))
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      expect(await screen.findByTestId('generated-deck-subtitle')).toHaveTextContent(/could not be fetched/i)
+    })
+
+    it('has no set-code import control left in the catalogue column', () => {
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      expect(screen.queryByTestId('set-import-input')).toBeNull()
+      expect(screen.queryByTestId('set-import-btn')).toBeNull()
+      expect(screen.queryByTestId('set-import-status')).toBeNull()
+    })
+
+    /** What the column loses is the control, not the explanation or the implementation panel. */
+    it('keeps the catalogue column explaining itself, with the implementation panel', () => {
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      const catalogue = screen.getByTestId('catalogue-column')
+      expect(within(catalogue).getByTestId('implemented-cards')).toBeInTheDocument()
+      expect(catalogue).toHaveTextContent(/cached on this device/i)
+    })
+
+    /**
+     * A deck saved in an earlier session against a cache that has since been cleared: its cards are
+     * fetched because the list names them, rather than needing the whole set imported by hand.
+     */
+    it('caches the cards a saved deck names', async () => {
+      saveDeck({ name: 'Old Deck', leader: 'SOR_010', base: 'SOR_029', cards: [{ id: 'SOR_100', count: 2 }] })
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+
+      await waitFor(() => expect(syncCatalogue).toHaveBeenCalledTimes(1))
+      // Leader and base first: they carry the highest display priority.
+      expect(vi.mocked(syncCatalogue).mock.calls[0][0]).toEqual([
+        { set: 'SOR', number: '010' },
+        { set: 'SOR', number: '029' },
+        { set: 'SOR', number: '100' },
+      ])
+    })
+
+    it('caches a saved deck\'s cards once, not on every render', async () => {
+      withCache(SETS)
+      saveDeck({ name: 'Old Deck', leader: 'SOR_010', base: 'SOR_029', cards: [{ id: 'SOR_100', count: 2 }] })
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await waitFor(() => expect(syncCatalogue).toHaveBeenCalledTimes(1))
+
+      await user.click(await screen.findByTestId('generate-deck-button'))
+
+      expect(syncCatalogue).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('removes a deck', async () => {

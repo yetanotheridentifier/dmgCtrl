@@ -415,6 +415,11 @@ The board is drawn with art-dominant cards, not text rows:
 | IndexedDB `cards` (Dexie v1) | Card JSON + thumbnail bytes | ~KBs per card; queryable; offline |
 | IndexedDB `games` (Dexie v2) | Completed game records | Replayable substrate for E7 training |
 
+Card caching is demand-driven from the deck-select screen: each deck generator calls `importSet`
+for the set it is pointed at, once per set per visit, and each deck list hands its cards to
+`syncCatalogue`, which fetches only the ids not already held. Nothing else fetches a set, so what
+lands in the cache is what the screen needs rather than the whole catalogue.
+
 Thumbnails are stored as `ArrayBuffer + mime` rather than Blob, because ArrayBuffers
 structured-clone reliably in every IndexedDB implementation and Blobs do not (and
 jsdom/fake-indexeddb can't round-trip them in tests either).
