@@ -18,17 +18,21 @@ Alongside the deck selection, an **Implemented cards** panel lists which card ab
 
 The **Card catalogue** section lets you cache an entire set by its code (e.g. `ASH`): one click fetches every card in the set and stores it on this device. Games and deck views then work without touching the network, and this also covers the handful of base cards whose individual lookups are unreliable upstream.
 
+Choosing a set in either **Set** picker (below) caches it the same way when it isn't cached already, reporting progress in the same place. Opening the deck screen never fetches a set by itself: nothing is downloaded until you ask for a set here or pick one that isn't cached.
+
 ## Choosing an opponent
 
 The deck screen has three columns: **your deck** on the left, **the opponent** in the middle, and the **card catalogue** on the right.
 
 The **Opponent** selector controls which deck the AI plays:
 
-- **Random generated deck** (the default): a fresh deck built from your cached set for every game. Until a cached set holds enough cards to fill a whole deck, a random built deck is used instead, and **Generate** says the set cannot fill a deck.
+- **Random generated deck** (the default): a fresh deck built from the opponent's chosen set for every game. Until that set holds enough cards to fill a whole deck, a random built deck is used instead, and **Generate** says the set cannot fill a deck.
 - **Random built deck**: one of your imported decks at random (it may pick the same deck you're playing).
 - **A specific deck**: choose any imported deck by name.
 
-Below it, **Generated opponent** chooses the **leader** and **base aspect** the generated deck is built around, and either can stay **random**. A random pick never pairs a leader with a base of an aspect the leader already has, since no card in the set rewards doubling an aspect; choose both yourself to get that pairing anyway. It only applies while the opponent is a random generated deck, and it's the way to watch how the AI plays a particular leader.
+Each generator has its own **Set** picker: one in the **Random generated deck** panel for the deck you play, one in the **Generated opponent** panel for the deck the AI plays. Both start on the newest set, and the two are chosen independently, so you can play a deck from one set against an opponent from another. Each panel names the set it builds from and how many of its cards are cached. A deck is built from a single set, so the two pools are never mixed.
+
+Below the opponent's set, **Generated opponent** chooses the **leader** and **base aspect** the generated deck is built around, and either can stay **random**. Both come from the opponent's chosen set, so switching sets drops a leader that the new set doesn't print (switch back and it returns). A random pick never pairs a leader with a base of an aspect the leader already has, since no card in the set rewards doubling an aspect; choose both yourself to get that pairing anyway. It only applies while the opponent is a random generated deck, and it's the way to watch how the AI plays a particular leader.
 
 The current AI opponent plays **random legal moves**. It exists to exercise the full rules engine; smarter opponents are on the roadmap.
 
