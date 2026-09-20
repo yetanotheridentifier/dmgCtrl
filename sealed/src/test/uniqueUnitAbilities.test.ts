@@ -3,6 +3,8 @@ import { resolve } from '../engine/resolve'
 import { effectivePower } from '../engine/stats'
 import { unitHasKeyword } from '../engine/keywords'
 import { dealDamageToUnit } from '../engine/combat'
+import { releaseCaptured } from '../engine/effects'
+import { enteredPlayThisPhase } from '../engine/types'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
@@ -47,6 +49,44 @@ describe('Outcast (041) — +1/+0 to friendly units entering play, including its
     const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const g = played.players.player.units.find(u => u.cardId === 'GRD')!
     expect(effectivePower(played, g)).toBe(2 + 1)
+  })
+
+  // A deployed leader enters play (CR 3, CR 7.1), so Outcast sees it even though it was not played.
+  it('buffs a friendly leader deploying as a unit', () => {
+    const s = state({ cards: F, players: { player: rich({ units: [unit('o', 'ASH_041', { arena: 'ground' })] }), opponent: player() } })
+    const deployed = resolve(s, { type: 'deployLeader' })
+    const l = deployed.players.player.units.find(u => u.isLeader)!
+    expect(effectivePower(deployed, l)).toBe(4 + 1)
+  })
+
+  // Rescuing a captured card puts it back into play (Bothan-5), which is an entry like any other.
+  it('buffs a friendly unit rescued from capture, and counts it as having entered play', () => {
+    const s = state({ cards: F, players: { player: rich({ units: [unit('o', 'ASH_041', { arena: 'ground' })] }), opponent: player() } })
+    const freed = releaseCaptured(s, 'player', ['GRD'])
+    const g = freed.players.player.units.find(u => u.cardId === 'GRD')!
+    expect(effectivePower(freed, g)).toBe(2 + 1)
+    expect(enteredPlayThisPhase(freed, 'player')).toContain(g.instanceId)
+  })
+})
+
+describe('A deploy is not a play', () => {
+  // Maz Kanata, Poggle the Lesser, Cobb Vanth and Ravager all read "when you play a unit", and a
+  // leader deploying is "considered deployed, not played" (CR 3).
+  it('does not raise "when you play a unit" when a leader deploys', () => {
+    const s = state({
+      cards: F,
+      players: { player: rich({ units: [unit('r', 'ASH_102', { arena: 'space' })] }), opponent: player({ units: [unit('e', 'GRD', { arena: 'ground' })] }) },
+    })
+    const deployed = resolve(s, { type: 'deployLeader' })
+    expect(deployed.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('does not raise "when you play a unit" when a captured unit is rescued', () => {
+    const s = state({
+      cards: F,
+      players: { player: rich({ units: [unit('r', 'ASH_102', { arena: 'space' })] }), opponent: player({ units: [unit('e', 'SPC', { arena: 'space' })] }) },
+    })
+    expect(releaseCaptured(s, 'player', ['SPC']).pendingChoices ?? []).toHaveLength(0)
   })
 })
 

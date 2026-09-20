@@ -2321,9 +2321,16 @@ function deployLeader(state: GameState, epicUsed = true): GameState {
   // at deploy (Moff Gideon gains keywords from an Imperial in your discard): a Shield token,
   // Hidden, and an Ambush or Support attack.
   next = applyDeployKeywords(next, playerId, leaderUnit.instanceId)
-  // Then its own "When Deployed", as one batch.
+  // Then its own "When Deployed" and everything reacting to a unit entering play, as ONE batch: one
+  // leader arriving is one event. No route point is passed, so nothing reading "when you play a unit"
+  // fires: a deployed leader is considered deployed, not played (CR 3).
   const inPlay = next.players[playerId].units.find(u => u.instanceId === leaderUnit.instanceId)
-  return inPlay ? fireBatch(next, collectUnitTriggers(next, 'whenDeployed', inPlay, playerId)) : next
+  return inPlay
+    ? fireBatch(next, [
+      ...collectUnitTriggers(next, 'whenDeployed', inPlay, playerId),
+      ...collectArrivalTriggers(next, undefined, playerId, leaderUnit.instanceId),
+    ])
+    : next
 }
 
 /**

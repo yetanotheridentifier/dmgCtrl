@@ -6,7 +6,7 @@ import { unitKeywordValue, unitHasKeyword } from '../engine/keywords'
 import { getCardDefinition } from '../engine/abilities'
 import { normaliseCard } from '../engine/cardDb'
 import { defeatUnit } from '../engine/combat'
-import { createTokenUnit, dealDamageToBase } from '../engine/effects'
+import { createTokenUnit, dealDamageToBase, releaseCaptured } from '../engine/effects'
 import { TOKEN_BATTLE_DROID } from '../engine/tokenUnits'
 import { evaluate } from '../ai/evaluate'
 import { triage } from '../bench/triage'
@@ -375,6 +375,8 @@ describe('Fortify: triggered abilities on the base', () => {
     expect(baseUpgrades(hit, 'opponent')).toEqual([])
     expect(choice(play(board(fortified('HMW_171')), 'GRD')).controller).toBe('player')
     expect(choice(createTokenUnit(board(fortified('HMW_171')), 'opponent', TOKEN_BATTLE_DROID)).controller).toBe('player')
+    // Entering play covers every route in, not just a play or a create: a rescued captured unit too.
+    expect(choice(releaseCaptured(board(fortified('HMW_171')), 'opponent', ['GRD'])).controller).toBe('player')
     noChoice(play(board({}, theirFortified('HMW_171')), 'SPC'))
   })
 })

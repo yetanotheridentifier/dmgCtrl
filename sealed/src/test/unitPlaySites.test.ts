@@ -66,4 +66,19 @@ describe('unit play sites', () => {
   it('records a card as played only in the doors', () => {
     expect(perFile(RECORD)).toEqual(EXPECTED_RECORDS)
   })
+
+  /**
+   * Entering play is not the same event as being played, so every arrival collects the arrival
+   * triggers, which is where `whenFriendlyEntersPlay` ("when a friendly unit enters play", Outcast)
+   * and `whenUnitEntersPlay` (Trap Field) come from. A deployed leader and a released captured card
+   * are entries as much as a play or a create is, and each raised nothing until it collected here.
+   * Taking control is the exception, and the reason this is a list rather than a count: that unit is
+   * already in play, so it enters nothing.
+   */
+  it('raises the arrival triggers at every site a unit enters play, and nowhere else', () => {
+    for (const [file, fn] of [['effects.ts', 'createTokenUnit'], ['effects.ts', 'releaseCaptured'], ['resolve.ts', 'deployLeader'], ['resolve.ts', 'collectEntersPlay']] as const) {
+      expect(body(file, fn), `${fn} collects the arrival triggers`).toContain('collectArrivalTriggers(')
+    }
+    expect(body('effects.ts', 'takeControlOfUnit')).not.toContain('collectArrivalTriggers(')
+  })
 })

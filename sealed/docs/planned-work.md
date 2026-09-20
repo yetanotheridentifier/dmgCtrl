@@ -190,7 +190,8 @@ who received one) went to #477.
 
 **70 were blocked by exactly one thing**: the 18 Fortify, 18 Weakness and 14 Beast-token cards are
 built (less one Fortify card lifted, above), and the rest are the 3 compound-head cards (built, #463), #474 a new trigger point (3),
-#471 play from discard (2), #468 (1), #475 (1) and #477's one-offs (10). 16 are multi-blocked, on #477.
+#471 play from discard (2), #468 (1), #475 (1) and #477's one-offs (9, Boba Fett having shipped on the
+"a friendly unit enters play" point). 16 are multi-blocked, on #477.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted into #477 and the batch
 ships without it. The classification is regex triage over ability prose: it catches new nouns but not

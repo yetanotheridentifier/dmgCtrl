@@ -459,8 +459,10 @@ and from each ability that plays a unit, whether from hand (`playUnitFromHand`),
 `mayPlayTopFree`). An ability play is still a play (CR 6.2.0a), so the door records it as played this
 phase before anything else, then enters the unit, fires its arrival batch and runs the unique rule. A unit
 that arrives without being played (a token created, control taken, a captured card released, a leader
-deployed) does not record. `unitPlaySites.test.ts` names every append to a player's units and every call
-to `recordCardPlayed`, so a new arrival fails until it is classified.
+deployed) does not record. Each of those still *enters play*, though, and raises the arrival triggers for
+it; taking control is the exception, since that unit is already in play. `unitPlaySites.test.ts` names
+every append to a player's units, every call to `recordCardPlayed` and which arrivals collect the arrival
+triggers, so a new arrival fails until it is classified.
 
 ## Unique rule
 

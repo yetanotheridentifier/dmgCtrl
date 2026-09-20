@@ -216,9 +216,9 @@ unit whose definition has `tokensEnterReady` (Chancellor Palpatine) makes every 
 creates enter ready. `unitsEnterReady` (Ritual Dragon) goes further, to every unit its controller plays or
 creates: `friendlyUnitsEnterReady` reads it both here and in `playUnitCard`. A Shielded token enters with its Shield. Creating counts as entering play
 (`enteredPlayThisPhase`) but not as playing, so it fires no "When Played" and no `whenPlayUnit` ("when
-you play another unit", Poggle the Lesser). Each token created raises `whenCreateUnit` from
-`createTokenUnit`, the one place token units are made, so "when you play or create a unit" (Greef Karga)
-and "when a friendly unit enters play" (Outcast) see every one of them.
+you play another unit", Poggle the Lesser). Each token created raises `whenCreateUnit` and
+`whenFriendlyEntersPlay` from `createTokenUnit`, the one place token units are made, so "when you play or
+create a unit" (Greef Karga) and "when a friendly unit enters play" (Outcast) see every one of them.
 
 ## Spent tokens are defeated upgrades
 

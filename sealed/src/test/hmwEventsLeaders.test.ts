@@ -32,7 +32,7 @@ const EVENTS = [
   'HMW_161', 'HMW_173', 'HMW_192', 'HMW_193', 'HMW_207', 'HMW_217', 'HMW_218', 'HMW_238', 'HMW_239',
   'HMW_253', 'HMW_266', 'HMW_267',
 ]
-const UNITS = ['HMW_041', 'HMW_044', 'HMW_056', 'HMW_064', 'HMW_104', 'HMW_147', 'HMW_170', 'HMW_182', 'HMW_209', 'HMW_210']
+const UNITS = ['HMW_041', 'HMW_044', 'HMW_056', 'HMW_064', 'HMW_104', 'HMW_147', 'HMW_170', 'HMW_182', 'HMW_209', 'HMW_210', 'HMW_225']
 const LEADERS = ['HMW_006', 'HMW_007', 'HMW_008', 'HMW_009', 'HMW_018']
 const SHIPPED = [...EVENTS, ...UNITS, ...LEADERS]
 
@@ -58,6 +58,8 @@ const F: Record<string, EngineCard> = {
   BIG: src('BIG', { power: 7 }),
   MID: src('MID', { power: 4 }),
   RAID2: src('RAID2', { keywords: [{ name: 'Raid', value: 2 }] }),
+  AMB: src('AMB', { keywords: [{ name: 'Ambush' }] }),
+  AMB_L: card({ id: 'AMB_L', type: 'leader', cost: 5, power: 3, hp: 6, keywords: [{ name: 'Ambush' }] }),
   OVER: src('OVER', { power: 6, keywords: [{ name: 'Overwhelm' }] }),
   CREATURE: src('CREATURE', { traits: ['CREATURE'], cost: 2 }),
   CREATURE5: src('CREATURE5', { traits: ['CREATURE'], cost: 5 }),
@@ -132,6 +134,12 @@ const playEvent = (s: GameState, cardId: string, who: PlayerId = 'player'): Game
   const p = s.players[who]
   const withCard = { ...s, activePlayer: who, players: { ...s.players, [who]: { ...p, hand: [...p.hand, cardId] } } }
   return resolve(withCard, { type: 'playEvent', handIndex: p.hand.length })
+}
+/** Play a unit from hand, appended so its index is known. */
+const play = (s: GameState, cardId: string, who: PlayerId = 'player'): GameState => {
+  const p = s.players[who]
+  const withCard = { ...s, activePlayer: who, players: { ...s.players, [who]: { ...p, hand: [...p.hand, cardId] } } }
+  return resolve(withCard, { type: 'playUnit', handIndex: p.hand.length })
 }
 const self =(s: GameState, cardId: string): string => s.players.player.units.find(u => u.cardId === cardId)!.instanceId
 /** Play a Fortify upgrade onto the player's own base. */
@@ -507,6 +515,43 @@ describe('HMW units: the remaining trigger points', () => {
     const declined = skip(advanced)
     expect(declined.players.player.units).toEqual([])
     expect(declined.players.player.hand).toHaveLength(held)
+  })
+
+  /**
+   * "When a friendly unit with Ambush enters play: Give it Raid 1 and Saboteur for this phase."
+   * Entering play, not being played, so a leader deploying with Ambush counts as much as a play does.
+   */
+  describe('Boba Fett (HMW_225): Raid 1 and Saboteur for a friendly unit with Ambush entering play', () => {
+    const boba = (mine: Side = {}, theirs: Side = {}) => board({ units: [unit('b', 'HMW_225')], ...mine }, theirs)
+    const granted = (s: GameState, id: string) => [unitKeywordValue(s, U(s, id)!, 'Raid'), unitHasKeyword(s, U(s, id)!, 'Saboteur')]
+
+    it('grants them to a friendly Ambush unit as it is played', () => {
+      const s = play(boba(), 'AMB')
+      expect(granted(s, self(s, 'AMB'))).toEqual([1, true])
+    })
+
+    it('grants them to a friendly leader deploying with Ambush', () => {
+      const s = resolve(boba({ leader: undeployed('AMB_L') }), { type: 'deployLeader' })
+      const deployed = s.players.player.units.find(u => u.isLeader)!
+      expect(granted(s, deployed.instanceId)).toEqual([1, true])
+    })
+
+    it('reads Ambush and friendliness: no Ambush, an enemy unit, or Boba himself gets nothing', () => {
+      const plain = play(boba(), 'GRD')
+      expect(granted(plain, self(plain, 'GRD'))).toEqual([0, false])
+      const theirs = play(boba(), 'AMB', 'opponent')
+      expect(granted(theirs, theirs.players.opponent.units.find(u => u.cardId === 'AMB')!.instanceId)).toEqual([0, false])
+      // He has Ambush himself, and the card does not say "including this one", so entering play is
+      // the one arrival his own ability does not see.
+      const arriving = play(board(), 'HMW_225')
+      expect(granted(arriving, self(arriving, 'HMW_225'))).toEqual([0, false])
+    })
+
+    it('is ordered against the Ambush attack, so the grant can land before the unit swings', () => {
+      const s = play(boba({}, { units: [unit('e', 'GRD')] }), 'AMB')
+      // Two abilities on one arrival: the Ambush attack and Boba's grant. The controller picks.
+      expect(choice(s).kind).toBe('chooseNextTrigger')
+    })
   })
 })
 
