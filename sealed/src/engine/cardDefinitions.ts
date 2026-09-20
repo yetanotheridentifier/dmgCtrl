@@ -1,10 +1,10 @@
-import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext } from './abilities'
+import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers } from './abilities'
 import { fireBatch, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck, defeatBaseUpgrade } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
-import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, hasToken } from './tokenUpgrades'
+import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
 import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
@@ -832,6 +832,27 @@ const whenDefeated = (description: string, effect: (s: GameState, ctx: { owner: 
   abilities: [{ trigger: 'whenDefeated' as const, description, effect }],
 })
 
+/**
+ * A **compound trigger head**: one printed ability block that fires at either of two or three points,
+ * `When Played/On Attack:`, `When Played/When Defeated:`, `When Played/On Attack/When Defeated:`.
+ *
+ * The block is written once with the When Played helpers and copied to each further point, because the
+ * engine has no "fires at either" trigger and wants none: `runPendingTrigger` addresses an ability by
+ * `cardId` + index into the card's full list, so two copies at two points stay individually
+ * addressable, which is what the ordering prompt needs when both are waiting at once (docs/abilities.md).
+ * The copies share the block's text, since one block is what was printed.
+ *
+ * Only the When Played abilities are copied, so a constant hook or a second printed ability on the same
+ * card is carried through untouched.
+ */
+const alsoAt = (def: CardDefinition, ...points: TriggerPoint[]): CardDefinition => ({
+  ...def,
+  abilities: [
+    ...(def.abilities ?? []),
+    ...points.flatMap(trigger => (def.abilities ?? []).filter(a => a.trigger === 'whenPlayed').map(a => ({ ...a, trigger }))),
+  ],
+})
+
 // Self / no-target effects.
 registerCard('ASH_218', whenPlayed('Give 4 Advantage tokens to this unit.', (s, ctx) => giveTokens(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE, 4))) // Ferry Droid
 registerCard('ASH_251', whenPlayed('Give an Advantage token to this unit.', (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE))) // Zealous Soldier
@@ -920,12 +941,9 @@ registerCard('ASH_176', whenPlayed('You may deal 3 damage to a ground unit; if d
 
 // "Next unit you play this phase" grants, with filters.
 registerCard('ASH_237', whenPlayed('The next Imperial unit you play this phase costs 1 less.', (s, ctx) => grantNextUnit(s, ctx.owner, { costDelta: -1, trait: 'Imperial' }))) // Mouse Droid
-registerCard('ASH_248', { // Neel — the next ≤1-power unit you play this phase enters play ready
-  abilities: [
-    { trigger: 'whenPlayed', description: 'The next unit you play this phase with 1 or less power enters play ready.', effect: (s, ctx) => grantNextUnit(s, ctx.owner, { entersReady: true, maxPower: 1 }) },
-    { trigger: 'onAttack', description: 'The next unit you play this phase with 1 or less power enters play ready.', effect: (s, ctx) => grantNextUnit(s, ctx.owner, { entersReady: true, maxPower: 1 }) },
-  ],
-})
+registerCard('ASH_248', alsoAt( // Neel — the next ≤1-power unit you play this phase enters play ready
+  whenPlayed('The next unit you play this phase with 1 or less power enters play ready.', (s, ctx) => grantNextUnit(s, ctx.owner, { entersReady: true, maxPower: 1 })),
+  'onAttack'))
 
 // Repeatable multi-target picks.
 registerCard('ASH_205', whenPlayed('Give an Advantage token to each of up to 3 exhausted units.', (s, ctx) => { // Inspiring Veteran
@@ -1023,12 +1041,7 @@ const flarestarGiveAdvantage = (s: GameState, ctx: { owner: PlayerId; sourceInst
   const targets = allUnits(s).map(u => u.instanceId)
   return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 1, targets, optional: true }) : s
 }
-registerCard('ASH_167', {
-  abilities: [
-    { trigger: 'whenPlayed', description: 'You may give an Advantage token to a unit.', effect: flarestarGiveAdvantage },
-    { trigger: 'whenDefeated', description: 'You may give an Advantage token to a unit.', effect: flarestarGiveAdvantage },
-  ],
-})
+registerCard('ASH_167', alsoAt(whenPlayed('You may give an Advantage token to a unit.', flarestarGiveAdvantage), 'whenDefeated')) // Flarestar Attack Shuttle
 
 registerCard('ASH_195', whenDefeated("You may distribute Advantage tokens equal to this unit's power among friendly units.", (s, ctx) => { // Helgait
   const power = ctx.defeatedUnit ? effectivePower(s, ctx.defeatedUnit) : 0
@@ -1085,12 +1098,9 @@ const purrgilReturn = (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: 
   const targets = s.players[ctx.owner].units.filter(u => !isLeaderUnit(s, u) && u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
   return targets.length ? pushChoice(s, { kind: 'returnFriendlyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, then: 'damageEqualToCost' }) : s
 }
-registerCard('ASH_038', {
-  abilities: [
-    { trigger: 'whenPlayed', description: "You may return another friendly non-leader unit to its owner's hand. If you do, deal damage to a unit equal to the returned unit's cost.", effect: purrgilReturn },
-    { trigger: 'whenDefeated', description: "You may return another friendly non-leader unit to its owner's hand. If you do, deal damage to a unit equal to the returned unit's cost.", effect: purrgilReturn },
-  ],
-})
+registerCard('ASH_038', alsoAt( // Purrgil Ultra
+  whenPlayed("You may return another friendly non-leader unit to its owner's hand. If you do, deal damage to a unit equal to the returned unit's cost.", purrgilReturn),
+  'whenDefeated'))
 
 registerCard('ASH_045', whenDefeated('Look at the top card of a deck. You may discard it.', (s, ctx) => { // Reanimated Night Trooper
   const decks = (['player', 'opponent'] as PlayerId[]).filter(d => s.players[d].deck.length > 0)
@@ -1193,12 +1203,7 @@ const justifierPing = (s: GameState, ctx: { owner: PlayerId; cardId: string; sou
   const targets = allUnits(s).map(u => u.instanceId)
   return targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 1, optional: true, rewardIfDefeated: { chooseAdvantage: 1 }, source: { cardId: ctx.cardId, controller: ctx.owner } }) : s
 }
-registerCard('ASH_146', {
-  abilities: [
-    { trigger: 'whenPlayed', description: 'You may deal 1 damage to a unit. If that unit is defeated this way, give an Advantage token to a unit.', effect: justifierPing },
-    { trigger: 'onAttack', description: 'You may deal 1 damage to a unit. If that unit is defeated this way, give an Advantage token to a unit.', effect: justifierPing },
-  ],
-})
+registerCard('ASH_146', alsoAt(whenPlayed('You may deal 1 damage to a unit. If that unit is defeated this way, give an Advantage token to a unit.', justifierPing), 'onAttack')) // Justifier
 
 registerCard('ASH_123', { actionAbilities: [{ // Lang
   description: "Deal damage equal to this unit's power to a ground unit.",
@@ -1279,13 +1284,14 @@ const twinsGrantSentinel = (s: GameState, ctx: { owner: PlayerId; sourceInstance
   const targets = s.players[ctx.owner].units.filter(u => u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
   return targets.length ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, keywords: [{ name: 'Sentinel' }], optional: true }) : s
 }
-registerCard('ASH_127', {
+// The Twins: a compound head, plus a second printed ability at a third point. Only the When Played
+// block is copied to On Attack, so the second ability rides along untouched.
+registerCard('ASH_127', alsoAt({
   abilities: [
     { trigger: 'whenPlayed', description: 'You may give another friendly unit Sentinel for this phase.', effect: twinsGrantSentinel },
-    { trigger: 'onAttack', description: 'You may give another friendly unit Sentinel for this phase.', effect: twinsGrantSentinel },
     { trigger: 'whenFriendlyUnitDefeated', description: 'Heal 1 damage from your base.', effect: (s, ctx) => healBase(s, ctx.owner, 1) },
   ],
-})
+}, 'onAttack'))
 
 const KACHIRHO_ROUND_KEY = 'ASH_160#round'
 registerCard('ASH_160', { abilities: [{ trigger: 'whenEnemyAttacksBase', description: 'Ready this unit. Once each round.', effect: (s, ctx) => { // Kachirho Militia
@@ -1557,24 +1563,20 @@ registerCard('ASH_032', { // Rancor Keeper
   }],
 })
 
-registerCard('ASH_039', { // Baylan Skoll
-  abilities: (['whenPlayed', 'onAttackEnd'] as const).map(trigger => ({
-    trigger,
-    description: 'If an enemy base was damaged this phase, give an Advantage token to a unit. If a friendly upgrade was defeated this phase, you may exhaust a unit.',
-    effect: (s: GameState, ctx: EffectContext) => {
-      let next = s
-      const targets = allUnits(next).map(u => u.instanceId)
-      if (targets.length === 0) return next
-      if (baseDamagedThisPhase(next, opponentOf(ctx.owner))) {
-        next = pushChoice(next, { kind: 'mayGiveTokens', id: `${ctx.sourceInstanceId}-adv`, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 1, targets, optional: false })
-      }
-      if (upgradeDefeatedThisPhase(next, ctx.owner)) {
-        next = pushChoice(next, { kind: 'mayExhaustUnit', id: `${ctx.sourceInstanceId}-exh`, controller: ctx.owner, targets, optional: true })
-      }
-      return next
-    },
-  })),
-})
+registerCard('ASH_039', alsoAt( // Baylan Skoll: "When Played/When Attack Ends"
+  whenPlayed('If an enemy base was damaged this phase, give an Advantage token to a unit. If a friendly upgrade was defeated this phase, you may exhaust a unit.', (s, ctx) => {
+    let next = s
+    const targets = allUnits(next).map(u => u.instanceId)
+    if (targets.length === 0) return next
+    if (baseDamagedThisPhase(next, opponentOf(ctx.owner))) {
+      next = pushChoice(next, { kind: 'mayGiveTokens', id: `${ctx.sourceInstanceId}-adv`, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 1, targets, optional: false })
+    }
+    if (upgradeDefeatedThisPhase(next, ctx.owner)) {
+      next = pushChoice(next, { kind: 'mayExhaustUnit', id: `${ctx.sourceInstanceId}-exh`, controller: ctx.owner, targets, optional: true })
+    }
+    return next
+  }),
+  'onAttackEnd'))
 
 registerCard('ASH_202', { dealsDamageFirst: () => true }) // Carson Teva — deals combat damage before the defender
 
@@ -1613,6 +1615,9 @@ registerCard('ASH_219', { // Jod Na Nawood
     canAfford(s.players[ctx.owner], 4) ? pushChoice(s, { kind: 'mayPayExhaustArena', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 4 }) : s }],
 })
 
+// Queen Soruna, Trask Walker and Gorian Shard's Corsair are compound heads too, but each closes over
+// the trigger name to keep its two copies' choice ids apart. `alsoAt` hands both copies one closure, so
+// these three keep the explicit form.
 registerCard('ASH_132', { // Queen Soruna
   abilities: (['whenPlayed', 'onAttack'] as const).map(trigger => ({
     trigger,
@@ -1669,21 +1674,17 @@ registerCard('ASH_159', { // Alphabet Squadron U-Wing
   } }],
 })
 
-registerCard('ASH_149', { // Eviscerator
+registerCard('ASH_149', alsoAt({ // Eviscerator
   suppressesFriendlyAdvantage: () => true,
-  abilities: (['whenPlayed', 'onAttack'] as const).map(trigger => ({
-    trigger,
-    description: 'Give 2 Advantage tokens to each other friendly unit.',
-    effect: (s: GameState, ctx: EffectContext) => {
-      let next = s
-      for (const u of next.players[ctx.owner].units) {
-        if (u.instanceId === ctx.sourceInstanceId) continue
-        next = giveToken(giveToken(next, u.instanceId, TOKEN_ADVANTAGE), u.instanceId, TOKEN_ADVANTAGE)
-      }
-      return next
-    },
-  })),
-})
+  ...whenPlayed('Give 2 Advantage tokens to each other friendly unit.', (s, ctx) => {
+    let next = s
+    for (const u of next.players[ctx.owner].units) {
+      if (u.instanceId === ctx.sourceInstanceId) continue
+      next = giveToken(giveToken(next, u.instanceId, TOKEN_ADVANTAGE), u.instanceId, TOKEN_ADVANTAGE)
+    }
+    return next
+  }),
+}, 'onAttack'))
 
 // ── Aura-granted abilities, capture, and searching an opponent's deck ───────────────────
 
@@ -5924,9 +5925,10 @@ registerCard('LAW_216', { // Jabba's Rancor
     ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'deal 7 damage to the chosen unit', then: resume(ctx, 'deal', ctx.targetInstanceId) })
     : dealDamageToUnit(s, ctx.unitChosen!, 7)),
 })
-registerCard('SHD_246', { // Grey Squadron Y-Wing
+/** Grey Squadron Y-Wing's block, printed again on HMW_244 Separatist Harbinger with a compound head. */
+const opponentChoosesThenTwoDamage: CardDefinition = {
   // The opponent picks from their units' cards and their base's card; the step lists what each option is.
-  ...onAttack(whenPlayed('An opponent chooses a unit or base they control. You may deal 2 damage to it.', (s, ctx) => {
+  ...whenPlayed('An opponent chooses a unit or base they control. You may deal 2 damage to it.', (s, ctx) => {
     const opp = opponentOf(ctx.owner)
     const units = s.players[opp].units
     const options = [...units.map(u => u.instanceId), 'base']
@@ -5934,13 +5936,14 @@ registerCard('SHD_246', { // Grey Squadron Y-Wing
       kind: 'selectCardThen', id: `${ctx.sourceInstanceId}-theirs`, controller: opp, candidates: [...units.map(u => u.cardId), s.players[opp].base.cardId],
       text: 'choose a unit or base you control', then: resume(ctx, `options:${options.join(',')}`),
     })
-  })),
+  }),
   ifYouDo: (s, ctx) => {
     if (ctx.step === 'hit') return ctx.unitChosen === 'base' ? dealDamageToBase(s, opponentOf(ctx.owner), 2) : dealDamageToUnit(s, ctx.unitChosen!, 2)
     const chosen = splitStep(ctx.step, 'options:')[ctx.optionIndex ?? -1]
     return chosen ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'deal 2 damage to the chosen unit or base', then: resume(ctx, 'hit', chosen) }) : s
   },
-})
+}
+registerCard('SHD_246', onAttack(opponentChoosesThenTwoDamage)) // Grey Squadron Y-Wing
 
 // F: needed a small engine addition
 registerCard('LAW_051', onAttack(whenPlayed("Draw a card. You may deal damage to a ground unit equal to the number of cards you've drawn this phase.", (s, ctx) => { // Beilert Valance
@@ -7967,7 +7970,7 @@ const infernoSquad = unitThenWp('You may deal 1 damage to a unit and give a Weak
     const hit = dealDamageToUnit(s, id, 1)
     return findUnit(hit, id) ? giveWeakness(hit, id) : hit
   })
-registerCard('HMW_202', allOf(infernoSquad, defeated(infernoSquad))) // Inferno Squad: When Played/When Defeated
+registerCard('HMW_202', alsoAt(infernoSquad, 'whenDefeated')) // Inferno Squad: When Played/When Defeated
 registerCard('HMW_196', defeated({ // Qimir
   ...whenPlayed("You may discard the top card of your deck. If it's not Villainy, give a Weakness token to an enemy unit.", (s, ctx) =>
     (s.players[ctx.owner].deck.length
@@ -8986,3 +8989,83 @@ registerCard('HMW_009', mergeLeaderSides( // Chewbacca
 const printedPowerAtMost = (n: number) => (c: EngineCard | undefined): boolean => printedUnit(c) && (c?.power ?? 0) <= n
 registerCard('HMW_018', leaderPlay('Play a unit with 3 or less power from your hand (paying its cost) and give it Ambush for this phase.', // The Warrior
   { test: printedPowerAtMost(3), gains: [KW.ambush] }, 1))
+
+// ── Compound trigger heads ────────────────────────────────────────────────────────────────────────
+// One printed ability block that fires at either of two or three points, `When Played/On Attack:`,
+// `When Played/When Defeated:`, `When Played/On Attack/When Defeated:`. `alsoAt` (declared with the
+// When Played helpers) copies the block to each further point; nothing here is a new effect, so each
+// card is the block plus the points it is printed at. Cards from every sealed set, grouped by effect.
+
+// A: Homeworlds
+registerCard('HMW_144', alsoAt(createWp('Create a Beast token.', TOKEN_BEAST), 'whenDefeated')) // Howler Pack
+registerCard('HMW_244', alsoAt(opponentChoosesThenTwoDamage, 'onAttack')) // Separatist Harbinger
+registerCard('HMW_063', alsoAt(whenPlayed('You may heal 1 damage from another unit or base.', (s, ctx) => // Rho Medical Shuttle
+  healChoice(s, ctx, 1, pickedIds(s, ctx, pickAll(pickOther, damaged)), BOTH_BASES.filter(b => s.players[b].base.damage > 0), true)), 'onAttack'))
+registerCard('HMW_057', alsoAt({ // Boss Lyonie
+  // "Another one of those tokens": the chosen upgrade's own token, given again to the unit it is on.
+  // Tokens are upgrades (CR 3.7.2), so the candidates are upgrade refs filtered to the token cards.
+  ...whenPlayed('You may choose a token upgrade attached to another unit. Give another one of those tokens to that unit.', (s, ctx) => {
+    const candidates = upgradeCandidates(s, { on: 'unit' }).filter(up => up.unitId !== ctx.sourceInstanceId && up.cardId in TOKEN_CARDS)
+    return candidates.length
+      ? pushChoice(s, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, text: 'copy a token upgrade on another unit', then: resume(ctx) })
+      : s
+  }),
+  ifYouDo: (s, ctx) => (ctx.upgradeChosen ? giveToken(s, ctx.upgradeChosen.unitId, ctx.upgradeChosen.cardId) : s),
+}, 'onAttack'))
+registerCard('HMW_077', alsoAt(unitThenWp('You may defeat a Shield token on a friendly Gungan unit. If you do, create a Beast token and give a Shield token to it.', // Boss Nass
+  pickAll(pickFriendly, pickTrait('Gungan'), (_s, u) => hasToken(u.upgrades, TOKEN_SHIELD)), 'defeat a Shield token on a friendly Gungan unit', true,
+  (s, ctx) => create(defeatUpgrade(s, ctx.targetInstanceId!, TOKEN_SHIELD), ctx.owner, TOKEN_BEAST, 1, (acc, id) => giveToken(acc, id, TOKEN_SHIELD))), 'onAttack'))
+
+// B: tokens created
+registerCard('TWI_229', alsoAt(createWp('Create a Battle Droid token.', TOKEN_BATTLE_DROID), 'whenDefeated')) // Battle Droid Escort
+registerCard('JTL_087', alsoAt(createWp('Create a TIE Fighter token.', TOKEN_TIE_FIGHTER), 'whenDefeated')) // TIE Ambush Squadron
+registerCard('JTL_117', alsoAt(createWp('Create an X-Wing token.', TOKEN_X_WING), 'onAttack')) // General Draven
+registerCard('JTL_090', alsoAt(createWp('Create 3 TIE Fighter tokens.', TOKEN_TIE_FIGHTER, 3), 'onAttack', 'whenDefeated')) // Executor
+registerCard('TS26_14', alsoAt({ // Yoda
+  costModifier: (s, playerId) => (s.players[playerId].resources.length >= 7 ? -2 : 0),
+  ...whenPlayed('Create a Clone Trooper token and give it Sentinel for this phase.', (s, ctx) =>
+    create(s, ctx.owner, TOKEN_CLONE_TROOPER, 1, (acc, id) => addLastingEffect(acc, { targetInstanceId: id, keywords: [KW.sentinel] }))),
+}, 'whenDefeated'))
+
+// C: damage
+registerCard('TWI_181', alsoAt(damageWp('You may deal 1 damage to a unit.', pickAny, 1, true), 'whenDefeated')) // Elite P-38 Starfighter
+registerCard('SEC_142', alsoAt(damageWp('You may deal 4 damage to a ground unit.', pickGround, 4, true), 'onAttack')) // Fulminatrix
+registerCard('SEC_171', alsoAt({ // Punishing One
+  // "Raid 1 for each damaged enemy unit": enemy is read from the unit's own controller, so a stolen
+  // copy counts the other side's damaged units.
+  conditionalKeywords: (s, u) => {
+    const owner = findUnit(s, u.instanceId)?.owner
+    const n = owner ? s.players[opponentOf(owner)].units.filter(x => x.damage > 0).length : 0
+    return n > 0 ? [KW.raid(n)] : []
+  },
+  ...damageWp('You may deal 1 damage to a unit.', pickAny, 1, true),
+}, 'onAttack'))
+registerCard('LAW_214', alsoAt(mayPayWp('You may pay 1. If you do, deal 3 damage to a ground unit.', 1, 'deal 3 damage to a ground unit', (s, ctx) => // Boba Fett
+  damageChoice(s, ctx, 3, picked(s, ctx, pickGround))), 'onAttack'))
+registerCard('TWI_048', alsoAt(unitThenWp('You may deal 1 damage to this unit and 2 damage to another space unit.', // Obi-Wan's Aethersprite
+  pickAll(pickArena('space'), pickOther), 'deal 1 damage to this unit and 2 damage to another space unit', true,
+  (s, ctx) => dealDamageToUnit(dealDamageToUnit(s, ctx.sourceInstanceId!, 1), ctx.targetInstanceId!, 2)), 'onAttack'))
+registerCard('SOR_134', alsoAt(whenPlayed('Deal 2 damage to an enemy base and 2 damage to an enemy unit.', (s, ctx) => { // Ruthless Raider
+  const based = dealDamageToBase(s, opponentOf(ctx.owner), 2)
+  return damageChoice(based, ctx, 2, picked(based, ctx, pickEnemy))
+}), 'whenDefeated'))
+
+// D: tokens, buffs and keywords for this phase
+registerCard('TWI_046', alsoAt(buffWp('Give a unit Sentinel for this phase.', pickAny, () => ({ keywords: [KW.sentinel] }), false), 'onAttack')) // Captain Typho
+registerCard('SEC_031', alsoAt(buffWp('You may give another friendly Official unit Sentinel for this phase.', // Nute Gunray
+  pickAll(pickFriendly, pickOther, pickTrait('Official')), () => ({ keywords: [KW.sentinel] }), true), 'onAttack'))
+registerCard('LOF_165', alsoAt(buffWp('Give another friendly Force unit +2/+0 for this phase.', // Asajj Ventress
+  pickAll(pickFriendly, pickOther, pickTrait('Force')), () => ({ power: 2 }), false), 'onAttack'))
+registerCard('JTL_088', alsoAt(buffWp('You may give another First Order unit +2/+2 for this phase.', // Captain Phasma
+  pickAll(pickOther, pickTrait('First Order')), () => ({ power: 2, hp: 2 }), true), 'onAttack'))
+registerCard('SEC_202', alsoAt(buffWp('Give another friendly unit +1/+0 and Saboteur for this phase.', // Rebel Propagandist
+  pickAll(pickFriendly, pickOther), () => ({ power: 1, keywords: [KW.saboteur] }), false), 'whenDefeated'))
+registerCard('SEC_119', alsoAt(whenPlayed('Give an Experience token to each other friendly unit.', (s, ctx) => // Crucible
+  expEach(s, ctx, pickAll(pickOther, pickFriendly))), 'whenDefeated'))
+registerCard('SOR_050', alsoAt(whenPlayed('You may give a Shield token to another Spectre unit.', (s, ctx) => // The Ghost
+  shieldChoice(s, ctx, pickedIds(s, ctx, pickAll(pickOther, pickTrait('Spectre'))), true)), 'onAttack'))
+registerCard('SOR_160', alsoAt(whenPlayed("Bases can't be healed for this phase.", s => ({ ...s, basesUnhealable: true })), 'onAttack')) // Wolffe
+registerCard('TWI_033', alsoAt(whenPlayed('This unit gains Sentinel for this phase.', (s, ctx) => // Calculating MagnaGuard
+  addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: [KW.sentinel] })), 'whenFriendlyUnitDefeated'))
+registerCard('LOF_207', alsoAt(targetWp('You may exhaust a ground unit.', 'mayExhaustUnit', pickGround, true), 'whenDefeated')) // Loth-Cat
+registerCard('SEC_055', alsoAt(whenPlayed('Heal 1 damage from your base.', (s, ctx) => healBase(s, ctx.owner, 1)), 'whenDefeated')) // Dhani Pilgrim

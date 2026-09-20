@@ -126,6 +126,7 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   JTL_137: { keywords: [] }, // Vonreg's TIE Interceptor: Overwhelm at 4 power, Raid 1 at 6
   SOR_188: { keywords: [] }, // Chopper: Raid 1 while you control another Spectre unit
   SOR_131: { keywords: [] }, // Fifth Brother: Raid 1 for each damage on him
+  SEC_171: { keywords: [] }, // Punishing One: Raid 1 for each damaged enemy unit
   TS26_75: { keywords: [] }, // Jango Fett: Ambush while an enemy unit has attacked your base this phase
 
   // A keyword a unit only ever hands to other units (continued).

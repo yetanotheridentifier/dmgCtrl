@@ -144,7 +144,8 @@ Two phases:
   needed followed, group by group. Vult Skerris's Defender (needs "discarded a card this phase") and
   the 14 other constant-ability cards lifted out are carried by #477. **When Defeated units are
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
-  shared with another trigger point ("When Played/When Defeated") waits on #463, and Stolen AT-Hauler
+  shared with another trigger point ("When Played/When Defeated") is built on the compound-head framework
+(#463) as its groups ship, with the groups still outstanding on #674, and Stolen AT-Hauler
   (an opponent may play it from the discard pile) is on #471. **Leaders are finished** on both sides (#458): the 19 not built are on the ticket of what
   blocks them, #465 pilots (7), #471 play from discard (2),
   #466 capture, #467 Bounty, #470 Plot, #474 trigger points, #468 playing any card type, #602 Credit
@@ -188,7 +189,7 @@ and Jar Jar Binks (reading who gave a token upgrade, which the phase record does
 who received one) went to #477.
 
 **70 were blocked by exactly one thing**: the 18 Fortify, 18 Weakness and 14 Beast-token cards are
-built (less one Fortify card lifted, above), and the rest are on #463 compound triggers (3), #474 a new trigger point (3),
+built (less one Fortify card lifted, above), and the rest are the 3 compound-head cards (built, #463), #474 a new trigger point (3),
 #471 play from discard (2), #468 (1), #475 (1) and #477's one-offs (10). 16 are multi-blocked, on #477.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted into #477 and the batch

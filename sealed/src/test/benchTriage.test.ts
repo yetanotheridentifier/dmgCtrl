@@ -241,16 +241,36 @@ describe('trigger heads', () => {
     expect(r.batches).toEqual([{ head: 'Action', cards: 1 }])
   })
 
-  it('reports a long compound head as trigger:compound', () => {
-    // JTL_089 The Invisible Hand, SOR_040 Avenger, SOR_147 Black One. Three cards, because a trigger
-    // blocker carried by fewer than ONE_OFF_THRESHOLD cards folds into trigger:one-off, compound
-    // included. Over the nine sets compound is the sole blocker on 47 cards, so the fold never bites.
-    const r = triage([
-      card({ Number: '1', Name: 'The Invisible Hand', FrontText: 'When Played/When this unit completes an attack (and survives): You may search the top 8 cards of your deck for a Droid unit, reveal it, and draw it. If it costs 2 or less, you may play it for free. (Put the other cards on the bottom of your deck in a random order.)' }),
-      card({ Number: '2', Name: 'Avenger', FrontText: 'When Played/On Attack: An opponent chooses a non-leader unit they control. Defeat that unit.' }),
-      card({ Number: '3', Name: 'Black One', FrontText: 'When Played/When Defeated: You may discard your hand. If you do, draw 3 cards.' }),
-    ])
-    expect(r.triaged.map(c => c.blockers)).toEqual([['trigger:compound'], ['trigger:compound'], ['trigger:compound']])
+  /**
+   * A slash joins two trigger points, and the card is blocked by whichever of them the engine does not
+   * dispatch, not by the join. One ability block registered at several points is what the engine does,
+   * so a head whose every part is dispatched blocks on nothing at all.
+   */
+  it.each([
+    ['SOR_040 Avenger', 'When Played/On Attack: An opponent chooses a non-leader unit they control. Defeat that unit.'],
+    ['SOR_147 Black One', 'When Played/When Defeated: You may discard your hand. If you do, draw 3 cards.'],
+    ['JTL_090 Executor', 'When Played/On Attack/When Defeated: Create 3 TIE Fighter tokens.'],
+    ['SEC_048 Captain Rex', 'When Played/When this unit completes an attack: Give this unit and an enemy unit Sentinel for this phase.'],
+    ['TWI_033 Calculating MagnaGuard', 'When Played/When a friendly unit is defeated: This unit gains Sentinel for this phase.'],
+  ])('blocks %s on nothing: every part of its compound head is a dispatched trigger point', (_card, text) => {
+    expect(triage([card({ FrontText: text })]).triaged[0].blockers).toEqual([])
+  })
+
+  it('reads a trailing parenthetical on a head as reminder text, not as part of the trigger point', () => {
+    // JTL_089 The Invisible Hand. "(and survives)" restates when onAttackEnd fires, which it already does.
+    const text = 'When Played/When this unit completes an attack (and survives): You may search the top 8 cards of your deck for a Droid unit, reveal it, and draw it. If it costs 2 or less, you may play it for free. (Put the other cards on the bottom of your deck in a random order.)'
+    expect(triage([card({ FrontText: text })]).triaged[0].blockers).toEqual([])
+  })
+
+  it('blocks a compound head on the half the engine cannot dispatch, not on the join', () => {
+    // SEC_143 The Elite Squad. "When Played" is dispatched; damage dealt to this unit is not a trigger
+    // point at all, so that half is what holds the card back and the report has to name it. Three cards,
+    // because a trigger blocker on fewer than ONE_OFF_THRESHOLD cards folds into trigger:one-off.
+    // The blocker names the missing half alone, so cards waiting on the same point group together
+    // however their compound heads are spelled.
+    const r = triage([1, 2, 3].map(n => card({ Number: String(n), Name: `Squad ${n}`, FrontText: 'When Played/When damage is dealt to this unit: You may deal 2 damage to another unique unit.' })))
+    const missing = ['trigger:When damage is dealt to this unit']
+    expect(r.triaged.map(c => c.blockers)).toEqual([missing, missing, missing])
   })
 
   /**
