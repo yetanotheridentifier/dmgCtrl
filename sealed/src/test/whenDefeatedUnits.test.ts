@@ -35,8 +35,12 @@ const SHIPPED = [
 ]
 /** Not When Defeated itself, but reads it: the first unit played each round that has one costs less. */
 const KRENNIC = 'JTL_032'
-/** Scoped by the triage but lifted out to the ticket that owns their blocker. */
-const LIFTED = ['JTL_221']
+/**
+ * Scoped by the triage but lifted out to the ticket that owns their blocker. Empty: `JTL_221`
+ * Stolen AT-Hauler was the last of them and shipped with playing a card out of a discard pile,
+ * which is where its When Defeated leads. Its own tests live with that group.
+ */
+const LIFTED: string[] = []
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
 const real = (id: string): EngineCard => {

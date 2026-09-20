@@ -114,11 +114,11 @@ describe('describeAction — pending choice labels', () => {
 
     it('names the discard-pile unit being played', () => {
       const s = withChoice(
-        { kind: 'mayPlayUnitFromDiscard', id: 'x', controller: 'player', candidates: ['DEADU'], remaining: 1 } as unknown as PendingChoice,
+        { kind: 'playCardFrom', id: 'x', controller: 'player', zone: 'discard', candidates: [{ index: 0, cardId: 'DEADU' }], optional: true, free: true } as unknown as PendingChoice,
         { DEADU: card({ id: 'DEADU', name: 'Fallen Scout', type: 'unit', arena: 'ground', cost: 2 }) },
       )
       expect(describeAction(s, 'player', { type: 'acceptChoice', choiceId: 'x', optionIndex: 0 })).toMatch(/fallen scout/i)
-      expect(describeAction(s, 'player', { type: 'skipTrigger', choiceId: 'x' })).toBe("Don't play")
+      expect(describeAction(s, 'player', { type: 'skipTrigger', choiceId: 'x' })).toBe('Cancel')
     })
 
     it('states the number chosen (Sense Through the Force)', () => {

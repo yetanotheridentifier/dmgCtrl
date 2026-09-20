@@ -1,6 +1,24 @@
-import type { GameState, PendingChoice, PlayerId } from '../engine/types'
+import type { GameState, PendingChoice, PlayFromZone, PlayerId } from '../engine/types'
 import { getCardDefinition } from '../engine/abilities'
 import type { DescribePart } from './describeAction'
+
+/**
+ * What a play's zone is called in a prompt. One table for every site that names a zone, so a new
+ * zone cannot reach players as its internal name the way a choice kind once did (#379/#380).
+ */
+export function playFromZoneName(zone: PlayFromZone): string {
+  switch (zone) {
+    case 'hand': return 'your hand'
+    case 'deckTop': return 'the top of your deck'
+    case 'resources': return 'your resources'
+    case 'opponentResources': return "your opponent's resources"
+    case 'handOrResources': return 'your hand or resources'
+    case 'discard': return 'your discard pile'
+    case 'opponentDiscard': return "your opponent's discard pile"
+    case 'anyDiscard': return 'either discard pile'
+    case 'handOrDiscard': return 'your hand or discard pile'
+  }
+}
 
 /**
  * Choice kinds resolved by clicking a highlighted card on the board rather than a menu button.
@@ -169,8 +187,6 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return ['choose an arena; every unit in it is dealt 2 damage when it attacks this phase']
     case 'chooseMode':
       return ['choose which effect to take']
-    case 'mayPlayUnitFromDiscard':
-      return ['choose a unit to play from your discard pile']
     case 'chooseNumber':
       return [choice.text ?? 'choose a number']
     case 'selectUnitToSteal':
@@ -259,12 +275,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
         ? 'name a card nobody may play this phase'
         : 'name a card the opponent may not play while this unit is out']
     case 'playCardFrom': {
-      const where = choice.zone === 'hand' ? 'your hand'
-        : choice.zone === 'deckTop' ? 'the top of your deck'
-          : choice.zone === 'opponentResources' ? "your opponent's resources"
-            : 'your resources'
       const price = choice.free ? ' for free' : choice.costDelta ? ` for ${Math.abs(choice.costDelta)} less` : ''
-      return [`choose a card to play from ${where}${price}`]
+      return [`choose a card to play from ${playFromZoneName(choice.zone)}${price}`]
     }
     case 'mayResourceFromHand':
       return ['choose a card to resource from your hand, or keep them all']

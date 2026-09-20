@@ -18,6 +18,11 @@ export type Action =
   | { type: 'playBaseUpgrade'; handIndex: number }
   // Play an event: it never enters play — pay its cost, put it in the discard, then resolve it.
   | { type: 'playEvent'; handIndex: number }
+  // Take a `DiscardPlayGrant`: "for this phase, you may play that card from <a> discard pile". A play
+  // action rather than a choice answer, because the permission stands until the phase ends and the
+  // player takes it on a turn of their own. `grantIndex` addresses it in `state.discardPlayGrants`,
+  // and `targetInstanceId` supplies the host when the granted card is an upgrade.
+  | { type: 'playFromDiscard'; grantIndex: number; targetInstanceId?: string }
   // `choiceId` is set when this attack is how a pending choice is ANSWERED (Ambush, Support,
   // "you may attack"). Without it the resolver had to guess which choice the attack belonged to,
   // and guessed the queue head, consuming the wrong one when several were outstanding.

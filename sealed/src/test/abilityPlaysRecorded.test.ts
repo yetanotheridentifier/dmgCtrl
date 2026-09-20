@@ -51,8 +51,8 @@ describe('a unit played by an ability counts as played this phase', () => {
     expect(cardsPlayedThisPhase(done, 'player')).toEqual(['FORCE_U'])
   })
 
-  it('a unit played from the discard (mayPlayUnitFromDiscard)', () => {
-    const s = board({ discard: ['FORCE_U'] }, [{ kind: 'mayPlayUnitFromDiscard', id: 'c', controller: 'player', candidates: ['FORCE_U'], remaining: 1 }])
+  it('a unit played from the discard (playCardFrom, zone `discard`)', () => {
+    const s = board({ discard: ['FORCE_U'] }, [{ kind: 'playCardFrom', id: 'c', controller: 'player', zone: 'discard', candidates: [{ index: 0, cardId: 'FORCE_U' }], free: true }])
     const done = accept(s, { optionIndex: 0 })
     expect(unitIds(done)).toEqual(['FORCE_U'])
     expect(cardsPlayedThisPhase(done, 'player')).toEqual(['FORCE_U'])

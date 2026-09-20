@@ -5,14 +5,14 @@ import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
-import { discardUnitsMatching, playUpgradeOnto } from './resolve'
+import { playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
+import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
-import type { CombatContext, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PlayerId, PlayFromTail, PlayFromZone, UnitState, UpgradeAttachment, UpgradeRef } from './types'
+import type { CombatContext, DiscardPlayGrant, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PlayerId, PlayFromTail, PlayFromZone, UnitState, UpgradeAttachment, UpgradeRef } from './types'
 
 /**
  * Real card definitions. Side-effect module: importing it registers every
@@ -1990,12 +1990,13 @@ registerCard('ASH_104', { // Dathomiri Magicks
   abilities: [{
     trigger: 'whenPlayed',
     description: 'Play up to 3 non-Vehicle units that each cost 2 or less from your discard pile for free.',
-    effect: (s, ctx) => {
-      const candidates = discardUnitsMatching(s, ctx.owner, 2, 'Vehicle')
-      return candidates.length
-        ? pushChoice(s, { kind: 'mayPlayUnitFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, remaining: 3, maxCost: 2, excludeTrait: 'Vehicle' })
-        : s
-    },
+    // "Up to 3 … (one at a time)" is the `again` re-offer, which re-indexes what is left of the same
+    // candidates against the pile the play just shortened. Three plays rather than three picks,
+    // because each one is a play whose When Played can change what the next one may take.
+    effect: (s, ctx) => playFromZoneChoice(s, ctx, {
+      zone: 'discard', free: true, optional: true, then: { again: true, againLimit: 3 },
+      test: c => c?.type === 'unit' && c.cost <= 2 && !c.traits.some(t => t.toLowerCase() === 'vehicle'),
+    }),
   }],
 })
 
@@ -9278,3 +9279,213 @@ registerCard('SHD_109', whenPlayed('Reveal any number of resources you control. 
   // wants one, which is what the re-offer does. A non-unit revealed this way does nothing, so only
   // the units are candidates.
   playFromZoneChoice(s, ctx, { test: c => c?.type === 'unit', free: true, optional: true, then: { again: true } })))
+
+// ── Playing a card out of a discard pile ───────────────────────────────────────────────────────
+//
+// A discard pile is another zone, so these are the same `playFromZoneChoice` as everything above,
+// with `zone` naming a pile. What each card actually decides is which pile, which of its cards are
+// eligible, what the play costs and what follows it.
+//
+// The cards that instead read "FOR THIS PHASE, you may play it" are further down: those leave a
+// standing permission on the Play a Card action rather than offering a play now.
+
+/** Units in `owner`'s discard pile that were defeated this phase (Maul, Unnatural Life). */
+const defeatedThisPhaseTest = (s: GameState, owner: PlayerId): ((c: EngineCard | undefined) => boolean) => {
+  const fallen = new Set(defeatedThisPhase(s, owner))
+  return c => printedUnit(c) && c !== undefined && fallen.has(c.id)
+}
+
+/** "At the start of the next regroup phase, defeat it": the unit the play put into play. */
+const defeatItAtRegroup: CardDefinition['delayed'] = (s, e) => (e.unitId && findUnit(s, e.unitId) ? defeatUnit(s, e.unitId) : s)
+
+registerCard('HMW_204', { // Nightbrother
+  ...whenPlayed('You may play a unit from your discard pile. It costs 3 less and enters play ready. At the start of the next regroup phase, defeat it.', (s, ctx) =>
+    playFromZoneChoice(s, ctx, {
+      zone: 'discard', test: printedUnit, costDelta: -3, optional: true,
+      then: { entersReady: true, sourceCardId: 'HMW_204', delay: 'regroupStart' },
+    })),
+  delayed: defeatItAtRegroup,
+})
+
+// Maul's back. His front (play a unit from hand 1 less, then defeat it) is a hand play, not this
+// ticket's; the deployed side reaches the pile for a unit that fell THIS phase.
+registerCard('HMW_016', whenDeployed('You may play a unit that was defeated this phase from your discard pile. It costs 5 less.', (s, ctx) => // Maul
+  playFromZoneChoice(s, ctx, { zone: 'discard', test: defeatedThisPhaseTest(s, ctx.owner), costDelta: -5, optional: true })))
+
+registerCard('TWI_189', { // Unnatural Life
+  ...whenPlayed('Play a unit that was defeated this phase from your discard pile. It costs 2 less and enters play ready. At the start of the regroup phase, defeat it.', (s, ctx) =>
+    playFromZoneChoice(s, ctx, {
+      zone: 'discard', test: defeatedThisPhaseTest(s, ctx.owner), costDelta: -2,
+      then: { entersReady: true, sourceCardId: 'TWI_189', delay: 'regroupStart' },
+    })),
+  delayed: defeatItAtRegroup,
+})
+
+registerCard('LAW_245', { // Salvaged Materials
+  ...whenPlayed('Play an Item upgrade from your discard pile. It costs 3 less. At the start of the next regroup phase, defeat it.', (s, ctx) =>
+    playFromZoneChoice(s, ctx, {
+      zone: 'discard', costDelta: -3,
+      test: c => isUpgradeCard(c) && printedTrait(c, 'Item'),
+      then: { sourceCardId: 'LAW_245', delay: 'regroupStart' },
+    })),
+  // The upgrade is what is defeated, not its host, so the effect names both: the card and the unit
+  // it went onto. A host that has since left play takes the upgrade with it, and there is nothing
+  // left to defeat.
+  delayed: (s, e) => {
+    const host = e.unitId ? findUnit(s, e.unitId) : undefined
+    const at = host?.unit.upgrades.findIndex(u => u.cardId === e.upgradeCardId)
+    return host && at !== undefined && at >= 0 ? defeatUpgradeAt(s, host.unit.instanceId, at) : s
+  },
+})
+
+registerCard('JTL_121', whenPlayed('Play a Vehicle unit from your discard pile (paying its cost). Then, deal 1 damage to it.', (s, ctx) => // Salvage
+  playFromZoneChoice(s, ctx, {
+    zone: 'discard', test: c => printedUnit(c) && printedTrait(c, 'Vehicle'),
+    then: { sourceCardId: 'JTL_121', damageIt: 1 },
+  })))
+
+registerCard('TS26_57', whenPlayed('Play a non-Vehicle from your discard pile (paying its cost) and give an Experience token to it.', (s, ctx) => // Mechanize
+  playFromZoneChoice(s, ctx, {
+    zone: 'discard', test: c => printedUnit(c) && !printedTrait(c, 'Vehicle'),
+    then: { sourceCardId: 'TS26_57', tokens: [TOKEN_EXPERIENCE] },
+  })))
+
+registerCard('SOR_102', { // Home One — Restore and the friendly Restore 1 aura come from elsewhere
+  ...whenPlayed('Play a Heroism unit from your discard pile. It costs 3 less.', (s, ctx) =>
+    playFromZoneChoice(s, ctx, { zone: 'discard', costDelta: -3, test: c => printedUnit(c) && printedAspect(c, 'Heroism') })),
+  aura: (_s, _source, target, friendly) => (friendly && !target.isLeader ? { keywords: [KW.restore(1)] } : undefined),
+})
+
+registerCard('SHD_094', whenPlayed("Play a unit from your discard pile. It costs 6 less. If it's a Force unit, it costs 8 less instead.", (s, ctx) => { // Palpatine's Return
+  // Two prices over one pile, and the discount depends on the card picked rather than on the play,
+  // so the Force units are offered as their own cheaper choice and the rest at 6 off. The player
+  // sees both lists; a Force unit only ever appears in the 8-off one.
+  const force = playFromZoneChoice(s, ctx, {
+    zone: 'discard', costDelta: -8, id: `${ctx.cardId}-force`,
+    test: c => printedUnit(c) && printedTrait(c, 'Force'),
+  })
+  return playFromZoneChoice(force, ctx, {
+    zone: 'discard', costDelta: -6, id: `${ctx.cardId}-plain`,
+    test: c => printedUnit(c) && !printedTrait(c, 'Force'),
+  })
+}))
+
+registerCard('SHD_242', whenPlayed('If you control Moff Gideon (as a leader or unit), play a Villainy unit that costs 3 or less from your hand or discard pile for free.', (s, ctx) => // Gideon's Light Cruiser
+  // "As a leader or unit" reaches the undeployed leader card as well as anything in play, which is
+  // exactly what `playerControlsNamed` already asks.
+  playerControlsNamed(s, ctx.owner, 'Moff Gideon')
+    ? playFromZoneChoice(s, ctx, {
+      zone: 'handOrDiscard', free: true,
+      test: c => printedUnit(c) && printedAspect(c, 'Villainy') && (c?.cost ?? 99) <= 3,
+    })
+    : s))
+
+registerCard('TWI_040', whenPlayed('If an enemy unit was defeated this phase, play an upgrade from your hand or from any player\'s discard pile, ignoring its aspect penalty.', (s, ctx) => // A Fine Addition
+  // "From your hand OR from any player's discard pile" is two zones, so the hand play and the
+  // two-pile play are raised as one choice each; the piles are one paired zone, own first.
+  defeatedThisPhase(s, opponentOf(ctx.owner)).length === 0 ? s : playFromZoneChoice(
+    playFromZoneChoice(s, ctx, { zone: 'hand', test: isUpgradeCard, waive: { all: true }, optional: true, id: `${ctx.cardId}-hand` }),
+    ctx, { zone: 'anyDiscard', test: isUpgradeCard, waive: { all: true }, optional: true, id: `${ctx.cardId}-piles` },
+  )))
+
+// Kylo Ren's back: "Play any number of upgrades from your discard pile on this unit (one at a time,
+// paying their costs)". Uncapped, so the re-offer carries no limit; the one legal host is Kylo.
+// His front (discard a card, draw one back if it was an upgrade) is #474's, not this ticket's.
+registerCard('LOF_001', whenDeployed('Play any number of upgrades from your discard pile on this unit (one at a time, paying their costs).', (s, ctx) =>
+  playFromZoneChoice(s, ctx, {
+    zone: 'discard', test: isUpgradeCard, optional: true,
+    targetUnits: () => (ctx.sourceInstanceId ? [ctx.sourceInstanceId] : []),
+    then: { again: true },
+  })))
+
+registerCard('SEC_003', { // Lama Su
+  ...leaderFront('[Exhaust]: Play an upgrade from your hand on a friendly non-Vehicle unit. It costs 1 less. If you do, deal 1 damage to that unit.', {
+    usable: (s, ctx) => canPlayFromZone(s, ctx.owner, lamaSu(s, ctx.owner, 'hand')),
+    effect: (s, ctx) => playFromZoneChoice(s, ctx, { ...lamaSu(s, ctx.owner, 'hand'), id: `${ctx.cardId}-front`, then: { sourceCardId: 'SEC_003', damageIt: 1 } }),
+  }),
+  // Back: "When this unit completes an attack (AND SURVIVES)". `onAttackEnd` fires for a defeated
+  // attacker too (CR 7.6), so the survival is a guard here rather than a trigger point of its own.
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'You may play an upgrade from your discard pile on a friendly non-Vehicle unit. It costs 1 less.',
+    effect: (s, ctx) => (ctx.sourceInstanceId && findUnit(s, ctx.sourceInstanceId)
+      ? playFromZoneChoice(s, ctx, { ...lamaSu(s, ctx.owner, 'discard'), optional: true })
+      : s),
+  }],
+})
+/** Lama Su plays an upgrade 1 less onto a friendly non-Vehicle, out of whichever zone the side names. */
+const lamaSu = (s: GameState, owner: PlayerId, zone: 'hand' | 'discard'): PlayFromZoneOptions => ({
+  zone, costDelta: -1, test: isUpgradeCard,
+  targetUnits: () => s.players[owner].units.filter(u => !unitHasTrait(s, u, 'Vehicle')).map(u => u.instanceId),
+})
+
+registerCard('LOF_036', whenPlayed('You may defeat a friendly Night unit not named Old Daka. Then, you may play that unit from your discard pile for free.', (s, ctx) => { // Old Daka
+  // The replay rides on `selectUnitToDefeat`'s `thenReplayFromDiscard`, which One Must Destroy to
+  // Create already uses: the unit it defeated is the one offered back, free.
+  const targets = s.players[ctx.owner].units
+    .filter(u => unitHasTrait(s, u, 'Night') && s.cards[u.cardId]?.name !== 'Old Daka' && !isTokenCard(u.cardId))
+    .map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'selectUnitToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, thenReplayFromDiscard: true })
+    : s
+}))
+
+// ── "For this phase, you may play it from a discard pile" ───────────────────────────────────────
+//
+// A standing permission rather than a play now: see `DiscardPlayGrant`. Each card decides who gets
+// it, whose pile it is over, which card it names and on what terms.
+
+registerCard('HMW_122', alsoAt({ // Boga
+  ...whenPlayed('Choose a non-Vehicle unit in your discard pile not named Boga. For this phase, you may play that unit from your discard pile. It costs 1 less.', (s, ctx) => {
+    const candidates = s.players[ctx.owner].discard.filter(id => {
+      const c = s.cards[id]
+      return printedUnit(c) && !printedTrait(c, 'Vehicle') && c?.name !== 'Boga'
+    })
+    return candidates.length
+      ? pushChoice(s, {
+        kind: 'selectCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates,
+        text: 'choose a non-Vehicle unit in your discard pile to make playable this phase',
+        then: { cardId: 'HMW_122', owner: ctx.owner, sourceInstanceId: ctx.sourceInstanceId },
+      })
+      : s
+  }),
+  // "For this phase, you may play THAT unit": the permission names the card just chosen, which is
+  // still sitting in the pile. Boga fires at either of two points, so both routes land here.
+  ifYouDo: (s, ctx) => (ctx.cardChosen
+    ? addDiscardPlayGrant(s, { player: ctx.owner, owner: ctx.owner, cardId: ctx.cardChosen, costDelta: -1 })
+    : s),
+}, 'whenDefeated'))
+
+registerCard('HMW_109', whenDefeated('If this unit had 5 or more power, for this phase you may play this unit from your discard pile for free and give 2 Weakness tokens to it.', (s, ctx) => // Tireless Magnaguard
+  // "HAD 5 or more power": the power it had as it was defeated, which is what `ctx.defeatedUnit`
+  // holds — reading the card's printed power would miss every buff and debuff on it.
+  (ctx.defeatedUnit && effectivePower(s, ctx.defeatedUnit) >= 5 && s.players[ctx.owner].discard.includes('HMW_109')
+    ? addDiscardPlayGrant(s, { player: ctx.owner, owner: ctx.owner, cardId: 'HMW_109', free: true, tokens: [TOKEN_WEAKNESS, TOKEN_WEAKNESS] })
+    : s)))
+
+registerCard('JTL_221', whenDefeated('Choose an opponent. For this phase, they may play this unit from its owner\'s discard pile for free.', (s, ctx) => // Stolen AT-Hauler
+  // A two-player game, so "choose an opponent" has one answer and needs no pick. The permission is
+  // the OTHER player's, over a pile that is not theirs, which is the shape the grant exists for.
+  (s.players[ctx.owner].discard.includes('JTL_221')
+    ? addDiscardPlayGrant(s, { player: opponentOf(ctx.owner), owner: ctx.owner, cardId: 'JTL_221', free: true })
+    : s)))
+
+registerCard('SHD_115', whenDefeated('Search the top 10 cards of your deck for a unit that costs 2 or less and discard it. For this phase, you may play that card from your discard pile for free.', (s, ctx) => // Cobb Vanth
+  searchDiscardGrant(s, ctx, 10, c => printedUnit(c) && (c?.cost ?? 99) <= 2, { free: true })))
+
+registerCard('TWI_201', whenPlayed('Search the top 10 cards of your deck for 2 Heroism non-unit cards and discard them. For this phase, you may play the discarded cards, and they each cost 2 less.', (s, ctx) => // Aid from the Innocent
+  searchDiscardGrant(s, ctx, 10, c => c !== undefined && c.type !== 'unit' && printedAspect(c, 'Heroism'), { costDelta: -2 }, 2)))
+
+/**
+ * "Search the top N …, discard it, and for this phase you may play that card from your discard
+ * pile": one search whose find goes to the pile rather than the hand, leaving a permission over it.
+ */
+const searchDiscardGrant = (s: GameState, ctx: EventCtx, depth: number, test: (c: EngineCard | undefined) => boolean, terms: Omit<DiscardPlayGrant, 'player' | 'owner' | 'cardId'>, count = 1): GameState => {
+  const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, depth))
+  if (revealed.length === 0) return s
+  const eligibleIndices = revealed.flatMap((id, i) => (test(s.cards[id]) ? [i] : []))
+  return pushChoice(s, {
+    kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices,
+    discardIt: true, grantPlay: terms, ...(count > 1 && { remaining: count, upTo: true }),
+  })
+}

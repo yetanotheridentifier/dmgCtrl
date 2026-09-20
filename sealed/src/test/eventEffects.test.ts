@@ -475,7 +475,7 @@ describe('One Must Destroy to Create (247) — defeat a unit, then replay it fre
     expect(defeated.players.player.discard).toContain('GRD')
 
     const replay = choice(defeated)
-    expect(replay).toMatchObject({ kind: 'mayPlayUnitFromDiscard' })
+    expect(replay).toMatchObject({ kind: 'playCardFrom', zone: 'discard', free: true })
     const before = defeated.players.player.resources.filter(r => !r.exhausted).length
     const done = resolve(defeated, { type: 'acceptChoice', choiceId: replay.id, optionIndex: 0 })
     expect(done.players.player.units.some(u => u.cardId === 'GRD')).toBe(true)
@@ -512,7 +512,10 @@ describe('Dathomiri Magicks (104) — cheaper with a Force unit, replays up to 3
     })
     const played = play(s)
     const c = choice(played)
-    expect(c.kind === 'mayPlayUnitFromDiscard' && c.candidates).toEqual(['TINY', 'TINY', 'TINY']) // RIG is a Vehicle, DEAR too dear
+    // RIG is a Vehicle, DEAR too dear. The refs carry the pile index each card is played from.
+    expect(c.kind === 'playCardFrom' && c.candidates).toEqual([
+      { index: 0, cardId: 'TINY' }, { index: 1, cardId: 'TINY' }, { index: 2, cardId: 'TINY' },
+    ])
 
     let cur = played
     for (let i = 0; i < 3; i++) cur = resolve(cur, { type: 'acceptChoice', choiceId: choice(cur).id, optionIndex: 0 })
