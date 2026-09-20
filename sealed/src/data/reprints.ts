@@ -53,6 +53,7 @@ export const REPRINTS: Reprint[] = [
   { name: 'Snapshot Reflexes', canonical: 'SOR_215', printings: ['SHD_223'] },
   { name: 'ISB Agent', canonical: 'SEC_184', printings: ['SOR_176'] },
   { name: 'Death Trooper', canonical: 'SEC_030', printings: ['SHD_030', 'SOR_033'] },
+  { name: 'Pounce', canonical: 'LOF_224', printings: ['HMW_239'] },
 ]
 
 const BY_PRINTING: Record<string, string> = Object.fromEntries(
