@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useDecks } from '../hooks/useDecks'
 import type { SavedDeck } from '../data/deckStore'
 import type { SwuCard } from '../data/cards'
@@ -28,6 +28,10 @@ const ERROR_MESSAGES: Record<ParseDeckError, string> = {
   'too-few-cards': 'Deck must have at least 30 cards.',
 }
 
+/**
+ * The cards a deck names, leader and base first: they carry the highest display priority, and
+ * `syncCatalogue` hydrates in the order it is given.
+ */
 function deckRefs(deck: ParsedDeck): CardRef[] {
   const ids = [deck.leader, deck.base, ...deck.cards.map(c => c.id)]
   return ids
@@ -87,9 +91,9 @@ const DEFAULT_SET = SET_CODES[0]
 /**
  * The pool one generator builds from, or `null` while its set has nothing cached.
  *
- * Reads the local cache only, so opening the screen still touches no network: a set is fetched when
- * it is chosen or imported, not when it is displayed. `cacheVersion` changes once an import
- * finishes, which is what brings a newly cached set in without re-reading on every progress tick.
+ * Reads the local cache only: fetching is `ensureSet`'s job, so this stays a pure read and cannot
+ * turn a re-render into network traffic. `cacheVersion` changes once a fetch finishes, which is what
+ * brings a newly cached set in without re-reading on every progress tick.
  */
 function useCachedPool(set: string, cacheVersion: number): Pool | null {
   const [pool, setPool] = useState<Pool | null>(null)
@@ -105,12 +109,12 @@ function useCachedPool(set: string, cacheVersion: number): Pool | null {
 
 /**
  * What a generator's panel says about its pool, in one place because both sides say it: the set is
- * either on its way, not here, or here with the number of cards behind it.
+ * either here with the number of cards behind it, or not here yet with whatever its fetch last
+ * reported. The fetch is reported on the panel that asked for it, so a set that is slow or
+ * unreachable says so where the player is looking rather than in another column.
  */
-function poolSummary(set: string, pool: Pool | null, caching: string | null, cannotBuild = false): string {
-  if (!pool) {
-    return caching === set ? `Importing ${set}…` : `No ${set} cards cached: import it in the card catalogue`
-  }
+function poolSummary(set: string, pool: Pool | null, fetchStatus: string | undefined, cannotBuild = false): string {
+  if (!pool) return fetchStatus ?? `Caching ${set}…`
   const lead = cannotBuild ? `Cannot fill a ${DECK_SIZE}-card deck from` : 'Built from'
   return `${lead} ${pool.set} (${pool.cards.length} cards cached)`
 }
@@ -120,7 +124,7 @@ const SELECT_CLASS = 'w-full bg-transparent border-2 border-accent rounded-xl px
 
 /**
  * One generator's set picker. Each side has its own, so a deck from one set can be played against an
- * opponent from another, and choosing a set that is not cached yet caches it.
+ * opponent from another, and pointing a side at a set that is not cached yet is what caches it.
  *
  * `layout` has no default so that every call site states the shape it wants rather than inheriting
  * one: `inline` sets the label beside the control, for a picker sharing a row with buttons, where a
@@ -307,17 +311,29 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   // What a generated opponent is built around. The empty string is "random".
   const [opponentLeader, setOpponentLeader] = useState('')
   const [opponentAspect, setOpponentAspect] = useState('')
-  const [setCode, setSetCode] = useState('')
-  const [setStatus, setSetStatus] = useState<string | null>(null)
   // Each generator has its own set, so the deck you play and the deck you play against need not come
   // from the same pool.
   const [playerSet, setPlayerSet] = useState(DEFAULT_SET)
   const [opponentSet, setOpponentSet] = useState(DEFAULT_SET)
-  // Bumped when an import finishes, which is what makes both pools re-read the cache.
+  // Bumped when a fetch finishes, which is what makes both pools re-read the cache.
   const [cacheVersion, setCacheVersion] = useState(0)
-  // The set an import is running for, so a panel waiting on one says so rather than telling you to go
-  // and import it.
-  const [caching, setCaching] = useState<string | null>(null)
+  // How each set asked for is getting on, keyed by set code: the line a panel with no pool shows.
+  // A map rather than one "currently caching" code, because the two generators can be on different
+  // sets and both be waiting.
+  const [fetchStatus, setFetchStatus] = useState<Record<string, string>>({})
+  // Set codes already asked for. The guard is synchronous and in a ref, so the two generators
+  // starting on the same set produce one fetch rather than two, and a re-render produces none.
+  const requestedSets = useRef(new Set<string>())
+  // Deck ids whose cards have been handed to the catalogue sync, so a list is walked once.
+  const syncedDecks = useRef(new Set<string>())
+  // A fetch outlives the screen: the network does not care that the player started a game. Reporting
+  // into a screen that is gone is at best wasted and at worst a crash, so every report goes through
+  // this. Set on mount rather than only at declaration, so a remount is live again.
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
   // Each pool is loaded up front so generating is synchronous, which lets the opponent picker build a
   // fresh deck at play time without `onPlay` having to become async.
   const pool = useCachedPool(playerSet, cacheVersion)
@@ -357,9 +373,8 @@ export default function DeckSelectScreen({ onPlay }: Props) {
     if (result.ok) {
       setImportText('')
       setImportError(null)
-      // Fire-and-forget: hydrate the new deck's cards in the background,
-      // leader and base first (highest display priority).
-      void syncCatalogue(deckRefs(result.deck))
+      // Its cards are hydrated by the deck-list effect above, which covers a deck saved in an
+      // earlier session too: one path rather than one per way a deck arrives.
     } else {
       setImportError(result.error)
     }
@@ -370,37 +385,67 @@ export default function DeckSelectScreen({ onPlay }: Props) {
     onPlay(deck, pickOpponent(decks, opponentChoice, deck, () => buildGenerated(opponentPool, choice)?.deck ?? null))
   }
 
-  /** Cache a whole set, reported where the catalogue's own import reports it. */
-  async function cacheSet(code: string) {
+  /**
+   * Cache a set the screen needs, at most once per set.
+   *
+   * The ref is claimed before the first `await`, so two generators asking for the same set in one
+   * render produce a single fetch. A failure releases the claim, so switching away and back retries
+   * rather than leaving the set permanently unfetchable.
+   */
+  const ensureSet = useCallback(async (code: string) => {
     const set = code.toUpperCase()
-    setSetStatus(`Importing ${set}…`)
-    setCaching(set)
+    if (requestedSets.current.has(set)) return
+    requestedSets.current.add(set)
+    // Any card of the set counts as cached, so a fetch interrupted half way is not resumed on the
+    // next visit. That predates caching on open and is left as it was: the generator reports the
+    // short pool it builds from, and nothing re-downloads a set that is already whole.
+    if (await cachedSetCount(set) > 0) return
+
+    const report = (line: string) => {
+      if (mounted.current) setFetchStatus(s => ({ ...s, [set]: line }))
+    }
+    report(`Caching ${set}…`)
     try {
-      const result = await importSet(code, {
-        onProgress: (done, total) => setSetStatus(`Importing ${set}… ${done}/${total}`),
+      const result = await importSet(set, {
+        onProgress: (done, total) => report(`Caching ${set}… ${done}/${total}`),
       })
-      setSetStatus(`${result.cached} cards cached for ${set}`)
+      report(`${result.cached} cards cached for ${set}`)
     } catch (err) {
-      setSetStatus(err instanceof Error ? err.message : String(err))
+      report(err instanceof Error ? err.message : String(err))
+      requestedSets.current.delete(set)
     } finally {
       // Whatever the cache now holds, both pools re-read it and the last Generate's verdict on the
       // old one is stale.
-      setCaching(null)
-      setCacheVersion(v => v + 1)
-      setCannotBuild(false)
+      if (mounted.current) {
+        setCacheVersion(v => v + 1)
+        setCannotBuild(false)
+      }
     }
-  }
+  }, [])
 
-  async function handleSetImport() {
-    const code = setCode.trim()
-    if (code) await cacheSet(code)
-  }
+  /**
+   * Each generator caches the set it is pointed at, on open as well as on a change.
+   *
+   * Caching on the change event alone leaves a cold cache stuck: re-selecting the set already
+   * selected fires no change, so the default set would never be asked for. Only the sets the two
+   * generators are actually on are fetched, never the whole manifest.
+   */
+  useEffect(() => {
+    for (const set of new Set([playerSet, opponentSet])) void ensureSet(set)
+  }, [playerSet, opponentSet, ensureSet])
 
-  /** Point one generator at a set, caching that set first if nothing of it is held locally. */
-  async function chooseSet(code: string, apply: (code: string) => void) {
-    apply(code)
-    if (await cachedSetCount(code) === 0) await cacheSet(code)
-  }
+  /**
+   * Each deck list caches the cards it names, so a deck imported now or saved in an earlier session
+   * can be viewed and played without its whole set having been cached. `syncCatalogue` skips what is
+   * already held, so this fetches the gaps and nothing else.
+   */
+  useEffect(() => {
+    for (const deck of decks) {
+      if (syncedDecks.current.has(deck.id)) continue
+      syncedDecks.current.add(deck.id)
+      void syncCatalogue(deckRefs(deck))
+    }
+  }, [decks])
 
   return (
     <div data-testid="deck-select-screen" className="grid grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,3fr)_minmax(0,4fr)] gap-8 items-start">
@@ -417,7 +462,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
             <span className="block font-medium truncate">Random generated deck</span>
             <span data-testid="generated-deck-subtitle" className="block text-xs text-ink-faint">
               {pool === null || generated === null
-                ? poolSummary(playerSet, pool, caching, cannotBuild)
+                ? poolSummary(playerSet, pool, fetchStatus[playerSet], cannotBuild)
                 : (
                     // Leader and base are cards too, so they hover for their art like any other row.
                     // They were previously raw ids, which is unreadable for the base.
@@ -446,7 +491,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
               // not explain.
               setGenerated(null)
               setCannotBuild(false)
-              void chooseSet(code, setPlayerSet)
+              setPlayerSet(code)
             }}
             className="w-32 shrink-0"
           />
@@ -563,7 +608,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
           <label htmlFor="opponent-deck-select">Opponent</label>
         </h2>
         {decks.length === 0 && opponentPool === null ? (
-          <p className="mt-4 text-ink-faint text-sm">Import a deck or cache a set to choose an opponent.</p>
+          <p className="mt-4 text-ink-faint text-sm">Import a deck, or wait for the opponent's set to finish caching.</p>
         ) : (
           <select
             id="opponent-deck-select"
@@ -586,7 +631,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
         {/* How to watch the bot play one leader: the matrix rates leaders, and a game against a chosen
             one shows whether a rating belongs to the leader or to the bot. A fieldset, so switching the
             opponent to a built deck disables every control in it at once. It is here whether or not a
-            set is cached, since choosing the set is what caches it. */}
+            set is cached, since the set it names is the one being cached. */}
         <fieldset
           data-testid="opponent-generation-panel"
           disabled={opponentChoice !== GENERATED_DECK_ID}
@@ -597,10 +642,10 @@ export default function DeckSelectScreen({ onPlay }: Props) {
             testId="opponent-set-select"
             layout="stacked"
             value={opponentSet}
-            onChange={code => void chooseSet(code, setOpponentSet)}
+            onChange={setOpponentSet}
           />
           <p data-testid="opponent-pool-summary" className="mt-1 text-xs text-ink-faint">
-            {poolSummary(opponentSet, opponentPool, caching)}
+            {poolSummary(opponentSet, opponentPool, fetchStatus[opponentSet])}
           </p>
           <label className="mt-3 block text-xs text-ink-dim">
             Leader
@@ -640,31 +685,10 @@ export default function DeckSelectScreen({ onPlay }: Props) {
       <div data-testid="catalogue-column" className="min-w-0">
         <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Card catalogue</h2>
         <p className="mt-1 text-ink-faint text-xs">
-          Cache a full set locally (e.g. ASH): games and deck views then work offline, including bases.
+          Cards are cached on this device as the decks here need them: the set each generator builds
+          from, and every card your own decks name, bases included. Games and deck views then work
+          offline. Each panel reports its own caching, so there is nothing to fetch by hand.
         </p>
-        <div className="mt-2 flex items-center gap-3">
-          <input
-            data-testid="set-import-input"
-            value={setCode}
-            onChange={e => setSetCode(e.target.value)}
-            placeholder="Set code"
-            maxLength={3}
-            className="w-28 bg-transparent border-2 border-accent rounded-xl px-3 py-1.5 text-sm text-ink uppercase placeholder:normal-case placeholder:text-ink-faint shadow-[0_0_12px_rgba(79,195,247,0.3)] focus:outline-none"
-          />
-          <button
-            data-testid="set-import-btn"
-            onClick={handleSetImport}
-            disabled={setCode.trim() === ''}
-            className="px-4 py-1.5 text-sm border-2 border-ink text-ink rounded-xl shadow-[0_0_12px_rgba(255,255,255,0.2)] hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Import set
-          </button>
-          {setStatus && (
-            <span data-testid="set-import-status" className="text-ink-dim text-xs">
-              {setStatus}
-            </span>
-          )}
-        </div>
 
         <ImplementationStatus />
       </div>

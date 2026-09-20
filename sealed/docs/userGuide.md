@@ -10,15 +10,19 @@ The **?** in the header opens this help, showing the part that covers the screen
 2. On the deck selection screen, paste the JSON into the **Import deck** box and press **Import**.
 3. A legal Sealed deck needs exactly 1 leader, exactly 1 base, and at least 30 other cards, unless the base itself says otherwise (Data Vault asks for 10 more, Thermal Oscillator for 5 fewer). The importer will tell you if something is missing.
 
-Your decks are saved on this device and appear in the deck list. The first time you play a deck, its card details are fetched and cached locally, and later games work from the cache.
+Your decks are saved on this device and appear in the deck list. Every card a deck in that list names is fetched and cached locally as soon as it is there, leader and base first, so a deck you import now, or one saved from an earlier visit, can be viewed and played without you fetching anything yourself.
 
 Alongside the deck selection, an **Implemented cards** panel lists which card abilities are currently built into the engine. A **progress bar** at the top shows how much of the whole set (tokens included) has its rules fully implemented. A token counts for every set that prints it once the engine creates it, so Shield and Experience count in each set of the cycle. **Leaders** (by side: **front** = undeployed, **back** = deployed leader-unit) and **upgrades** are complete, so they roll up into collapsible sections (collapsed by default; click to expand). **Units** are shown as collapsible **work groups** (each listing its cards) with a development status; the next group to be built is expanded, completed and later groups are collapsed with a status note. Cards not yet implemented still play: they just use their printed stats and keywords (and make fine resources) rather than their special ability text.
 
 ## Caching a full set
 
-The **Card catalogue** section lets you cache an entire set by its code (e.g. `ASH`): one click fetches every card in the set and stores it on this device. Games and deck views then work without touching the network, and this also covers the handful of base cards whose individual lookups are unreliable upstream.
+Caching follows the decks: there is nothing to fetch by hand.
 
-Choosing a set in either **Set** picker (below) caches it the same way when it isn't cached already, reporting progress in the same place. Opening the deck screen never fetches a set by itself: nothing is downloaded until you ask for a set here or pick one that isn't cached.
+A generator needs a whole set to build from, so each **Set** picker caches the set it names, the first time it names it. That happens when you open the deck screen as well as when you change the picker, so a device with an empty cache fetches the set the generators start on and goes straight to a playable deck. Fetching a set stores every card in it, which also covers the handful of base cards whose individual lookups are unreliable upstream.
+
+Each generator panel reports its own fetch on its summary line: **Caching HMW…** with a running count while it downloads, the number of cards once it lands, and the reason if it fails. Both generators starting on the same set is one download, not two.
+
+Only what the screen needs is fetched: the set each generator is pointed at, and the cards your own decks name. No other set is downloaded, and nothing already cached is fetched again. The **Card catalogue** column is a reference: it says what gets cached and shows how much of each set the engine implements.
 
 ## Choosing an opponent
 
@@ -30,7 +34,7 @@ The **Opponent** selector controls which deck the AI plays:
 - **Random built deck**: one of your imported decks at random (it may pick the same deck you're playing).
 - **A specific deck**: choose any imported deck by name.
 
-Each generator has its own **Set** picker: one in the **Random generated deck** panel for the deck you play, one in the **Generated opponent** panel for the deck the AI plays. Both start on the newest set, and the two are chosen independently, so you can play a deck from one set against an opponent from another. Each panel names the set it builds from and how many of its cards are cached. A deck is built from a single set, so the two pools are never mixed.
+Each generator has its own **Set** picker: one in the **Random generated deck** panel for the deck you play, one in the **Generated opponent** panel for the deck the AI plays. Both start on the newest set, and the two are chosen independently, so you can play a deck from one set against an opponent from another. Each panel names the set it builds from and how many of its cards are cached, and caches that set itself if it isn't cached yet (see **Caching a full set** above). A deck is built from a single set, so the two pools are never mixed.
 
 Below the opponent's set, **Generated opponent** chooses the **leader** and **base aspect** the generated deck is built around, and either can stay **random**. Both come from the opponent's chosen set, so switching sets drops a leader that the new set doesn't print (switch back and it returns). A random pick never pairs a leader with a base of an aspect the leader already has, since no card in the set rewards doubling an aspect; choose both yourself to get that pairing anyway. It only applies while the opponent is a random generated deck, and it's the way to watch how the AI plays a particular leader.
 

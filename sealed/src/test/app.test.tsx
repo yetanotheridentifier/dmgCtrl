@@ -7,6 +7,17 @@ import { saveDeck } from '../data/deckStore'
 import { db } from '../data/db'
 import type { SwuCard } from '../data/cards'
 
+/**
+ * The deck screen caches the set its generators are pointed at as soon as it opens, which would put
+ * a real SWUDB call in the middle of every shell test. These tests are about the shell, so the
+ * cache reads as empty and the fetch is a no-op: the seeded `TST_*` cards below are all they need.
+ */
+vi.mock('../data/setImport', () => ({
+  importSet: vi.fn().mockResolvedValue({ cached: 0, total: 0 }),
+  cachedSetCount: vi.fn().mockResolvedValue(0),
+  cachedSetCards: vi.fn().mockResolvedValue([]),
+}))
+
 const SWU_CARDS: SwuCard[] = [
   { Set: 'TST', Number: '001', Name: 'Test Leader', Type: 'Leader', Cost: '5', Power: '4', HP: '7' },
   { Set: 'TST', Number: '002', Name: 'Test Base', Type: 'Base', HP: '30' },
