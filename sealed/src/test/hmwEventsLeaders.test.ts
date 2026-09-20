@@ -516,7 +516,9 @@ describe('HMW leaders, both sides', () => {
     expect(usable(s)).toBe(true)
     const used = useFront(s)
     expect(attackerOffers(used)).toEqual(['h'])
-    expect(power(attack(used, 'h', 'e'), 'h')).toBe(2 + 3) // Grit: +1 per damage
+    // Grit is +1/+0 per damage on the unit, and the grant is spent by the time the attack ends,
+    // so it is read from the damage the attack dealt: 2 power plus 3 damage carried.
+    expect(U(attack(used, 'h', 'e'), 'e')!.damage).toBe(2 + 3)
 
     const back = board({ leader: deployedLeader('HMW_006'), units: [unit('L', 'HMW_006', { isLeader: true, damage: 2 }), unit('h', 'HER', { damage: 3 }), unit('v', 'VIL', { damage: 3 })] })
     expect(unitHasKeyword(back, U(back, 'h')!, 'Grit')).toBe(true)

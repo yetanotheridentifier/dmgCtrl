@@ -4728,6 +4728,8 @@ type PlayFromHandOptions = {
   thenDamageIt?: number
   /** "It gains <keywords> for this phase": granted to the next unit played, so an Ambush or Hidden takes effect as it enters. */
   gains?: KeywordInstance[]
+  /** The card's own follow-up, run once the unit is in play and paid for (Grievous's second play). */
+  then?: IfYouDo
 }
 const FREE = -99
 const playableFromHand = (s: GameState, owner: PlayerId, o: PlayFromHandOptions, extraResourceCost = 0) =>
@@ -4741,6 +4743,7 @@ const playFromHand = (s: GameState, ctx: EventCtx, o: PlayFromHandOptions): Game
     kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta, entersReady: false,
     ...(o.thenTokens ? { thenTokens: o.thenTokens } : {}), ...(o.thenDamageOwnBase ? { thenDamageOwnBase: true } : {}),
     ...(o.thenDamageIt ? { thenDamageIt: o.thenDamageIt } : {}),
+    ...(o.then ? { then: o.then } : {}),
   })
 }
 registerCard('LOF_076', whenPlayed('Play a Force unit from your hand (paying its cost) and give a Shield token to it.', (s, ctx) => // Soresu Stance
@@ -8935,3 +8938,51 @@ registerCard('HMW_147', { // Beast Lair
   }],
   ifYouDo: (s, ctx) => createTokenUnit(discardFromHand(s, ctx.owner, ctx.handIndex!), ctx.owner, TOKEN_BEAST),
 })
+
+// C: leaders, both sides
+
+/** Heroism is an aspect rather than a trait, so "Heroic" units are named rather than filtered. */
+const heroicOnly = (s: GameState, ctx: EventCtx): AttackOffer['attacker'] =>
+  ({ only: pickedIds(s, ctx, pickAll(pickFriendly, pickAspect('Heroism'))) })
+const GRANT_OMEGA_LEADER = 'GRANT_OMEGA_LEADER'
+registerCard(GRANT_OMEGA_LEADER, { sourceCardId: 'HMW_006', conditionalKeywords: () => [KW.grit] })
+registerCard('HMW_006', mergeLeaderSides( // Omega
+  leaderAttack('Attack with a Heroic unit. It gains Grit for this attack.',
+    (s, ctx) => ({ attacker: heroicOnly(s, ctx), grantCardId: GRANT_OMEGA_LEADER }), { cost: 1 }),
+  // Her back gives it to the OTHERS, so it is a unit-side aura only: the front grants nothing constant.
+  friendlyAura(isAspect('Heroism'), { keywords: [KW.grit] }, true),
+))
+
+registerCard('HMW_007', friendlyBothSides(printedCostOf(c => c >= 3), { keywords: [KW.raid(1)] }, false)) // Darth Vader
+
+registerCard('HMW_008', mergeLeaderSides( // General Grievous
+  leaderFront('Play 2 units from your hand (one at a time, paying their costs).', {
+    usable: (s, ctx) => playableFromHand(s, ctx.owner, {}).length > 0,
+    // The second play is chained through the choice's `then`, so its candidates are priced against
+    // the resources the first one left: two plays, not two offers made at the same moment.
+    effect: (s, ctx) => playFromHand(s, ctx, { then: resume(ctx, 'second') }),
+  }),
+  { ifYouDo: (s, ctx) => (ctx.step === 'second' ? playFromHand(s, ctx, {}) : s) },
+  { statModifier: (s, u) => (friendliesOf(s, u).length > enemiesOf(s, u).length ? { power: 3 } : {}) },
+))
+
+const GRANT_CHEWBACCA_LEADER = 'GRANT_CHEWBACCA_LEADER'
+registerCard(GRANT_CHEWBACCA_LEADER, { sourceCardId: 'HMW_009', cannotAttackBases: () => true })
+const CHEWBACCA_ROUND_KEY = 'HMW_009#round'
+const chewbaccaOffer: AttackOffer = { exhausted: true, grantCardId: GRANT_CHEWBACCA_LEADER }
+registerCard('HMW_009', mergeLeaderSides( // Chewbacca
+  leaderAttack("Attack with a unit, even if it's exhausted. It can't attack bases for this attack.", () => chewbaccaOffer, { cost: 2 }),
+  {
+    actionAbilities: [{
+      description: "Attack with a unit, even if it's exhausted. It can't attack bases for this attack. Use this ability only once each round.",
+      oncePerRound: true,
+      // No exhaust cost, so the leader unit itself is as eligible an attacker as any other.
+      usable: (s, self) => actionAttack(controllerOf(s, self), s, chewbaccaOffer),
+      effect: (s, ctx) => offerAttack(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, CHEWBACCA_ROUND_KEY), ctx.owner, `${ctx.sourceInstanceId}-attack`, chewbaccaOffer),
+    }],
+  },
+))
+
+const printedPowerAtMost = (n: number) => (c: EngineCard | undefined): boolean => printedUnit(c) && (c?.power ?? 0) <= n
+registerCard('HMW_018', leaderPlay('Play a unit with 3 or less power from your hand (paying its cost) and give it Ambush for this phase.', // The Warrior
+  { test: printedPowerAtMost(3), gains: [KW.ambush] }, 1))

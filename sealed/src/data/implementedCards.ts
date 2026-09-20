@@ -260,6 +260,12 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'HMW_015', name: 'Bossk', front: true, back: true },
   // Fortify
   { id: 'HMW_004', name: 'Grand Moff Tarkin', front: true, back: true },
+  // Homeworlds leaders
+  { id: 'HMW_006', name: 'Omega', front: true, back: true },
+  { id: 'HMW_007', name: 'Darth Vader', front: true, back: true },
+  { id: 'HMW_008', name: 'General Grievous', front: true, back: true },
+  { id: 'HMW_009', name: 'Chewbacca', front: true, back: true },
+  { id: 'HMW_018', name: 'The Warrior', front: true, back: true },
 ]
 
 /**
