@@ -1403,10 +1403,10 @@ registerCard('ASH_144', { abilities: [{ trigger: 'whenFriendlyAttackEnds', descr
 
 registerCard('ASH_041', { // Outcast — "when a friendly unit enters play (including this one)"
   abilities: [
-    // Played and created units both enter play. Those trigger points fire on the controller's OTHER
-    // units, so the "including this one" half is covered by its own whenPlayed.
+    // `whenFriendlyEntersPlay` fires on the controller's OTHER units, whichever way the unit arrived,
+    // so the "including this one" half is covered by its own whenPlayed.
     { trigger: 'whenPlayed', description: 'This unit gets +1/+0 for this phase.', effect: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, power: 1 }) },
-    ...onPlayOrCreate({ description: 'A friendly unit entering play gets +1/+0 for this phase.', effect: (s, ctx) => ctx.targetInstanceId ? addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId, power: 1 }) : s }),
+    { trigger: 'whenFriendlyEntersPlay', description: 'A friendly unit entering play gets +1/+0 for this phase.', effect: (s, ctx) => ctx.targetInstanceId ? addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId, power: 1 }) : s },
   ],
 })
 
@@ -8959,6 +8959,23 @@ registerCard('HMW_170', { // Han Solo
     exhaustCost: true,
     usable: (s, self) => allUnits(s).some(u => u.instanceId !== self.instanceId && u.exhausted),
     effect: (s, ctx) => targetChoice(s, ctx, 'selectUnitToReady', allUnits(s).filter(u => u.instanceId !== ctx.sourceInstanceId && u.exhausted).map(u => u.instanceId)),
+  }],
+})
+
+registerCard('HMW_225', { // Boba Fett, Family Found
+  abilities: [{
+    trigger: 'whenFriendlyEntersPlay',
+    description: 'When a friendly unit with Ambush enters play: Give it Raid 1 and Saboteur for this phase.',
+    // Ambush is read off the unit now that it is in play, so a conditionally granted one counts. The
+    // Ambush attack is in the same batch as this grant, so the controller can take the grant first and
+    // swing with it. Boba has Ambush himself and the card does not say "including this one", which is
+    // exactly what an arrival point leaving the arriving unit out gives.
+    effect: (s, ctx) => {
+      const entered = findUnit(s, ctx.targetInstanceId ?? '')?.unit
+      return entered && unitHasKeyword(s, entered, 'Ambush')
+        ? addLastingEffect(s, { targetInstanceId: entered.instanceId, keywords: [KW.raid(1), KW.saboteur] })
+        : s
+    },
   }],
 })
 

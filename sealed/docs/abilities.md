@@ -118,7 +118,8 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 ### Trigger points
 
 `whenPlayed`, `onAttack`, `onAttackEnd`, `onDefense`, `whenDefeated`, `whenReadies`,
-`whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenUpgradeAttached`,
+`whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
+`whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenFriendlyDamagedSurvives`, `whenEnemyAttacksBase`, `whenOwnBaseDamaged`, `whenEnemyBaseDamaged`,
 `whenFriendlyAttackEnds`, `whenDeployed`, `whenPlayUpgrade`, `whenPlayCard`, `whenUnitEntersPlay`,
@@ -128,7 +129,7 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 with the card in `ctx.playedCardId`. `whenPlayCard` ("when you play a Heroism card", Agent Kallus) has
 the same listeners but covers a card of **any** type, so it fires from all three play doors; the card
 is in `ctx.playedCardId` and the condition on it belongs to the registering card. `whenUnitEntersPlay`
-is collected from both players' bases only, for a unit either player plays or creates (Trap Field).
+is collected from both players' bases only, for any unit either player brings into play (Trap Field).
 
 `whenActionPhaseStarts` ("when the action phase starts", Beast Lair) fires for every unit in play and
 each player's leader and base as the next round's action phase begins, on the same boundary as an
@@ -136,17 +137,27 @@ each player's leader and base as the next round's action phase begins, on the sa
 nothing, which is right for every card that can read it: a card has to be played during an action
 phase to be in play to read the next one.
 
-`whenPlayUnit` ("when you play a unit") fires for a unit arriving through a play, and `whenCreateUnit`
-for a token unit being created; both fire on the player's undeployed leader and their other units, with
-the new unit in `ctx.targetInstanceId` (`collectArrivalTriggers`). A card that reads "play or create"
-(Greef Karga) or "enters play" (Outcast) registers the ability on both; one that reads "play" (Maz
-Kanata, Poggle the Lesser) registers only `whenPlayUnit`, so a created token does not fire it.
+**A unit entering play raises its arrival triggers through one function, `collectArrivalTriggers`**, and
+every route in goes through it: a play, a token being created, a leader deploying and a captured card
+released back into play. All four fire `whenFriendlyEntersPlay` ("when a friendly unit enters play",
+Outcast) on the controller's undeployed leader, base and **other** units, and `whenUnitEntersPlay` (Trap
+Field) on both players' bases, with the arriving unit in `ctx.targetInstanceId`.
+
+The route matters only where a card reads it. `whenPlayUnit` ("when you play a unit", Maz Kanata, Poggle
+the Lesser) fires for a play alone, and `whenCreateUnit` for a token being created, so a card that reads
+"play or create" (Greef Karga) registers both. **A deploy and a rescue raise neither**: a deployed leader
+is considered deployed, not played (CR 3), and a released card is not being played either, but both are
+entering play (CR 7.1), which is the distinction `whenFriendlyEntersPlay` exists to draw.
+
+The arriving unit is left out of its own arrival, so a card that also reads "including this one"
+(Outcast) covers that half with its own When Played, and one that does not (Boba Fett, Family Found)
+gets the printed behaviour for free. Taking control of a unit raises nothing: it is already in play.
 
 `whenFriendlyDamagedSurvives` fires once per damage event and names each unit that survived it, with
 how much it was dealt, in `ctx.damagedSurvivors`. `whenEnemyBaseDamaged` ("when you deal damage to an
 enemy base") fires on the units of the base owner's opponent, unless the damage came from a card the
 base's own controller controls. `whenDeployed` fires on a leader unit as it deploys, after its entry
-keywords.
+keywords, in the same batch as that leader's arrival triggers.
 
 Two attack-end points read the same on cards but mean different things, and conflating them makes a
 unit fire on other units' attacks:

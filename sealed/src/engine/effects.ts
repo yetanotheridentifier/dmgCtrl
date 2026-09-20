@@ -513,14 +513,18 @@ export function returnUnitToHand(state: GameState, instanceId: string): GameStat
 /**
  * Release the cards a unit had captured (Bothan-5): each returns to PLAY under its owner's
  * control, exhausted, in its own arena. It is not being *played*, so nothing that keys off playing
- * or entering play happens: no "When Played" (or play/create) trigger, no Shielded shield token, no
- * Ambush attack, and no cost. Token cards can't come back — they ceased to exist when captured.
+ * happens: no "When Played" (or play/create) trigger, no Shielded shield token, no Ambush attack,
+ * and no cost. It IS entering play, though (CR 7.1: a card enters play when it moves from an
+ * out-of-play zone to an in-play zone), so it counts as having entered play this phase and raises
+ * the arrival triggers that read an entry rather than a play. Token cards can't come back: they
+ * ceased to exist when captured.
  */
 export function releaseCaptured(state: GameState, owner: PlayerId, cardIds: string[]): GameState {
   let next = state
   for (const cardId of cardIds) {
     if (isTokenCard(cardId)) continue
     const card = next.cards[cardId]
+    const instanceId = `u${next.instanceCounter}`
     next = {
       ...next,
       instanceCounter: next.instanceCounter + 1,
@@ -529,7 +533,7 @@ export function releaseCaptured(state: GameState, owner: PlayerId, cardIds: stri
         [owner]: {
           ...next.players[owner],
           units: [...next.players[owner].units, {
-            instanceId: `u${next.instanceCounter}`,
+            instanceId,
             cardId,
             arena: card?.arena ?? 'ground',
             damage: 0,
@@ -540,6 +544,9 @@ export function releaseCaptured(state: GameState, owner: PlayerId, cardIds: stri
         },
       },
     }
+    // Each rescued card is its own arrival, so each gets its own batch, as a created token does.
+    next = recordUnitEntered(next, owner, instanceId)
+    next = fireBatch(next, collectArrivalTriggers(next, undefined, owner, instanceId))
   }
   return next
 }

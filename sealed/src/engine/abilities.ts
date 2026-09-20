@@ -61,8 +61,13 @@ export type TriggerPoint =
   // player's undeployed leader and their OTHER units, with `ctx.targetInstanceId` the played unit.
   | 'whenPlayUnit'
   // "When you create a unit": a token unit being created (`createTokenUnit`), fired on the same
-  // listeners as `whenPlayUnit`. "Play or create" (Greef Karga) and "enters play" (Outcast) register both.
+  // listeners as `whenPlayUnit`. "Play or create" (Greef Karga) registers both.
   | 'whenCreateUnit'
+  // "When a friendly unit enters play" (Outcast): a unit arriving under your control by ANY route, so
+  // a play, a token being created, a leader deploying (CR 3: deployed, not played) and a captured card
+  // rescued back into play all raise it. Same listeners as `whenPlayUnit`, and the arriving unit is in
+  // `ctx.targetInstanceId`. A card that reads "when you play or create" wants those two points instead.
+  | 'whenFriendlyEntersPlay'
   // "When Deployed": fires on a leader unit as it deploys, after its entry keywords (Shielded, Hidden).
   | 'whenDeployed'
   // "When you play an upgrade" (The Tarkin Doctrine reads Fortification ones): fires on the player's
@@ -765,21 +770,32 @@ export function collectPlayerTriggers(
 }
 
 /**
- * Everything a unit arriving under `owner`'s control raises at `point` (`whenPlayUnit` for a play,
- * `whenCreateUnit` for a created token unit): the undeployed leader's front side, the base and every
- * OTHER unit the player controls, each told which unit arrived in `ctx.targetInstanceId`. Both players'
- * bases also see it as `whenUnitEntersPlay` (Trap Field reads any unit entering play).
+ * Everything a unit arriving under `owner`'s control raises: the undeployed leader's front side, the
+ * base and every OTHER unit the player controls, each told which unit arrived in `ctx.targetInstanceId`.
+ * Both players' bases also see it as `whenUnitEntersPlay` (Trap Field reads any unit entering play).
+ *
+ * This is the one statement of "a unit entered play", so every route in goes through it. `route` names
+ * the way it arrived when a card can read that specifically (`whenPlayUnit` for a play, `whenCreateUnit`
+ * for a created token unit), and is omitted for a route no card reads on its own: a leader deploying
+ * (CR 3 makes that deployed, NOT played) or a captured card rescued back into play. `whenFriendlyEntersPlay`
+ * fires either way, since all four are entering play (CR 7.1).
  */
 export function collectArrivalTriggers(
   state: GameState,
-  point: 'whenPlayUnit' | 'whenCreateUnit',
+  route: 'whenPlayUnit' | 'whenCreateUnit' | undefined,
   owner: PlayerId,
   arrivedId: string,
 ): PendingTrigger[] {
   const ctx = { targetInstanceId: arrivedId }
-  return [
+  // The arriving unit is excluded from its own arrival: a card that also reads "including this one"
+  // (Outcast) covers that half with its own When Played.
+  const friendly = (point: TriggerPoint): PendingTrigger[] => [
     ...collectPlayerTriggers(state, point, owner, ctx),
     ...state.players[owner].units.flatMap(u => (u.instanceId === arrivedId ? [] : collectUnitTriggers(state, point, u, owner, ctx))),
+  ]
+  return [
+    ...(route ? friendly(route) : []),
+    ...friendly('whenFriendlyEntersPlay'),
     ...(['player', 'opponent'] as PlayerId[]).flatMap(p => collectBaseTriggers(state, 'whenUnitEntersPlay', p, ctx)),
   ]
 }

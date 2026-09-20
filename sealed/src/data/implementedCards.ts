@@ -1656,6 +1656,7 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_182', name: 'Arena Nexu' },
   { id: 'HMW_209', name: 'Corona Squadron X-Wing' },
   { id: 'HMW_210', name: 'Sol' },
+  { id: 'HMW_225', name: 'Boba Fett' },
   // Compound trigger heads: one ability block firing at two or three points
   { id: 'HMW_057', name: 'Boss Lyonie' },
   { id: 'HMW_063', name: 'Rho Medical Shuttle' },
