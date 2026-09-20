@@ -41,8 +41,16 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
   'when friendly upgrade defeated', 'when friendly unit defeated', 'when an enemy unit is defeated',
   'when enemy unit defeated', 'when friendly damaged survives', 'when enemy attacks base',
   'when own base damaged', 'when friendly attack ends', 'when this unit completes an attack', 'when deployed',
+  'when a friendly unit is defeated',
   'action', 'epic action',
 ])
+
+/**
+ * A head as a trigger point: lower-cased, with a trailing parenthetical dropped. The bracket is
+ * reminder text restating when the point fires ("When this unit completes an attack (and survives)"),
+ * not a second condition, so it is not part of the point's identity.
+ */
+const triggerPoint = (head: string): string => head.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase()
 
 /**
  * Things the engine cannot express. Grounded in `engine/effects.ts`, the hook table in
@@ -254,15 +262,18 @@ export function triage(pool: SwuCard[]): TriageReport {
     for (const [name, re] of NEW_MECHANICS) if (re.test(text)) blockers.add(name)
     for (const k of newKeywords) blockers.add(`kw:${k}`)
     for (const h of triggerHeads(text)) {
-      const norm = h.toLowerCase()
       // A base upgrade handing its base an ability is how Fortify upgrades work, which the engine does,
       // not a unit's granted ability block.
       if (GRANTED_ABILITY_LEAD_IN.test(h)) {
         if (!/^Attached base\b/i.test(h)) blockers.add('granted-ability-block')
       }
-      // A slash joins two trigger points ("When Played/On Attack").
-      else if (norm.includes('/')) blockers.add('trigger:compound')
-      else if (!EXISTING_TRIGGERS.has(norm)) blockers.add(`trigger:${h}`)
+      // A slash joins two or three trigger points ("When Played/On Attack/When Defeated"). Registering
+      // one ability block at several points is what the engine does, so the join costs nothing and each
+      // part is judged on its own: the card is held back by whichever part is not dispatched, named
+      // alone so cards waiting on the same point group together however their heads are spelled.
+      else for (const part of h.split('/').map(p => p.trim()).filter(Boolean)) {
+        if (!EXISTING_TRIGGERS.has(triggerPoint(part))) blockers.add(`trigger:${part}`)
+      }
     }
 
     triaged.push({

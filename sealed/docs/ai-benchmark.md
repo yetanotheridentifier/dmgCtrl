@@ -1025,6 +1025,14 @@ ending, not its spelling, and blocks the card on `granted-ability-block` rather 
 The one exception is "Attached base gains:", which blocks on nothing: an upgrade attached to a base
 (the Fortify keyword) handing the base an ability is how base upgrades work, which the engine does.
 
+A head that joins trigger points with a slash ("When Played/On Attack", "When Played/On Attack/When
+Defeated") is **split and each part judged on its own**. Registering one ability block at several
+points is what the engine does, so the join costs nothing, and the card is held back by whichever part
+is not dispatched: the blocker names that part alone, so cards waiting on the same missing point group
+together however their heads are spelled. A trailing parenthetical is reminder text restating when the
+point fires ("When this unit completes an attack (and survives)"), not part of the point's identity, so
+it is dropped before the lookup.
+
 ### Why there are fallout probes
 
 The blocker list catches new *nouns*: a token type, a zone, a card type. It cannot catch a card

@@ -167,6 +167,26 @@ Two triggers fire **once per event, not once per item**, matching cards worded "
 Granting tokens one at a time in a loop therefore fires these triggers repeatedly and is a bug; use
 `giveTokens` with a count.
 
+### A compound trigger head is one block registered at each of its points
+
+Cards are printed with a head that joins two or three trigger points with a slash: `When Played/On
+Attack:`, `When Played/When Defeated:`, `When Played/On Attack/When Defeated:`. One ability block,
+firing at either point.
+
+There is no "fires at either" trigger and there wants to be none. `alsoAt(def, ...points)` in
+`cardDefinitions.ts` writes the block once with the When Played helpers and copies it to each further
+point, so the card carries one ability per printed point, sharing the block's text. Two copies at two
+points is what the rest of the engine needs: `runPendingTrigger` addresses an ability by `cardId` plus
+its index into the card's full list, so both stay individually addressable when both are waiting in one
+batch and the ordering prompt has to name them apart. Only the When Played abilities are copied, so a
+constant hook or a second printed ability at a third point rides along untouched (The Twins).
+
+A card whose effect closes over the trigger name, to keep the two copies' choice ids apart, declares
+its abilities explicitly instead, since `alsoAt` hands both copies one closure.
+
+`onAttack` and `defeated` are the same retargeting for a block printed at **one** point that is not
+When Played; they move the ability rather than copying it.
+
 ## Static hooks
 
 Card-type-agnostic, all on `CardDefinition`:
