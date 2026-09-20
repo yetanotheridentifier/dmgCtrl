@@ -168,20 +168,27 @@ Two phases:
   "When Played/When Defeated" and Nuvo Vindi's one-off trigger), with Tireless Magnaguard on #471 (play
   from discard). **Fortify is finished** (#650), HMW's upgrades attached to a base: 17 of its 18 cards and
   Trap Field and Insurgent Camp, with Vice Admiral Rampart on #477 (a replacement for a base upgrade's
-  defeat) and Beast Lair on #653 ("when the action phase starts"). Next are Credit tokens (#602, 29),
+  defeat); Beast Lair shipped with #653, which gave it the action-phase-start trigger it waited on.
+  Next are Credit tokens (#602, 29),
   Disclose (#603, 19), and indirect damage (#604, 15).
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
 (with the token units, #605), the Weakness-token cards (#649), the Fortify cards (#650), the When Played
-units and upgrades (#651, all 50) and the constant abilities (#652, 36 of 39) are built. 58 play
-as printed (all 16 bases are vanilla). Of the 214 with ability text, **128 are blocked by nothing** once
-four the triage passed are lifted to their mechanic's ticket, cut like Phase 1 by trigger point: the
-When Played and constant batches are done, and events, leaders and the remaining trigger points (#653, 39)
-are next. Of the constants, Vernestra Rwoh (an additional cost from the discard pile, and borrowed When
+units and upgrades (#651, all 50), the constant abilities (#652, 36 of 39) and the events, leaders and
+remaining trigger points (#653, 36 of 40) are built. 58 play
+as printed (all 16 bases are vanilla). Of the 214 with ability text, **128 were blocked by nothing** once
+four the triage passed are lifted to their mechanic's ticket, cut like Phase 1 by trigger point, and
+**all three batches have now shipped**. Of the constants, Vernestra Rwoh (an additional cost from the
+discard pile, and borrowed When
 Played abilities) and Zam Wesell (a leader's traits while she is out of play) went to #477, and The
 Marauder (units chosen and damaged while playing it, each reducing its cost) to #473, as it is Exploit's shape.
+Of the events and leaders, The First Legion (enemy cards out of play lose a Trait), Ty Yorrick (a
+replacement on every friendly ability's damage), Asajj Ventress (Raid swapped for Restore on an attack)
+and Jar Jar Binks (reading who gave a token upgrade, which the phase record does not distinguish from
+who received one) went to #477.
+
 **70 were blocked by exactly one thing**: the 18 Fortify, 18 Weakness and 14 Beast-token cards are
-built (less two Fortify cards lifted, above), and the rest are on #463 compound triggers (3), #474 a new trigger point (3),
+built (less one Fortify card lifted, above), and the rest are on #463 compound triggers (3), #474 a new trigger point (3),
 #471 play from discard (2), #468 (1), #475 (1) and #477's one-offs (10). 16 are multi-blocked, on #477.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted into #477 and the batch

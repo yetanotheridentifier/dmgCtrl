@@ -25,6 +25,12 @@ ships it as a printed keyword of its own. Only what is printed on the card belon
 `cardDataCorrections.ts` strips the rest, and the ability grants it back where it belongs, at step 3
 or 4. A wrongly printed Sentinel is the one that bites, since it redirects enemy attacks.
 
+For a **leader**, the source's `Keywords` describes the unit side, and the card's BackText spells that
+side's keywords out line by line. So a keyword the source lists that the back does not print belongs to
+whichever units the leader gives it to (Omega's Grit), one the back prints that the source omits is
+simply missing (The Warrior's Ambush and Raid 1), and a numeral the source drops is restored from the
+back (Darth Vader's Raid 1). All three are `cardDataCorrections.ts` entries.
+
 ### Which cards supply a unit's abilities
 
 `abilityCardIds(unit)` is the single definition: the unit's own card, each attached upgrade, and any
@@ -139,7 +145,9 @@ A card whose bonus is conditional on attacking can instead express it as a `stat
 
 ## Delayed effects
 
-`GameState.delayedEffects` holds what a card leaves to happen later: `{ cardId, owner, when, unitId? }`.
+`GameState.delayedEffects` holds what a card leaves to happen later:
+`{ cardId, owner, when, unitId?, arena? }`. `unitId` names the unit the effect is about (the unit Sneak
+Attack played) and `arena` the arena it is about (the one Seismic Detonation chose).
 `when` is `regroupStart` (Sneak Attack defeats the unit it played, Triple Dark Raid returns its Vehicle to
 hand, Final Showdown loses the game), `actionPhaseStart` (The Eye of Aldhani, whose pay-or-exhaust choices
 are answered before play begins, like a whenReadies choice), or `takeInitiative`, the next time `owner`
