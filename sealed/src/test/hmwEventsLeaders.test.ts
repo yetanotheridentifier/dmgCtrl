@@ -133,12 +133,7 @@ const playEvent = (s: GameState, cardId: string, who: PlayerId = 'player'): Game
   const withCard = { ...s, activePlayer: who, players: { ...s.players, [who]: { ...p, hand: [...p.hand, cardId] } } }
   return resolve(withCard, { type: 'playEvent', handIndex: p.hand.length })
 }
-const playUnit = (s: GameState, cardId: string, who: PlayerId = 'player'): GameState => {
-  const p = s.players[who]
-  const withCard = { ...s, activePlayer: who, players: { ...s.players, [who]: { ...p, hand: [...p.hand, cardId] } } }
-  return resolve(withCard, { type: 'playUnit', handIndex: p.hand.length })
-}
-const self = (s: GameState, cardId: string): string => s.players.player.units.find(u => u.cardId === cardId)!.instanceId
+const self =(s: GameState, cardId: string): string => s.players.player.units.find(u => u.cardId === cardId)!.instanceId
 /** Play a Fortify upgrade onto the player's own base. */
 const playBaseUpgrade = (s: GameState, cardId: string): GameState => {
   const p = s.players.player
@@ -390,9 +385,8 @@ describe('HMW events C: cards, resources and healing', () => {
 
 describe('HMW units: the remaining trigger points', () => {
   it('Scorch (HMW_064) may deal 1 damage to an upgraded unit on attack', () => {
-    const s = playUnit(board({ units: [unit('p', 'GRD')] }, { units: [unit('e', 'GRD', { upgrades: [{ cardId: 'UPG', owner: 'opponent' }] }), unit('c', 'GRD')] }), 'HMW_064')
-    const me = self(s, 'HMW_064')
-    const attacked = attack({ ...s, players: { ...s.players, player: { ...s.players.player, units: s.players.player.units.map(u => (u.instanceId === me ? { ...u, exhausted: false } : u)) } } }, me, 'c')
+    const s = board({ units: [unit('me', 'HMW_064')] }, { units: [unit('e', 'GRD', { upgrades: [{ cardId: 'UPG', owner: 'opponent' }] }), unit('c', 'GRD')] })
+    const attacked = attack(s, 'me', 'c')
     expect(unitOffers(attacked)).toEqual(['e'])
     expect(declinable(attacked)).toBe(true)
     expect(U(accept(attacked, { targetInstanceId: 'e' }), 'e')!.damage).toBe(1)
@@ -406,10 +400,12 @@ describe('HMW units: the remaining trigger points', () => {
     expect(skip(attacked).players.player.resources.filter(r => r.exhausted)).toHaveLength(1)
   })
 
-  it('Sol (HMW_210) gains Sentinel for the phase when he attacks', () => {
+  it('Sol (HMW_210) gains Sentinel for the phase when he attacks, and does not have it printed', () => {
     const s = board({ units: [unit('me', 'HMW_210')] }, { units: [unit('e', 'GRD')] })
+    expect(F.HMW_210.keywords.map(k => k.name)).toEqual(['Shielded'])
     expect(unitHasKeyword(s, U(s, 'me')!, 'Sentinel')).toBe(false)
-    const attacked = attack(s, 'me', 'e')
+    // He attacks the base: at 2 HP a unit's counter-damage would defeat him before the check.
+    const attacked = attack(s, 'me')
     expect(unitHasKeyword(attacked, U(attacked, 'me')!, 'Sentinel')).toBe(true)
   })
 
@@ -420,8 +416,8 @@ describe('HMW units: the remaining trigger points', () => {
     expect(declinable(attacked)).toBe(true)
     const used = accept(attacked, { targetInstanceId: 'c' })
     expect([U(used, 'c')!.damage, U(used, 'me')!.exhausted]).toEqual([3, false])
-    // The second attack this round raises nothing.
-    noChoice(attack(used, 'me', 'e'))
+    // The second attack this round raises nothing: the turn passed, so hand it back first.
+    noChoice(attack({ ...used, activePlayer: 'player' }, 'me', 'e'))
   })
 
   it('Keeper of Skara Nal (HMW_041) may discard 2 copies of itself for +15/+0 and Overwhelm', () => {
@@ -430,8 +426,10 @@ describe('HMW units: the remaining trigger points', () => {
     expect(declinable(attacked)).toBe(true)
     const paid = accept(attacked)
     expect(paid.players.player.hand).toEqual(['GRD'])
-    expect(power(paid, 'me')).toBe(5 + 15)
-    expect(unitHasKeyword(paid, U(paid, 'me')!, 'Overwhelm')).toBe(true)
+    // The buff is spent by the time the attack has resolved, so it is read from what it dealt:
+    // 5 power + 15, of which 8 defeats the defender and the Overwhelm spills the other 12 to the base.
+    expect(U(paid, 'e')).toBeUndefined()
+    expect(paid.players.opponent.base.damage).toBe(12)
 
     const one = board({ hand: ['KEEPER', 'GRD'], units: [unit('me', 'HMW_041')] }, { units: [unit('e', 'GRD')] })
     noChoice(attack(one, 'me', 'e'))
@@ -482,23 +480,33 @@ describe('HMW units: the remaining trigger points', () => {
     expect(action, 'Han Solo offers his action').toBeDefined()
     const used = resolve(s, action!)
     expect(U(used, 'me')!.exhausted).toBe(true)
-    expect(unitOffers(used)).toEqual(['o'])
+    // "Ready ANOTHER unit" is unqualified, so an enemy unit is a legal (if unlikely) target.
+    expect(unitOffers(used)).toEqual(['e', 'o'])
     expect(U(accept(used, { targetInstanceId: 'o' }), 'o')!.exhausted).toBe(false)
   })
 
   it('Beast Lair (HMW_147) fires at the start of the action phase: discard a card to create a Beast', () => {
-    const s = playBaseUpgrade(board({ hand: ['GRD'], units: [] }), 'HMW_147')
+    const s = playBaseUpgrade(board({ hand: ['GRD'], deck: ['BIG', 'MID', 'COST2', 'COST3'] }, { deck: ['GRD', 'BIG', 'MID'] }), 'HMW_147')
     expect(s.players.player.base.upgrades?.map(u => u.cardId)).toEqual(['HMW_147'])
     // Nothing happens until an action phase starts.
     noChoice(s)
-    const nextRound = resolve(resolve({ ...s, activePlayer: 'player' }, { type: 'pass' }), { type: 'pass' })
-    let advanced = nextRound
+    let advanced = resolve(resolve({ ...s, activePlayer: 'player' }, { type: 'pass' }), { type: 'pass' })
+    // Through the regroup phase, declining to resource so the hand still holds a card to discard.
     let guard = 0
-    while (advanced.phase !== 'action' && guard++ < 12) advanced = resolve(advanced, legalMoves(advanced)[0])
+    while (advanced.phase !== 'action' && guard++ < 12) {
+      const skip = legalMoves(advanced).find(m => m.type === 'skipResource')
+      advanced = resolve(advanced, skip ?? legalMoves(advanced)[0])
+    }
+    expect(advanced.round).toBe(3)
     expect(declinable(advanced)).toBe(true)
+    const held = advanced.players.player.hand.length
     const made = accept(advanced, { handIndex: 0 })
     expect(made.players.player.units.map(u => u.cardId)).toEqual([TOKEN_BEAST])
-    expect(made.players.player.hand).toEqual([])
+    expect(made.players.player.hand).toHaveLength(held - 1)
+    // Declining costs nothing and creates nothing.
+    const declined = skip(advanced)
+    expect(declined.players.player.units).toEqual([])
+    expect(declined.players.player.hand).toHaveLength(held)
   })
 })
 

@@ -4774,10 +4774,10 @@ registerCard('LAW_171', whenPlayed('Resource this event and the top card of your
 
 // Decks, draws and discard piles
 /** Choose a card from your own hand for the card's hook (`step`), or nothing with an empty hand. */
-const handCardThen = (s: GameState, ctx: Resumable, text: string, step: string, test?: (c: EngineCard | undefined) => boolean): GameState => {
+const handCardThen = (s: GameState, ctx: Resumable, text: string, step: string, test?: (c: EngineCard | undefined) => boolean, optional = false): GameState => {
   const hand = s.players[ctx.owner].hand
   const handIndices = hand.flatMap((id, i) => (!test || test(s.cards[id]) ? [i] : []))
-  return handIndices.length ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices, text, then: resume(ctx, step) }) : s
+  return handIndices.length ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices, text, then: resume(ctx, step), ...mayFlag(optional) }) : s
 }
 /** Move the hand card at `handIndex` to the top or the bottom of its owner's deck. */
 const handToDeck = (s: GameState, owner: PlayerId, handIndex: number | undefined, where: 'top' | 'bottom'): GameState => {
@@ -8839,4 +8839,99 @@ registerCard('HMW_099', { // Always a Bigger Fish
       costDelta: FREE, test: c => printedUnit(c) && printedTrait(c, 'Creature') && (c?.cost ?? 0) <= budget,
     })
   },
+})
+
+// B: units on trigger points other than When Played, and the base upgrade that needed one
+
+registerCard('HMW_064', onAttack(damageWp('You may deal 1 damage to an upgraded unit.', (_s, u) => isUpgraded(u), 1, true))) // Scorch
+
+registerCard('HMW_209', onAttack(mayPayWp('You may ready a resource.', 0, 'ready a resource', // Corona Squadron X-Wing
+  (s, ctx) => readyResource(s, ctx.owner))))
+
+registerCard('HMW_210', attacks('This unit gains Sentinel for this phase.', (s, ctx) => // Sol
+  addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: [KW.sentinel] })))
+
+const ARENA_NEXU_ROUND_KEY = 'HMW_182#round'
+registerCard('HMW_182', { // Arena Nexu
+  ...attacks('You may deal 3 damage to a friendly Creature unit (including this one) and ready this unit. Use this ability only once each round.', (s, ctx) => {
+    const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+    if (!self || (self.usedAbilities ?? []).includes(ARENA_NEXU_ROUND_KEY)) return s
+    const targets = pickedIds(s, ctx, pickAll(pickFriendly, pickTrait('Creature')))
+    // Marked as the offer is made rather than as it is taken: the offer is the use.
+    return targets.length
+      ? unitThen(markAbilityUsed(s, ctx.owner, self.instanceId, ARENA_NEXU_ROUND_KEY), ctx, targets, 'deal 3 damage to a friendly Creature unit and ready this unit', true)
+      : s
+  }),
+  ifYouDo: (s, ctx) => readyUnit(dealDamageToUnit(s, ctx.targetInstanceId!, 3), ctx.sourceInstanceId!),
+})
+
+/** Hand indices holding a card with this name, in order. */
+const handNamed = (s: GameState, owner: PlayerId, name: string): number[] =>
+  s.players[owner].hand.flatMap((id, i) => (s.cards[id]?.name === name ? [i] : []))
+registerCard('HMW_041', { // Keeper of Skara Nal
+  ...onAttack(whenPlayed('You may discard 2 cards named Keeper of Skara Nal from your hand. If you do, this unit gets +15/+0 and gains Overwhelm for this attack.', (s, ctx) => {
+    // Both discards are of the same named card, so there is nothing to choose between them: the
+    // only decision is whether to pay, which `mayPayThen` at cost 0 asks.
+    if (handNamed(s, ctx.owner, 'Keeper of Skara Nal').length < 2) return s
+    return pushChoice(s, {
+      kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0,
+      text: 'discard 2 cards named Keeper of Skara Nal', then: resume(ctx),
+    })
+  })),
+  ifYouDo: (s, ctx) => {
+    // Highest index first, so removing one does not shift the other.
+    const discarded = handNamed(s, ctx.owner, 'Keeper of Skara Nal').slice(0, 2).reverse()
+      .reduce((acc, i) => discardFromHand(acc, ctx.owner, i), s)
+    return addLastingEffect(discarded, { targetInstanceId: ctx.sourceInstanceId!, power: 15, keywords: [KW.overwhelm], untilEndOfAttack: true })
+  },
+})
+
+/** Put the hand card at `handIndex` into play as an exhausted resource. */
+const resourceFromHand = (s: GameState, owner: PlayerId, handIndex: number | undefined): GameState => {
+  const p = s.players[owner]
+  const cardId = handIndex === undefined ? undefined : p.hand[handIndex]
+  if (cardId === undefined) return s
+  return updatePlayer(s, owner, { hand: p.hand.filter((_, i) => i !== handIndex), resources: [...p.resources, { cardId, exhausted: true }] })
+}
+registerCard('HMW_044', { // Ima-Gun Di
+  ...defeated(whenPlayed('If you control fewer resources than an opponent, you may resource a card from your hand. If you do, resource the top card of your deck.', (s, ctx) => {
+    if (s.players[ctx.owner].resources.length >= s.players[opponentOf(ctx.owner)].resources.length) return s
+    return handCardThen(s, ctx, 'resource a card from your hand', 'resource', undefined, true)
+  })),
+  ifYouDo: (s, ctx) => resourceTopOfDeck(resourceFromHand(s, ctx.owner, ctx.handIndex), ctx.owner),
+})
+
+registerCard('HMW_056', { // Yoda
+  // The card is already in its owner's discard pile by the time its own When Defeated resolves.
+  ...defeated(whenPlayed('You may put this card from your discard pile on top of your deck. If you do, heal 2 damage from a base.', (s, ctx) =>
+    (s.players[ctx.owner].discard.includes(ctx.cardId)
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'put Yoda on top of your deck', then: resume(ctx) })
+      : s))),
+  ifYouDo: (s, ctx) => healChoice(discardToTop(s, ctx.owner, ctx.cardId), ctx, 2, [], BOTH_BASES),
+})
+
+const isUnique: Holds = (s, x) => s.cards[x.cardId]?.unique === true
+registerCard('HMW_104', { // Garnac
+  ...gains(enemyHas(isUnique), HIDDEN),
+  abilities: [thenAttack('You may attack with another unit.', { optional: true })],
+})
+
+registerCard('HMW_170', { // Han Solo
+  actionAbilities: [{
+    description: 'Ready another unit.',
+    exhaustCost: true,
+    usable: (s, self) => allUnits(s).some(u => u.instanceId !== self.instanceId && u.exhausted),
+    effect: (s, ctx) => targetChoice(s, ctx, 'selectUnitToReady', allUnits(s).filter(u => u.instanceId !== ctx.sourceInstanceId && u.exhausted).map(u => u.instanceId)),
+  }],
+})
+
+// A triggered ability on a base upgrade is an ordinary `abilities` entry: `collectBaseTriggers`
+// reads the base card and everything attached to it alike.
+registerCard('HMW_147', { // Beast Lair
+  abilities: [{
+    trigger: 'whenActionPhaseStarts',
+    description: 'When the action phase starts: You may discard a card from your hand. If you do, create a Beast token.',
+    effect: (s, ctx) => handCardThen(s, ctx, 'discard a card to create a Beast token', 'beast', undefined, true),
+  }],
+  ifYouDo: (s, ctx) => createTokenUnit(discardFromHand(s, ctx.owner, ctx.handIndex!), ctx.owner, TOKEN_BEAST),
 })

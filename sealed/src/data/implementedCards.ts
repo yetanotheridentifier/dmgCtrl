@@ -397,6 +397,7 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'HMW_190', name: 'Enraged' },
   { id: 'HMW_191', name: "Hunter's Instinct" },
   { id: 'HMW_235', name: 'Gaderffii Stick' },
+  { id: 'HMW_147', name: 'Beast Lair' },
 ]
 
 /**
@@ -1619,6 +1620,17 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_203', name: 'Victor Squadron' },
   { id: 'HMW_208', name: 'Luke Skywalker' },
   { id: 'HMW_234', name: 'Ritual Dragon' },
+
+  // Homeworlds units on trigger points other than When Played
+  { id: 'HMW_041', name: 'Keeper of Skara Nal' },
+  { id: 'HMW_044', name: 'Ima-Gun Di' },
+  { id: 'HMW_056', name: 'Yoda' },
+  { id: 'HMW_064', name: 'Scorch' },
+  { id: 'HMW_104', name: 'Garnac' },
+  { id: 'HMW_170', name: 'Han Solo' },
+  { id: 'HMW_182', name: 'Arena Nexu' },
+  { id: 'HMW_209', name: 'Corona Squadron X-Wing' },
+  { id: 'HMW_210', name: 'Sol' },
 ]
 
 /**

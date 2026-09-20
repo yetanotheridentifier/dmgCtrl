@@ -51,6 +51,14 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   HMW_176: { keywords: [] }, // Village Troublemaker: Hidden and Saboteur with an Endor base
   HMW_257: { keywords: [] }, // Ewok Archers: Ambush with another unit costing 3 or less
   HMW_259: { keywords: [] }, // Pack Guardian: Sentinel while ready
+  HMW_210: { keywords: [{ name: 'Shielded' }] }, // Sol: Shielded is real; Sentinel is gained on attack
+
+  // Homeworlds leaders. The BackText spells out the leader unit's own keywords, so a keyword the
+  // source lists that the back does not print belongs to the units the leader gives it to, and one
+  // the back prints that the source omits is missing from the data.
+  HMW_006: { keywords: [] }, // Omega: Grit goes to each OTHER friendly Heroic unit
+  HMW_007: { keywords: [{ name: 'Raid', value: 1 }] }, // Darth Vader: the source ships Raid with no numeral
+  HMW_018: { keywords: [{ name: 'Ambush' }, { name: 'Raid', value: 1 }] }, // The Warrior: both printed on her back, neither in the source
   HMW_039: { keywords: [{ name: 'Raid', value: 1 }] }, // Mother Talzin: Raid 1 is hers; Restore 1 goes to each other friendly unit
   HMW_212: { keywords: [] }, // The Chieftain: Raid 1 per other friendly Tusken
   HMW_096: { keywords: [] }, // Devotion: Restore 2
