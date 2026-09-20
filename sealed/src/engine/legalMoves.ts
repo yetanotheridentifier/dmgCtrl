@@ -1,5 +1,5 @@
 import type { Action } from './actions'
-import type { AttackerFilter, EngineCard, GameState, HandCardRef, PlayerId, ResourceUpgradeRef, UnitState } from './types'
+import type { AspectWaiver, AttackerFilter, EngineCard, GameState, HandCardRef, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
 import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds, pushChoice, isFortify } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword, unitCannotAttack, unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
@@ -148,7 +148,7 @@ function attackMoves(
  * player's leader and base. Icons match as a multiset — a doubled icon on a
  * card needs two provided copies to avoid the penalty.
  */
-export function effectiveCost(state: GameState, playerId: PlayerId, card: EngineCard, target?: UnitState): number {
+export function effectiveCost(state: GameState, playerId: PlayerId, card: EngineCard, target?: UnitState, waive?: AspectWaiver): number {
   const p = state.players[playerId]
   const provided: string[] = [
     ...(state.cards[p.leader.cardId]?.aspects ?? []),
@@ -162,10 +162,23 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   }
   let penalty = 0
   const ignored = getCardDefinition(card.id)?.ignoresOwnAspectPenalty?.(state, playerId) ?? []
+  // Penalties this particular play forgives (`playCardFrom`'s `waive`), as distinct from the card's
+  // own standing waiver above. "Ignoring 1 of its … penalties" forgives the first match only, so it
+  // is tracked as it goes rather than applied to the total.
+  let oneLeft = waive !== undefined && 'aspects' in waive && waive.one === true
+  const waived = (icon: string): boolean => {
+    if (waive === undefined) return false
+    if ('all' in waive) return true
+    if (!waive.aspects.includes(icon)) return false
+    if (waive.one !== true) return true
+    if (!oneLeft) return false
+    oneLeft = false
+    return true
+  }
   for (const icon of card.aspects) {
     const i = provided.indexOf(icon)
     if (i === -1) {
-      if (!ignored.includes(icon)) penalty += 2
+      if (!ignored.includes(icon) && !waived(icon)) penalty += 2
     } else {
       provided.splice(i, 1)
     }
@@ -243,33 +256,102 @@ export function affordableHandUnits(state: GameState, owner: PlayerId, extraReso
 }
 
 /**
- * Valid targets for playing the resource upgrade at `resourceIndex`: units from `targetUnits`
- * that pass the upgrade's attach restriction and — when `payCost` — are affordable from the ready
- * resources left after the upgrade itself leaves the resource pool.
+ * The card ids a `playCardFrom` zone holds, in the order its refs index. `handOrResources` is one
+ * zone for one play out of either ("a card named It's Worse from your hand or resources"), the hand
+ * first and the resource zone after it, so an index past the hand names a resource.
  */
-export function validUpgradeTargets(state: GameState, owner: PlayerId, resourceIndex: number, cardId: string, payCost: boolean, targetUnits: string[]): string[] {
-  const p = state.players[owner]
-  const resource = p.resources[resourceIndex]
+export function zoneCards(state: GameState, controller: PlayerId, zone: PlayFromZone): string[] {
+  const p = state.players[controller]
+  switch (zone) {
+    case 'hand': return p.hand
+    case 'resources': return p.resources.map(r => r.cardId)
+    case 'opponentResources': return state.players[opponentOf(controller)].resources.map(r => r.cardId)
+    case 'deckTop': return p.deck.slice(0, 1)
+    case 'handOrResources': return [...p.hand, ...p.resources.map(r => r.cardId)]
+  }
+}
+
+/**
+ * The payer's own resource this play will vacate, if any. That resource is still in the zone while
+ * the cost is paid (CR 6.2.f), and exhausting it is free for its controller because it is leaving,
+ * so it is what `payCost` should take first.
+ */
+export function selfPayingResource(state: GameState, controller: PlayerId, zone: PlayFromZone, index: number): number[] {
+  if (zone === 'resources') return [index]
+  if (zone !== 'handOrResources') return []
+  const handSize = state.players[controller].hand.length
+  return index >= handSize ? [index - handSize] : []
+}
+
+/** The cost terms a play out of a zone carries, shared by the choice, its attach step and the AI. */
+export interface PlayFromTerms {
+  free?: boolean
+  costDelta?: number
+  waive?: AspectWaiver
+}
+
+/**
+ * What `controller` pays to play `card` under these terms. A free play bypasses the cost and every
+ * modifier, the aspect penalty included (CR 8.5); otherwise the delta is applied to the card's
+ * effective cost and the total floored at 0 (CR 6.2.3.b).
+ */
+export function playFromCost(state: GameState, controller: PlayerId, card: EngineCard, terms: PlayFromTerms, target?: UnitState): number {
+  if (terms.free) return 0
+  return Math.max(0, effectiveCost(state, controller, card, target, terms.waive) + (terms.costDelta ?? 0))
+}
+
+/**
+ * What `controller` has to pay a play out of `zone` with.
+ *
+ * **A card played out of its controller's own resource zone counts towards its own cost.** CR 6.2.f
+ * orders the steps "Pay cost(s)" then "Put card into play", so the card is still a resource while
+ * the cost is paid, and CR 14.e says so outright for Smuggle. `payCost`'s `prefer` then exhausts
+ * that card before any other, which is free for the player because it is leaving the zone anyway.
+ */
+export function playFromBudget(state: GameState, controller: PlayerId, extraCost = 0): number {
+  return readyResourceCount(state.players[controller]) - extraCost
+}
+
+/**
+ * Units the upgrade at `index` of `zone` could attach to: those of `targetUnits` (every unit in play
+ * when the card names none) that pass its attach restriction and whose resulting cost is affordable.
+ */
+export function validPlayTargets(state: GameState, controller: PlayerId, zone: PlayFromZone, index: number, cardId: string, terms: PlayFromTerms, targetUnits?: string[], extraCost = 0): string[] {
   const card = state.cards[cardId]
-  if (!resource || resource.cardId !== cardId || card?.type !== 'upgrade') return []
-  const available = readyResourceCount(p) - (resource.exhausted ? 0 : 1)
+  if (zoneCards(state, controller, zone)[index] !== cardId || card?.type !== 'upgrade') return []
+  const budget = playFromBudget(state, controller, extraCost)
   const restriction = getCardDefinition(cardId)?.attachRestriction
   const inPlay = [...state.players.player.units, ...state.players.opponent.units]
-  return targetUnits.filter(id => {
+  const ids = targetUnits ?? inPlay.map(u => u.instanceId)
+  return ids.filter(id => {
     const tu = inPlay.find(u => u.instanceId === id)
-    if (!tu || (restriction && !restriction(state, tu, owner))) return false
-    return !payCost || effectiveCost(state, owner, card, tu) <= available
+    if (!tu || (restriction && !restriction(state, tu, controller))) return false
+    return playFromCost(state, controller, card, terms, tu) <= budget
   })
 }
 
-/** Upgrades in `owner`'s resource zone that can be played on at least one of `targetUnits`. */
-export function resourceUpgradeCandidates(state: GameState, owner: PlayerId, payCost: boolean, targetUnits: string[]): ResourceUpgradeRef[] {
-  const out: ResourceUpgradeRef[] = []
-  state.players[owner].resources.forEach((r, resourceIndex) => {
-    if (state.cards[r.cardId]?.type !== 'upgrade') return
-    if (validUpgradeTargets(state, owner, resourceIndex, r.cardId, payCost, targetUnits).length > 0) out.push({ resourceIndex, cardId: r.cardId })
+/**
+ * Whether the candidate at `ref` can still be played: the zone holds it, and it is affordable. A
+ * Fortify upgrade attaches to the base and so needs no host; any other upgrade needs one.
+ */
+export function canPlayFrom(state: GameState, controller: PlayerId, zone: PlayFromZone, ref: PlayFromRef, terms: PlayFromTerms, targetUnits?: string[], extraCost = 0): boolean {
+  const card = state.cards[ref.cardId]
+  if (!card || zoneCards(state, controller, zone)[ref.index] !== ref.cardId) return false
+  if (card.type === 'upgrade' && !isFortify(card)) return validPlayTargets(state, controller, zone, ref.index, ref.cardId, terms, targetUnits, extraCost).length > 0
+  return playFromCost(state, controller, card, terms) <= playFromBudget(state, controller, extraCost)
+}
+
+/**
+ * The cards of `zone` `controller` could play under these terms, `test` narrowing what is eligible.
+ * `extraCost` is the raising ability's own cost, which is paid before the play: it is set while
+ * asking whether that ability is usable, and is 0 by the time the choice it raises is answered.
+ */
+export function playFromCandidates(state: GameState, controller: PlayerId, zone: PlayFromZone, terms: PlayFromTerms, test?: (c: EngineCard | undefined) => boolean, targetUnits?: string[], extraCost = 0): PlayFromRef[] {
+  return zoneCards(state, controller, zone).flatMap((cardId, index) => {
+    if (test && !test(state.cards[cardId])) return []
+    const ref = { index, cardId }
+    return canPlayFrom(state, controller, zone, ref, terms, targetUnits, extraCost) ? [ref] : []
   })
-  return out
 }
 
 /**
@@ -576,15 +658,27 @@ function choiceMoves(state: GameState): Action[] {
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         break
       }
-      case 'selectResourceUpgrade': {
-        // The Armorer: pick a resource upgrade to play; Cancel only on the optional (deployed) form.
-        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+      case 'playCardFrom': {
+        // Pick a card to play out of the zone. Affordability is re-read here rather than trusted
+        // from the raise: a card's own When Played can spend resources before the re-offer of a
+        // "one at a time", and the host an upgrade needs can leave play in between.
+        choice.candidates.forEach((ref, i) => {
+          if (canPlayFrom(state, choice.controller, choice.zone, ref, choice, choice.targetUnits)) {
+            moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i })
+          }
+        })
         if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
-      case 'attachResourceUpgrade': {
-        // Attach the chosen resource upgrade to a valid unit. Mandatory.
+      case 'attachPlayedCard': {
+        // Attach the upgrade picked above to a valid unit. Mandatory.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        break
+      }
+      case 'mayResourceFromHand': {
+        // "You may resource a card from your hand": any card, or decline.
+        p.hand.forEach((_, handIndex) => moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex }))
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'mayExhaustLeaderForAdvantage': {

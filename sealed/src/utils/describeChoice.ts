@@ -145,7 +145,7 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       const buff = [choice.power || choice.hp ? `+${choice.power ?? 0}/+${choice.hp ?? 0}` : '', ...(choice.keywords ?? []).map(k => k.name)].filter(Boolean).join(' & ')
       return [`choose a unit to give ${buff || 'a bonus'} this phase`]
     }
-    case 'attachResourceUpgrade':
+    case 'attachPlayedCard':
       return ['choose a unit to attach it to']
     case 'mayGiveTokens': {
       const name = tokenName(state, choice.token)
@@ -258,8 +258,16 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return [choice.phaseBan
         ? 'name a card nobody may play this phase'
         : 'name a card the opponent may not play while this unit is out']
-    case 'selectResourceUpgrade':
-      return ['choose an upgrade to play from your resources']
+    case 'playCardFrom': {
+      const where = choice.zone === 'hand' ? 'your hand'
+        : choice.zone === 'deckTop' ? 'the top of your deck'
+          : choice.zone === 'opponentResources' ? "your opponent's resources"
+            : 'your resources'
+      const price = choice.free ? ' for free' : choice.costDelta ? ` for ${Math.abs(choice.costDelta)} less` : ''
+      return [`choose a card to play from ${where}${price}`]
+    }
+    case 'mayResourceFromHand':
+      return ['choose a card to resource from your hand, or keep them all']
     case 'chooseOne':
       return ['choose one effect']
 

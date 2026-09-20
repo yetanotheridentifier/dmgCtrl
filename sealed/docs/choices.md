@@ -12,7 +12,7 @@ An interactive decision cannot be a callback, because the resolver is pure and g
 GameState.pendingChoices?: PendingChoice[]
 ```
 
-`PendingChoice` is a discriminated union of ~71 `kind`s in `engine/types.ts`. Every variant carries
+`PendingChoice` is a discriminated union of ~86 `kind`s in `engine/types.ts`. Every variant carries
 `id`, `controller`, and an optional `source` naming the card that raised it. Helpers live alongside
 it: `activeChoice`, `findChoice`, `hasPendingChoices`, `pushChoice`, `removeChoice`.
 
@@ -394,10 +394,44 @@ spent as the card is taken.
 cost less its `discount`, bottoms the leftovers, and then plays the chosen card through the same door as
 an upgrade played from hand.
 
+### Playing a card out of another zone
+
+**`playCardFrom` is the one door for a play that is not the Play a Card action**: a card of any type,
+out of `zone` (`hand`, `resources`, `opponentResources`, `deckTop`, or `handOrResources` for a card
+offered out of either), answered by `optionIndex` into its `candidates`. `free` bypasses the cost and
+the aspect penalty (CR 8.5), `costDelta` adjusts it, and `waive` forgives aspect penalties: all of
+them, the ones from named icons (Osha's Villainy), or exactly one of the named icons (the LAW bases'
+"1 of its Vigilance, Command, Aggression, or Cunning"). "One of" needs no pick from the player, since
+every penalty is the same 2 resources.
+
+An upgrade cannot be priced until its host is known, so it goes on to **`attachPlayedCard`** and pays
+there. `then` is what follows: the replacement resource (`resourceTop`), Osha's "you may resource a
+card from your hand" (`mayResourceFromHand`, its own choice), Endless Legions' "one at a time"
+(`again`, re-offering the rest re-indexed against the shortened zone) and Improvise's "if you don't,
+you may discard it" (`elseMayDiscardTop`, offered only on the decline). `always` raises the choice
+even with nothing playable, so a player still sees what they looked at and the decline's tail still
+runs.
+
+**Two comprehensive-rules facts decide what it costs**, and neither is inferable from the engine:
+
+- **A card in its controller's own resource zone helps pay for itself.** CR 6.2.f orders the steps
+  "Pay cost(s)" (4) then "Put card into play" (5), so the card is still a resource while the cost is
+  paid; CR 14.e says so outright for Smuggle. The budget is therefore the whole ready count, the card
+  included, and `payCost`'s `prefer` exhausts that card before any other, which costs its controller
+  nothing because it is leaving the zone anyway.
+- **Which resources a payment exhausts is not a player decision.** CR 1.7.4 lets a player rearrange
+  their resources at any time up to the point a specific one is chosen, including which are ready and
+  which exhausted, so long as the counts hold. Only the counts are game state, so no payment can
+  strand a particular card and there is nothing here to put to the player.
+
+`playUnitFromHand` remains the shorthand for an ability that plays a **unit** from hand, which 23
+cards use and which is answered by `handIndex`; `playCardFrom` is what a play of any other type, or
+out of any other zone, uses.
+
 **Every play of an upgrade goes through one door**, `playUpgradeCardOnto`, whatever zone the card came
 from and whether or not it was paid for: from hand (`playUpgradeOnto`, including Cin Drallig's and
-Jabba's free plays), from a deck search (Reforge), from the resource zone (The Armorer's
-`attachResourceUpgrade`) and from the top of the deck (Camtono's `mayPlayTopFree`). The caller takes the
+Jabba's free plays), from a deck search (Reforge), from another zone (`attachPlayedCard`) and from the
+top of the deck (Camtono's `mayPlayTopFree`). The caller takes the
 card out of its zone and deals with the cost; the door attaches it, records it as played (for the phase,
 and on the host for the round), fires the upgrade's own When Played in one batch with the host's attach
 reactions (with `upgradePlayed`, so "when you play an upgrade on this unit" fires too), and runs the

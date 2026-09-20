@@ -707,19 +707,25 @@ describe('The Armorer (ASH_001) — play an upgrade from your resources', () => 
 
     expect(legalMoves(s).some(a => a.type === 'useLeaderAbility')).toBe(true)
     const raised = resolve(s, { type: 'useLeaderAbility', index: 0 })
-    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'selectResourceUpgrade', optional: false, candidates: [{ resourceIndex: 0, cardId: 'UP' }] })
+    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'playCardFrom', zone: 'resources', candidates: [{ index: 0, cardId: 'UP' }] })
 
     const targeting = resolve(raised, { type: 'acceptChoice', choiceId: raised.pendingChoices![0].id, optionIndex: 0 })
-    expect(targeting.pendingChoices?.[0]).toMatchObject({ kind: 'attachResourceUpgrade', cardId: 'UP', targets: ['u1'], payCost: true })
+    expect(targeting.pendingChoices?.[0]).toMatchObject({ kind: 'attachPlayedCard', cardId: 'UP', targets: ['u1'] })
 
     const done = resolve(targeting, { type: 'acceptChoice', choiceId: targeting.pendingChoices![0].id, targetInstanceId: 'u1' })
     const u1 = done.players.player.units.find(u => u.instanceId === 'u1')!
     expect(u1.upgrades.some(a => a.cardId === 'UP')).toBe(true) // attached
-    // Resources: UP left the pool, R0 paid the cost, and the deck top (TST_U2) joins it EXHAUSTED.
-    // An ability resourced it, so CR 1.7.7 applies and nothing on this card says otherwise. This
-    // assertion previously read `exhausted: false`, with a comment calling it "a ready resource":
-    // the defect was written down as intended behaviour, which is how it survived to a bug report.
-    expect(done.players.player.resources).toEqual([{ cardId: 'R0', exhausted: true }, { cardId: 'TST_U2', exhausted: true }])
+    // Resources: UP paid its own cost and left the pool, so R0 is untouched, and the deck top
+    // (TST_U2) joins the pool EXHAUSTED. An ability resourced it, so CR 1.7.7 applies and nothing on
+    // this card says otherwise. That last assertion previously read `exhausted: false`, with a
+    // comment calling it "a ready resource": the defect was written down as intended behaviour,
+    // which is how it survived to a bug report.
+    //
+    // **UP paying for itself is the CR's order, not a shortcut.** CR 6.2.f pays costs at step 4 and
+    // puts the card into play at step 5, so a card played out of the resource zone is still a
+    // resource while its cost is paid; CR 14.e says so outright. It read `R0` exhausted while the
+    // engine took the card out of the pool first.
+    expect(done.players.player.resources).toEqual([{ cardId: 'R0', exhausted: false }, { cardId: 'TST_U2', exhausted: true }])
     expect(done.players.player.deck).toEqual(['TST_U1']) // top card moved to resources
     expect(done.players.player.leader.exhausted).toBe(true)
     expect(done.activePlayer).toBe('opponent')
@@ -748,16 +754,16 @@ describe('The Armorer (ASH_001) — play an upgrade from your resources', () => 
       },
     })
     const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
-    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectResourceUpgrade', optional: true })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'playCardFrom', optional: true })
     expect(legalMoves(atk).some(a => a.type === 'skipTrigger')).toBe(true) // may (Cancel)
     const targeting = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, optionIndex: 0 })
-    expect(targeting.pendingChoices?.[0]).toMatchObject({ kind: 'attachResourceUpgrade', payCost: true, targets: ['L', 'u1'] })
+    expect(targeting.pendingChoices?.[0]).toMatchObject({ kind: 'attachPlayedCard', targets: ['L', 'u1'] })
     const done = resolve(targeting, { type: 'acceptChoice', choiceId: targeting.pendingChoices![0].id, targetInstanceId: 'u1' })
     expect(done.players.player.units.find(u => u.instanceId === 'u1')!.upgrades.some(a => a.cardId === 'UP')).toBe(true)
-    // Cost paid: R0 is exhausted; UP left the pool; the deck top joins it EXHAUSTED.
+    // Cost paid: UP paid its own (CR 6.2.f), so R0 stays ready; the deck top joins the pool EXHAUSTED.
     // The back's rider is the same as the front's ("If you do, resource the top card of your deck")
     // and equally silent on readiness, so CR 1.7.7's default applies to both sides of the card.
-    expect(done.players.player.resources).toEqual([{ cardId: 'R0', exhausted: true }, { cardId: 'TST_U2', exhausted: true }])
+    expect(done.players.player.resources).toEqual([{ cardId: 'R0', exhausted: false }, { cardId: 'TST_U2', exhausted: true }])
   })
 
   // Playing a card from resources is still playing it: everything an upgrade played from hand does.
@@ -780,7 +786,7 @@ describe('The Armorer (ASH_001) — play an upgrade from your resources', () => 
     expect(done.pendingChoices?.some(c => c.kind === 'mayCreateToken' && c.id === 'gar')).toBe(true)
     expect(cardsPlayedThisPhase(done, 'player')).toContain('UP')
     expect(done.players.player.units.find(u => u.instanceId === 'gar')!.upgradesPlayedThisRound).toBe(1)
-    expect(done.players.player.resources).toEqual([{ cardId: 'R0', exhausted: true }, { cardId: 'TST_U2', exhausted: true }])
+    expect(done.players.player.resources).toEqual([{ cardId: 'R0', exhausted: false }, { cardId: 'TST_U2', exhausted: true }])
   })
 })
 

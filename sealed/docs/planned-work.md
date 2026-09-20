@@ -203,9 +203,8 @@ Three findings that contradict the assumptions the programme started from:
   programme: the token was already a card in the db and the token machinery already attached it, so the
   work was registrations plus a handful of helpers.
 - **Resource manipulation is near the bottom at 15 cards, not the top.** Most resource prose already
-  exists. What matters is *playing a card out of the resource zone* (#468), which gates Smuggle and
-  Plot, roughly 50 cards. The gap is that `payCost` exhausts resources in array order with no choice,
-  stranding a resource the player meant to play.
+  exists. What matters is *playing a card out of the resource zone*, which gates Smuggle (#469) and
+  Plot (#470), roughly 50 cards. That door is built: see `playCardFrom` in `choices.md`.
 - **Bounty is gated behind capture**, not resources.
 
 The 292 vanilla and keyword-only cards need no ticket: `PLAYABLE_AS_PRINTED` in

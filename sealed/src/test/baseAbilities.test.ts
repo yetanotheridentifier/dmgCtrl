@@ -28,8 +28,10 @@ const GROUP_A = ['SOR_019', 'SOR_025', 'SOR_028', 'LAW_023', 'LAW_026']
 const GROUP_B = ['SOR_022', 'TS26_10', 'TS26_11']
 /** C: constants — an aura over units in play, and the two that change how the game is set up. */
 const GROUP_C = ['TWI_019', 'TWI_028', 'JTL_021', 'JTL_024', 'JTL_025']
+/** D: the eight LAW bases that play a card of any type from hand, waiving one of four penalties. */
+const GROUP_D = ['LAW_020', 'LAW_021', 'LAW_022', 'LAW_024', 'LAW_025', 'LAW_027', 'LAW_028', 'LAW_030']
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
-const LIFTED = ['LAW_020', 'LAW_021', 'LAW_022', 'LAW_024', 'LAW_025', 'LAW_027', 'LAW_028', 'LAW_030', 'TS26_12']
+const LIFTED = ['TS26_12']
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
 const real = (id: string): EngineCard => {
@@ -42,7 +44,12 @@ const real = (id: string): EngineCard => {
 const src = (id: string, over: Partial<EngineCard> = {}) => card({ id, arena: 'ground', cost: 2, power: 2, hp: 8, ...over })
 const F: Record<string, EngineCard> = {
   ...CARDS,
-  ...Object.fromEntries([...GROUP_A, ...GROUP_B, ...GROUP_C].map(id => [id, real(id)])),
+  ...Object.fromEntries([...GROUP_A, ...GROUP_B, ...GROUP_C, ...GROUP_D].map(id => [id, real(id)])),
+  // Two unprovided icons of the four the LAW bases name, so waiving exactly one is visible, and one
+  // icon they do not name, so the waiver is shown to be selective rather than blanket.
+  TWOICON: card({ id: 'TWOICON', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 1, aspects: ['Aggression', 'Cunning'] }),
+  VILLAIN: card({ id: 'VILLAIN', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 1, aspects: ['Villainy'] }),
+  HEROEV: card({ id: 'HEROEV', type: 'event', cost: 1, aspects: ['Command'] }),
   LAW_163: real('LAW_163'), // The Sarlacc of Carkoon, the card Great Pit of Carkoon searches for
   GRD: src('GRD'),
   GRD2: src('GRD2'),
@@ -80,8 +87,55 @@ const useBase = (s: GameState) => resolve(s, { type: 'useBaseAbility' })
 
 describe('base abilities: the scope', () => {
   it('registers a base ability for every shipped base and none for the lifted ones', () => {
-    for (const id of [...GROUP_A, ...GROUP_B, ...GROUP_C]) expect(getCardDefinition(id)?.baseAbilities, id).toBeTruthy()
+    for (const id of [...GROUP_A, ...GROUP_B, ...GROUP_C, ...GROUP_D]) expect(getCardDefinition(id)?.baseAbilities, id).toBeTruthy()
     for (const id of LIFTED) expect(getCardDefinition(id), id).toBeUndefined()
+  })
+})
+
+/**
+ * D: "Epic Action: Play a card from your hand, ignoring 1 of its Vigilance, Command, Aggression, or
+ * Cunning aspect penalties." Eight bases print exactly this, so it is one registration repeated and
+ * the behaviour is tested once per group with each base checked to carry it.
+ *
+ * Waiving "1 of" four named penalties needs no pick from the player: each aspect penalty is a flat 2
+ * resources (CR 8.1), so whichever of the four is forgiven the card costs the same 2 less. A card
+ * with two of them unprovided still pays for the second.
+ */
+describe('base Epic Actions, D: play a card from hand, waiving one aspect penalty', () => {
+  // The player's leader provides Command + Heroism; each base below provides its own one icon.
+  // `useBase` is deliberately not called in the loop: the lint rule for React hooks reads any
+  // `use…` call inside one as a hook, so the action is taken inline here.
+  it.each(GROUP_D)('%s offers the same play', id => {
+    const s = board(id, { hand: ['TWOICON'] })
+    expect(offered(s)).toBe(true)
+    expect(choice(resolve(s, { type: 'useBaseAbility' }))).toMatchObject({ kind: 'playCardFrom', zone: 'hand' })
+  })
+
+  it('plays the card 2 cheaper, waiving one of the four penalties and no more', () => {
+    // TWOICON costs 1 with Aggression and Cunning both unprovided: 1 + 2 + 2 = 5, one waived = 3.
+    const s = board('LAW_020', { hand: ['TWOICON'], resources: ready(3) })
+    const done = accept(useBase(s), { optionIndex: 0 })
+    expect(done.players.player.units.some(u => u.cardId === 'TWOICON')).toBe(true)
+    expect(done.players.player.resources.filter(r => !r.exhausted)).toHaveLength(0)
+  })
+
+  it('waives none of a penalty the card does not name', () => {
+    // VILLAIN costs 1 + 2 for its unprovided Villainy, which is not one of the four.
+    const s = board('LAW_020', { hand: ['VILLAIN'], resources: ready(3) })
+    const done = accept(useBase(s), { optionIndex: 0 })
+    expect(done.players.player.resources.filter(r => !r.exhausted), '3 − 3').toHaveLength(0)
+  })
+
+  it('plays a card of any type, an event included', () => {
+    const s = board('LAW_025', { hand: ['HEROEV'] })
+    const done = accept(useBase(s), { optionIndex: 0 })
+    expect(done.players.player.discard).toContain('HEROEV')
+  })
+
+  it('is not offered with an empty hand, and spends the once-a-game Epic Action', () => {
+    expect(offered(board('LAW_020', { hand: [] }))).toBe(false)
+    const done = accept(useBase(board('LAW_020', { hand: ['TWOICON'] })), { optionIndex: 0 })
+    expect(done.players.player.base.epicActionUsed).toBe(true)
   })
 })
 

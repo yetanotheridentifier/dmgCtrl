@@ -266,6 +266,9 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'HMW_008', name: 'General Grievous', front: true, back: true },
   { id: 'HMW_009', name: 'Chewbacca', front: true, back: true },
   { id: 'HMW_018', name: 'The Warrior', front: true, back: true },
+  // Playing a card from somewhere other than the Play a Card action
+  { id: 'HMW_017', name: 'Osha', front: true, back: true },
+  { id: 'LAW_003', name: 'Agent Kallus', front: true, back: true },
 ]
 
 /**
@@ -288,6 +291,15 @@ export const IMPLEMENTED_BASES: UpgradeStatus[] = [
   { id: 'JTL_025', name: 'Thermal Oscillator' },
   // Experience tokens: G
   { id: 'TS26_9', name: 'First Battle Memorial' },
+  // Play a card from your hand, ignoring 1 of four aspect penalties: eight bases, one ability.
+  { id: 'LAW_020', name: "Daimyo's Palace" },
+  { id: 'LAW_021', name: 'Coaxium Mine' },
+  { id: 'LAW_022', name: 'Aldhani Garrison' },
+  { id: 'LAW_024', name: 'Imperial Command Complex' },
+  { id: 'LAW_025', name: 'Contested Caverns' },
+  { id: 'LAW_027', name: 'Stygeon Spire' },
+  { id: 'LAW_028', name: 'Canto Bight' },
+  { id: 'LAW_030', name: 'Partisan Hideout' },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
@@ -786,6 +798,13 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'HMW_253', name: 'Forced Pacification' },
   { id: 'HMW_266', name: 'Familiar Strategem' },
   { id: 'HMW_267', name: 'Renew' },
+  // Playing a card from somewhere other than the Play a Card action
+  { id: 'LAW_066', name: 'Tear This Ship Apart' },
+  { id: 'LAW_242', name: 'Improvise' },
+  { id: 'LAW_264', name: 'From a Certain Point of View' },
+  { id: 'LOF_222', name: 'A Precarious Predicament' },
+  { id: 'SHD_109', name: 'Endless Legions' },
+  { id: 'SOR_246', name: "You're My Only Hope" },
 ]
 
 /**
@@ -1665,6 +1684,9 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'TWI_033', name: 'Calculating MagnaGuard' },
   { id: 'LOF_207', name: 'Loth-Cat' },
   { id: 'SEC_055', name: 'Dhani Pilgrim' },
+  // Playing a card from somewhere other than the Play a Card action
+  { id: 'LAW_094', name: 'Hondo Ohnaka' },
+  { id: 'SOR_177', name: 'Bib Fortuna' },
 ]
 
 /**
