@@ -385,6 +385,8 @@ export interface GameState {
   delayedEffects?: DelayedEffect[]
   /** Card names nobody can play this phase (Transmission Jamming). Cleared as the regroup phase starts. */
   bannedNames?: string[]
+  /** Permissions to play a named card out of a discard pile this phase. Cleared as regroup starts. */
+  discardPlayGrants?: DiscardPlayGrant[]
   /** Bases whose next damage this phase is prevented (Close the Shield Gate). Cleared as the regroup phase starts. */
   shieldedBases?: PlayerId[]
   /** Bases can't be healed for this phase (Shifty Suspects). Cleared as the regroup phase starts. */
@@ -463,8 +465,20 @@ export interface PlayFromHandSpec {
  * The zone a `playCardFrom` play takes its card out of. `hand` is there because an ability that
  * plays a card of any type from hand is the same play as one out of the resource zone, differing
  * only in where the card is picked up: the Play a Card action itself does not come through here.
+ *
+ * A discard pile is a zone like the rest, so playing out of one adds zones rather than a door. The
+ * paired zones (`handOrResources`, `handOrDiscard`, `anyDiscard`) are each ONE zone for ONE play out
+ * of either half, listed in the order a card names them, so an index past the first half names the
+ * second.
  */
-export type PlayFromZone = 'hand' | 'resources' | 'opponentResources' | 'deckTop' | 'handOrResources'
+export type PlayFromZone =
+  | 'hand' | 'resources' | 'opponentResources' | 'deckTop' | 'handOrResources'
+  | 'discard' | 'opponentDiscard' | 'anyDiscard' | 'handOrDiscard'
+
+/** True if `zone` can hold a card somebody other than the player playing it owns. */
+export function zoneCrossesOwners(zone: PlayFromZone): boolean {
+  return zone === 'opponentResources' || zone === 'opponentDiscard' || zone === 'anyDiscard'
+}
 
 /** A card offered for play, with its index in the zone it is played out of. */
 export interface PlayFromRef {
@@ -481,7 +495,10 @@ export interface PlayFromRef {
  */
 export type AspectWaiver = { all: true } | { aspects: string[]; one?: boolean }
 
-/** What follows a `playCardFrom` play, once the card is in play or its event has resolved. */
+/**
+ * How a `playCardFrom` play differs from a plain one, and what follows it once the card is in play
+ * or its event has resolved.
+ */
 export interface PlayFromTail {
   /** "If you do, that player resources the top card of their deck" (Smuggle, Plot, LAW_066). */
   resourceTop?: PlayerId
@@ -489,8 +506,29 @@ export interface PlayFromTail {
   mayResourceFromHand?: boolean
   /** "Play each … (one at a time)": re-offer whatever is left of the same candidates (SHD_109). */
   again?: boolean
+  /**
+   * How many plays `again` has left, where the card caps them ("up to 3", Dathomiri Magicks). Absent
+   * is uncapped, which is what "play EACH unit revealed this way" means.
+   */
+  againLimit?: number
   /** "If you don't, you may discard it" (LAW_242): offered on a decline, never on a play. */
   elseMayDiscardTop?: boolean
+  /** "It enters play ready" (Nightbrother, Unnatural Life). A played unit is exhausted otherwise. */
+  entersReady?: boolean
+  /**
+   * The card whose text this tail is. It attributes the tail's damage and dispatches its delayed
+   * effect, both of which have to name a card rather than the play that caused them.
+   */
+  sourceCardId?: string
+  /**
+   * "At the start of the next regroup phase, defeat it" (Nightbrother, Unnatural Life, Salvaged
+   * Materials): the same `DelayedEffect` Sneak Attack leaves, about the card this play put into play.
+   */
+  delay?: DelayedEffect['when']
+  /** "Then, deal N damage to it" (Salvage): the unit just played, so it needs no target pick. */
+  damageIt?: number
+  /** "And give an Experience token to it" (Mechanize): token card ids for the unit just played. */
+  tokens?: string[]
 }
 
 /** A follow-up "deal N damage to a unit or a base" selection. */
@@ -569,12 +607,43 @@ export interface LastingEffect {
  * the initiative this phase (Premonition of Doom). Run once, by the card's `delayed` hook, then dropped.
  * A `takeInitiative` effect that never ran is dropped as the regroup phase starts.
  */
+/**
+ * "For this phase, you may play that card from <a> discard pile" (Boga, Tireless Magnaguard, Cobb
+ * Vanth, Stolen AT-Hauler, Aid from the Innocent).
+ *
+ * **This is the one play-from-discard shape `playCardFrom` cannot express**, and the reason is not
+ * the zone: it is a standing permission on the **Play a Card action**, taken later, on a turn of the
+ * player's own, among their normal moves. A pending choice is answered now or declined now, so it is
+ * the wrong instrument. The permission still *resolves* through `playFromZone`, so pay / take out of
+ * the zone / hand to the door for the card's type is stated exactly once either way.
+ *
+ * A grant names one card in one pile. It is spent when used, and cleared unused as the regroup phase
+ * starts, like `bannedNames`.
+ */
+export interface DiscardPlayGrant {
+  /** Who may take the play. Not always the pile's owner: Stolen AT-Hauler hands it to an opponent. */
+  player: PlayerId
+  /** Whose discard pile the card is in, and who still owns the card (CR 1.5.2). */
+  owner: PlayerId
+  cardId: string
+  free?: boolean
+  costDelta?: number
+  waive?: AspectWaiver
+  /** Tokens for the unit once it is in play (Tireless Magnaguard's 2 Weakness). */
+  tokens?: string[]
+}
+
 export interface DelayedEffect {
   cardId: string
   owner: PlayerId
   when: 'regroupStart' | 'actionPhaseStart' | 'takeInitiative'
   /** The unit the effect is about, when it has one (the unit Sneak Attack played). */
   unitId?: string
+  /**
+   * The upgrade the effect is about, where it is an upgrade rather than the unit itself (Salvaged
+   * Materials defeats the upgrade it played, not its host). `unitId` is then the host it went onto.
+   */
+  upgradeCardId?: string
   /** The arena the effect is about, when it has one (the arena Seismic Detonation chose). */
   arena?: Arena
 }
@@ -912,7 +981,10 @@ type ChoiceVariant =
   // upgrade cannot be priced until its host is known, so it goes on to `attachPlayedCard`.
   | { kind: 'playCardFrom'; id: string; controller: PlayerId; zone: PlayFromZone; candidates: PlayFromRef[]; optional?: boolean; free?: boolean; costDelta?: number; waive?: AspectWaiver; targetUnits?: string[]; then?: PlayFromTail }
   // Follow-up: attach the upgrade picked above to one of `targets`, paying for it there. Mandatory.
-  | { kind: 'attachPlayedCard'; id: string; controller: PlayerId; zone: PlayFromZone; index: number; cardId: string; targets: string[]; free?: boolean; costDelta?: number; waive?: AspectWaiver; then?: PlayFromTail }
+  // `candidates` is the list the `playCardFrom` above offered, carried through so a `then.again`
+  // re-offer can re-index what is left: an upgrade's play finishes HERE, not at the pick, so the
+  // re-offer has to be able to fire from this step too (Kylo Ren's "any number of upgrades").
+  | { kind: 'attachPlayedCard'; id: string; controller: PlayerId; zone: PlayFromZone; index: number; cardId: string; targets: string[]; candidates?: PlayFromRef[]; targetUnits?: string[]; free?: boolean; costDelta?: number; waive?: AspectWaiver; then?: PlayFromTail }
   // "You may resource a card from your hand" (Osha), answered by `handIndex`. Always a may.
   | { kind: 'mayResourceFromHand'; id: string; controller: PlayerId }
   // Optionally pay `cost` to draw `draw` cards (Mandalorian). `cost` 0 = a free "may draw".
@@ -1001,7 +1073,6 @@ type ChoiceVariant =
   // Play a unit from your discard for free (One Must Destroy to Create, Dathomiri Magicks).
   // `candidates` are discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. `remaining`
   // counts how many more may be played after this one, so the offer re-raises until the pool runs out.
-  | { kind: 'mayPlayUnitFromDiscard'; id: string; controller: PlayerId; candidates: string[]; remaining: number; maxCost?: number; excludeTrait?: string }
   // "Choose one:", a modal effect. `modes` holds only the options the card allows right now, so a
   // mode whose condition isn't met is never offered. Mandatory: "choose one" is never optional.
   // With `then`, the card resolves the mode itself: its `ifYouDo` runs with the picked mode as `step`,
@@ -1051,7 +1122,10 @@ type ChoiceVariant =
   // (Jendirian Valley).
   // `shuffle` shuffles the deck once the card is drawn, for a search of the whole deck (Search Your Feelings).
   // `then` is the rest of the ability once the search is settled, drawn or not (Captain Vaughn).
-  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number; discardRest?: boolean; remaining?: number; upTo?: boolean; held?: boolean; resourceIt?: boolean; shuffle?: boolean; then?: IfYouDo }
+  // `discardIt` discards the found card instead of drawing it, and `grantPlay` then leaves a
+  // `DiscardPlayGrant` for it on those terms: "search …, discard it, and for this phase you may play
+  // that card from your discard pile" (Cobb Vanth, Aid from the Innocent).
+  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number; discardRest?: boolean; remaining?: number; upTo?: boolean; held?: boolean; resourceIt?: boolean; shuffle?: boolean; discardIt?: boolean; grantPlay?: Omit<DiscardPlayGrant, 'player' | 'owner' | 'cardId'>; then?: IfYouDo }
   // The Cyborg Mech: deal `undamagedAmount` to a chosen undamaged target, or `damagedAmount`
   // to a damaged one (the amount is decided by the picked unit's damage). Mandatory board-target.
   | { kind: 'variableStrike'; id: string; controller: PlayerId; targets: string[]; undamagedAmount: number; damagedAmount: number }
@@ -1207,12 +1281,27 @@ export function addLastingEffect(state: GameState, effect: LastingEffect): GameS
 
 /**
  * Drop the "this phase" lasting effects (called at the start of the regroup phase), and the phase's
- * banned names and shielded bases. A `untilRoundEnd` effect stays until `clearRoundEffects`.
+ * banned names, shielded bases and discard-pile play permissions. A `untilRoundEnd` effect stays
+ * until `clearRoundEffects`.
  */
 export function clearLastingEffects(state: GameState): GameState {
-  if (!state.lastingEffects && !state.bannedNames && !state.shieldedBases && !state.basesUnhealable) return state
+  if (!state.lastingEffects && !state.bannedNames && !state.shieldedBases && !state.basesUnhealable && !state.discardPlayGrants) return state
   const kept = (state.lastingEffects ?? []).filter(e => e.untilRoundEnd)
-  return { ...state, lastingEffects: kept.length > 0 ? kept : undefined, bannedNames: undefined, shieldedBases: undefined, basesUnhealable: undefined }
+  return {
+    ...state, lastingEffects: kept.length > 0 ? kept : undefined,
+    bannedNames: undefined, shieldedBases: undefined, basesUnhealable: undefined, discardPlayGrants: undefined,
+  }
+}
+
+/** Add a "for this phase, you may play that card from <a> discard pile" permission. */
+export function addDiscardPlayGrant(state: GameState, grant: DiscardPlayGrant): GameState {
+  return { ...state, discardPlayGrants: [...(state.discardPlayGrants ?? []), grant] }
+}
+
+/** Drop the grant at `index` — it has been taken, or its card has left the pile. */
+export function dropDiscardPlayGrant(state: GameState, index: number): GameState {
+  const left = (state.discardPlayGrants ?? []).filter((_, i) => i !== index)
+  return { ...state, discardPlayGrants: left.length > 0 ? left : undefined }
 }
 
 /** Leave an effect to happen later (`DelayedEffect`). */

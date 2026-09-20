@@ -1,7 +1,7 @@
 import type { Action } from '../engine/actions'
 import type { GameState, PlayerId } from '../engine/types'
 import { opponentOf, activeChoice, findChoice } from '../engine/types'
-import { effectiveCost } from '../engine/legalMoves'
+import { effectiveCost, playFromCost } from '../engine/legalMoves'
 import { upgradeHostName } from './upgradeHosts'
 
 function unitName(state: GameState, owner: PlayerId, instanceId: string): string {
@@ -119,6 +119,17 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (!card) return 'Play a card'
       return `Play ${card.name} (${effectiveCost(state, by, card)})`
     }
+    case 'playFromDiscard': {
+      // A standing permission, so the label has to say where the card is coming from: it is not in
+      // the player's hand and the board gives them no other clue.
+      const grant = (state.discardPlayGrants ?? [])[action.grantIndex]
+      const card = grant ? state.cards[grant.cardId] : undefined
+      if (!grant || !card) return 'Play a card from a discard pile'
+      const where = grant.owner === by ? 'your discard pile' : "your opponent's discard pile"
+      const price = grant.free ? 'free' : `${playFromCost(state, by, card, grant)}`
+      const onto = action.targetInstanceId ? ` onto ${anyUnitName(state, action.targetInstanceId) ?? 'a unit'}` : ''
+      return `Play ${card.name} from ${where}${onto} (${price})`
+    }
     case 'playUpgrade': {
       const cardId = state.players[by].hand[action.handIndex]
       const card = cardId ? state.cards[cardId] : undefined
@@ -183,7 +194,6 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'damageAnyBases') return 'Done'
       if (choice.kind === 'selectPair' || choice.kind === 'selectUpgradeToReturn' || choice.kind === 'mayPlayUpgradeFree') return 'Decline'
       if (choice.kind === 'mayPayExhaustArena' || choice.kind === 'revealUnitFromHand') return "Don't"
-      if (choice.kind === 'mayPlayUnitFromDiscard') return "Don't play"
       // Named rather than left to the generic decline: a played unit can raise several choices at
       // once, and identical buttons make it unclear which one you are turning down.
       if (choice.kind === 'support') return 'Decline support'
@@ -193,7 +203,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       // Declining a prevention means the damage lands, which "Decline" alone does not convey (#422).
       if (choice.kind === 'mayPreventDamage') return 'Take the damage'
       // Never fall through to the kind's internal name: "Skip mayPlayUnitFromDiscard" reached
-      // players (#379/#380). An unlabelled decline is still a decline.
+      // players (#379/#380), back when playing from a discard pile had a choice kind of its own.
+      // An unlabelled decline is still a decline.
       return 'Decline'
     }
     case 'acceptChoice': {
@@ -460,10 +471,6 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       // read as one button per unit (#379).
       if (choice.kind === 'selectArenaToGrant') {
         return `Mine the ${(action.optionIndex ?? 0) === 0 ? 'ground' : 'space'} arena`
-      }
-      if (choice.kind === 'mayPlayUnitFromDiscard') {
-        const cardId = choice.candidates[action.optionIndex ?? 0]
-        return `Play ${cardId ? state.cards[cardId]?.name ?? cardId : 'unit'}`
       }
       if (choice.kind === 'chooseNumber') return `Choose ${action.optionIndex ?? 0}`
       if (choice.kind === 'selectUnitToSteal') {

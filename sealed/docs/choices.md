@@ -397,20 +397,35 @@ an upgrade played from hand.
 ### Playing a card out of another zone
 
 **`playCardFrom` is the one door for a play that is not the Play a Card action**: a card of any type,
-out of `zone` (`hand`, `resources`, `opponentResources`, `deckTop`, or `handOrResources` for a card
-offered out of either), answered by `optionIndex` into its `candidates`. `free` bypasses the cost and
-the aspect penalty (CR 8.5), `costDelta` adjusts it, and `waive` forgives aspect penalties: all of
-them, the ones from named icons (Osha's Villainy), or exactly one of the named icons (the LAW bases'
-"1 of its Vigilance, Command, Aggression, or Cunning"). "One of" needs no pick from the player, since
-every penalty is the same 2 resources.
+out of `zone`, answered by `optionIndex` into its `candidates`. The zones are `hand`, `resources`,
+`opponentResources`, `deckTop`, `discard` and `opponentDiscard`, plus three **paired** zones for a
+card offered out of either of two places at once: `handOrResources`, `handOrDiscard` and `anyDiscard`
+(both players' piles). A paired zone is one zone holding one list, in the order the card names them,
+so an index past the first half names the second.
+
+`free` bypasses the cost and the aspect penalty (CR 8.5), `costDelta` adjusts it, and `waive` forgives
+aspect penalties: all of them, the ones from named icons (Osha's Villainy), or exactly one of the
+named icons (the LAW bases' "1 of its Vigilance, Command, Aggression, or Cunning"). "One of" needs no
+pick from the player, since every penalty is the same 2 resources.
+
+**A card played out of a zone somebody else owns is still theirs.** CR 1.5.2 ties ownership to the
+deck a card started in, and playing it does not move it: `zoneCardOwner` reads the owner off the zone
+and the index, and the three type doors take it as `cardOwner`. So a unit played out of an opponent's
+discard pile enters play under its player but is defeated into **its owner's** pile, an upgrade
+attaches with that owner recorded on the attachment, and an event goes back to their discard when it
+resolves. A unit whose owner and controller differ this way is `controlUntil: 'permanent'`, since
+nothing hands the card back.
 
 An upgrade cannot be priced until its host is known, so it goes on to **`attachPlayedCard`** and pays
-there. `then` is what follows: the replacement resource (`resourceTop`), Osha's "you may resource a
-card from your hand" (`mayResourceFromHand`, its own choice), Endless Legions' "one at a time"
-(`again`, re-offering the rest re-indexed against the shortened zone) and Improvise's "if you don't,
-you may discard it" (`elseMayDiscardTop`, offered only on the decline). `always` raises the choice
-even with nothing playable, so a player still sees what they looked at and the decline's tail still
-runs.
+there. `then` is how the play differs from a plain one and what follows it: the replacement resource
+(`resourceTop`), Osha's "you may resource a card from your hand" (`mayResourceFromHand`, its own
+choice), Endless Legions' "one at a time" (`again`, re-offering the rest re-indexed against the
+shortened zone, capped by `againLimit` where the card reads "up to N"), Improvise's "if you don't,
+you may discard it" (`elseMayDiscardTop`, offered only on the decline), and, about the card just put
+into play, `entersReady`, `delay` ("at the start of the next regroup phase, defeat it"), `damageIt`
+and `tokens`. The `again` re-offer fires from **either** step, since a unit's or an event's play
+finishes at the pick and an upgrade's at the attach. `always` raises the choice even with nothing
+playable, so a player still sees what they looked at and the decline's tail still runs.
 
 **Two comprehensive-rules facts decide what it costs**, and neither is inferable from the engine:
 
@@ -427,6 +442,28 @@ runs.
 `playUnitFromHand` remains the shorthand for an ability that plays a **unit** from hand, which 23
 cards use and which is answered by `handIndex`; `playCardFrom` is what a play of any other type, or
 out of any other zone, uses.
+
+### "For this phase, you may play that card from a discard pile"
+
+The one play-from-a-pile shape that is **not** a choice. It is a standing permission on the **Play a
+Card action**, taken later, on a turn of the player's own, among their normal moves, so a pending
+choice (answered now or declined now) is the wrong instrument for it.
+
+A `DiscardPlayGrant` in `state.discardPlayGrants` names who may take the play, whose pile the card is
+in, which card it is, and its terms (`free`, `costDelta`, `waive`, and `tokens` for the unit once it
+arrives). `legalMoves` turns each live grant into a `playFromDiscard` action, one per legal host where
+the card is an upgrade, re-reading affordability and legality each time, because a grant outlives the
+board that created it. A grant whose card has left the pile offers nothing.
+
+**The permission resolves through `playFromZone`**, exactly as a `playCardFrom` does, so paying, taking
+the card out of the zone and handing it to the door for its type is stated once for both shapes. The
+grant is spent on use and cleared unused as the regroup phase starts, alongside `bannedNames`.
+
+The permission need not be its own player's: Stolen AT-Hauler gives an opponent a free play out of
+**its owner's** pile, which is the case ownership above exists for. `searchDraw` can leave one
+directly, with `discardIt` putting its find in the pile instead of the hand and `grantPlay` naming
+the terms ("search the top 10, discard it, and for this phase you may play that card from your
+discard pile").
 
 **Every play of an upgrade goes through one door**, `playUpgradeCardOnto`, whatever zone the card came
 from and whether or not it was paid for: from hand (`playUpgradeOnto`, including Cin Drallig's and

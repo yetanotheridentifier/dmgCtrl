@@ -32,8 +32,12 @@ const SHIPPED = [
   // Weakness plus something the engine already has: Beast tokens, a compound trigger, a one-off trigger
   'HMW_062', 'HMW_067', 'HMW_199', 'HMW_202', 'HMW_237',
 ]
-/** Scoped by the ticket, but lifted out to the ticket that owns its other blocker (play from discard). */
-const LIFTED = ['HMW_109']
+/**
+ * Scoped by the ticket, but lifted out to the ticket that owns its other blocker. Empty: `HMW_109`
+ * Tireless Magnaguard was the last of them and shipped with playing a card out of a discard pile,
+ * which was all it still needed. Its own tests live with that group.
+ */
+const LIFTED: string[] = []
 
 const POOL = poolFor(['HMW'])
 const real = (id: string): EngineCard => {

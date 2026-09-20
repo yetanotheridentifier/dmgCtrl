@@ -145,9 +145,9 @@ Two phases:
   the 14 other constant-ability cards lifted out are carried by #477. **When Defeated units are
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
   shared with another trigger point ("When Played/When Defeated") is built on the compound-head framework
-(#463) as its groups ship, with the groups still outstanding on #674, and Stolen AT-Hauler
-  (an opponent may play it from the discard pile) is on #471. **Leaders are finished** on both sides (#458): the 19 not built are on the ticket of what
-  blocks them, #465 pilots (7), #471 play from discard (2),
+(#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
+  (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 17 not built are on the ticket of what
+  blocks them, #465 pilots (7),
   #466 capture, #467 Bounty, #470 Plot, #474 trigger points, #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #477 (defeat by an enemy card ability, and Chancellor Palpatine,
   the one leader that flips between two faces rather than deploying).
@@ -162,12 +162,20 @@ Two phases:
   (it reads a Bounty), and the two leaders #458 had lifted out built alongside them. **Token units are
   finished** (#605), the second largest: Spy, X-Wing, TIE Fighter, Clone Trooper, Battle Droid and
   HMW's Beast, with 76 cards (73 the triage blocked on them alone, and Governor Pryce, HMW's Poggle the
-  Lesser and Nameless Valor lifted onto it). Darth Vader, Victor Squadron Leader waits on #465 (his
+  Lesser and Nameless Valor lifted onto it). **Playing a card out of a discard pile is finished**
+  (#471): the discard piles became zones on the existing `playCardFrom` door, the unit-only
+  `mayPlayUnitFromDiscard` it duplicated was retired onto it, and "for this phase you may play that
+  card from a discard pile" became a standing permission on the Play a Card action. 20 cards, the
+  five HMW ones among them. Three cards need an "Action:" dispatched from a card sitting IN the
+  discard pile, a site the engine does not have, and are on #678; L3-37 is on #477 (once each phase
+  on a triggered ability) and Obi-Wan Kenobi on #474; Second Chance, Stolen Landspeeder, Sifo-Dyas
+  and Mother Talzin are on the ticket of their own other blocker.
+  Darth Vader, Victor Squadron Leader waits on #465 (his
   back is a Pilot), and Queen Amidala (defeat a unit to prevent damage), Roger Roger (an upgrade's own
   When Defeated) and the flipping Chancellor Palpatine are on #477. **Weakness tokens are finished**
   (#649), HMW's -1/-1 token: its 18 cards and five more it touched (Beast-token cards, Inferno Squad's
-  "When Played/When Defeated" and Nuvo Vindi's one-off trigger), with Tireless Magnaguard on #471 (play
-  from discard). **Fortify is finished** (#650), HMW's upgrades attached to a base: 17 of its 18 cards and
+  "When Played/When Defeated" and Nuvo Vindi's one-off trigger), with Tireless Magnaguard shipping on
+  #471 (play from discard). **Fortify is finished** (#650), HMW's upgrades attached to a base: 17 of its 18 cards and
   Trap Field and Insurgent Camp, with Vice Admiral Rampart on #477 (a replacement for a base upgrade's
   defeat); Beast Lair shipped with #653, which gave it the action-phase-start trigger it waited on.
   Next are Credit tokens (#602, 29),
@@ -190,8 +198,11 @@ who received one) went to #477.
 
 **70 were blocked by exactly one thing**: the 18 Fortify, 18 Weakness and 14 Beast-token cards are
 built (less one Fortify card lifted, above), and the rest are the 3 compound-head cards (built, #463), #474 a new trigger point (3),
-#471 play from discard (2), #468 (1), #475 (1) and #477's one-offs (9, Boba Fett having shipped on the
-"a friendly unit enters play" point). 16 are multi-blocked, on #477.
+#468 (1), #475 (1) and #477's one-offs (9, Boba Fett having shipped on the
+"a friendly unit enters play" point). The 2 play-from-discard cards are built (#471), which also
+closed Boga, Tireless Magnaguard and L3-37's other blockers; L3-37 itself is on #477, needing "use
+this ability only once each phase" on a **triggered** ability, which today only base actions have.
+16 are multi-blocked, on #477.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted into #477 and the batch
 ships without it. The classification is regex triage over ability prose: it catches new nouns but not

@@ -48,12 +48,13 @@ const SHIPPED = [
 ]
 /**
  * Scoped by the triage but lifted out to the ticket that owns their blocker. LAW_010 and SOR_008 were
- * lifted to Experience tokens and SEC_011 to token units, which have since shipped, so they are built and
- * covered there instead.
+ * lifted to Experience tokens and SEC_011 to token units, and SEC_003 (Lama Su) and LOF_001 (Kylo
+ * Ren) to playing a card out of a discard pile. All of those have since shipped, so those leaders
+ * are built and covered with the group that unblocked them.
  */
 const LIFTED = [
   'JTL_001', 'JTL_003', 'JTL_011', 'JTL_012', 'JTL_015', 'JTL_017', 'JTL_018', 'TWI_017',
-  'SEC_003', 'LOF_001', 'SHD_006', 'SHD_010', 'SEC_001', 'SEC_006', 'LAW_017', 'SEC_012',
+  'SHD_006', 'SHD_010', 'SEC_001', 'SEC_006', 'LAW_017', 'SEC_012',
 ]
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])

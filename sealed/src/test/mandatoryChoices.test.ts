@@ -88,7 +88,7 @@ const rows: Row[] = [
   { id: 'ASH_052', text: 'Chimaera: you may choose a friendly unit and an enemy non-leader unit', kind: 'selectPair', may: true, s: board([unit('a', 'GRD')], [unit('e', 'GRD')]) },
   { id: 'ASH_195', text: "Helgait When Defeated: you may distribute Advantage tokens equal to this unit's power", kind: 'distributeTokens', may: true, s: board([unit('a', 'GRD')], []), ctx: { defeatedUnit: unit('src', 'GRD') } },
   { id: 'ASH_224', text: 'Elzar Mann: distribute up to 5 Advantage tokens among other friendly units', kind: 'distributeTokens', may: true, s: board([unit('src', 'GRD'), unit('a', 'GRD')], []) },
-  { id: 'ASH_104', text: 'Dathomiri Magicks: play up to 3 units that each cost 2 or less from your discard pile', kind: 'mayPlayUnitFromDiscard', may: true, s: state({ cards: F, players: { player: player({ discard: ['GRD'] }), opponent: player() } }) },
+  { id: 'ASH_104', text: 'Dathomiri Magicks: play up to 3 units that each cost 2 or less from your discard pile', kind: 'playCardFrom', may: true, s: state({ cards: F, players: { player: player({ discard: ['GRD'] }), opponent: player() } }) },
 
   // Printed without "may": no decline.
   { id: 'ASH_067', text: 'Get Lost: defeat an upgraded non-leader unit', kind: 'selectUnitToDefeat', may: false, s: board([], [upgraded('e', 'GRD', 'opponent')]) },
@@ -210,8 +210,8 @@ describe('each kind is mandatory unless the card marks it optional', () => {
     expect(skips({ ...base, kind: 'multiPick', targets: ['a'], spec: { mode: 'exhaust', remaining: 2 } })).toHaveLength(1)
   })
 
-  it('mayPlayUnitFromDiscard keeps its decline: every card using it reads "up to" or "you may"', () => {
-    expect(skips({ ...base, kind: 'mayPlayUnitFromDiscard', candidates: ['GRD'], remaining: 1 })).toHaveLength(1)
+  it('an optional playCardFrom keeps its decline: every card playing from a pile reads "up to" or "you may"', () => {
+    expect(skips({ ...base, kind: 'playCardFrom', zone: 'discard', candidates: [{ index: 0, cardId: 'GRD' }], optional: true, free: true })).toHaveLength(1)
   })
 })
 

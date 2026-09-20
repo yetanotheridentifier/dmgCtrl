@@ -269,6 +269,11 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   // Playing a card from somewhere other than the Play a Card action
   { id: 'HMW_017', name: 'Osha', front: true, back: true },
   { id: 'LAW_003', name: 'Agent Kallus', front: true, back: true },
+  // Playing a card out of a discard pile. Maul and Kylo Ren reach the pile only once deployed, and
+  // each front is a different mechanic's: Maul's plays from hand, Kylo Ren's discards for a draw.
+  { id: 'HMW_016', name: 'Maul', front: false, back: true },
+  { id: 'LOF_001', name: 'Kylo Ren', front: false, back: true },
+  { id: 'SEC_003', name: 'Lama Su', front: true, back: true },
 ]
 
 /**
@@ -805,6 +810,14 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LOF_222', name: 'A Precarious Predicament' },
   { id: 'SHD_109', name: 'Endless Legions' },
   { id: 'SOR_246', name: "You're My Only Hope" },
+  // Playing a card out of a discard pile
+  { id: 'JTL_121', name: 'Salvage' },
+  { id: 'LAW_245', name: 'Salvaged Materials' },
+  { id: 'SHD_094', name: "Palpatine's Return" },
+  { id: 'TS26_57', name: 'Mechanize' },
+  { id: 'TWI_040', name: 'A Fine Addition' },
+  { id: 'TWI_189', name: 'Unnatural Life' },
+  { id: 'TWI_201', name: 'Aid from the Innocent' },
 ]
 
 /**
@@ -1688,6 +1701,16 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // Playing a card from somewhere other than the Play a Card action
   { id: 'LAW_094', name: 'Hondo Ohnaka' },
   { id: 'SOR_177', name: 'Bib Fortuna' },
+  // Playing a card out of a discard pile. The last four leave a permission for the phase rather
+  // than playing anything themselves, and Stolen AT-Hauler leaves that permission to an opponent.
+  { id: 'HMW_204', name: 'Nightbrother' },
+  { id: 'LOF_036', name: 'Old Daka' },
+  { id: 'SHD_242', name: "Gideon's Light Cruiser" },
+  { id: 'SOR_102', name: 'Home One' },
+  { id: 'HMW_109', name: 'Tireless Magnaguard' },
+  { id: 'HMW_122', name: 'Boga' },
+  { id: 'JTL_221', name: 'Stolen AT-Hauler' },
+  { id: 'SHD_115', name: 'Cobb Vanth' },
 ]
 
 /**

@@ -1,5 +1,5 @@
 import type { Action } from './actions'
-import type { AspectWaiver, AttackerFilter, EngineCard, GameState, HandCardRef, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
+import type { AspectWaiver, AttackerFilter, DiscardPlayGrant, EngineCard, GameState, HandCardRef, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
 import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds, pushChoice, isFortify } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword, unitCannotAttack, unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
@@ -262,13 +262,64 @@ export function affordableHandUnits(state: GameState, owner: PlayerId, extraReso
  */
 export function zoneCards(state: GameState, controller: PlayerId, zone: PlayFromZone): string[] {
   const p = state.players[controller]
+  const theirs = state.players[opponentOf(controller)]
   switch (zone) {
     case 'hand': return p.hand
     case 'resources': return p.resources.map(r => r.cardId)
-    case 'opponentResources': return state.players[opponentOf(controller)].resources.map(r => r.cardId)
+    case 'opponentResources': return theirs.resources.map(r => r.cardId)
     case 'deckTop': return p.deck.slice(0, 1)
     case 'handOrResources': return [...p.hand, ...p.resources.map(r => r.cardId)]
+    case 'discard': return p.discard
+    case 'opponentDiscard': return theirs.discard
+    case 'anyDiscard': return [...p.discard, ...theirs.discard]
+    case 'handOrDiscard': return [...p.hand, ...p.discard]
   }
+}
+
+/**
+ * Who OWNS the card at `index` of `zone`, which is not always the player playing it: a card played
+ * out of somebody else's discard pile or resource zone is still theirs, and goes back to their
+ * discard pile when it leaves play (CR 1.5.2).
+ */
+export function zoneCardOwner(state: GameState, controller: PlayerId, zone: PlayFromZone, index: number): PlayerId {
+  if (zone === 'opponentResources' || zone === 'opponentDiscard') return opponentOf(controller)
+  if (zone === 'anyDiscard') return index < state.players[controller].discard.length ? controller : opponentOf(controller)
+  return controller
+}
+
+/**
+ * Where a `DiscardPlayGrant`'s card sits, as a zone and an index the play door can use: the pile's
+ * owner decides which of the two discard zones it is, relative to the player taking the play.
+ * `undefined` when the card has left the pile, which is how a grant goes quietly inert.
+ */
+export function grantZoneRef(state: GameState, grant: DiscardPlayGrant): { zone: PlayFromZone; ref: PlayFromRef } | undefined {
+  const index = state.players[grant.owner].discard.indexOf(grant.cardId)
+  if (index === -1) return undefined
+  return { zone: grant.owner === grant.player ? 'discard' : 'opponentDiscard', ref: { index, cardId: grant.cardId } }
+}
+
+/**
+ * The plays `playerId`'s standing discard-pile permissions offer right now: one move per grant, or
+ * one per legal host where the granted card is an upgrade and has to be attached to something.
+ * Affordability and legality are re-read here rather than trusted from when the grant was made,
+ * because a grant outlives the board state that created it.
+ */
+function discardGrantMoves(state: GameState, playerId: PlayerId, forbiddenNames: Set<string>): Action[] {
+  const moves: Action[] = []
+  ;(state.discardPlayGrants ?? []).forEach((grant, grantIndex) => {
+    if (grant.player !== playerId) return
+    const found = grantZoneRef(state, grant)
+    const card = state.cards[grant.cardId]
+    if (!found || !card || forbiddenNames.has(card.name)) return
+    if (card.type === 'upgrade' && !isFortify(card)) {
+      for (const id of validPlayTargets(state, playerId, found.zone, found.ref.index, grant.cardId, grant)) {
+        moves.push({ type: 'playFromDiscard', grantIndex, targetInstanceId: id })
+      }
+      return
+    }
+    if (canPlayFrom(state, playerId, found.zone, found.ref, grant)) moves.push({ type: 'playFromDiscard', grantIndex })
+  })
+  return moves
 }
 
 /**
@@ -403,6 +454,10 @@ function actionPhaseMoves(state: GameState): Action[] {
     if (!canAfford(p, effectiveCost(state, playerId, card))) return
     moves.push(card.type === 'unit' ? { type: 'playUnit', handIndex } : { type: 'playEvent', handIndex })
   })
+
+  // "For this phase, you may play that card from <a> discard pile": a standing permission, taken
+  // here among the normal plays rather than answered as a choice. See `DiscardPlayGrant`.
+  moves.push(...discardGrantMoves(state, playerId, forbiddenNames))
 
   // Play an Upgrade — attach to any unit in play (either player's) by default; a
   // card's attachRestriction narrows that, and its cost may depend on the target
@@ -852,13 +907,9 @@ function choiceMoves(state: GameState): Action[] {
         for (let n = 0; n <= choice.max; n++) moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: n })
         break
       }
-      case 'mayPlayUnitFromDiscard':
       case 'chooseMode': {
-        // Pick one of the listed options (a discard-pile unit, or a mode). "Choose one" is never optional;
-        // every card that plays a unit from the discard reads "up to" or "you may", so that one declines.
-        const options = choice.kind === 'chooseMode' ? choice.modes : choice.candidates
-        options.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
-        if (choice.kind === 'mayPlayUnitFromDiscard') moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        // Pick one of the listed modes. "Choose one:" is never optional.
+        choice.modes.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
         break
       }
       case 'mayPayThen': {

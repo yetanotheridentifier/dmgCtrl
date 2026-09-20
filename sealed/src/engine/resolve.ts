@@ -2,9 +2,9 @@ import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds, isFortify, recordBaseActionUsed } from './types'
-import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
+import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { effectiveCost, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
+import { effectiveCost, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, grantZoneRef, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
 import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
@@ -80,6 +80,15 @@ function resolveAction(state: GameState, action: Action): GameState {
         const played = playEvent(state, action.handIndex)
         if (played.winner !== null) return played
         // Like a unit's on-play trigger: a raised choice keeps the turn, and an opponent-controlled
+        // one hands over first.
+        if (activeChoice(played)) return resetPasses(handOffOpponentChoice(played, played.activePlayer))
+        return advanceTurn(resetPasses(played))
+      })
+    case 'playFromDiscard':
+      return requirePhase(state, 'action', () => {
+        const played = takeDiscardPlayGrant(state, action.grantIndex, action.targetInstanceId)
+        if (played.winner !== null) return played
+        // Like every other play: a choice the card raises keeps the turn, and an opponent-controlled
         // one hands over first.
         if (activeChoice(played)) return resetPasses(handOffOpponentChoice(played, played.activePlayer))
         return advanceTurn(resetPasses(played))
@@ -348,7 +357,7 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
  * it and the board no longer does, since payment happens before the unit exists. It defaults to 0, which
  * is what every free-play door pays.
  */
-function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0): GameState {
+function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0, cardOwner?: PlayerId): GameState {
   // First, after the cost, so "first X each phase" sees this one as the first and nothing below reads
   // a record that is missing it.
   state = recordCardPlayed(state, owner, cardId)
@@ -379,6 +388,11 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
     // conditionally gained one counts exactly as a printed one does.
     upgrades: [],
     ...(resourcesPaid > 0 ? { resourcesPaidToPlay: resourcesPaid } : {}),
+    // A unit played out of somebody else's discard pile or resource zone is still their card
+    // (CR 1.5.2), so it is defeated into THEIR discard pile. `owner` here is the controller: the
+    // array a unit sits in. `UnitState.owner` is only set where the two differ, as it is for a unit
+    // whose control has changed hands. The permanent form, since nothing hands the card back.
+    ...(cardOwner !== undefined && cardOwner !== owner ? { owner: cardOwner, controlUntil: 'permanent' as const } : {}),
   }
 
   let next = updatePlayer(state, owner, { units: [...state.players[owner].units, newUnit] })
@@ -564,7 +578,7 @@ function playEvent(state: GameState, handIndex: number): GameState {
  * zone it was played from. `playEvent` feeds it from hand, `playFromZone` from the resource zone,
  * the top of a deck, or a hand an ability rather than the Play a Card action is reaching into.
  */
-function playEventCard(state: GameState, playerId: PlayerId, cardId: string): GameState {
+function playEventCard(state: GameState, playerId: PlayerId, cardId: string, cardOwner?: PlayerId): GameState {
   const card = state.cards[cardId]
   if (card?.type !== 'event') return state
   const p = state.players[playerId]
@@ -572,10 +586,11 @@ function playEventCard(state: GameState, playerId: PlayerId, cardId: string): Ga
   // spent now.
   const eventGrants = (p.nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g, state, playerId))
   const grantsLeft = (p.nextUnitGrants ?? []).filter(g => !eventGrants.includes(g))
-  let next = updatePlayer(state, playerId, {
-    discard: [...p.discard, card.id],
-    ...(eventGrants.length ? { nextUnitGrants: grantsLeft.length ? grantsLeft : undefined } : {}),
-  })
+  // An event goes to its OWNER's discard pile (CR 1.5.2), which is the player it was played out of
+  // when that was not the one playing it. The grants are still the player's own.
+  const owner = cardOwner ?? playerId
+  let next = updatePlayer(state, playerId, eventGrants.length ? { nextUnitGrants: grantsLeft.length ? grantsLeft : undefined } : {})
+  next = updatePlayer(next, owner, { discard: [...next.players[owner].discard, card.id] })
   // After the cost, so Peli Motto's "first non-unit card each phase" counts this one as the first.
   next = recordCardPlayed(next, playerId, card.id)
   const sourceInstanceId = `ev${next.instanceCounter}`
@@ -589,15 +604,26 @@ function playEventCard(state: GameState, playerId: PlayerId, cardId: string): Ga
 
 /** Take the card at `index` out of the zone a `playCardFrom` played it from. */
 function removeFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone, index: number): GameState {
-  const owner = zone === 'opponentResources' ? opponentOf(controller) : controller
+  // Which half of a paired zone the index falls in decides whose pile it names, so the owner is read
+  // the same way the zone was listed rather than assumed to be the controller.
+  const owner = zoneCardOwner(state, controller, zone, index)
   const p = state.players[owner]
+  const drop = (arr: string[], i: number): string[] => arr.filter((_, n) => n !== i)
   switch (zone) {
-    case 'hand': return updatePlayer(state, owner, { hand: p.hand.filter((_, i) => i !== index) })
+    case 'hand': return updatePlayer(state, owner, { hand: drop(p.hand, index) })
     case 'resources':
     case 'opponentResources': return updatePlayer(state, owner, { resources: p.resources.filter((_, i) => i !== index) })
     case 'deckTop': return updatePlayer(state, owner, { deck: p.deck.slice(1) })
+    case 'discard':
+    case 'opponentDiscard': return updatePlayer(state, owner, { discard: drop(p.discard, index) })
+    case 'anyDiscard': return updatePlayer(state, owner, {
+      discard: drop(p.discard, owner === controller ? index : index - state.players[controller].discard.length),
+    })
+    case 'handOrDiscard': return index < p.hand.length
+      ? updatePlayer(state, owner, { hand: drop(p.hand, index) })
+      : updatePlayer(state, owner, { discard: drop(p.discard, index - p.hand.length) })
     case 'handOrResources': return index < p.hand.length
-      ? updatePlayer(state, owner, { hand: p.hand.filter((_, i) => i !== index) })
+      ? updatePlayer(state, owner, { hand: drop(p.hand, index) })
       : updatePlayer(state, owner, { resources: p.resources.filter((_, i) => i !== index - p.hand.length) })
   }
 }
@@ -618,6 +644,10 @@ function playFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone
   const host = targetInstanceId ? findUnit(state, targetInstanceId)?.unit : undefined
   const cost = playFromCost(state, controller, card, terms, host)
   if (cost > playFromBudget(state, controller)) return state
+  // Playing a card does not transfer ownership (CR 1.5.2): out of somebody else's pile or resource
+  // zone it stays theirs, which is what decides where it goes when it next leaves play. Read before
+  // the card is removed, since the zone is what says who owns it.
+  const cardOwner = zoneCardOwner(state, controller, zone, ref.index)
 
   let next = updatePlayer(state, controller, payCost(state.players[controller], cost, selfPayingResource(state, controller, zone, ref.index)))
   next = removeFromZone(next, controller, zone, ref.index)
@@ -627,9 +657,64 @@ function playFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone
   // replacement in facedown and exhausted.
   if (tail?.resourceTop) next = resourceTopOfDeck(next, tail.resourceTop)
 
-  if (card.type === 'unit') return checkWin(playUnitCard(next, controller, card.id, undefined, cost))
-  if (card.type === 'upgrade') return playUpgradeCardOnto(next, controller, card.id, targetInstanceId)
-  return playEventCard(next, controller, card.id)
+  if (card.type === 'unit') {
+    // `playUnitCard` names the new unit from the counter it is about to consume, so this is its id,
+    // and the tail's "it" (damage, tokens, the delayed defeat) needs no target pick.
+    const playedId = `u${next.instanceCounter}`
+    next = checkWin(playUnitCard(next, controller, card.id, tail?.entersReady === true, cost, cardOwner))
+    if (next.winner !== null) return next
+    return applyPlayedUnitTail(next, controller, playedId, tail)
+  }
+  if (card.type === 'upgrade') {
+    next = playUpgradeCardOnto(next, controller, card.id, targetInstanceId, cardOwner)
+    // "At the start of the next regroup phase, defeat it" where "it" is the UPGRADE (Salvaged
+    // Materials): the effect names the card and the host it went onto, since a pile can hold two
+    // copies and only the one just played is doomed.
+    if (tail?.delay && tail.sourceCardId && targetInstanceId && next.winner === null) {
+      next = addDelayedEffect(next, { cardId: tail.sourceCardId, when: tail.delay, owner: controller, unitId: targetInstanceId, upgradeCardId: card.id })
+    }
+    return next
+  }
+  return playEventCard(next, controller, card.id, cardOwner)
+}
+
+/**
+ * The part of a play's tail that is about the unit it just put into play: "it enters play ready" is
+ * handled in the play itself (the unit has to arrive ready), but damage, tokens and "defeat it at
+ * the start of the next regroup phase" all land on a unit that now exists.
+ */
+function applyPlayedUnitTail(state: GameState, controller: PlayerId, playedId: string, tail?: PlayFromTail): GameState {
+  if (!tail || !findUnit(state, playedId)) return state
+  let next = state
+  for (const tokenId of new Set(tail.tokens ?? [])) {
+    next = giveTokens(next, playedId, tokenId, tail.tokens!.filter(t => t === tokenId).length)
+  }
+  if (tail.delay && tail.sourceCardId) {
+    next = addDelayedEffect(next, { cardId: tail.sourceCardId, when: tail.delay, owner: controller, unitId: playedId })
+  }
+  if (tail.damageIt) {
+    const source = tail.sourceCardId ? { cardId: tail.sourceCardId, controller } : undefined
+    next = checkWin(dealDamageToUnit(next, playedId, tail.damageIt, source))
+  }
+  return next
+}
+
+/**
+ * Take a standing "for this phase, you may play that card from <a> discard pile" permission.
+ *
+ * The permission is what is new here; the play is not. It goes through `playFromZone` exactly as a
+ * `playCardFrom` does, with the grant standing in as the play's terms, so the cost rules, the
+ * ownership rule and the three type doors are all the same ones. The grant is spent whether or not
+ * the play went through, because a permission that failed its own affordability re-check is inert
+ * and would otherwise sit in the move list for the rest of the phase.
+ */
+function takeDiscardPlayGrant(state: GameState, grantIndex: number, targetInstanceId?: string): GameState {
+  const grant = (state.discardPlayGrants ?? [])[grantIndex]
+  if (!grant || grant.player !== state.activePlayer) return state
+  const found = grantZoneRef(state, grant)
+  if (!found) return dropDiscardPlayGrant(state, grantIndex)
+  const played = playFromZone(state, grant.player, found.zone, found.ref, grant, targetInstanceId, { tokens: grant.tokens })
+  return dropDiscardPlayGrant(played, grantIndex)
 }
 
 /** What a `playCardFrom` does once its card is in play, or its event has resolved. */
@@ -642,12 +727,26 @@ function runPlayFromTail(state: GameState, choice: Extract<PendingChoice, { kind
   }
   // "Play each unit revealed this way for free (one at a time)": the rest of the same candidates,
   // re-indexed against the zone the play just shortened.
-  if (tail.again && choice.kind === 'playCardFrom') {
+  // The re-offer fires from EITHER step: a unit's or an event's play finishes at the pick, an
+  // upgrade's at the attach, and "one at a time" has to carry on after both (Kylo Ren, Dathomiri
+  // Magicks). `candidates` travels to the attach step so this can re-index it there too.
+  if (tail.again && choice.candidates) {
+    // "Up to 3" (Dathomiri Magicks) spends one of its plays here; "each" (Endless Legions) is
+    // uncapped and carries no limit to spend.
+    const left = tail.againLimit === undefined ? undefined : tail.againLimit - 1
     const rest = choice.candidates
-      .filter(c => c !== played)
+      .filter(c => c.index !== played.index || c.cardId !== played.cardId)
       .map(c => ({ ...c, index: c.index > played.index ? c.index - 1 : c.index }))
       .filter(c => zoneCards(next, choice.controller, choice.zone)[c.index] === c.cardId)
-    if (rest.length > 0) next = pushChoice(next, { ...choice, candidates: rest })
+    if (rest.length > 0 && left !== 0) {
+      next = pushChoice(next, {
+        kind: 'playCardFrom', id: choice.id, controller: choice.controller, zone: choice.zone,
+        candidates: rest, optional: true,
+        ...(choice.free ? { free: true } : {}), ...(choice.costDelta ? { costDelta: choice.costDelta } : {}),
+        ...(choice.waive ? { waive: choice.waive } : {}), ...(choice.targetUnits ? { targetUnits: choice.targetUnits } : {}),
+        then: { ...tail, ...(left === undefined ? {} : { againLimit: left }) },
+      })
+    }
   }
   return next
 }
@@ -1517,27 +1616,6 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       next = takeControlOfUnit(next, found.owner, choice.controller, found.unit.instanceId)
       break
     }
-    case 'mayPlayUnitFromDiscard': {
-      // Bring the chosen unit out of the discard and into play, paying nothing. It enters as a
-      // normal play would, so its own When Played fires.
-      const owner = choice.controller
-      const cardId = choice.candidates[optionIndex ?? 0]
-      const idx = cardId === undefined ? -1 : next.players[owner].discard.indexOf(cardId)
-      if (idx === -1) break
-      next = updatePlayer(next, owner, { discard: next.players[owner].discard.filter((_, i) => i !== idx) })
-      next = playUnitCard(next, owner, cardId)
-      next = checkWin(next)
-      if (next.winner !== null) return next
-      // Re-offer while the pool allows it — Dathomiri Magicks plays up to three.
-      const remaining = choice.remaining - 1
-      if (remaining > 0) {
-        const candidates = discardUnitsMatching(next, owner, choice.maxCost, choice.excludeTrait)
-        if (candidates.length > 0) {
-          next = pushChoice(next, { ...choice, candidates, remaining })
-        }
-      }
-      break
-    }
     case 'chooseMode': {
       // "Choose one:" — the card decided which modes were available; run the one picked.
       const mode = choice.modes[optionIndex ?? 0]
@@ -1693,10 +1771,20 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         // duplicates, so an id is not a position.
         const kept = choice.revealed.map((_, i) => i).filter(i => i !== deckIndex)
         const stillEligible = kept.flatMap((oldIdx, newIdx) => (choice.eligibleIndices.includes(oldIdx) ? [newIdx] : []))
+        // "Search …, discard it, and for this phase you may play that card from your discard pile"
+        // (Cobb Vanth, Aid from the Innocent): the find goes to the pile rather than the hand, and
+        // the permission is left over it. Otherwise the find is drawn, as every other search does.
+        const keep = (st: GameState, deck: string[], andThen: string[] = []): GameState => choice.discardIt
+          ? updatePlayer(st, owner, { discard: [...st.players[owner].discard, drawn, ...andThen], deck })
+          : updatePlayer(st, owner, { hand: [...st.players[owner].hand, drawn], deck, ...(andThen.length ? { discard: [...st.players[owner].discard, ...andThen] } : {}) })
+        const grant = (st: GameState): GameState => choice.grantPlay
+          ? addDiscardPlayGrant(st, { ...choice.grantPlay, player: owner, owner, cardId: drawn })
+          : st
+
         if (remaining > 0 && stillEligible.length > 0) {
           // Grand Moff Tarkin's "up to 2": draw again from what is left of the same window, which
           // stays out of the deck until the player stops or runs out.
-          next = updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: rest })
+          next = grant(keep(next, rest))
           next = pushChoice(next, { ...choice, revealed: others, eligibleIndices: stillEligible, remaining, held: true })
           break
         }
@@ -1706,8 +1794,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
           next = updatePlayer(next, owner, { resources: [...p.resources, { cardId: drawn, exhausted: true }], deck: [...rest, ...others] })
         } else {
           next = choice.discardRest
-            ? updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: rest, discard: [...p.discard, ...others] })
-            : updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: [...rest, ...others] })
+            ? grant(keep(next, rest, others))
+            : grant(keep(next, [...rest, ...others]))
         }
         if (choice.shuffle) {
           next = { ...updatePlayer(next, owner, { deck: seededShuffle(next.players[owner].deck, next.rngSeed) }), rngSeed: nextSeed(next.rngSeed) }
@@ -1903,9 +1991,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (next.winner !== null) return next
         // "If you do, resource the top card of your deck" (Long Live the Empire).
         if (choice.thenResource) next = resourceTopOfDeck(next, choice.controller)
-        // "Then, you may play that unit from your discard pile for free" (One Must Destroy to Create).
-        if (choice.thenReplayFromDiscard && defeatedCardId !== undefined && next.players[choice.controller].discard.includes(defeatedCardId)) {
-          next = pushChoice(next, { kind: 'mayPlayUnitFromDiscard', id: `${choice.id}-replay`, controller: choice.controller, candidates: [defeatedCardId], remaining: 1 })
+        // "Then, you may play that unit from your discard pile for free" (One Must Destroy to Create,
+        // Old Daka). The unit the defeat just put there, so the pile is searched for it by index.
+        const replayIndex = defeatedCardId === undefined ? -1 : next.players[choice.controller].discard.lastIndexOf(defeatedCardId)
+        if (choice.thenReplayFromDiscard && defeatedCardId !== undefined && replayIndex !== -1) {
+          next = pushChoice(next, {
+            kind: 'playCardFrom', id: `${choice.id}-replay`, controller: choice.controller, zone: 'discard',
+            candidates: [{ index: replayIndex, cardId: defeatedCardId }], optional: true, free: true,
+          })
         }
         // "If you do, ready a friendly unit with N or less power" (You Have Failed Me).
         const maxPower = choice.thenReadyFriendlyMaxPower
@@ -1929,7 +2022,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (card.type === 'upgrade' && !isFortify(card)) {
           const targets = validPlayTargets(next, choice.controller, choice.zone, pick.index, pick.cardId, choice, choice.targetUnits)
           if (targets.length > 0) {
-            next = pushChoice(next, { kind: 'attachPlayedCard', id: `${choice.id}-attach`, controller: choice.controller, zone: choice.zone, index: pick.index, cardId: pick.cardId, targets, free: choice.free, costDelta: choice.costDelta, waive: choice.waive, then: choice.then })
+            next = pushChoice(next, { kind: 'attachPlayedCard', id: `${choice.id}-attach`, controller: choice.controller, zone: choice.zone, index: pick.index, cardId: pick.cardId, targets, candidates: choice.candidates, targetUnits: choice.targetUnits, free: choice.free, costDelta: choice.costDelta, waive: choice.waive, then: choice.then })
           }
         } else {
           next = playFromZone(next, choice.controller, choice.zone, pick, choice, undefined, choice.then)
@@ -2107,13 +2200,16 @@ export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex:
  * from the resource zone and Camtono from the top of the deck. `upgradeAttachSites.test.ts` fails on a new
  * hand-built attach, so a further zone comes through here too.
  */
-function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: string, targetInstanceId?: string): GameState {
+function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: string, targetInstanceId?: string, cardOwner?: PlayerId): GameState {
   const card = state.cards[cardId]
   if (!card || card.type !== 'upgrade') return state
   // Fortify: "Attach this to your base, not a unit", whatever unit the play named.
   const onBase = isFortify(card)
   if (!onBase && (targetInstanceId === undefined || !findUnit(state, targetInstanceId))) return state
-  let next = onBase ? attachToBase(state, playerId, card.id) : attachUpgrades(state, targetInstanceId!, [{ cardId: card.id, owner: playerId }], true)
+  // An upgrade played out of another player's discard pile stays theirs (CR 1.5.2), so the
+  // attachment records them and the card goes back to their pile when it is defeated.
+  const owner = cardOwner ?? playerId
+  let next = onBase ? attachToBase(state, playerId, card.id) : attachUpgrades(state, targetInstanceId!, [{ cardId: card.id, owner }], true)
   next = recordCardPlayed(next, playerId, card.id) // after the cost ("the first upgrade you play each phase")
 
   // One upgrade arriving is one event: the host reacting to it attaching (Sabine Wren, and since this
@@ -2716,18 +2812,6 @@ function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId
 
 function inPlayUnits(state: GameState): UnitState[] {
   return [...state.players.player.units, ...state.players.opponent.units]
-}
-
-
-/** Unit cards in `owner`'s discard matching an optional cost cap and excluded trait. */
-export function discardUnitsMatching(state: GameState, owner: PlayerId, maxCost?: number, excludeTrait?: string): string[] {
-  return state.players[owner].discard.filter(id => {
-    const c = state.cards[id]
-    if (c?.type !== 'unit') return false
-    if (maxCost !== undefined && c.cost > maxCost) return false
-    if (excludeTrait && c.traits.some(t => t.toLowerCase() === excludeTrait.toLowerCase())) return false
-    return true
-  })
 }
 
 /**

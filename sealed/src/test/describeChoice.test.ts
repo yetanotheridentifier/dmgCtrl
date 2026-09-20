@@ -97,7 +97,7 @@ describe('describeChoiceParts', () => {
     expect(prompt({ kind: 'selectArenaToGrant', id: 'c', controller: 'player', grantCardId: 'GRANT_MINEFIELD' } as unknown as PendingChoice)).toMatch(/arena/i)
     expect(prompt({ kind: 'chooseMode', id: 'c', controller: 'player', modes: ['healBase'] } as unknown as PendingChoice)).toMatch(/choose/i)
     expect(prompt({ kind: 'chooseNumber', id: 'c', controller: 'player', max: 10 } as unknown as PendingChoice)).toMatch(/number/i)
-    expect(prompt({ kind: 'mayPlayUnitFromDiscard', id: 'c', controller: 'player', candidates: [] } as unknown as PendingChoice)).toMatch(/discard/i)
+    expect(prompt({ kind: 'playCardFrom', id: 'c', controller: 'player', zone: 'discard', candidates: [] } as unknown as PendingChoice)).toMatch(/discard/i)
     expect(prompt({ kind: 'selectUnitToSteal', id: 'c', controller: 'player', targets: ['u1'] } as unknown as PendingChoice)).toMatch(/control/i)
   })
 
