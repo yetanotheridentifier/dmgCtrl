@@ -9785,3 +9785,100 @@ registerCard('SHD_255', { abilities: [{ trigger: 'whenPlayCard', description: 'W
 
 registerCard('SHD_084', { abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'When combat damage is dealt to this unit: Give an Experience token to this unit (if it survives the damage).', effect: (s, ctx) => // Phase-III Dark Trooper
   (ctx.byCombat && survivedItself(ctx) ? expSelf(s, ctx) : s) }] })
+
+// ── "When this unit completes an attack (and survives)" ─────────────────────────────────────────
+// `onAttackEnd`. It fires for an attacker the combat defeated too (CR 7.6), so "(and survives)" is
+// the guard below rather than a trigger point of its own, as it is for Lama Su.
+const survivedAttack = (s: GameState, ctx: EventCtx): boolean => ctx.sourceInstanceId !== undefined && findUnit(s, ctx.sourceInstanceId) !== undefined
+/** "Attack with another <kind of> unit", after this one's attack, from the units `test` picks. */
+const attackWithAnother = (s: GameState, ctx: EventCtx, test: Pick): GameState =>
+  offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-next`, { attacker: { only: pickedIds(s, ctx, pickAll(pickFriendly, pickOther, test)) }, optional: true })
+
+/** The friendly Vehicles other than its host that `up` could be moved to. */
+const landerTargets = (s: GameState, ctx: EventCtx, up: UpgradeRef): string[] =>
+  moveTargets(s, up, ctx.owner).filter(id => s.players[ctx.owner].units.some(u => u.instanceId === id && unitHasTrait(s, u, 'Vehicle')))
+registerCard('JTL_070', { // U-Wing Lander
+  abilities: [
+    { trigger: 'whenPlayed', description: 'Give 3 Experience tokens to this unit.', effect: (s, ctx) => expSelf(s, ctx, 3) },
+    {
+      trigger: 'onAttackEnd',
+      description: 'If this unit survived, you may attach an upgrade on this unit to another eligible friendly Vehicle unit.',
+      effect: (s, ctx) => {
+        if (!survivedAttack(s, ctx)) return s
+        const candidates = upgradeCandidates(s).filter(up => up.unitId === ctx.sourceInstanceId && landerTargets(s, ctx, up).length > 0)
+        return candidates.length
+          ? pushChoice(s, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, text: 'move an upgrade on this unit to another friendly Vehicle unit', then: resume(ctx) })
+          : s
+      },
+    },
+  ],
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    if (!up) return s
+    if (!ctx.targetInstanceId) {
+      return pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets: landerTargets(s, ctx, up), text: `attach ${s.cards[up.cardId]?.name ?? 'the upgrade'} to another friendly Vehicle unit`, then: { ...resume(ctx), upgrade: up } })
+    }
+    return moveUpgrade(s, up, ctx.targetInstanceId)
+  },
+})
+
+// The step carries the hand size before the search, so the tail can tell a draw from a decline (both
+// run it) and knows the drawn card is the one on the end.
+const invisibleHand = (s: GameState, ctx: EffectContext): GameState => (survivedAttack(s, ctx)
+  ? searchDrawChoice(s, ctx, 8, c => printedUnit(c) && printedTrait(c, 'Droid'), 1, resume(ctx, String(s.players[ctx.owner].hand.length)))
+  : s)
+registerCard('JTL_089', { // The Invisible Hand
+  ...alsoAt(whenPlayed('You may search the top 8 cards of your deck for a Droid unit, reveal it, and draw it. If it costs 2 or less, you may play it for free.', invisibleHand), 'onAttackEnd'),
+  ifYouDo: (s, ctx) => {
+    const hand = s.players[ctx.owner].hand
+    if (hand.length <= Number(ctx.step)) return s
+    const drawn = hand[hand.length - 1]
+    return (s.cards[drawn]?.cost ?? Infinity) <= 2
+      ? playFromZoneChoice(s, ctx, { zone: 'hand', free: true, optional: true, test: c => c?.id === drawn })
+      : s
+  },
+})
+
+registerCard('LOF_038', { abilities: [{ trigger: 'onAttackEnd', description: "If this unit survived, you may defeat a unit with less remaining HP than this unit's power.", effect: (s, ctx) => { // Pong Krell
+  const self = selfOf(s, ctx)
+  if (!self) return s
+  const power = effectivePower(s, self)
+  return targetChoice(s, ctx, 'selectUnitToDefeat', allUnits(s).filter(u => effectiveHp(s, u) - u.damage < power).map(u => u.instanceId), true)
+} }] })
+
+registerCard('SEC_048', alsoAt(whenPlayed('Give this unit and an enemy unit Sentinel for this phase.', (s, ctx) => { // Captain Rex
+  const sentinel = [{ name: 'Sentinel' }]
+  const self = survivedAttack(s, ctx) ? addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: sentinel }) : s
+  return lastingBuffChoice(self, ctx, self.players[opponentOf(ctx.owner)].units.map(u => u.instanceId), { keywords: sentinel })
+}), 'onAttackEnd'))
+
+registerCard('SEC_174', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit survived, you may attack with another Aggression unit.', effect: (s, ctx) => // Saw Gerrera's U-Wing
+  (survivedAttack(s, ctx) ? attackWithAnother(s, ctx, pickAspect('Aggression')) : s) }] })
+
+registerCard('SHD_059', { abilities: [{ trigger: 'onAttackEnd', description: 'If the defender was defeated, heal up to 2 damage from a unit.', effect: (s, ctx) => // Embo
+  (ctx.defenderDefeated ? healChoice(s, ctx, 2, allUnits(s).filter(u => u.damage > 0).map(u => u.instanceId), []) : s) }] })
+
+registerCard('SOR_146', { abilities: [{ trigger: 'onAttackEnd', description: 'If the defender was defeated, you may deal 4 damage to a ground unit.', effect: (s, ctx) => // Zeb Orrelios
+  (ctx.defenderDefeated ? damageChoice(s, ctx, 4, allUnits(s).filter(u => u.arena === 'ground'), [], true) : s) }] })
+
+registerCard('SOR_192', { abilities: [{ trigger: 'onAttackEnd', description: 'Look at the top card of your deck. You may play it, discard it, or leave it on top of your deck.', effect: (s, ctx) => // Ezra Bridger
+  // Improvise's shape at no discount: the play, then the discard on the decline, then leaving it.
+  (s.players[ctx.owner].deck.length ? playFromZoneChoice(s, ctx, { zone: 'deckTop', optional: true, always: true, then: { elseMayDiscardTop: true } }) : s) }] })
+
+registerCard('TWI_053', { // Finn
+  abilities: [{ trigger: 'onAttackEnd', description: 'Choose a unique unit. For this phase, if damage would be dealt to that unit, prevent 1 of that damage.', effect: (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickUnique), 'prevent 1 of each damage dealt to it this phase', false) }],
+  ifYouDo: (s, ctx) => (ctx.targetInstanceId ? addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId, preventEach: 1 }) : s),
+})
+
+const GRANT_YULAREN_LEADER = 'GRANT_YULAREN_LEADER'
+registerCard(GRANT_YULAREN_LEADER, { sourceCardId: 'SEC_006', abilities: [{ trigger: 'onAttackEnd', description: 'Then, you may attack with another unit that costs less than it.', effect: (s, ctx) => {
+  // "Than it" is the first attacker, which the combat may have defeated: its card rides on the ctx.
+  const cost = s.cards[ctx.attackerCardId ?? '']?.cost ?? 0
+  return attackWithAnother(s, ctx, costsAtMost(cost - 1))
+} }] })
+registerCard('SEC_006', { // Colonel Yularen
+  ...leaderAttack('Attack with a unit. Then, you may attack with another unit that costs less than it.', () => ({ grantCardId: GRANT_YULAREN_LEADER })),
+  abilities: [{ trigger: 'onAttackEnd', description: 'If this unit survived, you may attack with another unit that costs 4 or less.', effect: (s, ctx) =>
+    (survivedAttack(s, ctx) ? attackWithAnother(s, ctx, costsAtMost(4)) : s) }],
+})

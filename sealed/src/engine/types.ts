@@ -585,6 +585,8 @@ export interface LastingEffect {
   attackersPower?: number
   /** The next time the unit would be dealt damage, prevent this much of it; then the effect is spent (Shien Flurry). */
   preventNext?: number
+  /** Each time the unit would be dealt damage for the duration, prevent this much of it (Finn). Never spent. */
+  preventEach?: number
   /** The unit can't be defeated by having no remaining HP for the duration (The Tragedy of Plagueis). */
   survivesNoHp?: boolean
   /** The unit can't ready for the duration (No Good to Me Dead). Read by `unitCannotReady`. */
@@ -742,6 +744,11 @@ export interface TriggerContext {
   attackTarget?: AttackTarget
   /** `onAttackEnd` / `whenEnemyAttacksBase`: the unit that made the attack. */
   attackerInstanceId?: string
+  /**
+   * `onAttackEnd`: the attacker's card, readable after the combat defeated it ("another unit that
+   * costs less than it", Colonel Yularen), when its instance is no longer there to look up.
+   */
+  attackerCardId?: string
   /** `onAttackEnd`: combat damage dealt to the opponent's base this attack (0 if none). */
   combatDamageToBase?: number
   /** `onAttackEnd`: the defending unit was defeated during this attack. */

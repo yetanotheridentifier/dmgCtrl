@@ -33,7 +33,7 @@ const SHIPPED = [
   'SOR_014', 'IBH_53', 'IBH_1', 'SOR_010', 'SOR_005', 'JTL_007', 'JTL_004', 'TWI_015', 'TWI_006', 'TWI_003', 'SEC_015',
   'SOR_011', 'SHD_003', 'SHD_012', 'JTL_010', 'LOF_011', 'LAW_005', 'SOR_002', 'SHD_011', 'LAW_012', 'LOF_004', 'TWI_010',
   // B: attacks, and units entering play
-  'TWI_012', 'TWI_014', 'TWI_009', 'SHD_007', 'SOR_012', 'SOR_018', 'SOR_009', 'TS26_7', 'TS26_4', 'LAW_001', 'TS26_2',
+  'TWI_012', 'TWI_014', 'TWI_009', 'SHD_007', 'SOR_012', 'SOR_018', 'SOR_009', 'TS26_7', 'TS26_4', 'LAW_001', 'TS26_2', 'SEC_006',
   // C: plays from hand
   'LOF_010', 'JTL_005', 'SHD_016', 'SHD_013', 'SOR_003', 'SEC_007', 'LOF_005',
   // D: When Deployed
@@ -54,7 +54,7 @@ const SHIPPED = [
  */
 const LIFTED = [
   'JTL_001', 'JTL_003', 'JTL_011', 'JTL_012', 'JTL_015', 'JTL_017', 'JTL_018', 'TWI_017',
-  'SHD_006', 'SHD_010', 'SEC_001', 'SEC_006', 'LAW_017', 'SEC_012',
+  'SHD_006', 'SHD_010', 'SEC_001', 'LAW_017', 'SEC_012',
 ]
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
@@ -587,6 +587,24 @@ describe('leaders B: attack with a unit', () => {
     expect(U(second, 'g')).toBeUndefined()
     const s = back('LAW_001', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'STRONG')] })
     const doomed = { ...s, players: { ...s.players, player: { ...s.players.player, units: s.players.player.units.map(u => (u.instanceId === 'L' ? { ...u, damage: 6 } : u)) } } }
+    noChoice(attack(doomed, 'L', 'e'))
+  })
+
+  it('Colonel Yularen (SEC_006) attacks with a unit, then may attack with another that costs less; deployed, if he survives he may attack with another unit that costs 4 or less', () => {
+    const mine = { units: [unit('g', 'GRD'), unit('c', 'CHEAP'), unit('p', 'PRICEY'), unit('h', 'HUGE')] }
+    const used = use(front('SEC_006', mine))
+    const hit = attack(used, 'p')
+    expect(attackers(hit), 'another unit that costs less than it').toEqual(['c', 'g'])
+    expect(declinable(hit)).toBe(true)
+    // "Than it" is the first attacker, read even after that attack defeated it.
+    const doomedFirst = attack(use(front('SEC_006', { units: [unit('g', 'GRD'), unit('c', 'CHEAP'), unit('p', 'PRICEY', { damage: 7 })] }, { units: [unit('e', 'STRONG')] })), 'p', 'e')
+    expect(U(doomedFirst, 'p')).toBeUndefined()
+    expect(attackers(doomedFirst)).toEqual(['c', 'g'])
+    const a = attack(back('SEC_006', mine), 'L')
+    expect(attackers(a), 'another unit that costs 4 or less').toEqual(['c', 'g', 'p'])
+    expect(declinable(a)).toBe(true)
+    const s = back('SEC_006', mine, { units: [unit('e', 'STRONG')] })
+    const doomed = { ...s, players: { ...s.players, player: { ...s.players.player, units: s.players.player.units.map(u => (u.instanceId === 'L' ? { ...u, damage: 5 } : u)) } } }
     noChoice(attack(doomed, 'L', 'e'))
   })
 })

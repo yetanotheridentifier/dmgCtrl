@@ -2537,11 +2537,11 @@ function consumeAdvantage(state: GameState, owner: PlayerId, instanceId: string)
  *  survived the combat. `ctx` carries what the attack did (target, whether
  *  it damaged the base) for abilities like Whistling Birds. */
 function fireAttackEnd(state: GameState, owner: PlayerId, attackerId: string, ctx: TriggerContext, captured?: UnitState): GameState {
-  const fullCtx = { ...ctx, attackerInstanceId: attackerId }
   // "When THIS unit's attack ends" — the attacker only (Camtono, Whistling Birds). Still
   // triggers if the attacker was defeated by combat damage (CR 7.6 / 1258) — fall back to
   // its last-known state (with its upgrades).
   const attacker = state.players[owner].units.find(u => u.instanceId === attackerId) ?? captured
+  const fullCtx = { ...ctx, attackerInstanceId: attackerId, ...(attacker ? { attackerCardId: attacker.cardId } : {}) }
   const owed = attacker ? collectUnitTriggers(state, 'onAttackEnd', attacker, owner, fullCtx) : []
   // "When a friendly unit's attack ends": every unit the attacker's controller has, plus their
   // undeployed leader. One event, so all of it is one batch.

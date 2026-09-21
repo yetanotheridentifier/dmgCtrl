@@ -274,6 +274,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'HMW_016', name: 'Maul', front: false, back: true },
   { id: 'LOF_001', name: 'Kylo Ren', front: true, back: true },
   { id: 'SEC_003', name: 'Lama Su', front: true, back: true },
+  // "When this unit completes an attack (and survives)".
+  { id: 'SEC_006', name: 'Colonel Yularen', front: true, back: true },
 ]
 
 /**
@@ -1757,6 +1759,16 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SOR_101', name: 'Rogue Squadron Skirmisher' },
   { id: 'TS26_13', name: 'Darth Sidious' },
   { id: 'SHD_255', name: 'Lady Proxima' },
+  // "When this unit completes an attack (and survives)".
+  { id: 'JTL_070', name: 'U-Wing Lander' },
+  { id: 'JTL_089', name: 'The Invisible Hand' },
+  { id: 'LOF_038', name: 'Pong Krell' },
+  { id: 'SEC_048', name: 'Captain Rex' },
+  { id: 'SEC_174', name: "Saw Gerrera's U-Wing" },
+  { id: 'SHD_059', name: 'Embo' },
+  { id: 'SOR_146', name: 'Zeb Orrelios' },
+  { id: 'SOR_192', name: 'Ezra Bridger' },
+  { id: 'TWI_053', name: 'Finn' },
 ]
 
 /**
