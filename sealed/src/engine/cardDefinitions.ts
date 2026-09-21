@@ -10054,6 +10054,11 @@ registerCard('JTL_062', { abilities: [{ trigger: 'whenHealed', description: 'Whe
 registerCard('LAW_047', { abilities: [{ trigger: 'whenHealed', description: 'When 1 or more damage is healed from this unit: You may deal that much damage to a unit.', effect: (s, ctx) => // Baze Malbus
   ((ctx.amountHealed ?? 0) > 0 ? damageChoice(s, ctx, ctx.amountHealed!, allUnits(s), [], true) : s) }] })
 
+// ── "When attached unit readies" ───────────────────────────────────────────────────────────────
+// The host's `whenReadies` gathers its upgrades' abilities, so this is The Conflict Within at 2.
+registerCard('JTL_192', { abilities: [{ trigger: 'whenReadies', description: 'When attached unit readies: Exhaust it unless its controller pays 2.', effect: (s, ctx) => // In Debt to Crimson Dawn
+  pushChoice(s, { kind: 'payOrExhaust', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, cost: 2, resumeAtInitiative: true }) }] })
+
 // ── "When you play an event" ───────────────────────────────────────────────────────────────────
 // `whenPlayCard` covers every type on both sides, so the card states both.
 const playedOwnEvent = (s: GameState, ctx: EffectContext): boolean =>

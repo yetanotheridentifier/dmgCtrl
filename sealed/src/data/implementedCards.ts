@@ -420,6 +420,8 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'HMW_206', name: 'The Tarkin Doctrine' },
   { id: 'HMW_216', name: 'Insurgent Camp' },
   { id: 'HMW_271', name: 'Landing Pad' },
+  // "When attached unit readies".
+  { id: 'JTL_192', name: 'In Debt to Crimson Dawn' },
   // HMW When Played: A
   { id: 'HMW_236', name: 'Booma Ball' },
   { id: 'HMW_252', name: 'Villainous Ambition' },

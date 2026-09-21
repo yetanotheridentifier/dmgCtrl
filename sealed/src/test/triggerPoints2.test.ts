@@ -777,3 +777,25 @@ describe('JTL_062 Silver Angel and LAW_047 Baze Malbus', () => {
     noChoice(healUnit(hBoard([unit('bz', 'LAW_047'), unit('g', 'GRD', { damage: 2 })]), 'g', 2))
   })
 })
+
+// ── "When attached unit readies" ──────────────────────────────────────────────────────────────
+// The host's `whenReadies` gathers its upgrades' abilities too, so the upgrade listens on the host.
+
+describe('JTL_192 In Debt to Crimson Dawn', () => {
+  const R: Record<string, EngineCard> = { ...P, JTL_192: card({ id: 'JTL_192', name: 'In Debt to Crimson Dawn', type: 'upgrade', cost: 2, power: 0, hp: 0, traits: ['Condition'] }) }
+  /** A regroup where the player's exhausted `g` carries the opponent's In Debt to Crimson Dawn. */
+  const regroup = () => ({
+    ...board({ resources: ready(5), units: [unit('g', 'GRD', { exhausted: true, upgrades: [{ cardId: 'JTL_192', owner: 'opponent' }] })] }),
+    cards: R, phase: 'regroup' as const, regroupResourced: { player: false, opponent: false },
+  })
+  const intoNextRound = (s: GameState) => resolve(resolve(s, { type: 'skipResource' }), { type: 'skipResource' })
+
+  it("exhausts the unit as it readies unless its controller pays 2", () => {
+    const next = intoNextRound(regroup())
+    expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'payOrExhaust', unitId: 'g', cost: 2, controller: 'player' })
+    const paid = accept(next)
+    expect(U(paid, 'g')!.exhausted).toBe(false)
+    expect(paid.players.player.resources.filter(r => !r.exhausted)).toHaveLength(3)
+    expect(U(skip(next), 'g')!.exhausted).toBe(true)
+  })
+})
