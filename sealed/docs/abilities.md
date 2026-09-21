@@ -140,6 +140,12 @@ event", Saw Gerrera). As with `whenDrawCards`, every registration at this point 
 is collected from both players' bases and from every unit in play but the one arriving, for any unit
 either player brings into play (Trap Field, and Phee Genoa hearing an enemy leader deploy).
 
+The three defeat points (`whenDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`) carry
+`ctx.defeatedWhileAttacking` for an attacker defeated by the combat damage of its own attack, and the
+phase records whose unit that was (`phaseEvents.defeatedWhileAttacking`, Oppression Breeds Rebellion).
+`whenFriendlyUnitDefeated` reaches the controller's undeployed leader as well as their base and
+surviving units (Luthen Rael).
+
 `whenHealed` ("when 1 or more damage is healed from this unit", Silver Angel) fires on the healed unit
 from `healUnit`, which is the one place a unit is healed, with what the heal actually removed in
 `ctx.amountHealed` (Baze Malbus deals that much). A heal that removes nothing raises nothing.

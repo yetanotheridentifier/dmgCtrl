@@ -284,6 +284,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'LOF_017', name: 'Darth Revan', front: true, back: true },
   // "When you play an upgrade".
   { id: 'SHD_018', name: 'The Mandalorian', front: true, back: true },
+  // "When a friendly unit is defeated while attacking".
+  { id: 'SEC_013', name: 'Luthen Rael', front: true, back: true },
 ]
 
 /**
@@ -833,6 +835,8 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'TWI_040', name: 'A Fine Addition' },
   { id: 'TWI_189', name: 'Unnatural Life' },
   { id: 'TWI_201', name: 'Aid from the Innocent' },
+  // "A friendly unit was defeated while attacking this phase".
+  { id: 'SEC_158', name: 'Oppression Breeds Rebellion' },
 ]
 
 /**

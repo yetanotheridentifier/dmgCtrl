@@ -799,3 +799,46 @@ describe('JTL_192 In Debt to Crimson Dawn', () => {
     expect(U(skip(next), 'g')!.exhausted).toBe(true)
   })
 })
+
+// ── "Defeated while attacking" ────────────────────────────────────────────────────────────────
+// The defeat points carry `ctx.defeatedWhileAttacking` for a unit its own attack's combat damage
+// defeated, and the phase records whose unit that was.
+
+describe('SEC_013 Luthen Rael and SEC_158 Oppression Breeds Rebellion', () => {
+  const L: Record<string, EngineCard> = {
+    ...P,
+    SEC_013: card({ id: 'SEC_013', name: 'Luthen Rael', type: 'leader', arena: 'ground', cost: 5, power: 2, hp: 7, traits: ['Rebel'] }),
+    SEC_158: card({ id: 'SEC_158', name: 'Oppression Breeds Rebellion', type: 'event', cost: 3, traits: ['Plan'] }),
+  }
+  const lBoard = (mine: Side = {}, theirs: Side = {}) => ({ ...board(mine, theirs), cards: L })
+  const luthen = { cardId: 'SEC_013', deployed: false, epicActionUsed: false, exhausted: false }
+
+  it('Luthen front: when a friendly unit is defeated while attacking, may exhaust himself to deal 1 damage to a unit or base', () => {
+    const swung = attackUnit(lBoard({ leader: luthen, units: [unit('s', 'SMALL')] }, { units: [unit('e', 'BIG')] }), 's', 'e')
+    expect(U(swung, 's')).toBeUndefined()
+    expect(choice(swung)).toMatchObject({ kind: 'mayPayThen', cost: 0 })
+    const paid = accept(swung)
+    expect(paid.players.player.leader.exhausted).toBe(true)
+    expect(choice(paid)).toMatchObject({ kind: 'selectDamageTarget', amount: 1 })
+  })
+
+  it('Luthen front: not for a friendly unit defeated while defending', () => {
+    noChoice(attackUnit(lBoard({ leader: luthen, units: [unit('s', 'SMALL')] }, { units: [unit('e', 'BIG')] }), 'e', 's', 'opponent'))
+  })
+
+  it('Luthen back: may deal 2 damage to a unit or base', () => {
+    const s = lBoard({ leader: { ...luthen, deployed: true, epicActionUsed: true }, units: [unit('L', 'SEC_013', { isLeader: true }), unit('s', 'SMALL')] }, { units: [unit('e', 'BIG')] })
+    const swung = attackUnit(s, 's', 'e')
+    expect(choice(swung)).toMatchObject({ kind: 'selectDamageTarget', amount: 2 })
+    expect(optional(choice(swung))).toBe(true)
+  })
+
+  it('Oppression Breeds Rebellion draws 3 if a friendly unit was defeated while attacking this phase', () => {
+    const deck = ['GRD', 'GRD', 'GRD', 'GRD']
+    const lost = attackUnit(lBoard({ hand: ['SEC_158'], deck, units: [unit('s', 'SMALL')] }, { units: [unit('e', 'BIG')] }), 's', 'e')
+    expect(U(lost, 's')).toBeUndefined()
+    expect(resolve({ ...lost, activePlayer: 'player' }, { type: 'playEvent', handIndex: 0 }).players.player.hand).toHaveLength(3)
+    const defended = attackUnit(lBoard({ hand: ['SEC_158'], deck, units: [unit('s', 'SMALL')] }, { units: [unit('e', 'BIG')] }), 'e', 's', 'opponent')
+    expect(resolve({ ...defended, activePlayer: 'player' }, { type: 'playEvent', handIndex: 0 }).players.player.hand).toHaveLength(0)
+  })
+})

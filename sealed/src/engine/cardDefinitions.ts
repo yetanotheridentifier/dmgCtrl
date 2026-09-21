@@ -10059,6 +10059,30 @@ registerCard('LAW_047', { abilities: [{ trigger: 'whenHealed', description: 'Whe
 registerCard('JTL_192', { abilities: [{ trigger: 'whenReadies', description: 'When attached unit readies: Exhaust it unless its controller pays 2.', effect: (s, ctx) => // In Debt to Crimson Dawn
   pushChoice(s, { kind: 'payOrExhaust', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, cost: 2, resumeAtInitiative: true }) }] })
 
+// ── "Defeated while attacking" ─────────────────────────────────────────────────────────────────
+// The defeat points carry `ctx.defeatedWhileAttacking`; the phase records whose unit it was.
+registerCard('SEC_013', { // Luthen Rael
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenFriendlyUnitDefeated',
+      description: 'When a friendly unit is defeated while attacking: You may exhaust this leader. If you do, deal 1 damage to a unit or base.',
+      effect: (s, ctx) => (ctx.defeatedWhileAttacking && leaderCanExhaust(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Luthen Rael (leader) to deal 1 damage to a unit or base', then: resume(ctx) })
+        : s),
+    }],
+  },
+  // Deployed, "a friendly unit" includes himself: his own defeat is `whenDefeated`, the others' is
+  // `whenFriendlyUnitDefeated`, and the block is the same at both.
+  abilities: (['whenFriendlyUnitDefeated', 'whenDefeated'] as const).map(trigger => ({
+    trigger,
+    description: 'When a friendly unit is defeated while attacking: You may deal 2 damage to a unit or base.',
+    effect: (s: GameState, ctx: EffectContext) => (ctx.defeatedWhileAttacking ? damageChoice(s, { ...ctx, sourceInstanceId: ctx.sourceInstanceId ?? `${ctx.cardId}-back` }, 2, allUnits(s), BOTH_BASES, true) : s),
+  })),
+  ifYouDo: (s, ctx) => damageChoice(exhaustLeader(s, ctx.owner), { owner: ctx.owner, sourceInstanceId: `${ctx.cardId}-front` }, 1, allUnits(s), BOTH_BASES),
+})
+registerCard('SEC_158', whenPlayed('If a friendly unit was defeated while attacking this phase, draw 3 cards.', (s, ctx) => // Oppression Breeds Rebellion
+  ((s.phaseEvents?.defeatedWhileAttacking ?? []).includes(ctx.owner) ? drawCards(s, ctx.owner, 3) : s)))
+
 // ── "When you play an event" ───────────────────────────────────────────────────────────────────
 // `whenPlayCard` covers every type on both sides, so the card states both.
 const playedOwnEvent = (s: GameState, ctx: EffectContext): boolean =>

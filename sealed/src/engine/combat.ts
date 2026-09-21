@@ -1,12 +1,12 @@
 import type { DamageSource, GameState, PendingChoice, PendingTrigger, PlayerId, UnitState } from './types'
-import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordDamagePrevented, recordUnitLeftPlay, pushChoice, abilityCardIds } from './types'
+import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordDamagePrevented, recordUnitLeftPlay, recordDefeatedWhileAttacking, pushChoice, abilityCardIds } from './types'
 import type { DamagePreventionContext } from './abilities'
 import { enqueueTriggers, drainTriggers } from './triggerQueue'
 import { effectiveHp } from './stats'
 import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
-import { collectBaseTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
+import { collectPlayerTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
 import { fireUpgradesDefeated, fireUnitsTrigger, damageIsUnpreventable, releaseCaptured } from './effects'
 
 /**
@@ -136,7 +136,9 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
     }
   }
 
-  let result = finishDefeats(state, owner, survivors, defeated, byCombat, spentShieldOwners, defer)
+  // The attacker's own combat damage is applied with `attacking` set, which is what "defeated while
+  // attacking" reads.
+  let result = finishDefeats(state, owner, survivors, defeated, byCombat, spentShieldOwners, defer, byCombat && statCtx.attacking === true)
   if (preventNextSpent.length > 0) {
     const kept = (result.lastingEffects ?? []).filter(e => !(e.preventNext && preventNextSpent.includes(e.targetInstanceId)))
     result = { ...result, lastingEffects: kept.length > 0 ? kept : undefined }
@@ -164,7 +166,7 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
  * `spentShieldOwners` carries shields defeated by soaking this same damage, so they settle in the
  * same pass as the upgrades that went down with their hosts, one reaction each.
  */
-function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[], defeated: UnitState[], byCombat = false, spentShieldOwners: PlayerId[] = [], sameEvent = false): GameState {
+function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[], defeated: UnitState[], byCombat = false, spentShieldOwners: PlayerId[] = [], sameEvent = false, whileAttacking = false): GameState {
   // Always write `survivors` back — they carry the damage just applied (defeated may be empty).
   const p = state.players[owner]
   const defeatedUpgrades = defeated.flatMap(u => u.upgrades).filter(a => state.cards[a.cardId]?.type !== 'token')
@@ -211,17 +213,19 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
   for (const dead of defeated) {
     result = recordUnitDefeated(result, owner, dead.cardId) // "defeated this phase" tracking
     result = recordUnitLeftPlay(result, owner, dead.cardId, dead.isLeader)
-    const ctx = { defeatedUnit: dead, defeatedByCombat: byCombat }
+    if (whileAttacking) result = recordDefeatedWhileAttacking(result, owner)
+    const attacking = whileAttacking ? { defeatedWhileAttacking: true } : {}
+    const ctx = { defeatedUnit: dead, defeatedByCombat: byCombat, ...attacking }
     owed.push(...collectUnitTriggers(result, 'whenDefeated', dead, owner, ctx))
     // "When another friendly unit is defeated" (The Twins) — the controller's surviving units react.
     for (const u of result.players[owner].units) {
-      owed.push(...collectUnitTriggers(result, 'whenFriendlyUnitDefeated', u, owner, { defeatedUnit: dead }))
+      owed.push(...collectUnitTriggers(result, 'whenFriendlyUnitDefeated', u, owner, { defeatedUnit: dead, ...attacking }))
     }
-    // ... and so does their base (Sinister War Memorial).
-    owed.push(...collectBaseTriggers(result, 'whenFriendlyUnitDefeated', owner, { defeatedUnit: dead }))
+    // ... and so do their base (Sinister War Memorial) and undeployed leader (Luthen Rael).
+    owed.push(...collectPlayerTriggers(result, 'whenFriendlyUnitDefeated', owner, { defeatedUnit: dead, ...attacking }))
     // "When an enemy unit is defeated" (Chimaera) — the other side reacts.
     for (const u of result.players[opponentOf(owner)].units) {
-      owed.push(...collectUnitTriggers(result, 'whenEnemyUnitDefeated', u, opponentOf(owner), { defeatedUnit: dead }))
+      owed.push(...collectUnitTriggers(result, 'whenEnemyUnitDefeated', u, opponentOf(owner), { defeatedUnit: dead, ...attacking }))
     }
   }
   // `sameEvent` when the caller is still filling this batch: its remaining calls are simultaneous with

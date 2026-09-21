@@ -692,6 +692,8 @@ export interface PhaseEvents {
    * list while its own combat resolves: a card reading it means "no OTHER unit".
    */
   attackedUnits?: string[]
+  /** Players who had a unit defeated while attacking this phase (Oppression Breeds Rebellion). */
+  defeatedWhileAttacking?: PlayerId[]
   /** Instance ids of units healed this phase (Barriss Offee). */
   healedUnits?: string[]
   /**
@@ -763,6 +765,11 @@ export interface TriggerContext {
   defeatedUnit?: UnitState
   /** `whenDefeated`: the defeat was caused by combat damage. */
   defeatedByCombat?: boolean
+  /**
+   * `whenDefeated` / `whenFriendlyUnitDefeated` / `whenEnemyUnitDefeated`: the unit was the attacker,
+   * defeated by the combat damage of its own attack ("when a friendly unit is defeated while attacking").
+   */
+  defeatedWhileAttacking?: boolean
   /** A unit the event is *about*: the one just played, readied, or chosen. */
   targetInstanceId?: string
   /** `whenUpgradeAttached`: the upgrade was played (from any zone) rather than created or moved by an ability. */
@@ -1402,6 +1409,13 @@ export function cardsPlayedThisPhase(state: GameState, owner: PlayerId): string[
 }
 
 /** Note that a unit with card id `cardId` was defeated under `owner` this phase. */
+/** Note that one of `owner`'s units was defeated while attacking this phase. Idempotent. */
+export function recordDefeatedWhileAttacking(state: GameState, owner: PlayerId): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  const who = events.defeatedWhileAttacking ?? []
+  return who.includes(owner) ? state : { ...state, phaseEvents: { ...events, defeatedWhileAttacking: [...who, owner] } }
+}
+
 export function recordUnitDefeated(state: GameState, owner: PlayerId, cardId: string): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
   return { ...state, phaseEvents: { ...events, defeated: { ...events.defeated, [owner]: [...events.defeated[owner], cardId] } } }
