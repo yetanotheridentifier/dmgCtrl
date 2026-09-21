@@ -215,9 +215,10 @@ export function openSupportChoice(state: GameState, owner: PlayerId, sourceInsta
 }
 
 /** {@link fireUpgradeAttached} as data, for a caller folding it into a wider batch (a unit entering). */
-export function collectUpgradeAttached(state: GameState, instanceId: string, upgradePlayed = false): PendingTrigger[] {
+export function collectUpgradeAttached(state: GameState, instanceId: string, upgradePlayed = false, playingPlayer?: PlayerId): PendingTrigger[] {
   const found = findUnit(state, instanceId)
-  return found ? collectUnitTriggers(state, 'whenUpgradeAttached', found.unit, found.owner, { upgradePlayed }) : []
+  // Who played it, since an opponent can play an upgrade on your unit ("when YOU play an upgrade on this unit").
+  return found ? collectUnitTriggers(state, 'whenUpgradeAttached', found.unit, found.owner, { upgradePlayed, ...(playingPlayer ? { playingPlayer } : {}) }) : []
 }
 
 /**

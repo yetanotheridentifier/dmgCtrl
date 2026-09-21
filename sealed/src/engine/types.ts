@@ -790,6 +790,7 @@ export interface TriggerContext {
   /**
    * `whenPlayCard`: who played the card. Like `drawingPlayer`, the point fires on both players, so
    * every registration compares this against `ctx.owner` ("when you play" or "when an opponent plays").
+   * Also on a played upgrade's `whenUpgradeAttached`, since an opponent can play one on your unit.
    */
   playingPlayer?: PlayerId
   /**

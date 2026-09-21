@@ -2224,9 +2224,9 @@ function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: strin
   // upgrade's own "When Played" (CR 6.2.0f) are simultaneous, so they are one batch. A base upgrade's
   // source is `<cardId>-base`, so a choice its When Played raises has a stable id.
   next = fireBatch(next, [
-    ...(onBase ? [] : collectUpgradeAttached(next, targetInstanceId!, true)),
+    ...(onBase ? [] : collectUpgradeAttached(next, targetInstanceId!, true, playerId)),
     ...collectCardTriggers('whenPlayed', card.id, playerId, onBase ? baseSourceId(card.id) : targetInstanceId),
-    ...collectPlayUpgrade(next, playerId, card.id),
+    ...collectPlayUpgrade(next, playerId, card.id, onBase ? undefined : targetInstanceId),
     ...collectPlayCard(next, playerId, card.id),
   ])
   // Two upgrades with the same unique title → defeat one, on a base as on a unit.
@@ -2246,9 +2246,12 @@ function baseUniqueCheck(state: GameState, playerId: PlayerId, cardId: string): 
   return state.cards[cardId]?.unique && copies > 1 ? defeatBaseUpgrade(state, playerId, cardId) : state
 }
 
-/** "When you play an upgrade": the player's leader, base and units, told which card it was. */
-function collectPlayUpgrade(state: GameState, playerId: PlayerId, cardId: string): PendingTrigger[] {
-  const ctx = { playedCardId: cardId }
+/**
+ * "When you play an upgrade": the player's leader, base and units, told which card it was and, unless
+ * it went on a base, which unit it went on ("on a unit: deal 1 damage to that unit", Dengar).
+ */
+function collectPlayUpgrade(state: GameState, playerId: PlayerId, cardId: string, hostId?: string): PendingTrigger[] {
+  const ctx = { playedCardId: cardId, ...(hostId ? { targetInstanceId: hostId } : {}) }
   return [...collectPlayerTriggers(state, 'whenPlayUpgrade', playerId, ctx), ...collectUnitsTrigger(state, 'whenPlayUpgrade', playerId, ctx)]
 }
 

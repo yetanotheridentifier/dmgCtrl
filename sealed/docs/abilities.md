@@ -126,7 +126,11 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 `whenActionPhaseStarts`.
 
 `whenPlayUpgrade` ("when you play an upgrade") fires on the player's undeployed leader, base and units,
-with the card in `ctx.playedCardId`. `whenPlayCard` ("when you play a Heroism card", Agent Kallus)
+with the card in `ctx.playedCardId` and, unless it went on a base, the unit it went on in
+`ctx.targetInstanceId` ("when you play an upgrade on a unit: deal 1 damage to that unit", Dengar).
+"When you play an upgrade on **this** unit" is not that point but the host's `whenUpgradeAttached`
+with `ctx.upgradePlayed`, which carries who played it in `ctx.playingPlayer`: an opponent can play an
+upgrade on your unit, and that is not "you". `whenPlayCard` ("when you play a Heroism card", Agent Kallus)
 covers a card of **any** type, so it fires from all three play doors; the card is in
 `ctx.playedCardId` and the condition on it belongs to the registering card. It fires on **both**
 players' leaders, bases and units, the playing player's first, with who played in

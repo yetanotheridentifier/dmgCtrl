@@ -9989,6 +9989,50 @@ registerCard('SOR_196', { abilities: [{ trigger: 'onDefense', description: 'When
 registerCard('TWI_049', { abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked: Create a Clone Trooper token.', effect: (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_CLONE_TROOPER) }] }) // Knight of the Republic
 registerCard('TWI_083', { abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked: Create a Battle Droid token.', effect: (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_BATTLE_DROID) }] }) // General's Guardian
 
+// ── "When you play an upgrade (on this unit / on a unit)" ─────────────────────────────────────
+// "On this unit" is the host's `whenUpgradeAttached` for a played upgrade that its controller played;
+// "on a unit" is `whenPlayUpgrade`, with the host in `ctx.targetInstanceId`.
+const youPlayedUpgradeOnThis = (ctx: EffectContext): boolean => ctx.upgradePlayed === true && ctx.playingPlayer === ctx.owner
+
+const GRANT_BLACK_SQUADRON = 'GRANT_BLACK_SQUADRON'
+registerCard(GRANT_BLACK_SQUADRON, { sourceCardId: 'JTL_202', ...attackBonus(1) })
+registerCard('JTL_202', { abilities: [{ trigger: 'whenUpgradeAttached', description: 'When you play an upgrade on this unit: You may attack with this unit. It gets +1/+0 for this attack.', effect: (s, ctx) => // Black Squadron Scout Wing
+  (youPlayedUpgradeOnThis(ctx)
+    ? offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-attack`, { attacker: { only: [ctx.sourceInstanceId!] }, grantCardId: GRANT_BLACK_SQUADRON, optional: true })
+    : s) }] })
+
+registerCard('SHD_067', { // Fenn Rau
+  abilities: [
+    { trigger: 'whenPlayed', description: 'You may play an upgrade from your hand. It costs 2 less.', effect: (s, ctx) =>
+      playFromZoneChoice(s, ctx, { zone: 'hand', costDelta: -2, optional: true, test: isUpgradeCard }) },
+    { trigger: 'whenUpgradeAttached', description: 'When you play an upgrade on this unit: Give an enemy unit -2/-2 for this phase.', effect: (s, ctx) =>
+      (youPlayedUpgradeOnThis(ctx) ? lastingBuffChoice(s, ctx, s.players[opponentOf(ctx.owner)].units.map(u => u.instanceId), { power: -2, hp: -2 }) : s) },
+  ],
+})
+
+registerCard('SHD_133', { abilities: [{ trigger: 'whenPlayUpgrade', description: 'When you play an upgrade on a unit: You may deal 1 damage to that unit.', effect: (s, ctx) => { // Dengar
+  const host = findUnit(s, ctx.targetInstanceId ?? '')?.unit
+  return host ? damageChoice(s, ctx, 1, [host], [], true) : s
+} }] })
+
+/** An exhaust of an enemy unit with `hp` or less remaining HP, as the Mandalorian's two sides offer it. */
+const mandoExhaust = (s: GameState, ctx: EventCtx, hp: number, optional: boolean): GameState =>
+  targetChoice(s, ctx, 'mayExhaustUnit', s.players[opponentOf(ctx.owner)].units.filter(u => effectiveHp(s, u) - u.damage <= hp).map(u => u.instanceId), optional)
+registerCard('SHD_018', { // The Mandalorian
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenPlayUpgrade',
+      description: 'When you play an upgrade: You may exhaust this leader. If you do, exhaust an enemy unit with 4 or less remaining HP.',
+      effect: (s, ctx) => (leaderCanExhaust(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust The Mandalorian (leader) to exhaust an enemy unit with 4 or less remaining HP', then: resume(ctx) })
+        : s),
+    }],
+  },
+  abilities: [{ trigger: 'whenPlayUpgrade', description: 'When you play an upgrade: You may exhaust an enemy unit with 6 or less remaining HP.', effect: (s, ctx) => mandoExhaust(s, ctx, 6, true) }],
+  // The front has no unit in play, so its choice takes the leader's side id.
+  ifYouDo: (s, ctx) => mandoExhaust(exhaustLeader(s, ctx.owner), { owner: ctx.owner, sourceInstanceId: `${ctx.cardId}-front` }, 4, false),
+})
+
 // ── "When you play an event" ───────────────────────────────────────────────────────────────────
 // `whenPlayCard` covers every type on both sides, so the card states both.
 const playedOwnEvent = (s: GameState, ctx: EffectContext): boolean =>

@@ -282,6 +282,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'TS26_8', name: 'Ahsoka Tano', front: true, back: true },
   // "When a friendly unit attacks and defeats a unit".
   { id: 'LOF_017', name: 'Darth Revan', front: true, back: true },
+  // "When you play an upgrade".
+  { id: 'SHD_018', name: 'The Mandalorian', front: true, back: true },
 ]
 
 /**
@@ -1801,6 +1803,10 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SOR_196', name: 'Chewbacca' },
   { id: 'TWI_049', name: 'Knight of the Republic' },
   { id: 'TWI_083', name: "General's Guardian" },
+  // "When you play an upgrade on this unit / on a unit".
+  { id: 'JTL_202', name: 'Black Squadron Scout Wing' },
+  { id: 'SHD_067', name: 'Fenn Rau' },
+  { id: 'SHD_133', name: 'Dengar' },
 ]
 
 /**

@@ -621,3 +621,79 @@ describe('TWI_049 Knight of the Republic and TWI_083 General\'s Guardian', () =>
     expect(swung.players.player.units.filter(u => u.cardId === TOKEN_CLONE_TROOPER)).toHaveLength(0)
   })
 })
+
+// ── "When you play an upgrade (on this unit / on a unit)" ─────────────────────────────────────
+// "On this unit" is `whenUpgradeAttached` with `ctx.upgradePlayed` on the host, and who played it in
+// `ctx.playingPlayer`, since an opponent can play an upgrade on your unit. "On a unit" is
+// `whenPlayUpgrade`, which names the host in `ctx.targetInstanceId`.
+
+const P: Record<string, EngineCard> = {
+  ...V,
+  JTL_202: card({ id: 'JTL_202', name: 'Black Squadron Scout Wing', type: 'unit', arena: 'space', cost: 5, power: 4, hp: 6, traits: ['Resistance', 'Vehicle', 'Fighter'] }),
+  SHD_018: card({ id: 'SHD_018', name: 'The Mandalorian', type: 'leader', arena: 'ground', cost: 6, power: 4, hp: 7, traits: ['Mandalorian', 'Bounty Hunter'] }),
+  SHD_067: card({ id: 'SHD_067', name: 'Fenn Rau', type: 'unit', arena: 'ground', cost: 6, power: 5, hp: 6, traits: ['Mandalorian'] }),
+  SHD_133: card({ id: 'SHD_133', name: 'Dengar', type: 'unit', arena: 'ground', cost: 1, power: 2, hp: 2, traits: ['Underworld', 'Bounty Hunter'] }),
+  UPG3: card({ id: 'UPG3', type: 'upgrade', cost: 3, power: 1, hp: 1 }),
+}
+const pBoard = (mine: Side = {}, theirs: Side = {}) => ({ ...board(mine, theirs), cards: P })
+const playUpgrade = (s: GameState, targetInstanceId: string, who: PlayerId = 'player') =>
+  resolve({ ...s, activePlayer: who }, { type: 'playUpgrade', handIndex: 0, targetInstanceId })
+
+describe('JTL_202 Black Squadron Scout Wing', () => {
+  it('may attack when you play an upgrade on it, +1/+0 for this attack', () => {
+    const played = playUpgrade(pBoard({ hand: ['UPG'], units: [unit('w', 'JTL_202'), unit('g', 'GRD')] }), 'w')
+    const c = choice(played)
+    expect(c.kind).toBe('mayAttackAnyUnit')
+    expect(optional(c)).toBe(true)
+    expect(c.kind === 'mayAttackAnyUnit' ? c.attacker?.only : undefined).toEqual(['w'])
+    const swung = resolve(played, { type: 'attack', attackerId: 'w', target: { kind: 'base' } })
+    expect(swung.players.opponent.base.damage, '4 + 1 from the upgrade + 1 for this attack').toBe(6)
+  })
+  it('not for an upgrade on another unit, and not for an opponent\'s upgrade on it', () => {
+    noChoice(playUpgrade(pBoard({ hand: ['UPG'], units: [unit('w', 'JTL_202'), unit('g', 'GRD')] }), 'g'))
+    noChoice(playUpgrade(pBoard({ units: [unit('w', 'JTL_202')] }, { hand: ['UPG'] }), 'w', 'opponent'))
+  })
+})
+
+describe('SHD_067 Fenn Rau', () => {
+  it('when played, may play an upgrade from your hand for 2 less', () => {
+    const played = resolve(pBoard({ hand: ['SHD_067', 'UPG3'] }), { type: 'playUnit', handIndex: 0 })
+    expect(choice(played)).toMatchObject({ kind: 'playCardFrom', zone: 'hand', costDelta: -2 })
+    expect(optional(choice(played))).toBe(true)
+  })
+  it('gives an enemy unit -2/-2 for this phase when you play an upgrade on him', () => {
+    const played = playUpgrade(pBoard({ hand: ['UPG'], units: [unit('f', 'SHD_067')] }, { units: [unit('e', 'GRD')] }), 'f')
+    expect(choice(played)).toMatchObject({ kind: 'mayLastingBuff', power: -2, hp: -2 })
+    expect(targetsOf(choice(played))).toEqual(['e'])
+  })
+})
+
+describe('SHD_133 Dengar', () => {
+  it('may deal 1 damage to the unit you play an upgrade on, either side\'s', () => {
+    const played = playUpgrade(pBoard({ hand: ['UPG'], units: [unit('d', 'SHD_133')] }, { units: [unit('e', 'GRD')] }), 'e')
+    expect(choice(played)).toMatchObject({ kind: 'selectDamageTarget', amount: 1 })
+    expect(optional(choice(played))).toBe(true)
+    expect(targetsOf(choice(played))).toEqual(['e'])
+  })
+  it('not for an opponent\'s upgrade', () => {
+    noChoice(playUpgrade(pBoard({ units: [unit('d', 'SHD_133')] }, { hand: ['UPG'], units: [unit('e', 'GRD')] }), 'e', 'opponent'))
+  })
+})
+
+describe('SHD_018 The Mandalorian', () => {
+  const front = (units: UnitState[]) => pBoard({ leader: { cardId: 'SHD_018', deployed: false, epicActionUsed: false, exhausted: false }, hand: ['UPG'], units: [unit('g', 'GRD')] }, { units })
+  it('front: when you play an upgrade, may exhaust himself to exhaust an enemy unit with 4 or less remaining HP', () => {
+    const played = playUpgrade(front([unit('e', 'GRD', { damage: 2 }), unit('f', 'GRD')]), 'g')
+    expect(choice(played)).toMatchObject({ kind: 'mayPayThen', cost: 0 })
+    const paid = accept(played)
+    expect(paid.players.player.leader.exhausted).toBe(true)
+    expect(targetsOf(choice(paid))).toEqual(['e'])
+    expect(U(accept(paid, { targetInstanceId: 'e' }), 'e')!.exhausted).toBe(true)
+  })
+  it('back: may exhaust an enemy unit with 6 or less remaining HP', () => {
+    const s = pBoard({ leader: { cardId: 'SHD_018', deployed: true, epicActionUsed: true, exhausted: false }, hand: ['UPG'], units: [unit('L', 'SHD_018', { isLeader: true })] }, { units: [unit('e', 'GRD'), unit('t', 'TOUGH')] })
+    const played = playUpgrade(s, 'L')
+    expect(targetsOf(choice(played))).toEqual(['e'])
+    expect(optional(choice(played))).toBe(true)
+  })
+})
