@@ -9173,7 +9173,7 @@ registerCard('LAW_003', mergeLeaderSides( // Agent Kallus
     abilities: [{
       trigger: 'whenPlayCard',
       description: 'When you play a Heroism card: Heal 2 damage from your base.',
-      effect: (s, ctx) => (printedAspect(s.cards[ctx.playedCardId ?? ''], 'Heroism') ? healBase(s, ctx.owner, 2) : s),
+      effect: (s, ctx) => (ctx.playingPlayer === ctx.owner && printedAspect(s.cards[ctx.playedCardId ?? ''], 'Heroism') ? healBase(s, ctx.owner, 2) : s),
     }],
   },
 ))
@@ -9393,13 +9393,25 @@ registerCard('TWI_040', whenPlayed('If an enemy unit was defeated this phase, pl
 
 // Kylo Ren's back: "Play any number of upgrades from your discard pile on this unit (one at a time,
 // paying their costs)". Uncapped, so the re-offer carries no limit; the one legal host is Kylo.
-// His front (discard a card, draw one back if it was an upgrade) is #474's, not this ticket's.
-registerCard('LOF_001', whenDeployed('Play any number of upgrades from your discard pile on this unit (one at a time, paying their costs).', (s, ctx) =>
-  playFromZoneChoice(s, ctx, {
-    zone: 'discard', test: isUpgradeCard, optional: true,
-    targetUnits: () => (ctx.sourceInstanceId ? [ctx.sourceInstanceId] : []),
-    then: { again: true },
-  })))
+registerCard('LOF_001', { // Kylo Ren
+  ...mergeLeaderSides(
+    leaderFront('Discard a card from your hand. If you discarded an upgrade this way, draw a card.', {
+      usable: (s, ctx) => s.players[ctx.owner].hand.length > 0,
+      effect: (s, ctx) => handCardThen(s, ctx, 'discard a card from your hand', 'discard'),
+    }),
+    whenDeployed('Play any number of upgrades from your discard pile on this unit (one at a time, paying their costs).', (s, ctx) =>
+      playFromZoneChoice(s, ctx, {
+        zone: 'discard', test: isUpgradeCard, optional: true,
+        targetUnits: () => (ctx.sourceInstanceId ? [ctx.sourceInstanceId] : []),
+        then: { again: true },
+      })),
+  ),
+  ifYouDo: (s, ctx) => {
+    const discarded = ctx.cardChosen
+    const next = discardFromHand(s, ctx.owner, ctx.handIndex!)
+    return isUpgradeCard(s.cards[discarded ?? '']) ? drawCards(next, ctx.owner, 1) : next
+  },
+})
 
 registerCard('SEC_003', { // Lama Su
   ...leaderFront('[Exhaust]: Play an upgrade from your hand on a friendly non-Vehicle unit. It costs 1 less. If you do, deal 1 damage to that unit.', {
@@ -9630,3 +9642,146 @@ registerCard('SEC_205', { abilities: [{ trigger: 'onAttackEnd', description: "If
   // The card stays the defending player's (CR 1.5.2): `owner` is theirs, `player` is who may play it.
   return addDiscardPlayGrant(milled, { player: ctx.owner, owner: defender, cardId: top, waive: { all: true } })
 } }] })
+
+// ── Cards the triage held back whose head already has a dispatch point ───────────────────────────
+// Each reads an event an existing point raises; the card applies its own condition to the context.
+
+/** The card of the unit a `whenPlayUnit` names as the one just played. */
+const playedUnitCard = (s: GameState, ctx: EffectContext): EngineCard | undefined => {
+  const played = ctx.targetInstanceId ? findUnit(s, ctx.targetInstanceId)?.unit : undefined
+  return played ? s.cards[played.cardId] : undefined
+}
+const selfSource = (ctx: EffectContext) => ({ cardId: ctx.cardId, controller: ctx.owner })
+
+registerCard('HMW_115', { abilities: [{ trigger: 'whenPlayUnit', description: 'When you play another unit that costs 3 or less: Heal 1 damage from your base.', effect: (s, ctx) => // Leia Organa
+  ((playedUnitCard(s, ctx)?.cost ?? Infinity) <= 3 ? healBase(s, ctx.owner, 1) : s) }] })
+
+// "Including this one": her own play is the When Played copy, every other unit the `whenPlayUnit` one.
+registerCard('HMW_124', alsoAt(attackWp('When you play a unit (including this one): You may attack with a unit. It gets +2/+0 for this attack.', // Luminara Unduli
+  { optional: true, grantCardId: riderIf('GRANT_LUMINARA_UNDULI', 'HMW_124', () => true) }), 'whenPlayUnit'))
+
+registerCard('HMW_168', { // Ezra Bridger
+  abilities: [{ trigger: 'whenTakeInitiative', description: 'When you take the initiative: You may deal 3 damage to your base. If you do, create a Beast token.', effect: (s, ctx) =>
+    pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-ezra`, controller: ctx.owner, cost: 0, text: 'deal 3 damage to your base to create a Beast token', then: resume(ctx) }) }],
+  ifYouDo: (s, ctx) => create(dealDamageToBase(s, ctx.owner, 3, selfSource(ctx)), ctx.owner, TOKEN_BEAST),
+})
+
+registerCard('HMW_223', { abilities: [{ trigger: 'whenActionPhaseStarts', description: "When the action phase starts: Reveal the top card of your deck and an opponent's deck. For each card that costs 3 or more revealed this way, this unit gets -2/-2 for this phase.", effect: (s, ctx) => { // Therm Scissorpunch
+  // Revealing moves nothing, so the ability reads the two top cards and leaves both decks alone.
+  const tops = [s.players[ctx.owner].deck[0], s.players[opponentOf(ctx.owner)].deck[0]]
+  const n = tops.filter(id => id !== undefined && (s.cards[id]?.cost ?? 0) >= 3).length
+  return n > 0 && findUnit(s, ctx.sourceInstanceId!) ? addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, power: -2 * n, hp: -2 * n }) : s
+} }] })
+
+registerCard('SEC_168', { abilities: [{ trigger: 'whenTakeInitiative', description: 'When you take the initiative: Deal 2 damage to a base.', effect: (s, ctx) => // Ziton Moj
+  damageChoice(s, ctx, 2, [], BOTH_BASES) }] })
+
+registerCard('JTL_216', { abilities: [{ trigger: 'whenRegroupStarts', description: 'When the regroup phase starts: Defeat this unit.', effect: (s, ctx) => // Contracted Hunter
+  (findUnit(s, ctx.sourceInstanceId!) ? defeatUnit(s, ctx.sourceInstanceId!) : s) }] })
+registerCard('JTL_198', { abilities: [{ trigger: 'whenRegroupStarts', description: 'When the regroup phase starts: Deal 1 damage to this unit.', effect: (s, ctx) => // Fireball
+  (findUnit(s, ctx.sourceInstanceId!) ? dealDamageToUnit(s, ctx.sourceInstanceId!, 1, selfSource(ctx)) : s) }] })
+
+registerCard('TS26_24', { abilities: [{ trigger: 'onDefense', description: 'On Defense: Deal 1 damage to your base.', effect: (s, ctx) => // Sundari Gauntlet
+  dealDamageToBase(s, ctx.owner, 1, selfSource(ctx)) }] })
+
+registerCard('LAW_046', { abilities: [{ trigger: 'onAttackEnd', description: 'When Attack Ends: If this unit dealt combat damage to a base, you may heal 4 damage from another unit.', effect: (s, ctx) => // Chirrut Îmwe
+  (dealtToBase(ctx) ? healChoice(s, ctx, 4, allUnits(s).filter(u => u.instanceId !== ctx.sourceInstanceId && u.damage > 0).map(u => u.instanceId), [], true) : s) }] })
+
+registerCard('LOF_130', { abilities: [{ trigger: 'whenEnemyUnitDefeated', description: "When an enemy unit is defeated: Deal 1 damage to its controller's base.", effect: (s, ctx) => // HK-47
+  dealDamageToBase(s, opponentOf(ctx.owner), 1, selfSource(ctx)) }] })
+
+registerCard('SOR_109', { abilities: [ // Colonel Yularen: "when you play a Command unit (including this one)"
+  { trigger: 'whenPlayed', description: 'Heal 1 damage from your base.', effect: (s, ctx) => healBase(s, ctx.owner, 1) },
+  { trigger: 'whenPlayUnit', description: 'When you play a Command unit: Heal 1 damage from your base.', effect: (s, ctx) =>
+    (printedAspect(playedUnitCard(s, ctx), 'Command') ? healBase(s, ctx.owner, 1) : s) },
+] })
+
+registerCard('TS26_73', { abilities: [{ trigger: 'whenOwnBaseDamaged', description: 'When your base is dealt combat damage: You may deal 1 damage to a unit.', effect: (s, ctx) => // Moralo Eval
+  (ctx.byCombat ? damageChoice(s, ctx, 1, allUnits(s), [], true) : s) }] })
+
+registerCard('SHD_241', { abilities: [{ trigger: 'whenEnemyAttacksBase', description: 'When an enemy unit attacks your base: Give a Shield token to a friendly unit in the same arena as the attacker.', effect: (s, ctx) => { // Kragan Gorr
+  const attacker = ctx.attackerInstanceId ? findUnit(s, ctx.attackerInstanceId)?.unit : undefined
+  const targets = attacker ? s.players[ctx.owner].units.filter(u => u.arena === attacker.arena).map(u => u.instanceId) : []
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: `${ctx.sourceInstanceId}-shield`, controller: ctx.owner, token: TOKEN_SHIELD, count: 1, targets, optional: false }) : s
+} }] })
+
+registerCard('TWI_166', { abilities: [{ trigger: 'whenEnemyAttacksBase', description: 'When an enemy ground unit attacks your base: Ready this unit.', effect: (s, ctx) => { // Aurra Sing
+  const attacker = ctx.attackerInstanceId ? findUnit(s, ctx.attackerInstanceId)?.unit : undefined
+  return attacker?.arena === 'ground' && findUnit(s, ctx.sourceInstanceId!) ? readyUnit(s, ctx.sourceInstanceId!) : s
+} }] })
+
+registerCard('LAW_056', { abilities: [{ trigger: 'whenFriendlyAttackEnds', description: "When a friendly unit's attack ends: If the defending unit was defeated, deal 2 damage to a base.", effect: (s, ctx) => // Cassian Andor
+  (ctx.defenderDefeated ? damageChoice(s, ctx, 2, [], BOTH_BASES) : s) }] })
+
+registerCard('LAW_052', { abilities: [ // The Mandalorian
+  { trigger: 'whenPlayed', description: 'When Played: Draw a card.', effect: (s, ctx) => drawCards(s, ctx.owner, 1) },
+  { trigger: 'whenDrawCards', description: 'When you draw 1 or more cards during the action phase: Give a Shield token to this unit.', effect: (s, ctx) =>
+    (ctx.drawingPlayer === ctx.owner && s.phase === 'action' && findUnit(s, ctx.sourceInstanceId!) ? giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD) : s) },
+] })
+
+registerCard('JTL_111', { abilities: [{ trigger: 'whenDrawCards', description: 'When an opponent draws 1 or more cards during the action phase: You may give an Experience token to a unit.', effect: (s, ctx) => // Seasoned Fleet Admiral
+  (ctx.drawingPlayer !== undefined && ctx.drawingPlayer !== ctx.owner && s.phase === 'action'
+    ? expChoice(s, ctx, allUnits(s).map(u => u.instanceId), 1, true)
+    : s) }] })
+
+// "When an opponent plays": `whenPlayCard` fires on both sides with `ctx.playingPlayer`.
+const opponentPlayed = (s: GameState, ctx: EffectContext): EngineCard | undefined =>
+  (ctx.playingPlayer !== undefined && ctx.playingPlayer !== ctx.owner ? s.cards[ctx.playedCardId ?? ''] : undefined)
+
+registerCard('HMW_119', { abilities: [{ trigger: 'whenPlayCard', description: 'When an opponent plays an event: Resource the top card of your deck.', effect: (s, ctx) => // Saw Gerrera
+  (opponentPlayed(s, ctx)?.type === 'event' ? resourceTopOfDeck(s, ctx.owner) : s) }] })
+registerCard('LOF_142', { abilities: [{ trigger: 'whenPlayCard', description: "When an opponent plays an event: Deal 1 damage to that player's base.", effect: (s, ctx) => // Adi Gallia
+  (opponentPlayed(s, ctx)?.type === 'event' ? dealDamageToBase(s, ctx.playingPlayer!, 1, selfSource(ctx)) : s) }] })
+registerCard('SHD_172', { abilities: [{ trigger: 'whenPlayCard', description: "When an opponent plays a card: You may deal damage equal to that card's cost to their base or a ground unit they control.", effect: (s, ctx) => { // Krayt Dragon
+  const cost = opponentPlayed(s, ctx)?.cost ?? 0
+  if (cost <= 0) return s
+  const opp = ctx.playingPlayer!
+  return damageChoice(s, ctx, cost, s.players[opp].units.filter(u => u.arena === 'ground'), [opp], true)
+} }] })
+
+// "Use this ability only once each phase" on a triggered ability. Events are only played in the
+// action phase, and a unit's `usedAbilities` clears as it readies at the next regroup, so the
+// once-each-round key is exactly once each phase here.
+const L3_37_KEY = 'HMW_215#replay'
+registerCard('HMW_215', { abilities: [{ trigger: 'whenPlayCard', description: 'When you play an event that costs 3 or less: You may play it again from your discard pile for free. Use this ability only once each phase.', effect: (s, ctx) => { // L3-37
+  const played = ctx.playingPlayer === ctx.owner ? s.cards[ctx.playedCardId ?? ''] : undefined
+  const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+  if (!played || played.type !== 'event' || (played.cost ?? 0) > 3 || !self || (self.usedAbilities ?? []).includes(L3_37_KEY)) return s
+  const raised = playFromZoneChoice(s, ctx, { zone: 'discard', free: true, optional: true, id: `${ctx.sourceInstanceId}-replay`, test: c => c?.id === played.id })
+  // Stamp the spend onto the choice just raised, so it lands on acceptance and a decline keeps it.
+  return {
+    ...raised,
+    pendingChoices: raised.pendingChoices?.map(c => (c.kind === 'playCardFrom' && c.id === `${ctx.sourceInstanceId}-replay` ? { ...c, markUsed: { instanceId: self.instanceId, key: L3_37_KEY } } : c)),
+  }
+} }] })
+
+/** "(You may) return a <kind of> card from your discard pile to your hand." */
+const returnFromDiscardWp = (description: string, test: (c: EngineCard | undefined) => boolean, optional: boolean) =>
+  whenPlayed(description, (s, ctx) => {
+    const candidates = s.players[ctx.owner].discard.filter(id => test(s.cards[id]))
+    return candidates.length ? pushChoice(s, { kind: 'selectFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional }) : s
+  })
+registerCard('SHD_260', returnFromDiscardWp('You may return an Underworld card from your discard pile to your hand.', c => printedTrait(c, 'Underworld'), true)) // Street Gang Recruiter
+registerCard('SHD_044', returnFromDiscardWp('You may return an upgrade from your discard pile to your hand.', c => c?.type === 'upgrade', true)) // Razor Crest
+registerCard('SOR_101', returnFromDiscardWp('Return a unit that costs 2 or less from your discard pile to your hand.', c => printedUnit(c) && (c?.cost ?? Infinity) <= 2, false)) // Rogue Squadron Skirmisher
+
+// "When a non-token unit is defeated", either side's: one point per side, the same effect on both.
+const sidiousDroid = (s: GameState, ctx: EffectContext): GameState =>
+  (ctx.defeatedUnit && !isTokenCard(ctx.defeatedUnit.cardId) ? create(s, ctx.owner, TOKEN_BATTLE_DROID) : s)
+registerCard('TS26_13', { // Darth Sidious
+  aura: (s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId && unitHasTrait(s, tgt, 'Separatist') ? { power: 1 } : undefined),
+  abilities: [
+    { trigger: 'whenFriendlyUnitDefeated', description: 'When a non-token unit is defeated: Create a Battle Droid token.', effect: sidiousDroid },
+    { trigger: 'whenEnemyUnitDefeated', description: 'When a non-token unit is defeated: Create a Battle Droid token.', effect: sidiousDroid },
+  ],
+})
+
+// "Another": she is unique, so the only other copy of her a play could be is one that is about to be
+// defeated by the unique rule, and the card id is the guard.
+registerCard('SHD_255', { abilities: [{ trigger: 'whenPlayCard', description: 'When you play another Underworld card: You may deal 1 damage to a base.', effect: (s, ctx) => // Lady Proxima
+  (ctx.playingPlayer === ctx.owner && ctx.playedCardId !== ctx.cardId && printedTrait(s.cards[ctx.playedCardId ?? ''], 'Underworld')
+    ? damageChoice(s, ctx, 1, [], BOTH_BASES, true)
+    : s) }] })
+
+registerCard('SHD_084', { abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'When combat damage is dealt to this unit: Give an Experience token to this unit (if it survives the damage).', effect: (s, ctx) => // Phase-III Dark Trooper
+  (ctx.byCombat && survivedItself(ctx) ? expSelf(s, ctx) : s) }] })

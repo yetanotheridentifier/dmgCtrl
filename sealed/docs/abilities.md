@@ -126,9 +126,13 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 `whenActionPhaseStarts`.
 
 `whenPlayUpgrade` ("when you play an upgrade") fires on the player's undeployed leader, base and units,
-with the card in `ctx.playedCardId`. `whenPlayCard` ("when you play a Heroism card", Agent Kallus) has
-the same listeners but covers a card of **any** type, so it fires from all three play doors; the card
-is in `ctx.playedCardId` and the condition on it belongs to the registering card. `whenUnitEntersPlay`
+with the card in `ctx.playedCardId`. `whenPlayCard` ("when you play a Heroism card", Agent Kallus)
+covers a card of **any** type, so it fires from all three play doors; the card is in
+`ctx.playedCardId` and the condition on it belongs to the registering card. It fires on **both**
+players' leaders, bases and units, the playing player's first, with who played in
+`ctx.playingPlayer`, because the point is also printed from the far side ("when an opponent plays an
+event", Saw Gerrera). As with `whenDrawCards`, every registration at this point compares
+`ctx.playingPlayer` against `ctx.owner`. `whenUnitEntersPlay`
 is collected from both players' bases only, for any unit either player brings into play (Trap Field).
 
 `whenActionPhaseStarts` ("when the action phase starts", Beast Lair) fires for every unit in play and
@@ -391,6 +395,11 @@ a base's, and the cards that read a base's upgrades count `BaseState.upgrades` d
 triggered ability guards on `usedAbilities.includes(key)` and passes `markUsed: { instanceId, key }`
 in its choice, so the mark lands on **acceptance** and declining does not spend it. The list clears
 when the unit readies at regroup, shared with the activated-ability path.
+
+A `playCardFrom` choice carrying `markUsed` spends it before the play, so the play's own triggers
+already see it spent. "Use this ability only once each phase" on a trigger that reads a play (L3-37
+replaying an event) uses the same key: cards are played only in the action phase, and the list
+clears before the next one begins, so once each round is once each phase there.
 
 ## Testing conventions
 

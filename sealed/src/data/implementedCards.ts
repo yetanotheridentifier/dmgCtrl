@@ -272,7 +272,7 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   // Playing a card out of a discard pile. Maul and Kylo Ren reach the pile only once deployed, and
   // each front is a different mechanic's: Maul's plays from hand, Kylo Ren's discards for a draw.
   { id: 'HMW_016', name: 'Maul', front: false, back: true },
-  { id: 'LOF_001', name: 'Kylo Ren', front: false, back: true },
+  { id: 'LOF_001', name: 'Kylo Ren', front: true, back: true },
   { id: 'SEC_003', name: 'Lama Su', front: true, back: true },
 ]
 
@@ -1728,6 +1728,35 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SHD_147', name: 'Ketsu Onyo' },
   { id: 'SOR_133', name: 'Seventh Sister' },
   { id: 'JTL_188', name: 'Moff Gideon' },
+  // Held back by the triage, but each head already has a dispatch point and the card applies its own
+  // condition to the context. The four "when an opponent plays" read `whenPlayCard` from the far side.
+  { id: 'HMW_115', name: 'Leia Organa' },
+  { id: 'HMW_124', name: 'Luminara Unduli' },
+  { id: 'HMW_168', name: 'Ezra Bridger' },
+  { id: 'HMW_223', name: 'Therm Scissorpunch' },
+  { id: 'HMW_119', name: 'Saw Gerrera' },
+  { id: 'HMW_215', name: 'L3-37' },
+  { id: 'LOF_142', name: 'Adi Gallia' },
+  { id: 'SHD_172', name: 'Krayt Dragon' },
+  { id: 'SEC_168', name: 'Ziton Moj' },
+  { id: 'JTL_216', name: 'Contracted Hunter' },
+  { id: 'JTL_198', name: 'Fireball' },
+  { id: 'TS26_24', name: 'Sundari Gauntlet' },
+  { id: 'LAW_046', name: 'Chirrut Îmwe' },
+  { id: 'LOF_130', name: 'HK-47' },
+  { id: 'SOR_109', name: 'Colonel Yularen' },
+  { id: 'TS26_73', name: 'Moralo Eval' },
+  { id: 'SHD_241', name: 'Kragan Gorr' },
+  { id: 'TWI_166', name: 'Aurra Sing' },
+  { id: 'LAW_056', name: 'Cassian Andor' },
+  { id: 'LAW_052', name: 'The Mandalorian' },
+  { id: 'JTL_111', name: 'Seasoned Fleet Admiral' },
+  { id: 'SHD_084', name: 'Phase-III Dark Trooper' },
+  { id: 'SHD_260', name: 'Street Gang Recruiter' },
+  { id: 'SHD_044', name: 'Razor Crest' },
+  { id: 'SOR_101', name: 'Rogue Squadron Skirmisher' },
+  { id: 'TS26_13', name: 'Darth Sidious' },
+  { id: 'SHD_255', name: 'Lady Proxima' },
 ]
 
 /**

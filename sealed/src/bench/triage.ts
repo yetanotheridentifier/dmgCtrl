@@ -49,6 +49,10 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
   'when this unit is dealt damage and survives', 'when a friendly unit is dealt damage and survives',
   'when this unit deals combat damage to a base', "when this unit deals combat damage to an opponent's base",
   'when a friendly unit deals combat damage to a base', 'when an enemy unit deals combat damage to your base',
+  // Printed spellings of points that dispatch under another name: `whenTakeInitiative`,
+  // `whenFriendlyAttackEnds`, `whenActionPhaseStarts`, and `whenPlayCard`, which fires on both sides.
+  'when you take the initiative', "when a friendly unit's attack ends", 'when the action phase starts',
+  'when you play an event', 'when an opponent plays an event', 'when an opponent plays a card',
   'action', 'epic action',
 ])
 
@@ -81,7 +85,6 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
   // `granted-ability-block` is read from the trigger heads instead: see GRANTED_ABILITY_LEAD_IN.
   // Zone manipulation beyond resourceTopOfDeck / ready / exhaust, which do exist.
   ['resource-zone', /(?:return|take|move|defeat|discard)[^.\n]{0,40}\bresource\b|\bresource\b[^.\n]{0,30}\bto (?:your|their) hand|put[^.\n]{0,30}into (?:your|their) resource/i],
-  ['play-from-discard', /play[^.\n]{0,50}from (?:your|their|the) discard/i],
   ['sideboard', /\bsideboard\b/i],
   // Keyword identity as a runtime value rather than a static property.
   ['dynamic-keywords', /\bthe chosen Keyword\b|\bthis unit's Keywords\b|different Keywords\b/i],

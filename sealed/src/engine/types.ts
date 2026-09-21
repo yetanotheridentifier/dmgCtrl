@@ -776,6 +776,11 @@ export interface TriggerContext {
    * second. Every registration therefore compares this against `ctx.owner`.
    */
   drawingPlayer?: PlayerId
+  /**
+   * `whenPlayCard`: who played the card. Like `drawingPlayer`, the point fires on both players, so
+   * every registration compares this against `ctx.owner` ("when you play" or "when an opponent plays").
+   */
+  playingPlayer?: PlayerId
   /** `whenDrawCards`: how many cards that one draw event drew. Fires once per event, not per card. */
   cardsDrawn?: number
 }
@@ -1003,7 +1008,9 @@ type ChoiceVariant =
   // type, out of `zone`, answered by `optionIndex` into `candidates`. `free` bypasses the cost and
   // the aspect penalty (CR 8.5); `costDelta` adjusts it; `waive` forgives aspect penalties. An
   // upgrade cannot be priced until its host is known, so it goes on to `attachPlayedCard`.
-  | { kind: 'playCardFrom'; id: string; controller: PlayerId; zone: PlayFromZone; candidates: PlayFromRef[]; optional?: boolean; free?: boolean; costDelta?: number; waive?: AspectWaiver; targetUnits?: string[]; then?: PlayFromTail }
+  // `markUsed` spends a limited triggered ability on acceptance, before the play, so the play's own
+  // triggers already see it spent (L3-37 replaying an event does not offer a third play).
+  | { kind: 'playCardFrom'; id: string; controller: PlayerId; zone: PlayFromZone; candidates: PlayFromRef[]; optional?: boolean; free?: boolean; costDelta?: number; waive?: AspectWaiver; targetUnits?: string[]; then?: PlayFromTail; markUsed?: { instanceId: string; key: string } }
   // Follow-up: attach the upgrade picked above to one of `targets`, paying for it there. Mandatory.
   // `candidates` is the list the `playCardFrom` above offered, carried through so a `then.again`
   // re-offer can re-index what is left: an upgrade's play finishes HERE, not at the pick, so the

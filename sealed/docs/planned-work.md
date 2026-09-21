@@ -137,19 +137,21 @@ Two phases:
   expressible with the primitives already in `engine/effects.ts`. Cut by trigger point. **Events are finished** as far as the engine's choices express them.
   The rest are recorded on the ticket of what blocks them: #602 Credit, #603
   Disclose, #604 indirect damage, #469 Smuggle, #467 Bounty, #468 (playing any card type from a zone
-  other than the hand, or through an ability), #471 play from discard, and #477 for "loses all
-  abilities" (One Way Out and four more), state the engine does not record, and the unique one-offs.
+  other than the hand, or through an ability), #471 play from discard, #682 for "loses all
+  abilities" (One Way Out and seven more), and #686 for state the engine does not record and the
+  unique one-offs.
   **When Played units and upgrades are finished**, and so are **constant abilities on units and
   upgrades**: the ones existing primitives expressed shipped first, and the hooks and choices the rest
-  needed followed, group by group. Vult Skerris's Defender (needs "discarded a card this phase") and
-  the 14 other constant-ability cards lifted out are carried by #477. **When Defeated units are
+  needed followed, group by group. Vult Skerris's Defender (needs "discarded a card this phase") is
+  on #678, and the 14 other constant-ability cards lifted out are on #682 (losing abilities), #683
+  (Fives borrowing When Played abilities), #465 (Phantom II) and #686. **When Defeated units are
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
   shared with another trigger point ("When Played/When Defeated") is built on the compound-head framework
 (#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
   (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 17 not built are on the ticket of what
   blocks them, #465 pilots (7),
   #466 capture, #467 Bounty, #470 Plot, #680 trigger heads, #468 playing any card type, #602 Credit
-  (a friendly token of any kind) and #477 (defeat by an enemy card ability, and Chancellor Palpatine,
+  (a friendly token of any kind) and #686 (defeat by an enemy card ability, and Chancellor Palpatine,
   the one leader that flips between two faces rather than deploying).
   **Bases are finished** (#460), which completes Phase 1: the engine gained base abilities (an Epic
   Action once a game, an aura over units in play, and the two setup numbers a base can change), and
@@ -167,8 +169,8 @@ Two phases:
   `mayPlayUnitFromDiscard` it duplicated was retired onto it, and "for this phase you may play that
   card from a discard pile" became a standing permission on the Play a Card action. 20 cards, the
   five HMW ones among them. Three cards need an "Action:" dispatched from a card sitting IN the
-  discard pile, a site the engine does not have, and are on #678; L3-37 is on #477 (once each phase
-  on a triggered ability) and Obi-Wan Kenobi shipped with #474; Second Chance, Stolen Landspeeder,
+  discard pile, a site the engine does not have, and are on #678; L3-37 shipped with #477 and
+  Obi-Wan Kenobi with #474; Second Chance, Stolen Landspeeder,
   Sifo-Dyas and Mother Talzin are on the ticket of their own other blocker.
   **The trigger-head batch is half done** (#474). The recount that opened it found the premise wrong:
   seven of its eight heads already had a dispatch point, so the work is context on the points that
@@ -181,12 +183,12 @@ Two phases:
   order". Sabé is there too, held back not by her head but by needing a pick of 1 from N over
   another player's deck, which is a new interactive choice kind.
   Darth Vader, Victor Squadron Leader waits on #465 (his
-  back is a Pilot), and Queen Amidala (defeat a unit to prevent damage), Roger Roger (an upgrade's own
-  When Defeated) and the flipping Chancellor Palpatine are on #477. **Weakness tokens are finished**
+  back is a Pilot), Queen Amidala (defeat a unit to prevent damage) is on #684, and Roger Roger (an
+  upgrade's own When Defeated) and the flipping Chancellor Palpatine are on #686. **Weakness tokens are finished**
   (#649), HMW's -1/-1 token: its 18 cards and five more it touched (Beast-token cards, Inferno Squad's
   "When Played/When Defeated" and Nuvo Vindi's one-off trigger), with Tireless Magnaguard shipping on
   #471 (play from discard). **Fortify is finished** (#650), HMW's upgrades attached to a base: 17 of its 18 cards and
-  Trap Field and Insurgent Camp, with Vice Admiral Rampart on #477 (a replacement for a base upgrade's
+  Trap Field and Insurgent Camp, with Vice Admiral Rampart on #684 (a replacement for a base upgrade's
   defeat); Beast Lair shipped with #653, which gave it the action-phase-start trigger it waited on.
   Next are Credit tokens (#602, 29),
   Disclose (#603, 19), and indirect damage (#604, 15).
@@ -198,24 +200,32 @@ remaining trigger points (#653, 36 of 40) are built. 58 play
 as printed (all 16 bases are vanilla). Of the 214 with ability text, **128 were blocked by nothing** once
 four the triage passed are lifted to their mechanic's ticket, cut like Phase 1 by trigger point, and
 **all three batches have now shipped**. Of the constants, Vernestra Rwoh (an additional cost from the
-discard pile, and borrowed When
-Played abilities) and Zam Wesell (a leader's traits while she is out of play) went to #477, and The
-Marauder (units chosen and damaged while playing it, each reducing its cost) to #473, as it is Exploit's shape.
-Of the events and leaders, The First Legion (enemy cards out of play lose a Trait), Ty Yorrick (a
-replacement on every friendly ability's damage), Asajj Ventress (Raid swapped for Restore on an attack)
-and Jar Jar Binks (reading who gave a token upgrade, which the phase record does not distinguish from
-who received one) went to #477.
+discard pile, and borrowed When Played abilities) is on #683, Zam Wesell (a leader's traits while she
+is out of play) on #686, and The Marauder (units chosen and damaged while playing it, each reducing its
+cost) on #473, as it is Exploit's shape. Of the events and leaders, The First Legion (enemy cards out
+of play lose a Trait) and Jar Jar Binks (reading who gave a token upgrade, which the phase record does
+not distinguish from who received one) are on #686, Ty Yorrick (a replacement on every friendly
+ability's damage) on #684, and Asajj Ventress (Raid swapped for Restore on an attack) on #476.
 
 **70 were blocked by exactly one thing**: the 18 Fortify, 18 Weakness and 14 Beast-token cards are
 built (less one Fortify card lifted, above), and the rest are the 3 compound-head cards (built, #463), #680 trigger heads (3),
-#468 (1), #475 (1) and #477's one-offs (9, Boba Fett having shipped on the
-"a friendly unit enters play" point). The 2 play-from-discard cards are built (#471), which also
-closed Boga, Tireless Magnaguard and L3-37's other blockers; L3-37 itself is on #477, needing "use
-this ability only once each phase" on a **triggered** ability, which today only base actions have.
-16 are multi-blocked, on #477.
+#468 (1), #475 (1) and the one-off heads. The 2 play-from-discard cards are built (#471), which also
+closed Boga, Tireless Magnaguard and L3-37's other blockers.
 
-**Batches shrink, never grow.** A card that turns out not to fit is lifted into #477 and the batch
-ships without it. The classification is regex triage over ability prose: it catches new nouns but not
+**The deferred-cards spike (#477) closed with no twin.** A recount against the registry found 192
+cards held on it, and read against the engine as it now is, 28 needed no engine work beyond a
+registration (six HMW among them, and "when an opponent plays" now read from the far side of
+`whenPlayCard`), and shipped. Every other card went to the ticket that owns its real blocker: the
+mechanic tickets above by comment, #680 for trigger heads no point raises, #678 for the discard
+record, and five new ones, #682 losing abilities (8), #683 re-using abilities (7), #684 replacement
+effects (5), #685 cards that need only writing (22) and #686 the one-offs no other ticket owns (23).
+**HMW has 16 cards outstanding**: Asajj Ventress (#476), Cham Syndulla, Darth Sidious, Logray, Phee
+Genoa and Wicket (#680), Giant Gorax and Greater Sarlacc (#475), The Marauder (#473), Vernestra Rwoh
+(#683), Ty Yorrick and Vice Admiral Rampart (#684), and Jar Jar Binks, The First Legion, Zam Wesell and
+Maul's front (#686).
+
+**Batches shrink, never grow.** A card that turns out not to fit is lifted to the ticket that owns its
+blocker (#686 for a one-off nothing else shares) and the batch ships without it. The classification is regex triage over ability prose: it catches new nouns but not
 familiar nouns in an unfamiliar shape.
 
 Three findings that contradict the assumptions the programme started from:

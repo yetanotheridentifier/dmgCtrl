@@ -36,7 +36,7 @@ const UNITS = ['HMW_041', 'HMW_044', 'HMW_056', 'HMW_064', 'HMW_104', 'HMW_147',
 const LEADERS = ['HMW_006', 'HMW_007', 'HMW_008', 'HMW_009', 'HMW_018']
 const SHIPPED = [...EVENTS, ...UNITS, ...LEADERS]
 
-/** Lifted to #477 by comment: each needs a mechanic no card in this batch supplies. */
+/** Lifted by comment: each needs a mechanic no card in this batch supplies (#476, #686, #684). */
 const LIFTED = ['HMW_001', 'HMW_005', 'HMW_108', 'HMW_185']
 
 const POOL = poolFor(['HMW'])
