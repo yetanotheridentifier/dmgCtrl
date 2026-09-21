@@ -470,10 +470,16 @@ function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string,
   return owed
 }
 
-/** "When you play a card" of any type: the player's leader, base and units, told which card it was. */
+/**
+ * "When you play a card" of any type, told which card it was and who played it. Collected on BOTH
+ * players' leaders, bases and units, the playing player's first, because the point is also printed
+ * from the far side ("when an opponent plays an event", Saw Gerrera), exactly as `whenDrawCards` is.
+ * Every registration therefore compares `ctx.playingPlayer` against `ctx.owner`.
+ */
 function collectPlayCard(state: GameState, playerId: PlayerId, cardId: string): PendingTrigger[] {
-  const ctx = { playedCardId: cardId }
-  return [...collectPlayerTriggers(state, 'whenPlayCard', playerId, ctx), ...collectUnitsTrigger(state, 'whenPlayCard', playerId, ctx)]
+  const ctx = { playedCardId: cardId, playingPlayer: playerId }
+  return [playerId, opponentOf(playerId)].flatMap(p =>
+    [...collectPlayerTriggers(state, 'whenPlayCard', p, ctx), ...collectUnitsTrigger(state, 'whenPlayCard', p, ctx)])
 }
 
 /** Enoch: grant "next unit costs 1 less per 2 damage dealt to your base". */
@@ -2019,6 +2025,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       const pick = choice.candidates[optionIndex ?? 0]
       const card = pick ? next.cards[pick.cardId] : undefined
       if (pick && card) {
+        if (choice.markUsed) next = markAbilityUsed(next, choice.controller, choice.markUsed.instanceId, choice.markUsed.key)
         if (card.type === 'upgrade' && !isFortify(card)) {
           const targets = validPlayTargets(next, choice.controller, choice.zone, pick.index, pick.cardId, choice, choice.targetUnits)
           if (targets.length > 0) {

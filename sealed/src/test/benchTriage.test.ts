@@ -321,9 +321,9 @@ describe('trigger heads', () => {
   })
 
   it('blocks a card on a long head the framework does not dispatch', () => {
-    // HMW_215 L3-37: alone in the pool, so the head folds into the one-off bucket. (It used to be
-    // SEC_041 Populist Advisor, whose head the framework now dispatches.)
-    const r = triage([card({ FrontText: 'When you play an event that costs 3 or less: Draw a card.' })])
+    // SEC_081 Major Partagaz: alone in the pool, so the head folds into the one-off bucket. No point
+    // raises "when another friendly unit attacks": `onAttack` is heard by the attacker alone.
+    const r = triage([card({ FrontText: 'When another friendly Official unit attacks: This unit gets +2/+2 for this phase.' })])
     expect(r.triaged[0].blockers).toEqual(['trigger:one-off'])
     expect(r.batches).toEqual([])
   })
