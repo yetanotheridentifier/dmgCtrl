@@ -1220,11 +1220,14 @@ registerCard('ASH_036', { abilities: [{ trigger: 'onAttackEnd', description: 'If
   return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 3, targets, optional: true }) : s
 } }] })
 
-registerCard('ASH_101', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a non-leader unit, defeat that unit.', effect: (s, ctx) => { // The Great Mothers
+/** "If this unit dealt combat damage to a non-leader unit (while attacking), defeat that unit." */
+const defeatDamagedDefender: AbilityDef['effect'] = (s, ctx) => {
   if (!ctx.combatDamageToDefender || ctx.attackTarget?.kind !== 'unit') return s
   const d = allUnits(s).find(u => u.instanceId === (ctx.attackTarget as { instanceId: string }).instanceId)
   return d && !isLeaderUnit(s, d) ? defeatUnit(s, d.instanceId) : s // already gone if combat killed it
-} }] })
+}
+registerCard('ASH_101', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a non-leader unit, defeat that unit.', effect: defeatDamagedDefender }] }) // The Great Mothers
+registerCard('SOR_085', { abilities: [{ trigger: 'onAttackEnd', description: 'When this unit deals combat damage to a non-leader unit while attacking: Defeat that unit.', effect: defeatDamagedDefender }] }) // Rukh
 
 registerCard('ASH_031', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a base, heal that much damage from your base.', effect: (s, ctx) => // Hera Syndulla
   (ctx.combatDamageToBase ?? 0) > 0 ? healBase(s, ctx.owner, ctx.combatDamageToBase!) : s }] })
@@ -9918,6 +9921,52 @@ registerCard('SEC_081', { abilities: [{ trigger: 'whenUnitAttacks', description:
 registerCard('LAW_112', { abilities: [{ trigger: 'whenUnitAttacks', description: 'When a friendly unit attacks: If no other units have attacked this phase (including enemy units), heal 2 damage from your base.', effect: (s, ctx) => // Boonta Eve Flagbearer
   // The attack is recorded as it is declared, before this fires, so the attacker leaves itself out.
   (friendlyAttack(ctx) && attackedThisPhase(s).every(id => id === ctx.attackerInstanceId) ? healBase(s, ctx.owner, 2) : s) }] })
+
+// ── "When this unit attacks and defeats a unit" ────────────────────────────────────────────────
+// `onAttackEnd` with `ctx.defenderDefeated`; the unit itself is `ctx.defeatedDefender`.
+const defeatedAndSurvived = (s: GameState, ctx: EffectContext): boolean => ctx.defenderDefeated === true && survivedAttack(s, ctx)
+
+/** The friendly attacker a "when a friendly unit attacks and defeats a unit" card names, while it is still in play. */
+const friendlyVictor = (s: GameState, ctx: EffectContext): string | undefined =>
+  (ctx.defenderDefeated && s.players[ctx.owner].units.some(u => u.instanceId === ctx.attackerInstanceId) ? ctx.attackerInstanceId : undefined)
+registerCard('LOF_017', { // Darth Revan
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenFriendlyAttackEnds',
+      description: 'When a friendly unit attacks and defeats a unit: You may exhaust this leader. If you do, give an Experience token to that friendly unit.',
+      effect: (s, ctx) => {
+        const victor = friendlyVictor(s, ctx)
+        return victor && leaderCanExhaust(s, ctx.owner)
+          ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Darth Revan (leader) to give that unit an Experience token', then: resume(ctx, undefined, victor) })
+          : s
+      },
+    }],
+  },
+  abilities: [{ trigger: 'whenFriendlyAttackEnds', description: 'When a friendly unit attacks and defeats a unit: You may give an Experience token to that friendly unit.', effect: (s, ctx) => {
+    const victor = friendlyVictor(s, ctx)
+    return victor ? pushChoice(s, { kind: 'mayGiveTokens', id: `${ctx.sourceInstanceId}-exp`, controller: ctx.owner, token: TOKEN_EXPERIENCE, count: 1, targets: [victor], optional: true }) : s
+  } }],
+  ifYouDo: (s, ctx) => (ctx.unitChosen ? giveToken(exhaustLeader(s, ctx.owner), ctx.unitChosen, TOKEN_EXPERIENCE) : s),
+})
+
+registerCard('LOF_063', { // Oggdo Bogdo
+  cannotAttack: (_s, u) => u.damage === 0,
+  abilities: [{ trigger: 'onAttackEnd', description: 'When this unit attacks and defeats a unit: Heal 2 damage from this unit.', effect: (s, ctx) =>
+    (defeatedAndSurvived(s, ctx) ? healUnit(s, ctx.sourceInstanceId!, 2) : s) }],
+})
+
+registerCard('LOF_086', { abilities: [{ trigger: 'onAttackEnd', description: "When this unit attacks and defeats a unit: Give a number of Experience tokens to this unit equal to the defeated unit's cost.", effect: (s, ctx) => { // Drengir Spawn
+  const cost = ctx.defeatedDefender ? printedCost(s, ctx.defeatedDefender) : 0
+  return defeatedAndSurvived(s, ctx) && cost > 0 ? giveTokens(s, ctx.sourceInstanceId!, TOKEN_EXPERIENCE, cost) : s
+} }] })
+
+registerCard('SOR_088', { abilities: [{ trigger: 'onAttackEnd', description: 'When this unit attacks and defeats a unit: You may deal the excess damage from this attack to an enemy ground unit.', effect: (s, ctx) => // Blizzard Assault AT-AT
+  (ctx.defenderDefeated && (ctx.excessCombatDamage ?? 0) > 0
+    ? damageChoice(s, ctx, ctx.excessCombatDamage!, unitsIn(s, opponentOf(ctx.owner), 'ground'), [], true)
+    : s) }] })
+
+registerCard('SOR_149', { abilities: [{ trigger: 'onAttackEnd', description: 'When this unit attacks and defeats a unit: Ready him.', effect: (s, ctx) => // Mace Windu
+  (defeatedAndSurvived(s, ctx) ? readyUnit(s, ctx.sourceInstanceId!) : s) }] })
 
 // ── "When you play an event" ───────────────────────────────────────────────────────────────────
 // `whenPlayCard` covers every type on both sides, so the card states both.

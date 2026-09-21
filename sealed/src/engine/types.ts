@@ -753,6 +753,10 @@ export interface TriggerContext {
   combatDamageToBase?: number
   /** `onAttackEnd`: the defending unit was defeated during this attack. */
   defenderDefeated?: boolean
+  /** `onAttackEnd`, when the combat defeated the defender: that unit as it was going into the damage step. */
+  defeatedDefender?: UnitState
+  /** `onAttackEnd`, when the combat defeated the defender: the attacker's damage past its remaining HP. */
+  excessCombatDamage?: number
   /** `onAttackEnd`: combat damage the attacker dealt to the defending unit (0 if a base attack). */
   combatDamageToDefender?: number
   /** `whenDefeated`: the unit as it was at the moment of defeat (it has left play). */

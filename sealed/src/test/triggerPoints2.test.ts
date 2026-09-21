@@ -454,3 +454,90 @@ describe('TWI_022 Droid Manufactory and TWI_025 Shadow Collective Camp', () => {
     expect(played.players.player.hand).toEqual([])
   })
 })
+
+// ── "When this unit attacks and defeats a unit" ───────────────────────────────────────────────
+// `onAttackEnd` with `ctx.defenderDefeated`. The defeated unit itself rides on `ctx.defeatedDefender`,
+// and what the hit had left over past its remaining HP on `ctx.excessCombatDamage`.
+
+const K: Record<string, EngineCard> = {
+  ...D,
+  LOF_017: card({ id: 'LOF_017', name: 'Darth Revan', type: 'leader', arena: 'ground', cost: 5, power: 3, hp: 6, traits: ['Force', 'Sith'], keywords: [{ name: 'Restore', value: 1 }] }),
+  LOF_063: card({ id: 'LOF_063', name: 'Oggdo Bogdo', type: 'unit', arena: 'ground', cost: 3, power: 5, hp: 5, traits: ['Creature'] }),
+  LOF_086: card({ id: 'LOF_086', name: 'Drengir Spawn', type: 'unit', arena: 'ground', cost: 4, power: 3, hp: 3, traits: ['Creature'], keywords: [{ name: 'Overwhelm' }] }),
+  SOR_088: card({ id: 'SOR_088', name: 'Blizzard Assault AT-AT', type: 'unit', arena: 'ground', cost: 8, power: 9, hp: 9, traits: ['Imperial', 'Vehicle', 'Walker'] }),
+  SOR_149: card({ id: 'SOR_149', name: 'Mace Windu', type: 'unit', arena: 'ground', cost: 7, power: 5, hp: 7, traits: ['Force', 'Jedi', 'Republic'], keywords: [{ name: 'Ambush' }] }),
+  SOR_085: card({ id: 'SOR_085', name: 'Rukh', type: 'unit', arena: 'ground', cost: 5, power: 3, hp: 6, traits: ['Imperial'] }),
+  TWO: card({ id: 'TWO', type: 'unit', arena: 'ground', cost: 3, power: 1, hp: 2 }),
+  TOUGHL: card({ id: 'TOUGHL', type: 'leader', arena: 'ground', cost: 5, power: 1, hp: 20 }),
+}
+const kBoard = (mine: Side = {}, theirs: Side = {}) => ({ ...board(mine, theirs), cards: K })
+const exp = (s: GameState, id: string) => (U(s, id)?.upgrades ?? []).filter(u => u.cardId === TOKEN_EXPERIENCE).length
+
+describe('LOF_017 Darth Revan', () => {
+  it('front: when a friendly unit attacks and defeats a unit, may exhaust himself to give it an Experience token', () => {
+    const s = kBoard({ leader: { cardId: 'LOF_017', deployed: false, epicActionUsed: false, exhausted: false }, units: [unit('g', 'GRD')] }, { units: [unit('e', 'SMALL'), unit('t', 'TOUGH')] })
+    const swung = attackUnit(s, 'g', 'e')
+    expect(choice(swung)).toMatchObject({ kind: 'mayPayThen', cost: 0 })
+    const paid = accept(swung)
+    expect(paid.players.player.leader.exhausted).toBe(true)
+    expect(exp(paid, 'g')).toBe(1)
+    noChoice(attackUnit(s, 'g', 't'))
+  })
+  it('back: may give that friendly unit an Experience token, himself included', () => {
+    const s = kBoard({ leader: { cardId: 'LOF_017', deployed: true, epicActionUsed: true, exhausted: false }, units: [unit('L', 'LOF_017', { isLeader: true }), unit('g', 'GRD')] }, { units: [unit('e', 'SMALL'), unit('f', 'SMALL')] })
+    const one = attackUnit(s, 'g', 'e')
+    expect(choice(one)).toMatchObject({ kind: 'mayGiveTokens', token: TOKEN_EXPERIENCE })
+    expect(targetsOf(choice(one))).toEqual(['g'])
+    expect(exp(accept(one, { targetInstanceId: 'g' }), 'g')).toBe(1)
+    expect(targetsOf(choice(attackUnit(s, 'L', 'f')))).toEqual(['L'])
+  })
+})
+
+describe('LOF_063 Oggdo Bogdo', () => {
+  it("can't attack unless damaged, and heals 2 from himself when he attacks and defeats a unit", () => {
+    expect(getCardDefinition('LOF_063')?.cannotAttack?.(kBoard(), unit('o', 'LOF_063'))).toBe(true)
+    expect(getCardDefinition('LOF_063')?.cannotAttack?.(kBoard(), unit('o', 'LOF_063', { damage: 1 }))).toBe(false)
+    const swung = attackUnit(kBoard({ units: [unit('o', 'LOF_063', { damage: 3 })] }, { units: [unit('e', 'SMALL')] }), 'o', 'e')
+    expect(U(swung, 'o')!.damage).toBe(2) // 3 + 1 from the defender, less 2
+  })
+})
+
+describe('LOF_086 Drengir Spawn', () => {
+  it("gives itself Experience tokens equal to the defeated unit's cost", () => {
+    const swung = attackUnit(kBoard({ units: [unit('d', 'LOF_086')] }, { units: [unit('e', 'TWO')] }), 'd', 'e')
+    expect(U(swung, 'e')).toBeUndefined()
+    expect(exp(swung, 'd')).toBe(3)
+  })
+})
+
+describe('SOR_088 Blizzard Assault AT-AT', () => {
+  it('may deal the excess damage from the attack to an enemy ground unit', () => {
+    const s = kBoard({ units: [unit('at', 'SOR_088'), unit('mine', 'GRD')] }, { units: [unit('e', 'TWO'), unit('g', 'GRD'), unit('sp', 'SPC')] })
+    const swung = attackUnit(s, 'at', 'e')
+    const c = choice(swung)
+    expect(c).toMatchObject({ kind: 'selectDamageTarget', amount: 7 }) // 9 power into 2 remaining HP
+    expect(optional(c)).toBe(true)
+    expect(targetsOf(c), 'enemy ground units').toEqual(['g'])
+  })
+  it('offers nothing when the defender survived', () => {
+    noChoice(attackUnit(kBoard({ units: [unit('at', 'SOR_088')] }, { units: [unit('e', 'TOUGH'), unit('g', 'GRD')] }), 'at', 'e'))
+  })
+})
+
+describe('SOR_149 Mace Windu', () => {
+  it('readies when he attacks and defeats a unit', () => {
+    expect(U(attackUnit(kBoard({ units: [unit('m', 'SOR_149')] }, { units: [unit('e', 'SMALL')] }), 'm', 'e'), 'm')!.exhausted).toBe(false)
+    expect(U(attackUnit(kBoard({ units: [unit('m', 'SOR_149')] }, { units: [unit('e', 'TOUGH')] }), 'm', 'e'), 'm')!.exhausted).toBe(true)
+  })
+})
+
+describe('SOR_085 Rukh', () => {
+  it('defeats a non-leader unit he deals combat damage to while attacking', () => {
+    const swung = attackUnit(kBoard({ units: [unit('r', 'SOR_085')] }, { units: [unit('e', 'TOUGH')] }), 'r', 'e')
+    expect(U(swung, 'e')).toBeUndefined()
+  })
+  it('not a leader unit', () => {
+    const swung = attackUnit(kBoard({ units: [unit('r', 'SOR_085')] }, { units: [unit('l', 'TOUGHL', { isLeader: true })] }), 'r', 'l')
+    expect(U(swung, 'l')).toBeDefined()
+  })
+})

@@ -2803,7 +2803,10 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   next = consumeAdvantage(next, enemyId, defender.instanceId)
   // Pass the pre-combat attacker so its "When Attack Ends" fires even if it was defeated.
   const defenderDefeated = !next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
-  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmDealt, defenderDefeated, combatDamageToDefender: dealtToDefender }, attacker)
+  // "Attacks and defeats a unit" cards read the unit itself (its cost, Drengir Spawn) and what the
+  // hit had left over past its remaining HP (Blizzard Assault AT-AT).
+  const defeatedCtx = defenderDefeated ? { defeatedDefender: defender, excessCombatDamage: spillExcess } : {}
+  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmDealt, defenderDefeated, combatDamageToDefender: dealtToDefender, ...defeatedCtx }, attacker)
   return clearAttackGrants(checkWin(next))
 }
 

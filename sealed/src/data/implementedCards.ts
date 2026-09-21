@@ -280,6 +280,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'HMW_014', name: 'Wicket', front: true, back: true },
   // "When you play an event".
   { id: 'TS26_8', name: 'Ahsoka Tano', front: true, back: true },
+  // "When a friendly unit attacks and defeats a unit".
+  { id: 'LOF_017', name: 'Darth Revan', front: true, back: true },
 ]
 
 /**
@@ -1785,6 +1787,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'TWI_216', name: 'Fives' },
   // "When you deploy a leader".
   { id: 'JTL_191', name: 'Invincible' },
+  // "When this unit attacks and defeats a unit", and Rukh on The Great Mothers' block.
+  { id: 'LOF_063', name: 'Oggdo Bogdo' },
+  { id: 'LOF_086', name: 'Drengir Spawn' },
+  { id: 'SOR_088', name: 'Blizzard Assault AT-AT' },
+  { id: 'SOR_149', name: 'Mace Windu' },
+  { id: 'SOR_085', name: 'Rukh' },
 ]
 
 /**

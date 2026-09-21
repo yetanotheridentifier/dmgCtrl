@@ -200,7 +200,10 @@ unit fire on other units' attacks:
 last-known state with its upgrades, and carries that attacker's card in `ctx.attackerCardId` so a
 card can still read it ("another unit that costs less than it", Colonel Yularen). A card printed
 "when this unit completes an attack (and survives)" is `onAttackEnd` with a guard that the unit is
-still in play: the bracket is reminder text, not a point of its own.
+still in play: the bracket is reminder text, not a point of its own. "When this unit attacks and
+defeats a unit" is `onAttackEnd` with `ctx.defenderDefeated`; when the combat did the defeating, the
+unit itself is in `ctx.defeatedDefender` (its cost, Drengir Spawn) and the damage past its remaining
+HP in `ctx.excessCombatDamage` (Blizzard Assault AT-AT), as `whenDefeated` carries `defeatedUnit`.
 
 The declaration has the same pair. **`onAttack`** is the attacker's own "On Attack";
 **`whenUnitAttacks`** is the same event heard by **both** players' undeployed leaders, bases and
