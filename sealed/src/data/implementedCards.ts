@@ -1809,6 +1809,9 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SHD_133', name: 'Dengar' },
   // "When an enemy leader deploys".
   { id: 'HMW_214', name: 'Phee Genoa' },
+  // "When 1 or more damage is healed from this unit".
+  { id: 'JTL_062', name: 'Silver Angel' },
+  { id: 'LAW_047', name: 'Baze Malbus' },
 ]
 
 /**

@@ -328,7 +328,11 @@ export function healUnit(state: GameState, instanceId: string, amount: number): 
   if (!found || found.unit.damage === 0 || amount <= 0) return state
   // "Each friendly unit that was healed this phase" (Barriss Offee) — recorded here, which is the
   // one place a unit is healed, so every source of healing counts.
-  return recordUnitHealed(patchUnit(state, found.owner, instanceId, u => ({ ...u, damage: Math.max(0, u.damage - amount) })), instanceId)
+  const amountHealed = Math.min(amount, found.unit.damage)
+  const healed = recordUnitHealed(patchUnit(state, found.owner, instanceId, u => ({ ...u, damage: u.damage - amountHealed })), instanceId)
+  // "When 1 or more damage is healed from this unit" (Silver Angel), with what the heal removed.
+  const unit = findUnit(healed, instanceId)!.unit
+  return fireBatch(healed, collectUnitTriggers(healed, 'whenHealed', unit, found.owner, { amountHealed }))
 }
 
 /**

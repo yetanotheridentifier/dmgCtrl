@@ -10048,6 +10048,12 @@ registerCard('HMW_214', { // Phee Genoa
   ifYouDo: (s, ctx) => (ctx.step === 'exhaust' && ctx.unitChosen ? exhaustUnit(s, ctx.unitChosen) : s),
 })
 
+// ── "When 1 or more damage is healed from this unit" ───────────────────────────────────────────
+registerCard('JTL_062', { abilities: [{ trigger: 'whenHealed', description: 'When 1 or more damage is healed from this unit: You may deal 1 damage to a space unit.', effect: (s, ctx) => // Silver Angel
+  damageChoice(s, ctx, 1, allUnits(s).filter(u => u.arena === 'space'), [], true) }] })
+registerCard('LAW_047', { abilities: [{ trigger: 'whenHealed', description: 'When 1 or more damage is healed from this unit: You may deal that much damage to a unit.', effect: (s, ctx) => // Baze Malbus
+  ((ctx.amountHealed ?? 0) > 0 ? damageChoice(s, ctx, ctx.amountHealed!, allUnits(s), [], true) : s) }] })
+
 // ── "When you play an event" ───────────────────────────────────────────────────────────────────
 // `whenPlayCard` covers every type on both sides, so the card states both.
 const playedOwnEvent = (s: GameState, ctx: EffectContext): boolean =>

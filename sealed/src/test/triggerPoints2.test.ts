@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { dealDamageToUnit } from '../engine/combat'
+import { healUnit } from '../engine/effects'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_EXPERIENCE } from '../engine/tokenUpgrades'
 import { TOKEN_BATTLE_DROID, TOKEN_CLONE_TROOPER } from '../engine/tokenUnits'
@@ -47,9 +48,12 @@ const F: Record<string, EngineCard> = {
   DROIDEV: card({ id: 'DROIDEV', type: 'event', cost: 1, traits: ['Droid'] }),
 }
 
-/** `unit()` reads the arena off the SHARED fixture pool, so it is stated from `F` here. */
+/**
+ * `unit()` reads the arena off the SHARED fixture pool, so it is stated here from `P`, the widest of
+ * the maps below (each extends the one before). Read at call time, inside the tests, once all exist.
+ */
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
-  fixtureUnit(instanceId, cardId, { arena: F[cardId]?.arena ?? 'ground', ...over })
+  fixtureUnit(instanceId, cardId, { arena: P[cardId]?.arena ?? 'ground', ...over })
 type Side = Parameters<typeof player>[0]
 const board = (mine: Side = {}, theirs: Side = {}) => state({
   cards: F,
@@ -739,5 +743,37 @@ describe('HMW_214 Phee Genoa', () => {
     noChoice(deploy(s))
     expect(s.players.player.units.find(u => u.isLeader)).toBeUndefined()
     expect(deploy(s).players.player.units.find(u => u.isLeader)!.exhausted).toBe(false)
+  })
+})
+
+// ── "When 1 or more damage is healed from this unit" ──────────────────────────────────────────
+// `whenHealed`, raised on the unit by `healUnit`, the one place a unit is healed, with what the heal
+// actually removed in `ctx.amountHealed`.
+
+describe('JTL_062 Silver Angel and LAW_047 Baze Malbus', () => {
+  const H: Record<string, EngineCard> = {
+    ...P,
+    JTL_062: card({ id: 'JTL_062', name: 'Silver Angel', type: 'unit', arena: 'space', cost: 2, power: 2, hp: 3, traits: ['Fringe', 'Vehicle', 'Transport'] }),
+    LAW_047: card({ id: 'LAW_047', name: 'Baze Malbus', type: 'unit', arena: 'ground', cost: 7, power: 6, hp: 8, traits: ['Rebel'], keywords: [{ name: 'Sentinel' }] }),
+  }
+  const hBoard = (mine: UnitState[], theirs: UnitState[] = []) => ({ ...board({ units: mine }, { units: theirs }), cards: H })
+
+  it('Silver Angel may deal 1 damage to a space unit when damage is healed from it', () => {
+    // `unit()` reads the arena from `F`, which does not hold Silver Angel, so it is stated.
+    const healed = healUnit(hBoard([unit('sa', 'JTL_062', { damage: 2, arena: 'space' }), unit('g', 'GRD')], [unit('sp', 'SPC')]), 'sa', 1)
+    expect(choice(healed)).toMatchObject({ kind: 'selectDamageTarget', amount: 1 })
+    expect(optional(choice(healed))).toBe(true)
+    expect(targetsOf(choice(healed))).toEqual(['sa', 'sp'])
+  })
+
+  it('Baze Malbus may deal as much damage as was healed from him, to a unit', () => {
+    const healed = healUnit(hBoard([unit('bz', 'LAW_047', { damage: 2 })], [unit('e', 'GRD')]), 'bz', 3)
+    expect(choice(healed)).toMatchObject({ kind: 'selectDamageTarget', amount: 2 })
+    expect(targetsOf(choice(healed))).toEqual(['bz', 'e'])
+  })
+
+  it('nothing when no damage was healed, or when another unit is healed', () => {
+    noChoice(healUnit(hBoard([unit('bz', 'LAW_047')]), 'bz', 3))
+    noChoice(healUnit(hBoard([unit('bz', 'LAW_047'), unit('g', 'GRD', { damage: 2 })]), 'g', 2))
   })
 })

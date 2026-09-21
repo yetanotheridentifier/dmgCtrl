@@ -117,7 +117,7 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 
 ### Trigger points
 
-`whenPlayed`, `onAttack`, `whenUnitAttacks`, `onAttackEnd`, `onDefense`, `whenDefeated`, `whenReadies`,
+`whenPlayed`, `onAttack`, `whenUnitAttacks`, `onAttackEnd`, `onDefense`, `whenHealed`, `whenDefeated`, `whenReadies`,
 `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
 `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
@@ -139,6 +139,10 @@ event", Saw Gerrera). As with `whenDrawCards`, every registration at this point 
 `ctx.playingPlayer` against `ctx.owner`. `whenUnitEntersPlay`
 is collected from both players' bases and from every unit in play but the one arriving, for any unit
 either player brings into play (Trap Field, and Phee Genoa hearing an enemy leader deploy).
+
+`whenHealed` ("when 1 or more damage is healed from this unit", Silver Angel) fires on the healed unit
+from `healUnit`, which is the one place a unit is healed, with what the heal actually removed in
+`ctx.amountHealed` (Baze Malbus deals that much). A heal that removes nothing raises nothing.
 
 `whenActionPhaseStarts` ("when the action phase starts", Beast Lair) fires for every unit in play and
 each player's leader and base as the next round's action phase begins, on the same boundary as an

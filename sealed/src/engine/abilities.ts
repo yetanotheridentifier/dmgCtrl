@@ -24,6 +24,9 @@ export type TriggerPoint =
   // is, and every registration compares it against `ctx.owner`, as at `whenDrawCards`.
   | 'whenUnitAttacks'
   | 'onAttackEnd'
+  // "When 1 or more damage is healed from this unit" (Silver Angel): fires on the healed unit from
+  // `healUnit`, the one place a unit is healed, with what was removed in `ctx.amountHealed`.
+  | 'whenHealed'
   // "When a friendly unit's attack ends": fires for every unit the attacker's
   // controller has (and their undeployed leader), not just the attacker — distinct from
   // `onAttackEnd` ("when THIS unit's attack ends", the attacker only).
