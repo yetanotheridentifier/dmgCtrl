@@ -788,6 +788,11 @@ export interface TriggerContext {
    * every registration compares this against `ctx.owner` ("when you play" or "when an opponent plays").
    */
   playingPlayer?: PlayerId
+  /**
+   * `whenUnitAttacks`: whose unit is attacking. The point fires on both players, so every
+   * registration compares this against `ctx.owner` ("a friendly unit attacks" or "an enemy unit attacks").
+   */
+  attackingPlayer?: PlayerId
   /** `whenDrawCards`: how many cards that one draw event drew. Fires once per event, not per card. */
   cardsDrawn?: number
 }

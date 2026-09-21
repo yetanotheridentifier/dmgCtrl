@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers } from './abilities'
-import { fireBatch, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck, defeatBaseUpgrade } from './effects'
+import { fireBatch, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -9882,3 +9882,44 @@ registerCard('SEC_006', { // Colonel Yularen
   abilities: [{ trigger: 'onAttackEnd', description: 'If this unit survived, you may attack with another unit that costs 4 or less.', effect: (s, ctx) =>
     (survivedAttack(s, ctx) ? attackWithAnother(s, ctx, costsAtMost(4)) : s) }],
 })
+
+// ── "When a friendly / another friendly / an enemy unit attacks" ─────────────────────────────────
+// `whenUnitAttacks` fires on both sides, so each registration states whose attack it hears.
+const friendlyAttack = (ctx: EffectContext): boolean => ctx.attackingPlayer === ctx.owner
+const attackerOf = (s: GameState, ctx: EffectContext): UnitState | undefined => findUnit(s, ctx.attackerInstanceId ?? '')?.unit
+
+registerCard('HMW_014', { // Wicket
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenUnitAttacks',
+      description: 'When a friendly unit attacks a unit that costs more than it: You may exhaust this leader. If you do, draw a card.',
+      effect: (s, ctx) => {
+        const attacker = attackerOf(s, ctx)
+        const defender = defenderOf(s, ctx)
+        if (!friendlyAttack(ctx) || !attacker || !defender || !leaderCanExhaust(s, ctx.owner)) return s
+        return printedCost(s, defender) > printedCost(s, attacker)
+          ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Wicket (leader) to draw a card', then: resume(ctx) })
+          : s
+      },
+    }],
+  },
+  ...onAttack(whenPlayed('If you control a unit that costs 3 or less, draw a card.', (s, ctx) =>
+    (s.players[ctx.owner].units.some(u => printedCost(s, u) <= 3) ? drawCards(s, ctx.owner, 1) : s))),
+  ifYouDo: (s, ctx) => drawCards(exhaustLeader(s, ctx.owner), ctx.owner, 1),
+})
+
+registerCard('SEC_081', { abilities: [{ trigger: 'whenUnitAttacks', description: 'When another friendly Official unit attacks: This unit gets +2/+2 for this phase.', effect: (s, ctx) => { // Major Partagaz
+  const attacker = attackerOf(s, ctx)
+  return friendlyAttack(ctx) && attacker && attacker.instanceId !== ctx.sourceInstanceId && unitHasTrait(s, attacker, 'Official')
+    ? addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, power: 2, hp: 2 })
+    : s
+} }] })
+
+registerCard('LAW_112', { abilities: [{ trigger: 'whenUnitAttacks', description: 'When a friendly unit attacks: If no other units have attacked this phase (including enemy units), heal 2 damage from your base.', effect: (s, ctx) => // Boonta Eve Flagbearer
+  // The attack is recorded as it is declared, before this fires, so the attacker leaves itself out.
+  (friendlyAttack(ctx) && attackedThisPhase(s).every(id => id === ctx.attackerInstanceId) ? healBase(s, ctx.owner, 2) : s) }] })
+
+registerCard('TS26_78', { abilities: [{ trigger: 'whenUnitAttacks', description: 'When an enemy unit attacks: You may give an Experience token to that unit.', effect: (s, ctx) => // Barriss Offee
+  (!friendlyAttack(ctx) && attackerOf(s, ctx)
+    ? pushChoice(s, { kind: 'mayGiveTokens', id: `${ctx.sourceInstanceId}-exp`, controller: ctx.owner, token: TOKEN_EXPERIENCE, count: 1, targets: [ctx.attackerInstanceId!], optional: true })
+    : s) }] })

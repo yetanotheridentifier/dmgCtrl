@@ -18,6 +18,11 @@ import { abilityCardIds, baseAbilityCardIds } from './types'
 export type TriggerPoint =
   | 'whenPlayed'
   | 'onAttack'
+  // "When a friendly / another friendly / an enemy unit attacks" (Major Partagaz, Barriss Offee): the
+  // same event as the attacker's own `onAttack`, in the same batch, heard by BOTH players' undeployed
+  // leaders, bases and units, the attacker's own included. `ctx.attackingPlayer` says whose attack it
+  // is, and every registration compares it against `ctx.owner`, as at `whenDrawCards`.
+  | 'whenUnitAttacks'
   | 'onAttackEnd'
   // "When a friendly unit's attack ends": fires for every unit the attacker's
   // controller has (and their undeployed leader), not just the attacker — distinct from

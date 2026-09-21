@@ -276,6 +276,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SEC_003', name: 'Lama Su', front: true, back: true },
   // "When this unit completes an attack (and survives)".
   { id: 'SEC_006', name: 'Colonel Yularen', front: true, back: true },
+  // "When a friendly unit attacks".
+  { id: 'HMW_014', name: 'Wicket', front: true, back: true },
 ]
 
 /**
@@ -1769,6 +1771,10 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SOR_146', name: 'Zeb Orrelios' },
   { id: 'SOR_192', name: 'Ezra Bridger' },
   { id: 'TWI_053', name: 'Finn' },
+  // "When a friendly / another friendly / an enemy unit attacks".
+  { id: 'SEC_081', name: 'Major Partagaz' },
+  { id: 'LAW_112', name: 'Boonta Eve Flagbearer' },
+  { id: 'TS26_78', name: 'Barriss Offee' },
 ]
 
 /**

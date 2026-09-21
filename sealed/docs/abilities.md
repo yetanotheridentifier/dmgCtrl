@@ -117,7 +117,7 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 
 ### Trigger points
 
-`whenPlayed`, `onAttack`, `onAttackEnd`, `onDefense`, `whenDefeated`, `whenReadies`,
+`whenPlayed`, `onAttack`, `whenUnitAttacks`, `onAttackEnd`, `onDefense`, `whenDefeated`, `whenReadies`,
 `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
 `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
@@ -197,7 +197,20 @@ unit fire on other units' attacks:
   leader**: "when a *friendly* unit's attack ends".
 
 `onAttackEnd` still fires if the attacker was defeated in the combat (CR 7.6), falling back to its
-last-known state with its upgrades.
+last-known state with its upgrades, and carries that attacker's card in `ctx.attackerCardId` so a
+card can still read it ("another unit that costs less than it", Colonel Yularen). A card printed
+"when this unit completes an attack (and survives)" is `onAttackEnd` with a guard that the unit is
+still in play: the bracket is reminder text, not a point of its own.
+
+The declaration has the same pair. **`onAttack`** is the attacker's own "On Attack";
+**`whenUnitAttacks`** is the same event heard by **both** players' undeployed leaders, bases and
+units, the attacker's own included, in the same batch as the On Attack. It carries the attacker in
+`ctx.attackerInstanceId`, its target in `ctx.attackTarget` and whose attack it is in
+`ctx.attackingPlayer`, so a card reads "a friendly unit attacks" (Boonta Eve Flagbearer), "another
+friendly Official unit attacks" (Major Partagaz) or "an enemy unit attacks" (Barriss Offee) from one
+point. As at `whenDrawCards`, **every registration compares `ctx.attackingPlayer` against
+`ctx.owner`**. `whenEnemyAttacksBase` is narrower and older: the attacked player's units only, for
+base attacks only, raised as the damage lands.
 
 Two triggers fire **once per event, not once per item**, matching cards worded "1 or more":
 

@@ -6,6 +6,7 @@ import { TOKEN_EXPERIENCE } from '../engine/tokenUpgrades'
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
 import { unitHasKeyword } from '../engine/keywords'
 import { getCardDefinition } from '../engine/abilities'
+import { recordUnitAttacked } from '../engine/types'
 import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState } from '../engine/types'
 
 /**
@@ -247,5 +248,95 @@ describe('TWI_053 Finn', () => {
     const twice = dealDamageToUnit(once, 'u', 2)
     expect(U(twice, 'u')!.damage, 'every instance, not only the next').toBe(3)
     expect(U(dealDamageToUnit(chosen, 'g', 3), 'g')!.damage, 'only that unit').toBe(3)
+  })
+})
+
+// ── "When a friendly / another friendly / an enemy unit attacks" ──────────────────────────────
+// `whenUnitAttacks`: the same event as the attacker's own On Attack, heard by both players' leaders,
+// bases and units, with the attacker in `ctx.attackerInstanceId` and its controller in
+// `ctx.attackingPlayer`. Every registration states its side, so each card is tested from the far side.
+
+const A: Record<string, EngineCard> = {
+  ...F,
+  HMW_014: card({ id: 'HMW_014', name: 'Wicket', type: 'leader', arena: 'ground', cost: 4, power: 2, hp: 5, aspects: ['Aggression', 'Heroism'], traits: ['Ewok'] }),
+  SEC_081: card({ id: 'SEC_081', name: 'Major Partagaz', type: 'unit', arena: 'ground', cost: 2, power: 0, hp: 6, traits: ['Imperial', 'Official'], keywords: [{ name: 'Overwhelm' }] }),
+  LAW_112: card({ id: 'LAW_112', name: 'Boonta Eve Flagbearer', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 3, traits: ['Fringe'] }),
+  TS26_78: card({ id: 'TS26_78', name: 'Barriss Offee', type: 'unit', arena: 'ground', cost: 5, power: 5, hp: 6, traits: ['Force', 'Jedi', 'Republic'], keywords: [{ name: 'Hidden' }] }),
+  OFF: card({ id: 'OFF', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 6, traits: ['Official'] }),
+  PRICEY: card({ id: 'PRICEY', type: 'unit', arena: 'ground', cost: 5, power: 1, hp: 20 }),
+}
+const aBoard = (mine: Side = {}, theirs: Side = {}) => ({ ...board(mine, theirs), cards: A })
+const drawn = (s: GameState) => s.players.player.hand.length
+
+describe('HMW_014 Wicket', () => {
+  const wicketFront = (mine: Side = {}, theirs: Side = {}) =>
+    aBoard({ leader: { cardId: 'HMW_014', deployed: false, epicActionUsed: false, exhausted: false }, deck: ['GRD', 'GRD'], ...mine }, theirs)
+
+  it('front: when a friendly unit attacks a unit that costs more than it, may exhaust himself to draw a card', () => {
+    const swung = attackUnit(wicketFront({ units: [unit('g', 'GRD')] }, { units: [unit('e', 'PRICEY')] }), 'g', 'e')
+    expect(choice(swung)).toMatchObject({ kind: 'mayPayThen', cost: 0 })
+    const paid = accept(swung)
+    expect(paid.players.player.leader.exhausted).toBe(true)
+    expect(drawn(paid)).toBe(1)
+  })
+
+  it('front: not against a unit that costs the same or less, not on a base, not for an enemy attacker, not while exhausted', () => {
+    noChoice(attackUnit(wicketFront({ units: [unit('g', 'GRD')] }, { units: [unit('e', 'SMALL')] }), 'g', 'e'))
+    noChoice(attackBase(wicketFront({ units: [unit('g', 'GRD')] }), 'g'))
+    noChoice(attackUnit(wicketFront({ units: [unit('p', 'PRICEY')] }, { units: [unit('e', 'GRD')] }), 'e', 'p', 'opponent'))
+    const tired = wicketFront({ units: [unit('g', 'GRD')] }, { units: [unit('e', 'PRICEY')] })
+    noChoice(attackUnit({ ...tired, players: { ...tired.players, player: { ...tired.players.player, leader: { ...tired.players.player.leader, exhausted: true } } } }, 'g', 'e'))
+  })
+
+  it('back: On Attack, draws a card if you control a unit that costs 3 or less', () => {
+    const deployed = (units: UnitState[]) =>
+      aBoard({ leader: { cardId: 'HMW_014', deployed: true, epicActionUsed: true, exhausted: false }, deck: ['GRD'], units: [unit('L', 'HMW_014', { isLeader: true }), ...units] })
+    expect(drawn(attackBase(deployed([unit('g', 'GRD')]), 'L'))).toBe(1)
+    expect(drawn(attackBase(deployed([unit('p', 'PRICEY')]), 'L'))).toBe(0)
+  })
+})
+
+describe('SEC_081 Major Partagaz', () => {
+  const buffed = (s: GameState) => (s.lastingEffects ?? []).some(e => e.targetInstanceId === 'pz' && e.power === 2 && e.hp === 2)
+  it('gets +2/+2 for this phase when another friendly Official unit attacks', () => {
+    expect(buffed(attackBase(aBoard({ units: [unit('pz', 'SEC_081'), unit('o', 'OFF')] }), 'o'))).toBe(true)
+  })
+  it('not for a non-Official, not for himself, not for an enemy Official', () => {
+    expect(buffed(attackBase(aBoard({ units: [unit('pz', 'SEC_081'), unit('g', 'GRD')] }), 'g'))).toBe(false)
+    expect(buffed(attackBase(aBoard({ units: [unit('pz', 'SEC_081')] }), 'pz'))).toBe(false)
+    expect(buffed(attackBase(aBoard({ units: [unit('pz', 'SEC_081')] }, { units: [unit('o', 'OFF')] }), 'o', 'opponent'))).toBe(false)
+  })
+})
+
+describe('LAW_112 Boonta Eve Flagbearer', () => {
+  const hurt = (units: UnitState[], theirs: UnitState[] = []) => {
+    const s = aBoard({ units }, { units: theirs })
+    return { ...s, players: { ...s.players, player: { ...s.players.player, base: { ...s.players.player.base, damage: 5 } } } }
+  }
+  it('heals 2 from your base when a friendly unit makes the first attack of the phase', () => {
+    expect(attackBase(hurt([unit('fb', 'LAW_112'), unit('g', 'GRD')]), 'g').players.player.base.damage).toBe(3)
+    expect(attackBase(hurt([unit('fb', 'LAW_112')]), 'fb').players.player.base.damage, 'including itself').toBe(3)
+  })
+  it('not when another unit, of either side, has attacked this phase, and not for an enemy attack', () => {
+    const first = attackBase(hurt([unit('fb', 'LAW_112'), unit('g', 'GRD'), unit('h', 'GRD')]), 'g')
+    expect(attackBase(first, 'h').players.player.base.damage).toBe(3)
+    const s = hurt([unit('fb', 'LAW_112'), unit('g', 'GRD')], [unit('e', 'GRD')])
+    const enemyFirst = recordUnitAttacked(s, 'e')
+    expect(attackBase(enemyFirst, 'g').players.player.base.damage).toBe(5)
+    expect(attackUnit(s, 'e', 'g', 'opponent').players.player.base.damage).toBe(5)
+  })
+})
+
+describe('TS26_78 Barriss Offee', () => {
+  it('may give an Experience token to an enemy unit that attacks', () => {
+    const swung = attackBase(aBoard({ units: [unit('b', 'TS26_78')] }, { units: [unit('e', 'GRD')] }), 'e', 'opponent')
+    const c = choice(swung)
+    expect(c).toMatchObject({ kind: 'mayGiveTokens', token: TOKEN_EXPERIENCE, controller: 'player' })
+    expect(targetsOf(c)).toEqual(['e'])
+    expect(optional(c)).toBe(true)
+    expect(U(accept(swung, { targetInstanceId: 'e' }), 'e')!.upgrades.map(u => u.cardId)).toEqual([TOKEN_EXPERIENCE])
+  })
+  it('not for a friendly attack', () => {
+    noChoice(attackBase(aBoard({ units: [unit('b', 'TS26_78'), unit('g', 'GRD')] }), 'g'))
   })
 })

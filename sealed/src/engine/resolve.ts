@@ -2604,7 +2604,14 @@ function attack(state: GameState, attackerId: string, target: AttackTarget, viaA
   // the attack with the attacker keeping control, resuming at the On Defense stage.
   const before = next
   const attackerNow = next.players[playerId].units.find(u => u.instanceId === attackerId)!
-  next = fireBatch(next, collectUnitTriggers(next, 'onAttack', attackerNow, playerId, { attackTarget: target }))
+  // "When a friendly / an enemy unit attacks" is the same event, so it joins the same batch, heard
+  // on both sides with the attacker's side first.
+  const heard = { attackTarget: target, attackerInstanceId: attackerId, attackingPlayer: playerId }
+  next = fireBatch(next, [
+    ...collectUnitTriggers(next, 'onAttack', attackerNow, playerId, { attackTarget: target }),
+    ...[playerId, opponentOf(playerId)].flatMap(p =>
+      [...collectPlayerTriggers(next, 'whenUnitAttacks', p, heard), ...collectUnitsTrigger(next, 'whenUnitAttacks', p, heard)]),
+  ])
   if (batchOutstanding(before, next)) {
     return { ...next, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'onDefense', viaAmbush } }
   }
