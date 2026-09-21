@@ -7,7 +7,7 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
+import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford } from './resources'
@@ -1562,7 +1562,10 @@ registerCard('ASH_245', { // Eye of Sion
 // ── Reactions to draws, base damage, and upgrade defeats ──────────────────────────────────
 
 registerCard('ASH_169', { // Axe Woves
-  abilities: [{ trigger: 'whenDrawCards', description: 'Give an Advantage token to this unit.', effect: (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE) }],
+  // "When YOU draw": the point fires on both players' units now that a card reads it about an
+  // opponent (Crosshair), so every listener states which side it means.
+  abilities: [{ trigger: 'whenDrawCards', description: 'Give an Advantage token to this unit.', effect: (s, ctx) =>
+    (ctx.drawingPlayer === undefined || ctx.drawingPlayer === ctx.owner ? giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE) : s) }],
 })
 
 registerCard('ASH_204', { // Blade Three
@@ -9489,3 +9492,141 @@ const searchDiscardGrant = (s: GameState, ctx: EventCtx, depth: number, test: (c
     discardIt: true, grantPlay: terms, ...(count > 1 && { remaining: count, upTo: true }),
   })
 }
+
+// ── #474: "When this unit is dealt damage and survives" ──────────────────────────────────────────
+//
+// The point is `whenFriendlyDamagedSurvives`, which fires on every unit its controller has and names
+// each survivor in `ctx.damagedSurvivors`. "THIS unit" is therefore the opposite filter to the one
+// Jabba the Hutt already applies: he drops his own instance id, these cards keep only it.
+const survivedItself = (ctx: EffectContext): boolean =>
+  (ctx.damagedSurvivors ?? []).some(d => d.instanceId === ctx.sourceInstanceId)
+
+registerCard('HMW_156', { abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'Deal 2 damage to each enemy base.', effect: (s, ctx) => // Arena Acklay
+  (survivedItself(ctx) ? dealDamageToBase(s, opponentOf(ctx.owner), 2, { cardId: ctx.cardId, controller: ctx.owner }) : s) }] })
+
+registerCard('HMW_166', { // Gungi
+  abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'You may discard a card from your hand. If you do, ready this unit.', effect: (s, ctx) =>
+    (survivedItself(ctx) && s.players[ctx.owner].hand.length > 0
+      ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1, optional: true, then: { ifYouDo: resume(ctx) } })
+      : s) }],
+  ifYouDo: (s, ctx) => readyUnit(s, ctx.sourceInstanceId!),
+})
+
+registerCard('HMW_211', { abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'You may exhaust a unit.', effect: (s, ctx) => { // Tech
+  if (!survivedItself(ctx)) return s
+  const targets = allUnits(s).filter(u => !u.exhausted).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayExhaustUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true }) : s
+} }] })
+
+registerCard('HMW_169', { abilities: [ // Crosshair
+  { trigger: 'whenFriendlyDamagedSurvives', description: 'Each player draws a card.', effect: (s, ctx) =>
+    (survivedItself(ctx) ? drawCards(drawCards(s, ctx.owner, 1), opponentOf(ctx.owner), 1) : s) },
+  // The second head is why `whenDrawCards` now fires on both sides: it reads an OPPONENT drawing,
+  // and "during the action phase" excludes the regroup draw, which is the bulk of a game's draws.
+  { trigger: 'whenDrawCards', description: 'When an opponent draws 1 or more cards during the action phase, deal 2 damage to their base.', effect: (s, ctx) =>
+    (ctx.drawingPlayer !== undefined && ctx.drawingPlayer !== ctx.owner && s.phase === 'action'
+      ? dealDamageToBase(s, ctx.drawingPlayer, 2, { cardId: ctx.cardId, controller: ctx.owner })
+      : s) },
+] })
+
+registerCard('SHD_250', { // Tarfful
+  abilities: [{
+    trigger: 'whenFriendlyDamagedSurvives',
+    description: 'When a friendly Wookiee unit is dealt combat damage and survives, it deals that much damage to an enemy ground unit.',
+    effect: (s, ctx) => {
+      // `byCombat` is the whole difference between this card and Arena Acklay above: an ability's
+      // ping damages a Wookiee and survives it, and Tarfful reads combat damage only.
+      if (!ctx.byCombat) return s
+      const hurt = (ctx.damagedSurvivors ?? []).filter(d => {
+        const found = findUnit(s, d.instanceId)
+        return found?.owner === ctx.owner && unitHasTrait(s, found.unit, 'Wookiee')
+      })
+      if (hurt.length === 0 || !pickedIds(s, ctx, pickAll(pickEnemy, pickGround)).length) return s
+      return hurt.length === 1
+        ? unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, pickGround)), `have it deal ${hurt[0].amount} damage to an enemy ground unit`, false, `deal:${hurt[0].amount}`, hurt[0].instanceId)
+        : unitThen(s, ctx, hurt.map(d => d.instanceId), 'choose the damaged Wookiee that deals the damage', false, `dealer:${JSON.stringify(hurt)}`)
+    },
+  }],
+  ifYouDo: (s, ctx) => {
+    const step = ctx.step ?? ''
+    if (step.startsWith('deal:')) return dealDamageToUnit(s, ctx.targetInstanceId!, Number(step.slice(5)))
+    if (step.startsWith('dealer:')) {
+      const hurt = JSON.parse(step.slice(7)) as { instanceId: string; amount: number }[]
+      const amount = hurt.find(h => h.instanceId === ctx.targetInstanceId)?.amount ?? 0
+      return unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, pickGround)), `have it deal ${amount} damage to an enemy ground unit`, false, `deal:${amount}`)
+    }
+    return s
+  },
+})
+
+// ── #474: "When this unit deals combat damage to a base" ─────────────────────────────────────────
+//
+// `onAttackEnd` with `ctx.combatDamageToBase`, which is already exactly this event: the attacker
+// itself (not every friendly unit, as `whenEnemyBaseDamaged` would be) and combat damage only.
+const dealtToBase = (ctx: EffectContext): boolean => (ctx.combatDamageToBase ?? 0) > 0
+
+registerCard('LOF_166', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a base, you may give an Experience token to this unit.', effect: (s, ctx) => // Blockade Runner
+  (dealtToBase(ctx) && findUnit(s, ctx.sourceInstanceId!)
+    ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_EXPERIENCE, count: 1, targets: [ctx.sourceInstanceId!], optional: true })
+    : s) }] })
+
+registerCard('SEC_147', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a base, each player discards a card from their hand.', effect: (s, ctx) => // Chopper
+  (dealtToBase(ctx)
+    ? discards(discards(s, ctx.owner, 1, `${ctx.sourceInstanceId}-mine`), opponentOf(ctx.owner), 1, `${ctx.sourceInstanceId}-theirs`)
+    : s) }] })
+
+// "You may defeat this unit. If you do, …" is a free `mayPayThen` (Poacher's Starfighter), so the
+// decline path and the ordering prompt are the ones every other optional self-defeat uses.
+registerCard('SEC_150', { // Valiant Commando
+  abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a base, you may defeat this unit to deal 3 damage to that base.', effect: (s, ctx) =>
+    (dealtToBase(ctx) && findUnit(s, ctx.sourceInstanceId!)
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'defeat this unit', then: resume(ctx) })
+      : s) }],
+  ifYouDo: (s, ctx) => dealDamageToBase(defeatUnit(s, ctx.sourceInstanceId!), opponentOf(ctx.owner), 3, { cardId: ctx.cardId, controller: ctx.owner }),
+})
+
+registerCard('SHD_147', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a base, you may defeat an upgrade that costs 2 or less.', effect: (s, ctx) => { // Ketsu Onyo
+  if (!dealtToBase(ctx)) return s
+  const candidates = upgradeCandidates(s, { maxCost: 2 })
+  return candidates.length ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true }) : s
+} }] })
+
+registerCard('SOR_133', { abilities: [{ trigger: 'onAttackEnd', description: "If this unit dealt combat damage to an opponent's base, you may deal 3 damage to a ground unit that opponent controls.", effect: (s, ctx) => { // Seventh Sister
+  if (!dealtToBase(ctx)) return s
+  const targets = pickedIds(s, ctx, pickAll(pickEnemy, pickGround))
+  return targets.length
+    ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 3, optional: true, source: { cardId: ctx.cardId, controller: ctx.owner } })
+    : s
+} }] })
+
+// The surcharge lasts the PHASE, not the attack, so it is a phase record read by the cost hook
+// rather than a lasting effect: `enemyCostDelta` is already the one place a unit reaches across the
+// table to change what the other player pays (Del Meeko).
+//
+// It carries NO ability at the trigger point, deliberately. The event is already recorded by the
+// combat step itself, so a trigger here would have nothing to do, and a no-op ability still joins
+// the pending batch and can put an empty ordering prompt in front of a player.
+registerCard('JTL_188', { // Moff Gideon
+  enemyCostDelta: (s, source, ctx) => (ctx.card.type === 'unit' && dealtBaseCombatDamageThisPhase(s, source.instanceId) ? 1 : 0),
+})
+
+// The far side of the same event: `whenOwnBaseDamaged` now says whether the damage was combat and
+// which unit dealt it, so "an ENEMY UNIT deals COMBAT damage to your base" is expressible without a
+// second dispatch point.
+registerCard('SEC_041', { abilities: [{ trigger: 'whenOwnBaseDamaged', description: 'When an enemy unit deals combat damage to your base, this unit gains Sentinel for this phase.', effect: (s, ctx) => { // Populist Advisor
+  if (!ctx.byCombat || ctx.attackerInstanceId === undefined) return s
+  const attacker = findUnit(s, ctx.attackerInstanceId)
+  return attacker && attacker.owner !== ctx.owner
+    ? addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: [{ name: 'Sentinel' }] })
+    : s
+} }] })
+
+registerCard('SEC_205', { abilities: [{ trigger: 'onAttackEnd', description: "If this unit dealt combat damage to a base, discard a card from the defending player's deck; for this phase you may play it from their discard pile, ignoring its aspect penalties.", effect: (s, ctx) => { // Obi-Wan Kenobi
+  const defender = opponentOf(ctx.owner)
+  const top = s.players[defender].deck[0]
+  if (!dealtToBase(ctx) || top === undefined) return s
+  const p = s.players[defender]
+  const milled = updatePlayer(s, defender, { deck: p.deck.slice(1), discard: [...p.discard, top] })
+  // The card stays the defending player's (CR 1.5.2): `owner` is theirs, `player` is who may play it.
+  return addDiscardPlayGrant(milled, { player: ctx.owner, owner: defender, cardId: top, waive: { all: true } })
+} }] })

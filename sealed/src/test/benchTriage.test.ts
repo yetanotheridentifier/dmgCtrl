@@ -321,8 +321,9 @@ describe('trigger heads', () => {
   })
 
   it('blocks a card on a long head the framework does not dispatch', () => {
-    // SEC_041 Populist Advisor: alone in the pool, so the head folds into the one-off bucket.
-    const r = triage([card({ FrontText: 'When an enemy unit deals combat damage to your base: This unit gains Sentinel for this phase.' })])
+    // HMW_215 L3-37: alone in the pool, so the head folds into the one-off bucket. (It used to be
+    // SEC_041 Populist Advisor, whose head the framework now dispatches.)
+    const r = triage([card({ FrontText: 'When you play an event that costs 3 or less: Draw a card.' })])
     expect(r.triaged[0].blockers).toEqual(['trigger:one-off'])
     expect(r.batches).toEqual([])
   })

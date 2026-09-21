@@ -2670,7 +2670,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     // the attack-end ctx reports what actually landed, not the raw power.
     const baseSource = { cardId: attacker.cardId, controller: playerId }
     const dealtToBase = baseDamageAfterPrevention(state, enemyId, attackerPower, baseSource)
-    let next = dealDamageToBase(state, enemyId, attackerPower, baseSource)
+    let next = dealDamageToBase(state, enemyId, attackerPower, baseSource, { attackerInstanceId: attackerId })
     next = recordBaseAttacked(next, enemyId, attackerId) // "your base was attacked this phase" (Greef Karga, Qui-Gon Jinn)
     // "When an enemy unit attacks your base" (Kachirho Militia) — the attacked player's units react.
     next = fireBatch(next, collectUnitsTrigger(next, 'whenEnemyAttacksBase', enemyId, { attackerInstanceId: attackerId }))
@@ -2769,7 +2769,9 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
 
   // Overwhelm excess also goes through base-damage prevention.
   const overwhelmDealt = overwhelmExcess > 0 ? baseDamageAfterPrevention(next, enemyId, overwhelmExcess, attackerSource) : 0
-  if (overwhelmExcess > 0) next = dealDamageToBase(next, enemyId, overwhelmExcess, attackerSource)
+  // Overwhelm excess is still the attacker's combat damage to the base, so it reads as such on both
+  // sides (Moff Gideon's surcharge, Populist Advisor's Sentinel).
+  if (overwhelmExcess > 0) next = dealDamageToBase(next, enemyId, overwhelmExcess, attackerSource, { attackerInstanceId: attackerId })
 
   // Wipe Them Out: the same excess may be aimed at another unit in the arena instead of the base.
   const spillExcess = Math.max(0, damageTo(defender.instanceId, attackerPower) - remainingHp)

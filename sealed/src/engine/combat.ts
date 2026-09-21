@@ -142,7 +142,9 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   // "The first time this unit would take damage each phase" (Umbaran Mobile Cannon) counts what was
   // stopped, which is exactly what `damagedUnits` cannot record.
   for (const id of preventedIds) result = recordDamagePrevented(result, id)
-  if (damagedSurvivors.length > 0) result = fireUnitsTrigger(result, 'whenFriendlyDamagedSurvives', owner, { damagedSurvivors })
+  // `byCombat` travels with the event: cards are printed at this point both ways ("dealt damage and
+  // survives" vs Tarfful's "dealt COMBAT damage and isn't defeated"), and only the caller knows which.
+  if (damagedSurvivors.length > 0) result = fireUnitsTrigger(result, 'whenFriendlyDamagedSurvives', owner, { damagedSurvivors, byCombat })
   // Resolve the batch here, which is where it used to resolve. `drainTriggers` stops of its own accord
   // as soon as a player has something to order, so deferral costs nothing when there is no decision:
   // the overwhelmingly common single-ability defeat behaves exactly as it did.

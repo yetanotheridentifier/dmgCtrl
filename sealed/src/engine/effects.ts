@@ -1,5 +1,5 @@
 import type { DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
-import { baseHostId, baseHostOwner, updatePlayer, pushChoice, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
+import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint } from './abilities'
@@ -230,8 +230,14 @@ export function grantNextUnit(state: GameState, owner: PlayerId, grant: NextUnit
   return updatePlayer(state, owner, { nextUnitGrants: [...(state.players[owner].nextUnitGrants ?? []), grant] })
 }
 
-/** Deal `amount` damage to a player's base. The caller runs the win check. */
-export function dealDamageToBase(state: GameState, player: PlayerId, amount: number, source?: DamageSource): GameState {
+/**
+ * Deal `amount` damage to a player's base. The caller runs the win check.
+ *
+ * `combat` names the attacking unit when this is combat damage, which is what lets the base owner's
+ * side tell an attack from an ability's ping (Populist Advisor gains Sentinel only against an enemy
+ * unit's combat damage). It is absent for every ability that damages a base.
+ */
+export function dealDamageToBase(state: GameState, player: PlayerId, amount: number, source?: DamageSource, combat?: { attackerInstanceId: string }): GameState {
   // The base's own prevention (Alliance Shield Generator), which settles the damage entirely when it acts.
   if (amount > 0 && !damageIsUnpreventable(state, source)) {
     for (const cardId of baseAbilityCardIds(state.players[player].base)) {
@@ -249,8 +255,11 @@ export function dealDamageToBase(state: GameState, player: PlayerId, amount: num
   if (dealt <= 0) return state
   let next: GameState = { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + dealt } } } }
   next = recordBaseDamaged(next, player, dealt) // "an enemy base was damaged this phase" (Baylan Skoll)
+  // Only combat damage that actually LANDED counts, which is why this sits below the prevention
+  // above rather than beside `recordBaseAttacked` at the declaration (Moff Gideon).
+  if (combat) next = recordBaseCombatDamage(next, combat.attackerInstanceId)
   // "When your base is dealt damage" (Blade Three) — the base owner's units react.
-  next = fireUnitsTrigger(next, 'whenOwnBaseDamaged', player)
+  next = fireUnitsTrigger(next, 'whenOwnBaseDamaged', player, combat ? { byCombat: true, attackerInstanceId: combat.attackerInstanceId } : {})
   // "When you deal damage to an enemy base" (Cassian Andor): the other side's units, unless the base's
   // own controller's card dealt it.
   const dealer = player === 'player' ? 'opponent' : 'player'
@@ -471,7 +480,13 @@ export function drawCards(state: GameState, owner: PlayerId, n: number): GameSta
     players: { ...state.players, [owner]: { ...p, hand: [...p.hand, ...drawn], deck: p.deck.slice(drawn.length) } },
   }, owner, drawn.length)
   // "When you draw 1 or more cards" (Axe Woves) — once per event, however many cards.
-  return fireUnitsTrigger(next, 'whenDrawCards', owner)
+  //
+  // Fired on BOTH players' units, because the point is also printed from the far side ("when an
+  // opponent draws 1 or more cards", Crosshair) and a listener that only ever saw its own
+  // controller's draws could not express that. Who drew is in `ctx.drawingPlayer`, and every
+  // registration compares it against `ctx.owner` rather than assuming one side.
+  const ctx = { drawingPlayer: owner, cardsDrawn: drawn.length }
+  return fireUnitsTrigger(fireUnitsTrigger(next, 'whenDrawCards', owner, ctx), 'whenDrawCards', opponentOf(owner), ctx)
 }
 
 /** Every ability `owner`'s units have at `point`: one event, so one batch. */

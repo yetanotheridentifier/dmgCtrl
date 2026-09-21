@@ -1711,6 +1711,23 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_122', name: 'Boga' },
   { id: 'JTL_221', name: 'Stolen AT-Hauler' },
   { id: 'SHD_115', name: 'Cobb Vanth' },
+  // "When this unit is dealt damage and survives": the existing `whenFriendlyDamagedSurvives`
+  // filtered to the registering unit. Tarfful reads combat damage only.
+  { id: 'HMW_156', name: 'Arena Acklay' },
+  { id: 'HMW_166', name: 'Gungi' },
+  { id: 'HMW_169', name: 'Crosshair' },
+  { id: 'HMW_211', name: 'Tech' },
+  { id: 'SHD_250', name: 'Tarfful' },
+  // "When this unit deals combat damage to a base": `onAttackEnd` with `combatDamageToBase`.
+  // Populist Advisor reads the same event from the base owner's side.
+  { id: 'LOF_166', name: 'Blockade Runner' },
+  { id: 'SEC_041', name: 'Populist Advisor' },
+  { id: 'SEC_147', name: 'Chopper' },
+  { id: 'SEC_150', name: 'Valiant Commando' },
+  { id: 'SEC_205', name: 'Obi-Wan Kenobi' },
+  { id: 'SHD_147', name: 'Ketsu Onyo' },
+  { id: 'SOR_133', name: 'Seventh Sister' },
+  { id: 'JTL_188', name: 'Moff Gideon' },
 ]
 
 /**

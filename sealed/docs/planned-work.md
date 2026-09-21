@@ -148,7 +148,7 @@ Two phases:
 (#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
   (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 17 not built are on the ticket of what
   blocks them, #465 pilots (7),
-  #466 capture, #467 Bounty, #470 Plot, #474 trigger points, #468 playing any card type, #602 Credit
+  #466 capture, #467 Bounty, #470 Plot, #680 trigger heads, #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #477 (defeat by an enemy card ability, and Chancellor Palpatine,
   the one leader that flips between two faces rather than deploying).
   **Bases are finished** (#460), which completes Phase 1: the engine gained base abilities (an Epic
@@ -168,8 +168,18 @@ Two phases:
   card from a discard pile" became a standing permission on the Play a Card action. 20 cards, the
   five HMW ones among them. Three cards need an "Action:" dispatched from a card sitting IN the
   discard pile, a site the engine does not have, and are on #678; L3-37 is on #477 (once each phase
-  on a triggered ability) and Obi-Wan Kenobi on #474; Second Chance, Stolen Landspeeder, Sifo-Dyas
-  and Mother Talzin are on the ticket of their own other blocker.
+  on a triggered ability) and Obi-Wan Kenobi shipped with #474; Second Chance, Stolen Landspeeder,
+  Sifo-Dyas and Mother Talzin are on the ticket of their own other blocker.
+  **The trigger-head batch is half done** (#474). The recount that opened it found the premise wrong:
+  seven of its eight heads already had a dispatch point, so the work is context on the points that
+  exist, not new points. Two groups shipped, 14 cards: "when this unit is dealt damage and survives"
+  (the four HMW cards and Tarfful) and "when this unit deals combat damage to a base" (Obi-Wan
+  Kenobi, Chopper, Valiant Commando, Blockade Runner, Ketsu Onyo, Seventh Sister, Moff Gideon, and
+  Populist Advisor from the base owner's side). **The remaining seven groups are #680**, 47 cards,
+  none of them blocked by a missing point: the largest, "when this unit completes an attack", needs
+  no engine work at all, and the only genuinely missing mechanic in the batch is "choose two, in any
+  order". Sabé is there too, held back not by her head but by needing a pick of 1 from N over
+  another player's deck, which is a new interactive choice kind.
   Darth Vader, Victor Squadron Leader waits on #465 (his
   back is a Pilot), and Queen Amidala (defeat a unit to prevent damage), Roger Roger (an upgrade's own
   When Defeated) and the flipping Chancellor Palpatine are on #477. **Weakness tokens are finished**
@@ -197,7 +207,7 @@ and Jar Jar Binks (reading who gave a token upgrade, which the phase record does
 who received one) went to #477.
 
 **70 were blocked by exactly one thing**: the 18 Fortify, 18 Weakness and 14 Beast-token cards are
-built (less one Fortify card lifted, above), and the rest are the 3 compound-head cards (built, #463), #474 a new trigger point (3),
+built (less one Fortify card lifted, above), and the rest are the 3 compound-head cards (built, #463), #680 trigger heads (3),
 #468 (1), #475 (1) and #477's one-offs (9, Boba Fett having shipped on the
 "a friendly unit enters play" point). The 2 play-from-discard cards are built (#471), which also
 closed Boga, Tireless Magnaguard and L3-37's other blockers; L3-37 itself is on #477, needing "use
