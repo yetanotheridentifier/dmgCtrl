@@ -3,7 +3,7 @@ import { resolve } from '../engine/resolve'
 import { dealDamageToUnit } from '../engine/combat'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_EXPERIENCE } from '../engine/tokenUpgrades'
-import { TOKEN_BATTLE_DROID } from '../engine/tokenUnits'
+import { TOKEN_BATTLE_DROID, TOKEN_CLONE_TROOPER } from '../engine/tokenUnits'
 import { effectiveCost } from '../engine/legalMoves'
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
 import { unitHasKeyword } from '../engine/keywords'
@@ -539,5 +539,85 @@ describe('SOR_085 Rukh', () => {
   it('not a leader unit', () => {
     const swung = attackUnit(kBoard({ units: [unit('r', 'SOR_085')] }, { units: [unit('l', 'TOUGHL', { isLeader: true })] }), 'r', 'l')
     expect(U(swung, 'l')).toBeDefined()
+  })
+})
+
+// ── "When this unit is attacked" ──────────────────────────────────────────────────────────────
+// `onDefense`, which fires on the defender before damage is dealt. The enemy attacks here, so the
+// player's unit is the defender.
+
+const V: Record<string, EngineCard> = {
+  ...K,
+  LOF_047: card({ id: 'LOF_047', name: 'T-6 Shuttle 1974', type: 'unit', arena: 'space', cost: 3, power: 3, hp: 4, traits: ['Fringe', 'Vehicle', 'Transport'] }),
+  SEC_090: card({ id: 'SEC_090', name: 'Director Krennic', type: 'unit', arena: 'ground', cost: 9, power: 8, hp: 10, traits: ['Imperial', 'Official'], keywords: [{ name: 'Sentinel' }] }),
+  SEC_187: card({ id: 'SEC_187', name: 'General Grievous', type: 'unit', arena: 'ground', cost: 2, power: 3, hp: 3, traits: ['Separatist', 'Official'], keywords: [{ name: 'Hidden' }] }),
+  SHD_035: card({ id: 'SHD_035', name: 'Clan Saxon Gauntlet', type: 'unit', arena: 'space', cost: 6, power: 4, hp: 5, traits: ['Mandalorian', 'Vehicle', 'Transport'], keywords: [{ name: 'Sentinel' }] }),
+  SOR_196: card({ id: 'SOR_196', name: 'Chewbacca', type: 'unit', arena: 'ground', cost: 5, power: 3, hp: 6, traits: ['Underworld', 'Wookiee'], keywords: [{ name: 'Sentinel' }] }),
+  TWI_049: card({ id: 'TWI_049', name: 'Knight of the Republic', type: 'unit', arena: 'ground', cost: 6, power: 4, hp: 7, traits: ['Force', 'Jedi', 'Republic'] }),
+  TWI_083: card({ id: 'TWI_083', name: "General's Guardian", type: 'unit', arena: 'ground', cost: 4, power: 4, hp: 4, traits: ['Separatist', 'Droid'] }),
+}
+const vBoard = (mine: Side = {}, theirs: Side = {}) => ({ ...board(mine, theirs), cards: V })
+/** The opponent's `attacker` attacks the player's `defender`. */
+const attacked = (s: GameState, defender: string, attacker = 'e') => attackUnit(s, attacker, defender, 'opponent')
+
+describe('LOF_047 T-6 Shuttle 1974', () => {
+  it('may give itself an Experience token before damage is dealt', () => {
+    const swung = attacked(vBoard({ units: [unit('t', 'LOF_047')] }, { units: [unit('e', 'SPC')] }), 't')
+    expect(choice(swung)).toMatchObject({ kind: 'mayGiveTokens', token: TOKEN_EXPERIENCE })
+    expect(targetsOf(choice(swung))).toEqual(['t'])
+    const done = accept(swung, { targetInstanceId: 't' })
+    expect(exp(done, 't')).toBe(1)
+    expect(U(done, 't')!.damage, 'the token is there before the damage').toBe(2)
+  })
+})
+
+describe('SEC_090 Director Krennic', () => {
+  it('discards the top card of his deck; if it is a unit, he may return it to hand', () => {
+    const swung = attacked(vBoard({ units: [unit('k', 'SEC_090')], deck: ['GRD', 'EV'] }, { units: [unit('e', 'GRD')] }), 'k')
+    expect(swung.players.player.discard).toEqual(['GRD'])
+    expect(choice(swung)).toMatchObject({ kind: 'selectFromDiscard', candidates: ['GRD'] })
+    expect(optional(choice(swung))).toBe(true)
+    expect(accept(swung, { optionIndex: 0 }).players.player.hand).toEqual(['GRD'])
+    const event = attacked(vBoard({ units: [unit('k', 'SEC_090')], deck: ['EV'] }, { units: [unit('e', 'GRD')] }), 'k')
+    expect(event.players.player.discard).toEqual(['EV'])
+    noChoice(event)
+  })
+})
+
+describe('SEC_187 General Grievous', () => {
+  it('returns to his owner\'s hand before damage is dealt, and the attack deals nothing', () => {
+    const swung = attacked(vBoard({ units: [unit('gg', 'SEC_187')] }, { units: [unit('e', 'GRD')] }), 'gg')
+    expect(U(swung, 'gg')).toBeUndefined()
+    expect(swung.players.player.hand).toEqual(['SEC_187'])
+    expect(U(swung, 'e')!.damage).toBe(0)
+  })
+})
+
+describe('SHD_035 Clan Saxon Gauntlet', () => {
+  it('may give an Experience token to a unit', () => {
+    const swung = attacked(vBoard({ units: [unit('c', 'SHD_035'), unit('g', 'GRD')] }, { units: [unit('e', 'SPC')] }), 'c')
+    expect(choice(swung)).toMatchObject({ kind: 'mayGiveTokens', token: TOKEN_EXPERIENCE })
+    expect(optional(choice(swung))).toBe(true)
+    expect(targetsOf(choice(swung))).toEqual(['c', 'e', 'g'])
+  })
+})
+
+describe('SOR_196 Chewbacca', () => {
+  it('readies when attacked', () => {
+    const swung = attacked(vBoard({ units: [unit('ch', 'SOR_196', { exhausted: true })] }, { units: [unit('e', 'GRD')] }), 'ch')
+    expect(U(swung, 'ch')!.exhausted).toBe(false)
+  })
+})
+
+describe('TWI_049 Knight of the Republic and TWI_083 General\'s Guardian', () => {
+  it('create a Clone Trooper token, or a Battle Droid token, when attacked', () => {
+    const knight = attacked(vBoard({ units: [unit('k', 'TWI_049')] }, { units: [unit('e', 'GRD')] }), 'k')
+    expect(knight.players.player.units.filter(u => u.cardId === TOKEN_CLONE_TROOPER)).toHaveLength(1)
+    const guard = attacked(vBoard({ units: [unit('k', 'TWI_083')] }, { units: [unit('e', 'GRD')] }), 'k')
+    expect(guard.players.player.units.filter(u => u.cardId === TOKEN_BATTLE_DROID)).toHaveLength(1)
+  })
+  it('not when it is the attacker', () => {
+    const swung = attackUnit(vBoard({ units: [unit('k', 'TWI_049')] }, { units: [unit('e', 'GRD')] }), 'k', 'e')
+    expect(swung.players.player.units.filter(u => u.cardId === TOKEN_CLONE_TROOPER)).toHaveLength(0)
   })
 })

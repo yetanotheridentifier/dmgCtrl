@@ -1793,6 +1793,14 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SOR_088', name: 'Blizzard Assault AT-AT' },
   { id: 'SOR_149', name: 'Mace Windu' },
   { id: 'SOR_085', name: 'Rukh' },
+  // "When this unit is attacked".
+  { id: 'LOF_047', name: 'T-6 Shuttle 1974' },
+  { id: 'SEC_090', name: 'Director Krennic' },
+  { id: 'SEC_187', name: 'General Grievous' },
+  { id: 'SHD_035', name: 'Clan Saxon Gauntlet' },
+  { id: 'SOR_196', name: 'Chewbacca' },
+  { id: 'TWI_049', name: 'Knight of the Republic' },
+  { id: 'TWI_083', name: "General's Guardian" },
 ]
 
 /**

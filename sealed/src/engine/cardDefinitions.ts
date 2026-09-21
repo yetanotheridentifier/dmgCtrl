@@ -9944,7 +9944,7 @@ registerCard('LOF_017', { // Darth Revan
   },
   abilities: [{ trigger: 'whenFriendlyAttackEnds', description: 'When a friendly unit attacks and defeats a unit: You may give an Experience token to that friendly unit.', effect: (s, ctx) => {
     const victor = friendlyVictor(s, ctx)
-    return victor ? pushChoice(s, { kind: 'mayGiveTokens', id: `${ctx.sourceInstanceId}-exp`, controller: ctx.owner, token: TOKEN_EXPERIENCE, count: 1, targets: [victor], optional: true }) : s
+    return victor ? expChoice(s, ctx, [victor], 1, true) : s
   } }],
   ifYouDo: (s, ctx) => (ctx.unitChosen ? giveToken(exhaustLeader(s, ctx.owner), ctx.unitChosen, TOKEN_EXPERIENCE) : s),
 })
@@ -9967,6 +9967,27 @@ registerCard('SOR_088', { abilities: [{ trigger: 'onAttackEnd', description: 'Wh
 
 registerCard('SOR_149', { abilities: [{ trigger: 'onAttackEnd', description: 'When this unit attacks and defeats a unit: Ready him.', effect: (s, ctx) => // Mace Windu
   (defeatedAndSurvived(s, ctx) ? readyUnit(s, ctx.sourceInstanceId!) : s) }] })
+
+// ── "When this unit is attacked" ───────────────────────────────────────────────────────────────
+// `onDefense`, on the defender before damage is dealt. A defender that leaves play here (Grievous)
+// fizzles the attack.
+registerCard('LOF_047', { abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked (before damage is dealt): You may give an Experience token to this unit.', effect: (s, ctx) => // T-6 Shuttle 1974
+  expChoice(s, ctx, [ctx.sourceInstanceId!], 1, true) }] })
+registerCard('SHD_035', { abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked: You may give an Experience token to a unit (before damage is dealt).', effect: (s, ctx) => // Clan Saxon Gauntlet
+  expChoice(s, ctx, allUnits(s).map(u => u.instanceId), 1, true) }] })
+registerCard('SEC_090', { abilities: [{ trigger: 'onDefense', description: "When this unit is attacked: Discard a card from your deck. If it's a unit, you may return it to your hand.", effect: (s, ctx) => { // Director Krennic
+  const top = s.players[ctx.owner].deck[0]
+  if (top === undefined) return s
+  const discarded = updatePlayer(s, ctx.owner, { deck: s.players[ctx.owner].deck.slice(1), discard: [...s.players[ctx.owner].discard, top] })
+  return printedUnit(s.cards[top])
+    ? pushChoice(discarded, { kind: 'selectFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: [top], optional: true })
+    : discarded
+} }] })
+registerCard('SEC_187', { abilities: [{ trigger: 'onDefense', description: "When this unit is attacked: Return him to his owner's hand (before damage is dealt).", effect: (s, ctx) => // General Grievous
+  returnUnitToHand(s, ctx.sourceInstanceId!) }] })
+registerCard('SOR_196', { abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked: Ready him.', effect: (s, ctx) => readyUnit(s, ctx.sourceInstanceId!) }] }) // Chewbacca
+registerCard('TWI_049', { abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked: Create a Clone Trooper token.', effect: (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_CLONE_TROOPER) }] }) // Knight of the Republic
+registerCard('TWI_083', { abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked: Create a Battle Droid token.', effect: (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_BATTLE_DROID) }] }) // General's Guardian
 
 // ── "When you play an event" ───────────────────────────────────────────────────────────────────
 // `whenPlayCard` covers every type on both sides, so the card states both.
@@ -10030,6 +10051,4 @@ registerCard('TWI_025', { abilities: [{ trigger: 'whenFriendlyEntersPlay', descr
   (leaderArrived(s, ctx) ? drawCards(s, ctx.owner, 1) : s) }] })
 
 registerCard('TS26_78', { abilities: [{ trigger: 'whenUnitAttacks', description: 'When an enemy unit attacks: You may give an Experience token to that unit.', effect: (s, ctx) => // Barriss Offee
-  (!friendlyAttack(ctx) && attackerOf(s, ctx)
-    ? pushChoice(s, { kind: 'mayGiveTokens', id: `${ctx.sourceInstanceId}-exp`, controller: ctx.owner, token: TOKEN_EXPERIENCE, count: 1, targets: [ctx.attackerInstanceId!], optional: true })
-    : s) }] })
+  (!friendlyAttack(ctx) && attackerOf(s, ctx) ? expChoice(s, ctx, [ctx.attackerInstanceId!], 1, true) : s) }] })
