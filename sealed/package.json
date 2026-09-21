@@ -1,55 +1,11 @@
 {
-  "name": "dmgctrl-sealed",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  // ... existing fields ...
   "scripts": {
-    "identity": "node scripts/buildIdentity.mjs",
-    "prepare": "node scripts/buildIdentity.mjs",
-    "predev": "node scripts/buildIdentity.mjs",
-    "dev": "vite",
-    "prebuild": "node scripts/buildIdentity.mjs",
-    "build": "tsc -b && vite build",
-    "lint": "eslint . --max-warnings 0",
-    "preview": "vite preview",
-    "pretest": "node scripts/buildIdentity.mjs",
-    "test": "vitest run --project sealed",
-    "test:bench": "vitest run --project sealed-bench",
-    "test:watch": "vitest",
-    "prebench": "node scripts/buildIdentity.mjs",
-    "bench": "tsx src/bench/main.ts",
-    "pretune": "node scripts/buildIdentity.mjs",
-    "tune": "tsx src/bench/tune.ts",
-    "check": "node scripts/buildIdentity.mjs && vitest run && tsc -b && eslint . --max-warnings 0"
-  },
-  "dependencies": {
-    "dexie": "^4.4.4",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    // ... existing scripts ...
+    "test": "vitest run"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@tailwindcss/vite": "^4.1.0",
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^26.1.1",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.2",
-    "eslint": "^10.4.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "fake-indexeddb": "^6.2.5",
-    "globals": "^17.6.0",
-    "jsdom": "^29.1.1",
-    "marked": "^18.0.5",
-    "tailwindcss": "^4.1.0",
-    "tsx": "^4.23.1",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.3",
-    "vite": "^8.0.13",
-    "vitest": "^4.1.6"
+    // ... existing dev deps ...
+    "vitest": "^1.0.0"
   }
 }
