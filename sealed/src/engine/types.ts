@@ -703,6 +703,12 @@ export interface PhaseEvents {
   /** How much damage each player's base has been dealt this phase (Cassian Andor). */
   baseDamageTaken?: Partial<Record<PlayerId, number>>
   /**
+   * Instance ids of units that have dealt COMBAT damage to a base this phase (Moff Gideon, whose
+   * surcharge lasts the phase rather than the attack). Distinct from `baseAttackers`, which records
+   * the declaration: an attack a prevention soaked entirely attacked the base but dealt it nothing.
+   */
+  baseCombatDamagers?: string[]
+  /**
    * Players who created a token this phase (The Client). A token upgrade is credited to the controller of
    * the unit it lands on, which is who created it for every card that gives one to its own side.
    */
@@ -754,6 +760,24 @@ export interface TriggerContext {
   playedCardId?: string
   /** `whenFriendlyDamagedSurvives`: each unit that was dealt damage and survived, with how much (Jabba the Hutt). */
   damagedSurvivors?: { instanceId: string; amount: number }[]
+  /**
+   * `whenFriendlyDamagedSurvives` / `whenOwnBaseDamaged`: the damage was **combat** damage.
+   *
+   * Cards are printed both ways at both points and the two readings are not interchangeable:
+   * "dealt damage and survives" (Arena Acklay) fires on an ability's ping, "dealt combat damage and
+   * isn't defeated" (Tarfful) does not. The flag is the one already threaded through
+   * `applyUnitDamage`, surfaced rather than recomputed.
+   */
+  byCombat?: boolean
+  /**
+   * `whenDrawCards`: who drew. The point fires on **both** players' units, because a card reads it
+   * either about itself ("when you draw", Axe Woves) or about the other side ("when an opponent
+   * draws", Crosshair), and a listener that only ever saw its own controller could not express the
+   * second. Every registration therefore compares this against `ctx.owner`.
+   */
+  drawingPlayer?: PlayerId
+  /** `whenDrawCards`: how many cards that one draw event drew. Fires once per event, not per card. */
+  cardsDrawn?: number
 }
 
 export interface PendingTrigger {
@@ -1369,6 +1393,18 @@ export function recordBaseAttacked(state: GameState, owner: PlayerId, attackerId
 /** Instance ids of the units that attacked `owner`'s base this phase. */
 export function baseAttackersThisPhase(state: GameState, owner: PlayerId): string[] {
   return state.phaseEvents?.baseAttackers?.[owner] ?? []
+}
+
+/** Record that `attackerId` dealt combat damage to a base this phase (Moff Gideon). */
+export function recordBaseCombatDamage(state: GameState, attackerId: string): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  const dealers = events.baseCombatDamagers ?? []
+  return dealers.includes(attackerId) ? state : { ...state, phaseEvents: { ...events, baseCombatDamagers: [...dealers, attackerId] } }
+}
+
+/** Whether `instanceId` has dealt combat damage to a base this phase. */
+export function dealtBaseCombatDamageThisPhase(state: GameState, instanceId: string): boolean {
+  return state.phaseEvents?.baseCombatDamagers?.includes(instanceId) ?? false
 }
 
 /** Record that `owner`'s base took `amount` damage this phase. */

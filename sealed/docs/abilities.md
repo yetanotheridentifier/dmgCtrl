@@ -154,9 +154,35 @@ The arriving unit is left out of its own arrival, so a card that also reads "inc
 gets the printed behaviour for free. Taking control of a unit raises nothing: it is already in play.
 
 `whenFriendlyDamagedSurvives` fires once per damage event and names each unit that survived it, with
-how much it was dealt, in `ctx.damagedSurvivors`. `whenEnemyBaseDamaged` ("when you deal damage to an
-enemy base") fires on the units of the base owner's opponent, unless the damage came from a card the
-base's own controller controls. `whenDeployed` fires on a leader unit as it deploys, after its entry
+how much it was dealt, in `ctx.damagedSurvivors`. A card printed "when **this** unit is dealt damage
+and survives" (Arena Acklay, Gungi, Tech, Crosshair) is that list filtered to `ctx.sourceInstanceId`,
+and one printed "a friendly unit" (Jabba the Hutt) is the same list with the source dropped: there is
+no second point for the singular reading. `ctx.byCombat` says whether the damage was combat damage,
+which is the only difference between Arena Acklay, who fires on an ability's ping, and Tarfful, whose
+head reads "dealt **combat** damage and isn't defeated".
+
+`whenEnemyBaseDamaged` ("when you deal damage to an enemy base") fires on the units of the base
+owner's opponent, unless the damage came from a card the base's own controller controls. It is
+**not** the point for "when this unit deals combat damage to a base" (Obi-Wan Kenobi, Chopper,
+Seventh Sister), which is `onAttackEnd` with `ctx.combatDamageToBase`: that is the attacking unit
+itself rather than every unit its controller has, and combat damage rather than any damage.
+
+`whenOwnBaseDamaged` ("when your base is dealt damage") carries `ctx.byCombat` and, when it was
+combat, `ctx.attackerInstanceId`, so the base owner's side can read the same attack the attacker's
+own `onAttackEnd` reads (Populist Advisor: "when an **enemy unit** deals **combat** damage to your
+base"). Both are absent for every ability that pings a base.
+
+`whenDrawCards` fires on **both** players' units, with who drew in `ctx.drawingPlayer` and the size
+of the draw in `ctx.cardsDrawn`. A card reads it either about itself ("when you draw", Axe Woves) or
+about the other side ("when an opponent draws 1 or more cards during the action phase", Crosshair),
+so **every registration at this point compares `ctx.drawingPlayer` against `ctx.owner`**; one that
+does not will fire on both sides' draws.
+
+A unit that dealt combat damage to a base is also recorded for the phase
+(`dealtBaseCombatDamageThisPhase`), for the cards whose consequence outlives the attack (Moff
+Gideon's surcharge on the units that opponent plays this phase). That record sits below base-damage
+prevention, so an attack a prevention soaked entirely does not count, which is the distinction from
+`baseAttackersThisPhase`: that one is written when the attack is declared. `whenDeployed` fires on a leader unit as it deploys, after its entry
 keywords, in the same batch as that leader's arrival triggers.
 
 Two attack-end points read the same on cards but mean different things, and conflating them makes a
