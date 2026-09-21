@@ -3,6 +3,8 @@ import { resolve } from '../engine/resolve'
 import { dealDamageToUnit } from '../engine/combat'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_EXPERIENCE } from '../engine/tokenUpgrades'
+import { TOKEN_BATTLE_DROID } from '../engine/tokenUnits'
+import { effectiveCost } from '../engine/legalMoves'
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
 import { unitHasKeyword } from '../engine/keywords'
 import { getCardDefinition } from '../engine/abilities'
@@ -338,5 +340,117 @@ describe('TS26_78 Barriss Offee', () => {
   })
   it('not for a friendly attack', () => {
     noChoice(attackBase(aBoard({ units: [unit('b', 'TS26_78'), unit('g', 'GRD')] }), 'g'))
+  })
+})
+
+// ── "When you play an event" ──────────────────────────────────────────────────────────────────
+// `whenPlayCard`, which covers a card of any type and fires on both players: each card states the
+// type and the side.
+
+const E: Record<string, EngineCard> = {
+  ...A,
+  SOR_182: card({ id: 'SOR_182', name: 'Bossk', type: 'unit', arena: 'ground', cost: 5, power: 4, hp: 5, traits: ['Underworld', 'Bounty Hunter'], keywords: [{ name: 'Ambush' }] }),
+  TWI_216: card({ id: 'TWI_216', name: 'Fives', type: 'unit', arena: 'ground', cost: 5, power: 5, hp: 5, traits: ['Republic', 'Clone', 'Trooper'], keywords: [{ name: 'Saboteur' }] }),
+  TS26_8: card({ id: 'TS26_8', name: 'Ahsoka Tano', type: 'leader', arena: 'ground', cost: 5, power: 3, hp: 6, traits: ['Force'], keywords: [{ name: 'Raid', value: 1 }] }),
+  CLONE: card({ id: 'CLONE', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2, traits: ['Clone'] }),
+  CLONEEV: card({ id: 'CLONEEV', type: 'event', cost: 1, traits: ['Clone'] }),
+  EV: card({ id: 'EV', type: 'event', cost: 1 }),
+}
+const eBoard = (mine: Side = {}, theirs: Side = {}) => ({ ...board(mine, theirs), cards: E })
+const playEvent = (s: GameState, who: PlayerId = 'player') => resolve({ ...s, activePlayer: who }, { type: 'playEvent', handIndex: 0 })
+
+describe('SOR_182 Bossk', () => {
+  it('may deal 2 damage to a unit when you play an event', () => {
+    const played = playEvent(eBoard({ hand: ['EV'], units: [unit('bk', 'SOR_182')] }, { units: [unit('e', 'GRD')] }))
+    const c = choice(played)
+    expect(c).toMatchObject({ kind: 'selectDamageTarget', amount: 2 })
+    expect(optional(c)).toBe(true)
+    expect(targetsOf(c)).toEqual(['bk', 'e'])
+  })
+  it('not for an opponent\'s event, and not for a unit', () => {
+    noChoice(playEvent(eBoard({ units: [unit('bk', 'SOR_182')] }, { hand: ['EV'] }), 'opponent'))
+    noChoice(resolve(eBoard({ hand: ['GRD'], units: [unit('bk', 'SOR_182')] }), { type: 'playUnit', handIndex: 0 }))
+  })
+})
+
+describe('TWI_216 Fives', () => {
+  it('may put a Clone unit from your discard pile on the bottom of your deck, and if you do, draw a card', () => {
+    const played = playEvent(eBoard({ hand: ['EV'], discard: ['CLONEEV', 'CLONE', 'GRD'], deck: ['GRD'], units: [unit('f', 'TWI_216')] }))
+    const c = choice(played)
+    expect(c.kind === 'selectCardThen' ? c.candidates : [], 'Clone units only').toEqual(['CLONE'])
+    expect(optional(c)).toBe(true)
+    const done = accept(played, { optionIndex: 0 })
+    expect(done.players.player.deck).toEqual(['CLONE'])
+    expect(done.players.player.hand).toEqual(['GRD'])
+    expect(done.players.player.discard).not.toContain('CLONE')
+    const declined = skip(played)
+    expect(declined.players.player.hand, 'no draw on a decline').toEqual([])
+  })
+})
+
+describe('TS26_8 Ahsoka Tano', () => {
+  it('front: when you play an event, may exhaust herself to look at the top card, then play, discard or leave it', () => {
+    const s = eBoard({ leader: { cardId: 'TS26_8', deployed: false, epicActionUsed: false, exhausted: false }, hand: ['EV'], deck: ['GRD', 'SMALL'] })
+    const played = playEvent(s)
+    expect(choice(played)).toMatchObject({ kind: 'mayPayThen', cost: 0 })
+    const paid = accept(played)
+    expect(paid.players.player.leader.exhausted).toBe(true)
+    expect(choice(paid)).toMatchObject({ kind: 'playCardFrom', zone: 'deckTop', optional: true })
+    expect((choice(paid) as { costDelta?: number }).costDelta, 'paying its cost').toBeUndefined()
+    noChoice(resolve(eBoard({ leader: { cardId: 'TS26_8', deployed: false, epicActionUsed: false, exhausted: false }, hand: ['GRD'], deck: ['GRD'] }), { type: 'playUnit', handIndex: 0 }))
+  })
+  it('back: when her attack ends, the same look, and a play costs 1 less', () => {
+    const s = eBoard({ leader: { cardId: 'TS26_8', deployed: true, epicActionUsed: true, exhausted: false }, deck: ['GRD'], units: [unit('L', 'TS26_8', { isLeader: true })] })
+    expect(choice(attackBase(s, 'L'))).toMatchObject({ kind: 'playCardFrom', zone: 'deckTop', optional: true, costDelta: -1 })
+  })
+})
+
+// ── "When you deploy a leader" ────────────────────────────────────────────────────────────────
+// A deploy raises `whenFriendlyEntersPlay`, which reaches the controller's base and other units, so
+// each card is that point with a guard that the unit arriving is a leader.
+
+const D: Record<string, EngineCard> = {
+  ...E,
+  JTL_191: card({ id: 'JTL_191', name: 'Invincible', type: 'unit', arena: 'space', cost: 6, power: 6, hp: 6, traits: ['Separatist', 'Vehicle', 'Capital Ship'] }),
+  TWI_022: card({ id: 'TWI_022', name: 'Droid Manufactory', type: 'base', hp: 24 }),
+  TWI_025: card({ id: 'TWI_025', name: 'Shadow Collective Camp', type: 'base', hp: 25 }),
+  SEPU: card({ id: 'SEPU', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2, traits: ['Separatist'], unique: true }),
+  SEP: card({ id: 'SEP', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2, traits: ['Separatist'] }),
+  SEPL: card({ id: 'SEPL', type: 'leader', cost: 5, power: 4, hp: 7, traits: ['Separatist'], unique: true }),
+}
+const dBoard = (mine: Side = {}, theirs: Side = {}) => ({ ...board(mine, theirs), cards: D })
+const deploy = (s: GameState) => resolve(s, { type: 'deployLeader' })
+
+describe('JTL_191 Invincible', () => {
+  it('may return a non-leader unit that costs 3 or less when you deploy a leader', () => {
+    const deployed = deploy(dBoard({ units: [unit('inv', 'JTL_191'), unit('g', 'GRD')] }, { units: [unit('e', 'SMALL'), unit('p', 'BIG')] }))
+    const c = choice(deployed)
+    expect(c.kind).toBe('selectUnitToReturn')
+    expect(optional(c)).toBe(true)
+    expect(targetsOf(c), 'not the leader, not the 4-cost').toEqual(['e', 'g'])
+  })
+  it('not when a unit that is not a leader enters play', () => {
+    noChoice(resolve(dBoard({ hand: ['GRD'], units: [unit('inv', 'JTL_191'), unit('g', 'GRD')] }), { type: 'playUnit', handIndex: 0 }))
+  })
+  it('costs 1 less while you control a unique Separatist card', () => {
+    expect(effectiveCost(dBoard(), 'player', D.JTL_191)).toBe(6)
+    expect(effectiveCost(dBoard({ units: [unit('s', 'SEP')] }), 'player', D.JTL_191), 'unique only').toBe(6)
+    expect(effectiveCost(dBoard({ units: [unit('s', 'SEPU')] }), 'player', D.JTL_191)).toBe(5)
+    expect(effectiveCost(dBoard({ leader: { cardId: 'SEPL', deployed: false, epicActionUsed: false, exhausted: false } }), 'player', D.JTL_191), 'a leader is a card').toBe(5)
+  })
+})
+
+describe('TWI_022 Droid Manufactory and TWI_025 Shadow Collective Camp', () => {
+  it('create 2 Battle Droid tokens, or draw a card, when you deploy a leader', () => {
+    const droids = deploy(dBoard({ base: { cardId: 'TWI_022', damage: 0 } }))
+    expect(droids.players.player.units.filter(u => u.cardId === TOKEN_BATTLE_DROID)).toHaveLength(2)
+    const drew = deploy(dBoard({ base: { cardId: 'TWI_025', damage: 0 }, deck: ['GRD'] }))
+    expect(drew.players.player.hand).toEqual(['GRD'])
+  })
+  it('not for an opponent\'s deploy, and not for a unit played', () => {
+    const theirs = resolve({ ...dBoard({ base: { cardId: 'TWI_022', damage: 0 } }), activePlayer: 'opponent' }, { type: 'deployLeader' })
+    expect(theirs.players.player.units).toHaveLength(0)
+    const played = resolve(dBoard({ base: { cardId: 'TWI_025', damage: 0 }, hand: ['GRD'], deck: ['SMALL'] }), { type: 'playUnit', handIndex: 0 })
+    expect(played.players.player.hand).toEqual([])
   })
 })

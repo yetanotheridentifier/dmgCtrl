@@ -9919,6 +9919,67 @@ registerCard('LAW_112', { abilities: [{ trigger: 'whenUnitAttacks', description:
   // The attack is recorded as it is declared, before this fires, so the attacker leaves itself out.
   (friendlyAttack(ctx) && attackedThisPhase(s).every(id => id === ctx.attackerInstanceId) ? healBase(s, ctx.owner, 2) : s) }] })
 
+// ── "When you play an event" ───────────────────────────────────────────────────────────────────
+// `whenPlayCard` covers every type on both sides, so the card states both.
+const playedOwnEvent = (s: GameState, ctx: EffectContext): boolean =>
+  ctx.playingPlayer === ctx.owner && s.cards[ctx.playedCardId ?? '']?.type === 'event'
+
+registerCard('SOR_182', { abilities: [{ trigger: 'whenPlayCard', description: 'When you play an event: You may deal 2 damage to a unit.', effect: (s, ctx) => // Bossk
+  (playedOwnEvent(s, ctx) ? damageChoice(s, ctx, 2, allUnits(s), [], true) : s) }] })
+
+registerCard('TWI_216', { // Fives
+  abilities: [{ trigger: 'whenPlayCard', description: 'When you play an event: You may put a Clone unit from your discard pile on the bottom of your deck. If you do, draw a card.', effect: (s, ctx) => {
+    const candidates = s.players[ctx.owner].discard.filter(id => printedUnit(s.cards[id]) && printedTrait(s.cards[id], 'Clone'))
+    return playedOwnEvent(s, ctx) && candidates.length
+      ? cardThen(s, ctx, candidates, 'put a Clone unit from your discard pile on the bottom of your deck', true, 'bottom')
+      : s
+  } }],
+  ifYouDo: (s, ctx) => (ctx.cardChosen ? drawCards(discardToDeckBottom(s, ctx.owner, [ctx.cardChosen]), ctx.owner, 1) : s),
+})
+
+/** "Look at the top card of your deck. You may play it, discard it, or leave it on top of your deck." */
+const lookAtTopThenPlay = (s: GameState, ctx: EffectContext, costDelta = 0): GameState =>
+  (s.players[ctx.owner].deck.length
+    ? playFromZoneChoice(s, ctx, { zone: 'deckTop', optional: true, always: true, ...(costDelta ? { costDelta } : {}), then: { elseMayDiscardTop: true } })
+    : s)
+registerCard('TS26_8', { // Ahsoka Tano
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenPlayCard',
+      description: 'When you play an event: You may exhaust this leader. If you do, look at the top card of your deck. You may play it (paying its cost), discard it, or leave it on top of your deck.',
+      effect: (s, ctx) => (playedOwnEvent(s, ctx) && leaderCanExhaust(s, ctx.owner) && s.players[ctx.owner].deck.length
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Ahsoka Tano (leader) to look at the top card of your deck', then: resume(ctx) })
+        : s),
+    }],
+  },
+  abilities: [{ trigger: 'onAttackEnd', description: 'Look at the top card of your deck. You may play it, discard it, or leave it on top of your deck. If you play it, it costs 1 less.', effect: (s, ctx) =>
+    lookAtTopThenPlay(s, ctx, -1) }],
+  ifYouDo: (s, ctx) => lookAtTopThenPlay(exhaustLeader(s, ctx.owner), ctx),
+})
+
+// ── "When you deploy a leader" ─────────────────────────────────────────────────────────────────
+// A deploy raises `whenFriendlyEntersPlay` on the controller's base and other units; a leader arriving
+// any other way is not entering play (taking control is not), so the guard is only that it is a leader.
+const leaderArrived = (s: GameState, ctx: EffectContext): boolean => {
+  const arrived = findUnit(s, ctx.targetInstanceId ?? '')?.unit
+  return arrived !== undefined && isLeaderUnit(s, arrived)
+}
+/** "A unique <trait> card" you control: a unit in play, or the leader, which is a card wherever it is. */
+const controlsUniqueTraitCard = (s: GameState, owner: PlayerId, trait: string): boolean => {
+  const leader = s.cards[s.players[owner].leader.cardId]
+  return s.players[owner].units.some(u => s.cards[u.cardId]?.unique === true && unitHasTrait(s, u, trait))
+    || (!s.players[owner].leader.deployed && printedTrait(leader, trait))
+}
+registerCard('JTL_191', { // Invincible
+  costModifier: (s, playerId) => (controlsUniqueTraitCard(s, playerId, 'Separatist') ? -1 : 0),
+  abilities: [{ trigger: 'whenFriendlyEntersPlay', description: "When you deploy a leader: You may return a non-leader unit that costs 3 or less to its owner's hand.", effect: (s, ctx) =>
+    (leaderArrived(s, ctx) ? targetChoice(s, ctx, 'selectUnitToReturn', allUnits(s).filter(u => nonLeader(s, u) && printedCost(s, u) <= 3).map(u => u.instanceId), true) : s) }],
+})
+registerCard('TWI_022', { abilities: [{ trigger: 'whenFriendlyEntersPlay', description: 'When you deploy a leader: Create 2 Battle Droid tokens.', effect: (s, ctx) => // Droid Manufactory
+  (leaderArrived(s, ctx) ? createTokenUnits(s, ctx.owner, TOKEN_BATTLE_DROID, 2) : s) }] })
+registerCard('TWI_025', { abilities: [{ trigger: 'whenFriendlyEntersPlay', description: 'When you deploy a leader: Draw a card.', effect: (s, ctx) => // Shadow Collective Camp
+  (leaderArrived(s, ctx) ? drawCards(s, ctx.owner, 1) : s) }] })
+
 registerCard('TS26_78', { abilities: [{ trigger: 'whenUnitAttacks', description: 'When an enemy unit attacks: You may give an Experience token to that unit.', effect: (s, ctx) => // Barriss Offee
   (!friendlyAttack(ctx) && attackerOf(s, ctx)
     ? pushChoice(s, { kind: 'mayGiveTokens', id: `${ctx.sourceInstanceId}-exp`, controller: ctx.owner, token: TOKEN_EXPERIENCE, count: 1, targets: [ctx.attackerInstanceId!], optional: true })

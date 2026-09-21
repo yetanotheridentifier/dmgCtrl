@@ -278,6 +278,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SEC_006', name: 'Colonel Yularen', front: true, back: true },
   // "When a friendly unit attacks".
   { id: 'HMW_014', name: 'Wicket', front: true, back: true },
+  // "When you play an event".
+  { id: 'TS26_8', name: 'Ahsoka Tano', front: true, back: true },
 ]
 
 /**
@@ -309,6 +311,9 @@ export const IMPLEMENTED_BASES: UpgradeStatus[] = [
   { id: 'LAW_027', name: 'Stygeon Spire' },
   { id: 'LAW_028', name: 'Canto Bight' },
   { id: 'LAW_030', name: 'Partisan Hideout' },
+  // "When you deploy a leader".
+  { id: 'TWI_022', name: 'Droid Manufactory' },
+  { id: 'TWI_025', name: 'Shadow Collective Camp' },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
@@ -1775,6 +1780,11 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SEC_081', name: 'Major Partagaz' },
   { id: 'LAW_112', name: 'Boonta Eve Flagbearer' },
   { id: 'TS26_78', name: 'Barriss Offee' },
+  // "When you play an event".
+  { id: 'SOR_182', name: 'Bossk' },
+  { id: 'TWI_216', name: 'Fives' },
+  // "When you deploy a leader".
+  { id: 'JTL_191', name: 'Invincible' },
 ]
 
 /**
