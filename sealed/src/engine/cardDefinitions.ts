@@ -10033,6 +10033,21 @@ registerCard('SHD_018', { // The Mandalorian
   ifYouDo: (s, ctx) => mandoExhaust(exhaustLeader(s, ctx.owner), { owner: ctx.owner, sourceInstanceId: `${ctx.cardId}-front` }, 4, false),
 })
 
+// ── "When an enemy leader deploys" ─────────────────────────────────────────────────────────────
+// `whenUnitEntersPlay` reaches the far side's units; a leader unit arriving is a deploy.
+registerCard('HMW_214', { // Phee Genoa
+  abilities: [{ trigger: 'whenUnitEntersPlay', description: "When an enemy leader deploys: Its controller may pay 2. If they don't, exhaust that leader.", effect: (s, ctx) => {
+    const enemy = opponentOf(ctx.owner)
+    const leader = s.players[enemy].units.find(u => u.instanceId === ctx.targetInstanceId && isLeaderUnit(s, u))
+    if (!leader) return s
+    // The pay-or-not is theirs; one who cannot pay simply has the leader exhausted.
+    return canAfford(s.players[enemy], 2)
+      ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-deploy`, controller: enemy, cost: 2, text: 'pay 2 (otherwise your leader is exhausted)', then: resume(ctx, 'paid', leader.instanceId), declineStep: 'exhaust' })
+      : exhaustUnit(s, leader.instanceId)
+  } }],
+  ifYouDo: (s, ctx) => (ctx.step === 'exhaust' && ctx.unitChosen ? exhaustUnit(s, ctx.unitChosen) : s),
+})
+
 // ── "When you play an event" ───────────────────────────────────────────────────────────────────
 // `whenPlayCard` covers every type on both sides, so the card states both.
 const playedOwnEvent = (s: GameState, ctx: EffectContext): boolean =>

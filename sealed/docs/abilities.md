@@ -137,7 +137,8 @@ players' leaders, bases and units, the playing player's first, with who played i
 `ctx.playingPlayer`, because the point is also printed from the far side ("when an opponent plays an
 event", Saw Gerrera). As with `whenDrawCards`, every registration at this point compares
 `ctx.playingPlayer` against `ctx.owner`. `whenUnitEntersPlay`
-is collected from both players' bases only, for any unit either player brings into play (Trap Field).
+is collected from both players' bases and from every unit in play but the one arriving, for any unit
+either player brings into play (Trap Field, and Phee Genoa hearing an enemy leader deploy).
 
 `whenActionPhaseStarts` ("when the action phase starts", Beast Lair) fires for every unit in play and
 each player's leader and base as the next round's action phase begins, on the same boundary as an
@@ -149,7 +150,9 @@ phase to be in play to read the next one.
 every route in goes through it: a play, a token being created, a leader deploying and a captured card
 released back into play. All four fire `whenFriendlyEntersPlay` ("when a friendly unit enters play",
 Outcast) on the controller's undeployed leader, base and **other** units, and `whenUnitEntersPlay` (Trap
-Field) on both players' bases, with the arriving unit in `ctx.targetInstanceId`.
+Field) on both players' bases and other units, with the arriving unit in `ctx.targetInstanceId`. "When
+you deploy a leader" is `whenFriendlyEntersPlay` with a guard that the arriving unit is a leader, and
+"when an enemy leader deploys" is `whenUnitEntersPlay` with the same guard on the far side.
 
 The route matters only where a card reads it. `whenPlayUnit` ("when you play a unit", Maz Kanata, Poggle
 the Lesser) fires for a play alone, and `whenCreateUnit` for a token being created, so a card that reads

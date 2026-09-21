@@ -801,7 +801,12 @@ export function collectArrivalTriggers(
   return [
     ...(route ? friendly(route) : []),
     ...friendly('whenFriendlyEntersPlay'),
-    ...(['player', 'opponent'] as PlayerId[]).flatMap(p => collectBaseTriggers(state, 'whenUnitEntersPlay', p, ctx)),
+    // "When a unit enters play", from either side: both bases (Trap Field) and every unit but the one
+    // arriving (Phee Genoa hears an enemy leader deploy).
+    ...(['player', 'opponent'] as PlayerId[]).flatMap(p => [
+      ...collectBaseTriggers(state, 'whenUnitEntersPlay', p, ctx),
+      ...state.players[p].units.flatMap(u => (u.instanceId === arrivedId ? [] : collectUnitTriggers(state, 'whenUnitEntersPlay', u, p, ctx))),
+    ]),
   ]
 }
 

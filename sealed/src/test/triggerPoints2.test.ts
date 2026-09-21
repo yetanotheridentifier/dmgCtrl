@@ -697,3 +697,47 @@ describe('SHD_018 The Mandalorian', () => {
     expect(optional(choice(played))).toBe(true)
   })
 })
+
+// ── "When an enemy leader deploys" ────────────────────────────────────────────────────────────
+// `whenUnitEntersPlay`, which every arrival raises on both players' bases and on every unit but the
+// one arriving, so the far side hears a deploy.
+
+describe('HMW_214 Phee Genoa', () => {
+  const G: Record<string, EngineCard> = {
+    ...P,
+    HMW_214: card({ id: 'HMW_214', name: 'Phee Genoa', type: 'unit', arena: 'ground', cost: 4, power: 5, hp: 4, traits: ['Underworld'], keywords: [{ name: 'Hidden' }] }),
+  }
+  // A deploy needs as many resources as the leader costs but exhausts none of them.
+  const gBoard = (readyCount = 10, spent = 0) => {
+    const s = { ...board({ units: [unit('ph', 'HMW_214')] }), cards: G }
+    const resources = [...ready(readyCount), ...ready(spent).map(r => ({ ...r, exhausted: true }))]
+    return { ...s, activePlayer: 'opponent' as PlayerId, players: { ...s.players, opponent: { ...s.players.opponent, resources } } }
+  }
+  const leaderUnit = (s: GameState) => s.players.opponent.units.find(u => u.isLeader)!
+  const readyLeft = (s: GameState) => s.players.opponent.resources.filter(r => !r.exhausted).length
+
+  it("offers the deploying leader's controller a payment of 2, and exhausts the leader if they don't", () => {
+    const deployed = deploy(gBoard())
+    const c = choice(deployed)
+    expect(c).toMatchObject({ kind: 'mayPayThen', cost: 2, controller: 'opponent' })
+    const paid = accept(deployed)
+    expect(readyLeft(paid)).toBe(8)
+    expect(leaderUnit(paid).exhausted).toBe(false)
+    const declined = skip(deployed)
+    expect(readyLeft(declined)).toBe(10)
+    expect(leaderUnit(declined).exhausted).toBe(true)
+  })
+
+  it('exhausts the leader outright when its controller cannot pay', () => {
+    const deployed = deploy(gBoard(1, 5))
+    noChoice(deployed)
+    expect(leaderUnit(deployed).exhausted).toBe(true)
+  })
+
+  it('not for a friendly deploy', () => {
+    const s = { ...board({ units: [unit('ph', 'HMW_214')] }), cards: G }
+    noChoice(deploy(s))
+    expect(s.players.player.units.find(u => u.isLeader)).toBeUndefined()
+    expect(deploy(s).players.player.units.find(u => u.isLeader)!.exhausted).toBe(false)
+  })
+})

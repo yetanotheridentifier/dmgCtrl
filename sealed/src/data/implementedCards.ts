@@ -1807,6 +1807,8 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'JTL_202', name: 'Black Squadron Scout Wing' },
   { id: 'SHD_067', name: 'Fenn Rau' },
   { id: 'SHD_133', name: 'Dengar' },
+  // "When an enemy leader deploys".
+  { id: 'HMW_214', name: 'Phee Genoa' },
 ]
 
 /**
