@@ -255,7 +255,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return [`deal another damage to your own base for a bigger discount (${choice.dealt} of ${choice.max} so far), or stop`]
     /** The #422 prompt: the generic fallback read as "pick something to hit", the opposite of this. */
     case 'mayPreventDamage':
-      return [`defeat a Shield to prevent ${choice.amount} damage to this unit`]
+      return [`${choice.costText ?? 'defeat a Shield'} to prevent ${choice.amount} damage to this unit`]
+    case 'mayDefeatInstead':
+      return [`defeat this unit instead of ${cardName(state, choice.upgradeCardId)} on your base`]
 
     // ── Picking a card, rather than a target on the board ─────────────────────────────────────
     case 'mayPlayTopFree':

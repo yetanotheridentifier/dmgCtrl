@@ -5,14 +5,14 @@ import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPe
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
-import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, type TriggerPoint } from './abilities'
-import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed } from './combat'
+import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, whileResolving, type TriggerPoint } from './abilities'
+import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
 import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
-import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage } from './keywords'
+import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, hasToken } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 
@@ -57,6 +57,16 @@ function settleChoiceControl(state: GameState): GameState {
   const controller = state.pendingChoices![0].controller
   if (controller === actor) return state
   return { ...state, activePlayer: controller, pendingResumeActive: state.pendingResumeActive ?? actor }
+}
+
+/**
+ * Answer a choice as the card that raised it: damage the answer deals without naming a source is that
+ * card's, exactly as it would be had the ability dealt it without asking. A choice a card raises from a
+ * combat (the defender's prevention offer) names the damage's own source, and combat damage names its
+ * dealer explicitly, so the attack the answer resumes reads the same either way.
+ */
+function answeredAs(state: GameState, choice: PendingChoice | undefined, answer: (s: GameState) => GameState): GameState {
+  return choice?.source && choice.kind !== 'mayPreventDamage' ? whileResolving(state, choice.source, answer) : answer(state)
 }
 
 function resolveAction(state: GameState, action: Action): GameState {
@@ -181,11 +191,11 @@ function resolveAction(state: GameState, action: Action): GameState {
     // choice's source, which carries the original card down an arbitrarily long chain (#374).
     case 'skipTrigger': {
       const parent = action.choiceId ? findChoice(state, action.choiceId) : activeChoice(state)
-      return promoteNested(state, inheritSource(state, resolveSkip(state, action.choiceId), parent))
+      return promoteNested(state, inheritSource(state, answeredAs(state, parent, s => resolveSkip(s, action.choiceId)), parent))
     }
     case 'acceptChoice': {
       const parent = findChoice(state, action.choiceId)
-      const next = resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName)
+      const next = answeredAs(state, parent, s => resolveAccept(s, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName))
       return promoteNested(state, inheritSource(state, next, parent))
     }
     case 'resourceCard':
@@ -1052,6 +1062,8 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   if (choice.kind === 'distributeTokens') {
     next = finishDistribution(next, choice, choice.total - choice.remaining)
   }
+  // Vice Admiral Rampart declined: the upgrade is defeated after all, with no second offer.
+  if (choice.kind === 'mayDefeatInstead') next = defeatBaseUpgrade(next, choice.baseOwner, choice.upgradeCardId, false)
   // The Mandalorian: declining to prevent lets the damage through. Combat damage is applied
   // by the resumed attack; ability damage was deferred into this choice, so it lands here — along
   // with the "if you do …" tail of whatever was dealing it.
@@ -1222,11 +1234,15 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     }
     case 'mayPreventDamage': {
       // The Mandalorian: pay the preventer's own cost (defeat a Shield), then cancel the damage.
+      // Queen Amidala's price is a unit the player picks, answered by `targetInstanceId`.
+      if (choice.costTargets && !(targetInstanceId && choice.costTargets.includes(targetInstanceId))) {
+        throw new Error(`acceptChoice: ${choice.id} needs one of ${choice.costTargets.join(', ')}`)
+      }
       const preventer = findUnit(next, choice.preventerId)
       if (preventer) {
         for (const cardId of abilityCardIds(preventer.unit)) {
           const pay = getCardDefinition(cardId)?.payPreventionCost
-          if (pay) { next = pay(next, preventer.unit); break }
+          if (pay) { next = pay(next, preventer.unit, targetInstanceId); break }
         }
       }
       // Combat damage is applied later, by the resumed attack — record the cancellation for it.
@@ -1236,6 +1252,13 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
+    case 'mayDefeatInstead':
+      // Vice Admiral Rampart goes in the upgrade's place, and the upgrade stays on the base. If he has
+      // left play meanwhile the replacement cannot be performed, so the upgrade goes (CR 7.7.5c).
+      next = findUnit(next, choice.unitId)
+        ? defeatUnit(next, choice.unitId)
+        : defeatBaseUpgrade(next, choice.baseOwner, choice.upgradeCardId, false)
+      break
     case 'mayCapture': {
       // Bothan-5: move the card out of the discard and under the capturing unit.
       const owner = choice.controller
@@ -1574,14 +1597,16 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Ninth Sister: spend one point of the pool onto the chosen unit, then re-offer the
       // rest against the still-living units. skipTrigger (Done) ends it early — the whole thing is optional.
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
-        next = dealDamageToUnit(next, targetInstanceId, 1)
+        // A unit's first point carries any "plus 1" (Ty Yorrick), since the division is one instance per unit.
+        const boosted = choice.boosted ?? []
+        next = dealDamageToUnit(next, targetInstanceId, 1, undefined, undefined, !boosted.includes(targetInstanceId))
         next = checkWin(next)
         if (next.winner !== null) return next
         const remaining = choice.remaining - 1
         const pool = choice.enemiesOf ? next.players[opponentOf(choice.enemiesOf)].units : [...next.players.player.units, ...next.players.opponent.units]
         const targets = pool.map(u => u.instanceId)
         if (remaining > 0 && targets.length > 0) {
-          next = pushChoice(next, { ...choice, remaining, targets })
+          next = pushChoice(next, { ...choice, remaining, targets, boosted: [...boosted, targetInstanceId] })
         }
       }
       break
@@ -2311,10 +2336,14 @@ function attachToBase(state: GameState, playerId: PlayerId, cardId: string): Gam
   return updatePlayer(state, playerId, { base: { ...base, upgrades: [...(base.upgrades ?? []), { cardId, owner: playerId }] } })
 }
 
-/** The unique rule on a base: a second copy of a unique upgrade there defeats the first. */
+/**
+ * The unique rule on a base: a second copy of a unique upgrade there defeats the first. Vice Admiral
+ * Rampart is not offered: the rule would find the two copies again at once, so standing in would only
+ * lose him as well.
+ */
 function baseUniqueCheck(state: GameState, playerId: PlayerId, cardId: string): GameState {
   const copies = (state.players[playerId].base.upgrades ?? []).filter(u => u.cardId === cardId).length
-  return state.cards[cardId]?.unique && copies > 1 ? defeatBaseUpgrade(state, playerId, cardId) : state
+  return state.cards[cardId]?.unique && copies > 1 ? defeatBaseUpgrade(state, playerId, cardId, false) : state
 }
 
 /**
@@ -2750,8 +2779,11 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     viaAmbush,
     ...(targetUnit ? { defenderArena: targetUnit.arena, combat: { attackerInstanceId: attackerId, defenderInstanceId: targetUnit.instanceId, viaAmbush } } : {}),
   }
-  // A unit that can't deal combat damage (Betrayed Trust) still attacks, with nothing to deal.
-  const attackerPower = unitDealsNoCombatDamage(state, attacker) ? 0 : effectivePower(state, attacker, attackerCtx)
+  // A unit that can't deal combat damage (Betrayed Trust) still attacks, with nothing to deal. Babu Frik's
+  // Droid deals its remaining HP instead of its power, for this attack only.
+  const attackerPower = unitDealsNoCombatDamage(state, attacker) ? 0
+    : unitDealsCombatDamageByHp(state, attacker) ? Math.max(0, effectiveHp(state, attacker, attackerCtx) - attacker.damage)
+      : effectivePower(state, attacker, attackerCtx)
 
   if (target.kind === 'base') {
     // Through `dealDamageToBase` so base-damage prevention applies (At Attin Safety Droid);
@@ -2813,9 +2845,12 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // whole function on resume is safe. Each side is asked at most once per combat (`preventAsked`).
   const asked = prevent.preventAsked ?? []
   const prevented = prevent.prevented ?? []
+  // Maul: the defender's damage to him goes to the unit he chose, for this attack. Still combat damage,
+  // dealt by the defender, and prevented or soaked by the unit it now lands on.
+  const counterTargetId = damageRecipient(preCombat, attacker.instanceId)
   for (const [targetId, amount, dmgSource] of [
     [defender.instanceId, attackerPower, attackerSource],
-    [attacker.instanceId, counterPower, counterSource],
+    [counterTargetId, counterPower, counterSource],
   ] as const) {
     if (amount <= 0 || asked.includes(targetId)) continue
     const offer = preventionOffer(preCombat, targetId, dmgSource)
@@ -2829,6 +2864,8 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
       amount,
       source: dmgSource,
       combat: true,
+      ...(offer.costTargets ? { costTargets: offer.costTargets } : {}),
+      ...(offer.costText ? { costText: offer.costText } : {}),
     })
     return {
       ...withChoice,
@@ -2850,7 +2887,9 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // the whole hit, and then no damage was dealt at all. A defender the hit defeated took all of it.
   const dealtToDefender = defenderAfter ? defenderAfter.damage - defender.damage : damageTo(defender.instanceId, attackerPower)
   if (defenderSurvived || !unitDealsDamageFirst(preCombat, attacker, { defender })) {
-    next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, damageTo(attacker.instanceId, counterPower)]]), true, { combat, attacking: true, viaAmbush }, counterSource, true)
+    // Only the attacker itself is "attacking" for the defeat check and "defeated while attacking".
+    const counterCtx = counterTargetId === attacker.instanceId ? { combat, attacking: true, viaAmbush } : {}
+    next = applyUnitDamage(next, playerId, new Map([[counterTargetId, damageTo(counterTargetId, counterPower)]]), true, counterCtx, counterSource, true)
   }
   // The damage step is complete, so the batch it fired can be ordered and resolved.
   next = drainTriggers(next)

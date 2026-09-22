@@ -91,7 +91,8 @@ same guard since a pair of Kelleran Beqs blew the stack.
 GameState.lastingEffects?: LastingEffect[]
 // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, untilRoundEnd?, abilityCardIds?,
 //   cannotAttack?, cannotAttackBases?, cannotBeAttacked?, unlessSentinel?, removeKeywords?,
-//   noCombatDamage?, attackersPower?, cannotReady?, preventNext?, preventEach?, survivesNoHp? }
+//   noCombatDamage?, attackersPower?, cannotReady?, preventNext?, preventEach?, survivesNoHp?,
+//   redirectDamageTo? }
 ```
 
 `addLastingEffect` appends one; `lastingEffectTotals(state, instanceId)` sums those aimed at a unit.
@@ -345,6 +346,34 @@ dealt to that unit, prevent 1 of that damage") is counted with the cards and nev
 applies to every instance for its duration.
 
 Unpreventable damage ignores both kinds, and ignores Shields entirely: the token is not even spent.
+
+**The price of a chosen prevention can be a pick.** Queen Amidala prevents damage to herself by defeating
+another friendly unit that shares a trait with her, so her offer (`preventionCostTargets`) carries the
+units that can pay and is answered with one of them. Mid-combat it suspends the attack exactly as The
+Mandalorian's does; her counter damage still lands when the combat resumes.
+
+## Replacing damage before it is dealt
+
+A replacement effect (CR 7.7.5, "would ... instead") settles as the damage is about to be dealt, before
+any prevention is asked about it, so a prevention sees the damage that would really land.
+
+- **Where it goes.** A `redirectDamageTo` lasting effect sends damage headed for its unit to another unit
+  while that one is in play (Maul: "all damage that would be dealt to this unit during this attack is
+  dealt to the chosen unit instead", so it is set with `untilEndOfAttack`). The defender's combat damage
+  follows it and stays combat damage; the unit it lands on can soak it with its own Shield. Redirected
+  damage is not redirected again.
+- **How much.** `abilityDamageBonus` adds to one instance of **ability** damage, to a unit
+  (`dealDamageToUnit`) or a base (`dealDamageToBase`), and never to combat damage. Ty Yorrick adds 1 to a
+  friendly ability's damage. Her "you may" is answered by the engine rather than asked: taken when the
+  damage is aimed at an opponent's unit or base, and declined when it is aimed at her own side, where more
+  damage is only ever a cost. Damage divided among units is one instance per unit, so the plus 1 lands on
+  a unit's first point only.
+- **What it is read from.** `dealsCombatDamageByHp` makes an attacker's combat damage its remaining HP
+  instead of its power (Babu Frik's Droid, for one attack). Power itself is unchanged, so nothing else
+  that reads it is affected.
+
+A friendly ability is read from the damage's source, or from the card whose choice is being answered:
+answering a choice runs as that card, so damage dealt by the answer is its card's.
 
 ## Healing
 

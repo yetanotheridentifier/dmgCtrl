@@ -1080,10 +1080,16 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'mayPreventDamage':
+        // Queen Amidala: one accept per unit the price can be paid with.
+        if (choice.costTargets) for (const id of choice.costTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        else moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
       case 'mayDeployLeader':
       case 'maySelfDamageShield':
       case 'mayCapture':
-      case 'mayPreventDamage':
+      case 'mayDefeatInstead':
       case 'mayResourceTop':
       case 'mayCreateToken': {
         // Grogu: a yes/no to deploy via the triggered epic action.

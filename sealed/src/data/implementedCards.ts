@@ -1881,6 +1881,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SHD_154', name: 'Wrecker' },
   { id: 'SHD_214', name: 'Frontier Trader' },
   { id: 'SHD_122', name: 'Arquitens Assault Cruiser' },
+  // Replacement effects: "if X would happen, (you may) do Y instead".
+  { id: 'SEC_101', name: 'Queen Amidala' },
+  { id: 'HMW_060', name: 'Vice Admiral Rampart' },
+  { id: 'HMW_185', name: 'Ty Yorrick' },
+  { id: 'SHD_090', name: 'Maul' },
+  { id: 'LOF_206', name: 'Babu Frik' },
 ]
 
 /**

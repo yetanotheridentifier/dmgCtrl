@@ -10785,3 +10785,44 @@ registerCard('SEC_008', { // Bail Organa
     return pick ? resourceTopOfDeck(returnResourceToHand(s, pick.holder, pick.index), ctx.owner) : s
   },
 })
+
+// ══ Replacement effects: "if X would happen, (you may) do Y instead" ════════════════════════
+// A replacement settles as the event is about to happen (CR 7.7.5), so a "you may" is asked there and
+// the event waits on it: a prevention offer suspends the combat (`mayPreventDamage`), and a base
+// upgrade's defeat waits on `mayDefeatInstead`. A replaced cost is still paid (CR 1.8.10), and the text
+// after "If you do" still resolves (CR 8.9.2).
+
+/** Queen Amidala's price: another friendly unit that shares a trait with her. */
+const sharesTraitWith = (s: GameState, self: UnitState): string[] => {
+  const mine = unitTraits(s, self).map(t => t.toLowerCase())
+  return friendliesOf(s, self)
+    .filter(u => u.instanceId !== self.instanceId && unitTraits(s, u).some(t => mine.includes(t.toLowerCase())))
+    .map(u => u.instanceId)
+}
+registerCard('SEC_101', { // Queen Amidala
+  ...createWp('Create 2 Spy tokens.', TOKEN_SPY, 2),
+  canPreventDamage: (s, self, target) => target.instanceId === self.instanceId && sharesTraitWith(s, self).length > 0,
+  preventionCostTargets: (s, self) => sharesTraitWith(s, self),
+  preventionCostText: 'defeat another friendly unit that shares a Trait with this unit',
+  payPreventionCost: (s, _self, chosen) => (chosen ? defeatUnit(s, chosen) : s),
+})
+registerCard('HMW_060', { defeatsInsteadOfBaseUpgrade: () => true }) // Vice Admiral Rampart
+registerCard('HMW_185', { // Ty Yorrick
+  abilityDamageBonus: (_s, _self, owner, source, targetController) => (source.controller === owner && targetController !== owner ? 1 : 0),
+  ...attacks('You may deal 1 damage to a Creature unit.', (s, ctx) => damageChoice(s, ctx, 1, allUnits(s).filter(u => unitHasTrait(s, u, 'Creature')), [], true)),
+})
+registerCard('SHD_090', { // Maul
+  ...attacks('You may choose another friendly Underworld unit. If you do, all damage that would be dealt to this unit during this attack is dealt to the chosen unit instead.', (s, ctx) =>
+    unitThen(s, ctx, s.players[ctx.owner].units.filter(u => u.instanceId !== ctx.sourceInstanceId && unitHasTrait(s, u, 'Underworld')).map(u => u.instanceId), 'choose another friendly Underworld unit to take the damage dealt to this unit during this attack', true)),
+  ifYouDo: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, redirectDamageTo: ctx.targetInstanceId!, untilEndOfAttack: true }),
+})
+const GRANT_BABU_FRIK = 'GRANT_BABU_FRIK'
+registerCard(GRANT_BABU_FRIK, { sourceCardId: 'LOF_206', dealsCombatDamageByHp: () => true })
+const babuOffer = (s: GameState, owner: PlayerId, id: string): GameState =>
+  offerAttack(s, owner, id, { optional: true, attacker: { trait: 'Droid' }, grantCardId: GRANT_BABU_FRIK })
+registerCard('LOF_206', { actionAbilities: [{ // Babu Frik
+  description: 'Action [Exhaust]: You may attack with a friendly Droid unit. For this attack, it deals damage equal to its remaining HP instead of its power.',
+  exhaustCost: true,
+  usable: (s, u) => babuOffer(s, s.activePlayer, u.instanceId) !== s,
+  effect: (s, ctx) => babuOffer(s, ctx.owner, ctx.sourceInstanceId!),
+}] })

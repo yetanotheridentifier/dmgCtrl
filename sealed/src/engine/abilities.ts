@@ -345,8 +345,35 @@ export interface CardDefinition {
    * choice, and `payPreventionCost` collects the price if it's taken.
    */
   canPreventDamage?: (state: GameState, self: UnitState, target: UnitState) => boolean
-  /** Pay the cost of a prevention this card offered — e.g. defeat a Shield on `self`. */
-  payPreventionCost?: (state: GameState, self: UnitState) => GameState
+  /**
+   * Pay the cost of a prevention this card offered — e.g. defeat a Shield on `self`. `chosen` is the
+   * unit picked from `preventionCostTargets`, for a price the player chooses.
+   */
+  payPreventionCost?: (state: GameState, self: UnitState, chosen?: string) => GameState
+  /**
+   * The units a prevention's price is picked from (Queen Amidala: another friendly unit sharing a trait
+   * with her). The offer is one accept per unit; absent, the price needs no pick.
+   */
+  preventionCostTargets?: (state: GameState, self: UnitState, target: UnitState) => string[]
+  /** The price, as the prevention prompt names it ("defeat a Shield" when absent). */
+  preventionCostText?: string
+  /**
+   * "If a friendly ability would deal damage, you may have that ability deal that much damage plus 1
+   * instead" (Ty Yorrick): what this unit adds to one instance of ability damage. `owner` controls
+   * `self`, `source` is the dealing ability and `targetController` controls what it damages. Combat
+   * damage never asks.
+   */
+  abilityDamageBonus?: (state: GameState, self: UnitState, owner: PlayerId, source: DamageSource, targetController: PlayerId) => number
+  /**
+   * "If an upgrade on your base would be defeated, you may defeat this unit instead" (Vice Admiral
+   * Rampart). True while `self` can stand in for an upgrade on its controller's base.
+   */
+  defeatsInsteadOfBaseUpgrade?: (state: GameState, self: UnitState) => boolean
+  /**
+   * "For this attack, it deals damage equal to its remaining HP instead of its power" (Babu Frik): the
+   * attacker's combat damage is read from its remaining HP. Power itself is unchanged for every other reader.
+   */
+  dealsCombatDamageByHp?: (state: GameState, unit: UnitState) => boolean
   /** Extra traits this card grants a unit — The Darksaber grants Mandalorian. */
   grantedTraits?: (state: GameState, unit: UnitState) => string[]
   /** Traits this card takes away from its unit, printed or granted (Abandoned the Order: loses Jedi). */
@@ -667,8 +694,12 @@ export function runAttributed(state: GameState, source: DamageSource, run: (s: G
   return stampChoiceSource(state, whileResolving(state, source, run), source)
 }
 
-/** The damage-event half of `runAttributed`: `GameState.resolvingSource` for the duration of `run`. */
-function whileResolving(state: GameState, source: DamageSource, run: (s: GameState) => GameState): GameState {
+/**
+ * The damage-event half of `runAttributed`: `GameState.resolvingSource` for the duration of `run`.
+ * Answering a choice runs under it too, as the card that raised the choice, so damage dealt by the
+ * answer is that card's ("that ability deals that much damage plus 1", Ty Yorrick).
+ */
+export function whileResolving(state: GameState, source: DamageSource, run: (s: GameState) => GameState): GameState {
   const outer = state.resolvingSource
   const marked: GameState = { ...state, resolvingSource: source }
   const after = run(marked)

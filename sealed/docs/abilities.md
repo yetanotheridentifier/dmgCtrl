@@ -217,7 +217,7 @@ of the defeats the same damage caused. `ctx.damageDealt` carries:
   the attacker or the defender. Otherwise it is the source the damage was dealt with, or, when an
   effect deals damage without naming one, the effect resolving at the time
   (`GameState.resolvingSource`, set by `runAttributed` around every ability, action and resumed
-  ability, and never at rest). Damage with neither is dealt by nobody, which is correct for the
+  ability, and by answering a choice, as the card that raised it; never at rest). Damage with neither is dealt by nobody, which is correct for the
   damage a player deals their own base as a cost. The fallback feeds the event only: prevention
   still reads only a named source.
 
@@ -353,6 +353,10 @@ Card-type-agnostic, all on `CardDefinition`:
 | `makesLeaderUnit` | the host counts as a leader unit |
 | `actionAbilities` | activated "Action:" abilities, with `usable`, `oncePerRound`, `exhaustCost`, and `anyPlayer` for one offered on an enemy unit too, paid for and owned by whoever uses it |
 | `canPreventDamage` / `payPreventionCost` | offers a prevention, and collects its price if taken |
+| `preventionCostTargets` / `preventionCostText` | the units a prevention's price is picked from, and how the prompt names it (Queen Amidala) |
+| `abilityDamageBonus` | adds to an instance of ability damage (Ty Yorrick's "plus 1") |
+| `defeatsInsteadOfBaseUpgrade` | offers the unit's defeat in place of an upgrade on its controller's base (Vice Admiral Rampart) |
+| `dealsCombatDamageByHp` | the attacker's combat damage is its remaining HP, not its power (Babu Frik's attack grant) |
 
 Three of these are scoped more narrowly than they read.
 

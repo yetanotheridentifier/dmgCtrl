@@ -156,6 +156,11 @@ export function unitSpillsExcessToUnit(state: GameState, unit: UnitState): boole
     .some(id => getCardDefinition(id)?.spillsExcessToUnit?.(state, unit) ?? false)
 }
 
+/** True if the unit's combat damage is its remaining HP rather than its power, for this attack (Babu Frik). */
+export function unitDealsCombatDamageByHp(state: GameState, unit: UnitState): boolean {
+  return abilityCardIds(unit).some(id => getCardDefinition(id)?.dealsCombatDamageByHp?.(state, unit) ?? false)
+}
+
 /** True if the unit deals no combat damage for now (Betrayed Trust). */
 export function unitDealsNoCombatDamage(state: GameState, unit: UnitState): boolean {
   return (state.lastingEffects ?? []).some(e => e.noCombatDamage && e.targetInstanceId === unit.instanceId)
