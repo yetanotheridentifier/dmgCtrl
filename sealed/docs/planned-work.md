@@ -150,7 +150,7 @@ Two phases:
 (#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
   (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 17 not built are on the ticket of what
   blocks them, #465 pilots (7),
-  #466 capture, #467 Bounty, #470 Plot, #680 trigger heads, #468 playing any card type, #602 Credit
+  #466 capture, #467 Bounty, #470 Plot, #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #686 (defeat by an enemy card ability, and Chancellor Palpatine,
   the one leader that flips between two faces rather than deploying).
   **Bases are finished** (#460), which completes Phase 1: the engine gained base abilities (an Epic
@@ -172,16 +172,13 @@ Two phases:
   discard pile, a site the engine does not have, and are on #678; L3-37 shipped with #477 and
   Obi-Wan Kenobi with #474; Second Chance, Stolen Landspeeder,
   Sifo-Dyas and Mother Talzin are on the ticket of their own other blocker.
-  **The trigger-head batch is half done** (#474). The recount that opened it found the premise wrong:
-  seven of its eight heads already had a dispatch point, so the work is context on the points that
-  exist, not new points. Two groups shipped, 14 cards: "when this unit is dealt damage and survives"
-  (the four HMW cards and Tarfful) and "when this unit deals combat damage to a base" (Obi-Wan
-  Kenobi, Chopper, Valiant Commando, Blockade Runner, Ketsu Onyo, Seventh Sister, Moff Gideon, and
-  Populist Advisor from the base owner's side). **The remaining seven groups are #680**, 47 cards,
-  none of them blocked by a missing point: the largest, "when this unit completes an attack", needs
-  no engine work at all, and the only genuinely missing mechanic in the batch is "choose two, in any
-  order". Sabé is there too, held back not by her head but by needing a pick of 1 from N over
-  another player's deck, which is a new interactive choice kind.
+  **The trigger-head batch is finished** (#474, #680). Most heads needed only context on points that
+  already fired; the damage points became one both-sides event (`whenDamageDealt`), and the heads no
+  point raised got their own (a unit attacking, healing, the ready step, a card being drawn, a unit
+  leaving play). "Choose two, in any order" is `chooseMode` with a queued continuation. The cards
+  whose other blocker is a keyword are on that keyword's ticket (Disclose #603, the Force #462,
+  Pilot #465, Plot #470, Bounty #467, capture #466, an opponent-owned resource #475), and
+  Traitorous, Nabat Village and Lux Bonteri are on #686.
   Darth Vader, Victor Squadron Leader waits on #465 (his
   back is a Pilot), Queen Amidala (defeat a unit to prevent damage) is on #684, and Roger Roger (an
   upgrade's own When Defeated) and the flipping Chancellor Palpatine are on #686. **Weakness tokens are finished**
@@ -208,7 +205,7 @@ not distinguish from who received one) are on #686, Ty Yorrick (a replacement on
 ability's damage) on #684, and Asajj Ventress (Raid swapped for Restore on an attack) on #476.
 
 **70 were blocked by exactly one thing**: the 18 Fortify, 18 Weakness and 14 Beast-token cards are
-built (less one Fortify card lifted, above), and the rest are the 3 compound-head cards (built, #463), #680 trigger heads (3),
+built (less one Fortify card lifted, above), and the rest are the 3 compound-head cards (built, #463), 3 trigger-head cards (built, #680),
 #468 (1), #475 (1) and the one-off heads. The 2 play-from-discard cards are built (#471), which also
 closed Boga, Tireless Magnaguard and L3-37's other blockers.
 
@@ -219,8 +216,7 @@ registration (six HMW among them, and "when an opponent plays" now read from the
 mechanic tickets above by comment, #680 for trigger heads no point raises, #678 for the discard
 record, and five new ones, #682 losing abilities (8), #683 re-using abilities (7), #684 replacement
 effects (5), #685 cards that need only writing (22) and #686 the one-offs no other ticket owns (23).
-**HMW has 16 cards outstanding**: Asajj Ventress (#476), Cham Syndulla, Darth Sidious, Logray, Phee
-Genoa and Wicket (#680), Giant Gorax and Greater Sarlacc (#475), The Marauder (#473), Vernestra Rwoh
+**HMW has 11 cards outstanding**: Asajj Ventress (#476), Giant Gorax and Greater Sarlacc (#475), The Marauder (#473), Vernestra Rwoh
 (#683), Ty Yorrick and Vice Admiral Rampart (#684), and Jar Jar Binks, The First Legion, Zam Wesell and
 Maul's front (#686).
 
