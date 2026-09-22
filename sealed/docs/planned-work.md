@@ -194,12 +194,12 @@ Two phases:
   resource) shipped with #475, and
   Traitorous, Nabat Village and Lux Bonteri are on #686.
   Darth Vader, Victor Squadron Leader waits on #465 (his
-  back is a Pilot), Queen Amidala (defeat a unit to prevent damage) is on #684, and Roger Roger (an
+  back is a Pilot), Queen Amidala (defeat a unit to prevent damage) shipped with the replacement effects (#684), and Roger Roger (an
   upgrade's own When Defeated) and the flipping Chancellor Palpatine are on #686. **Weakness tokens are finished**
   (#649), HMW's -1/-1 token: its 18 cards and five more it touched (Beast-token cards, Inferno Squad's
   "When Played/When Defeated" and Nuvo Vindi's one-off trigger), with Tireless Magnaguard shipping on
   #471 (play from discard). **Fortify is finished** (#650), HMW's upgrades attached to a base: 17 of its 18 cards and
-  Trap Field and Insurgent Camp, with Vice Admiral Rampart on #684 (a replacement for a base upgrade's
+  Trap Field and Insurgent Camp, with Vice Admiral Rampart shipping on #684 (a replacement for a base upgrade's
   defeat); Beast Lair shipped with #653, which gave it the action-phase-start trigger it waited on.
   Next are Credit tokens (#602, 29),
   Disclose (#603, 19), and indirect damage (#604, 15).
@@ -215,7 +215,7 @@ discard pile, and borrowed When Played abilities) is on #683, Zam Wesell (a lead
 is out of play) on #686, and The Marauder shipped with Exploit (#473), whose step it shares. Of the events and leaders, The First Legion (enemy cards out
 of play lose a Trait) and Jar Jar Binks (reading who gave a token upgrade, which the phase record does
 not distinguish from who received one) are on #686, Ty Yorrick (a replacement on every friendly
-ability's damage) on #684, and Asajj Ventress (Raid swapped for Restore on an attack) on #476.
+ability's damage) shipped with #684, and Asajj Ventress (Raid swapped for Restore on an attack) on #476.
 
 **70 were blocked by exactly one thing**: the 18 Fortify, 18 Weakness and 14 Beast-token cards are
 built (less one Fortify card lifted, above), and the rest are the 3 compound-head cards (built, #463), 3 trigger-head cards (built, #680),
@@ -228,8 +228,8 @@ registration (six HMW among them, and "when an opponent plays" now read from the
 `whenPlayCard`), and shipped. Every other card went to the ticket that owns its real blocker: the
 mechanic tickets above by comment, #680 for trigger heads no point raises, #678 for the discard
 record, and five new ones, #682 losing abilities (8), #683 re-using abilities (7), #684 replacement
-effects (5), #685 cards that need only writing (22) and #686 the one-offs no other ticket owns (23).
-**HMW has 8 cards outstanding**: Asajj Ventress (#476), Vernestra Rwoh (#683), Ty Yorrick and Vice Admiral Rampart (#684), and Jar Jar Binks, The First Legion, Zam Wesell and
+effects (5, all shipped), #685 cards that need only writing (22) and #686 the one-offs no other ticket owns (23).
+**HMW has 6 cards outstanding**: Asajj Ventress (#476), Vernestra Rwoh (#683), and Jar Jar Binks, The First Legion, Zam Wesell and
 Maul's front (#686).
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted to the ticket that owns its

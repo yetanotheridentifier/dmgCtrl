@@ -250,13 +250,34 @@ export function grantNextUnit(state: GameState, owner: PlayerId, grant: NextUnit
 }
 
 /**
+ * What the cards in play add to one instance of ability damage (Ty Yorrick: "that much damage plus 1").
+ * `from` is the dealing ability, and `targetController` controls the unit or base it damages. A "you
+ * may" the engine answers itself: taken whenever the damage is aimed at an opponent's unit or base, and
+ * declined when it is aimed at the ability's own side, where more damage is only ever a cost.
+ */
+export function abilityDamageBonus(state: GameState, from: DamageSource | undefined, targetController: PlayerId): number {
+  if (!from || from.controller === targetController) return 0
+  let bonus = 0
+  for (const owner of ['player', 'opponent'] as PlayerId[]) {
+    for (const self of state.players[owner].units) {
+      for (const cardId of abilityCardIds(self)) {
+        bonus += getCardDefinition(cardId)?.abilityDamageBonus?.(state, self, owner, from, targetController) ?? 0
+      }
+    }
+  }
+  return bonus
+}
+
+/**
  * Deal `amount` damage to a player's base. The caller runs the win check.
  *
  * `combat` names the attacking unit when this is combat damage, which is what lets the base owner's
  * side tell an attack from an ability's ping (Populist Advisor gains Sentinel only against an enemy
  * unit's combat damage). It is absent for every ability that damages a base.
  */
-export function dealDamageToBase(state: GameState, player: PlayerId, amount: number, source?: DamageSource, combat?: { attackerInstanceId: string }): GameState {
+export function dealDamageToBase(state: GameState, player: PlayerId, rawAmount: number, source?: DamageSource, combat?: { attackerInstanceId: string }): GameState {
+  // "That much damage plus 1" (Ty Yorrick) replaces an ability's damage before anything prevents it.
+  const amount = rawAmount > 0 && !combat ? rawAmount + abilityDamageBonus(state, source ?? state.resolvingSource, player) : rawAmount
   // The base's own prevention (Alliance Shield Generator), which settles the damage entirely when it acts.
   if (amount > 0 && !damageIsUnpreventable(state, source)) {
     for (const cardId of baseAbilityCardIds(state.players[player].base)) {
@@ -783,8 +804,21 @@ export function defeatUpgrade(state: GameState, instanceId: string, cardId: stri
  * A card upgrade goes to its OWNER's discard pile, a token ceases to exist, and "when a friendly upgrade
  * is defeated" fires for its owner. A no-op if the upgrade is no longer there.
  */
-export function defeatBaseUpgrade(state: GameState, baseOwner: PlayerId, cardId: string): GameState {
-  return defeatUpgradeAt(state, baseHostId(baseOwner), (state.players[baseOwner].base.upgrades ?? []).findIndex(a => a.cardId === cardId))
+export function defeatBaseUpgrade(state: GameState, baseOwner: PlayerId, cardId: string, replaceable = true): GameState {
+  return defeatUpgradeAt(state, baseHostId(baseOwner), (state.players[baseOwner].base.upgrades ?? []).findIndex(a => a.cardId === cardId), replaceable)
+}
+
+/**
+ * "If an upgrade on your base would be defeated, you may defeat this unit instead" (Vice Admiral
+ * Rampart): the defeat waits on a `mayDefeatInstead` choice, and the upgrade stays until it is answered.
+ * The caller carries on either way, since a replaced cost is still paid and the text after "If you do"
+ * still resolves. Undefined when no unit of the base's controller can stand in.
+ */
+function offerDefeatInstead(state: GameState, baseOwner: PlayerId, upgradeCardId: string): GameState | undefined {
+  const standIn = state.players[baseOwner].units.find(u =>
+    abilityCardIds(u).some(id => getCardDefinition(id)?.defeatsInsteadOfBaseUpgrade?.(state, u) ?? false))
+  if (!standIn) return undefined
+  return pushChoice(state, { kind: 'mayDefeatInstead', id: `instead-${standIn.instanceId}`, controller: baseOwner, unitId: standIn.instanceId, baseOwner, upgradeCardId })
 }
 
 /** Remove the upgrade at `index` from `baseOwner`'s base, returning it with the new state. */
@@ -807,12 +841,17 @@ export function upgradeAt(state: GameState, hostId: string, index: number): Upgr
  * precise-instance form of `defeatUpgrade`, so a chosen upgrade (e.g. one of two identical Advantage
  * tokens) is removed exactly. A card-upgrade goes to its owner's discard; a token ceases to exist.
  * No-op if the host or index is gone.
+ *
+ * On a base, a unit that stands in for the upgrade (Vice Admiral Rampart) is offered first unless
+ * `replaceable` is false, which the answer to that offer uses to defeat the upgrade itself.
  */
-export function defeatUpgradeAt(state: GameState, instanceId: string, index: number): GameState {
+export function defeatUpgradeAt(state: GameState, instanceId: string, index: number, replaceable = true): GameState {
   const baseOwner = baseHostOwner(instanceId)
   if (baseOwner) {
     const { next, removed } = detachBaseUpgrade(state, baseOwner, index)
     if (!removed) return state
+    const instead = replaceable ? offerDefeatInstead(state, baseOwner, removed.cardId) : undefined
+    if (instead) return instead
     const discarded = state.cards[removed.cardId]?.type === 'token'
       ? next
       : updatePlayer(next, removed.owner, { discard: [...next.players[removed.owner].discard, removed.cardId] })

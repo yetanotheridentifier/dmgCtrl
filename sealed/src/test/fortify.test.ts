@@ -32,12 +32,8 @@ const SHIPPED = [
   // Touched by the ticket for a one-off trigger head, which ships with them.
   'HMW_171', 'HMW_216',
 ]
-/**
- * Scoped by the ticket, but lifted out to the tickets that own their other blocker. Beast Lair
- * (HMW_147) has since shipped with the action-phase-start trigger it was waiting on, and its
- * behaviour is covered in `hmwEventsLeaders.test.ts`.
- */
-const LIFTED = ['HMW_060']
+// Beast Lair (HMW_147) is covered in `hmwEventsLeaders.test.ts`, and Vice Admiral Rampart (HMW_060), who
+// stands in for a base upgrade's defeat, in `replacementEffects.test.ts`.
 
 /**
  * Cards from other sets that pick an upgrade, for whether they see one on a base: "an upgrade" and "a
@@ -65,7 +61,7 @@ const real = (id: string): EngineCard => {
 const src = (id: string, over: Partial<EngineCard> = {}) => card({ id, arena: 'ground', cost: 2, power: 2, hp: 8, ...over })
 const F: Record<string, EngineCard> = {
   ...CARDS,
-  ...Object.fromEntries([...SHIPPED, ...LIFTED, ...PICKERS].map(id => [id, real(id)])),
+  ...Object.fromEntries([...SHIPPED, ...PICKERS].map(id => [id, real(id)])),
   GRD: src('GRD'),
   SPC: src('SPC', { arena: 'space' }),
   BIG: src('BIG', { power: 4 }),
@@ -132,9 +128,8 @@ const baseActionOffered = (s: GameState, cardId: string) => moves(s).some(m => m
 const toRegroup = (s: GameState): GameState => resolve({ ...s, consecutivePasses: 1 }, { type: 'pass' })
 
 describe('Fortify: the mechanic', () => {
-  it('registers every shipped card, and none of the lifted ones', () => {
+  it('registers every shipped card', () => {
     for (const id of SHIPPED) expect(getCardDefinition(id), id).toBeDefined()
-    for (const id of LIFTED) expect(getCardDefinition(id), id).toBeUndefined()
   })
 
   it('plays a Fortify upgrade onto your own base and never onto a unit', () => {

@@ -7,7 +7,7 @@ import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { collectPlayerTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
-import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay } from './effects'
+import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay, abilityDamageBonus } from './effects'
 
 /**
  * How much of an instance of damage the cards in play stop before it lands (Cassian Andor, Boba
@@ -337,19 +337,37 @@ export function defeatUnit(state: GameState, instanceId: string): GameState {
  * can prevent damage that's been made unpreventable (Gorian Shard's Corsair), and only the target's
  * OWN controller's units are asked — you can't shield an enemy.
  */
-export function preventionOffer(state: GameState, targetId: string, source?: DamageSource): { preventerId: string; controller: PlayerId } | undefined {
+export function preventionOffer(state: GameState, targetId: string, source?: DamageSource): { preventerId: string; controller: PlayerId; costTargets?: string[]; costText?: string } | undefined {
   if (damageIsUnpreventable(state, source)) return undefined
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
     const target = state.players[owner].units.find(u => u.instanceId === targetId)
     if (!target) continue
     for (const self of state.players[owner].units) {
-      const able = abilityCardIds(self)
-        .some(id => getCardDefinition(id)?.canPreventDamage?.(state, self, target) ?? false)
-      if (able) return { preventerId: self.instanceId, controller: owner }
+      for (const id of abilityCardIds(self)) {
+        const def = getCardDefinition(id)
+        if (!def?.canPreventDamage?.(state, self, target)) continue
+        const costTargets = def.preventionCostTargets?.(state, self, target)
+        return {
+          preventerId: self.instanceId,
+          controller: owner,
+          ...(costTargets ? { costTargets } : {}),
+          ...(def.preventionCostText ? { costText: def.preventionCostText } : {}),
+        }
+      }
     }
     return undefined
   }
   return undefined
+}
+
+/**
+ * Where damage headed for `instanceId` actually goes: a unit it is redirected to while that unit is in
+ * play (Maul, for one attack), else the unit itself. Redirected damage is not redirected again.
+ */
+export function damageRecipient(state: GameState, instanceId: string): string {
+  const to = (state.lastingEffects ?? []).find(e => e.redirectDamageTo && e.targetInstanceId === instanceId)?.redirectDamageTo
+  const onBoard = (id: string) => state.players.player.units.some(u => u.instanceId === id) || state.players.opponent.units.some(u => u.instanceId === id)
+  return to && onBoard(to) ? to : instanceId
 }
 
 /**
@@ -362,23 +380,29 @@ export function preventionOffer(state: GameState, targetId: string, source?: Dam
  * Combat damage skips that — `completeAttack` settles prevention at its own stage, before any
  * damage is calculated, so that first strike / Overwhelm / attack-end still see correct values.
  */
-export function dealDamageToUnit(state: GameState, instanceId: string, amount: number, source?: DamageSource, followUp?: PendingChoice): GameState {
+export function dealDamageToUnit(state: GameState, instanceId: string, amount: number, source?: DamageSource, followUp?: PendingChoice, boost = true): GameState {
+  // Replacements that change where the damage goes (Maul) or how much it is (Ty Yorrick) settle first,
+  // so a prevention is offered against the damage that would actually land.
+  const recipient = amount > 0 ? damageRecipient(state, instanceId) : instanceId
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
-    if (!state.players[owner].units.some(u => u.instanceId === instanceId)) continue
-    const offer = amount > 0 ? preventionOffer(state, instanceId, source) : undefined
+    if (!state.players[owner].units.some(u => u.instanceId === recipient)) continue
+    const dealt = amount > 0 && boost ? amount + abilityDamageBonus(state, source ?? state.resolvingSource, owner) : amount
+    const offer = dealt > 0 ? preventionOffer(state, recipient, source) : undefined
     if (offer) {
       return pushChoice(state, {
         kind: 'mayPreventDamage',
-        id: `prevent-${instanceId}-${state.instanceCounter}`,
+        id: `prevent-${recipient}-${state.instanceCounter}`,
         controller: offer.controller,
         preventerId: offer.preventerId,
-        targetId: instanceId,
-        amount,
+        targetId: recipient,
+        amount: dealt,
         source,
         followUp,
+        ...(offer.costTargets ? { costTargets: offer.costTargets } : {}),
+        ...(offer.costText ? { costText: offer.costText } : {}),
       })
     }
-    return applyUnitDamage(state, owner, new Map([[instanceId, amount]]), false, {}, source)
+    return applyUnitDamage(state, owner, new Map([[recipient, dealt]]), false, {}, source)
   }
   return state
 }

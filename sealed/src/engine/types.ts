@@ -644,6 +644,11 @@ export interface LastingEffect {
   preventEach?: number
   /** The unit can't be defeated by having no remaining HP for the duration (The Tragedy of Plagueis). */
   survivesNoHp?: boolean
+  /**
+   * Damage that would be dealt to the unit is dealt to this unit instead, while it is in play (Maul,
+   * "during this attack", so set with `untilEndOfAttack`).
+   */
+  redirectDamageTo?: string
   /** The unit can't ready for the duration (No Good to Me Dead). Read by `unitCannotReady`. */
   cannotReady?: boolean
   /**
@@ -1162,7 +1167,9 @@ type ChoiceVariant =
   // recomputed as units are defeated). Always optional — the controller may stop early (a "may").
   // `enemiesOf` keeps the re-offers to that player's enemy units, and makes the whole amount mandatory
   // while any remain (Emperor Palpatine's "deal 6 damage divided as you choose among enemy units").
-  | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[]; enemiesOf?: PlayerId }
+  // `boosted` are the units already dealt a point: the division is one instance of damage to each unit,
+  // so a "that much damage plus 1" replacement (Ty Yorrick) adds to a unit's first point only.
+  | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[]; enemiesOf?: PlayerId; boosted?: string[] }
   // Distribute `total` tokens among `targets`, one per pick until `remaining` reaches 0. Unlike
   // `multiPick`'s give-advantage, targets stay eligible so tokens can stack. Every token is placed
   // (Fateful Goodbye) unless `upTo`, which may stop at any point (Elzar Mann), or `optional`, which may
@@ -1303,8 +1310,16 @@ type ChoiceVariant =
    *    resolution applies it (declined) or drops it (accepted).
    * `followUp` carries the damage-dealing choice whose "if you do …" tail must only run when the
    * damage actually lands.
+   * `costTargets` is a prevention whose price is a unit the controller picks (Queen Amidala defeats
+   * another friendly unit sharing a trait with her): one accept per unit, answered by
+   * `targetInstanceId`. `costText` names the price in the prompt; absent, it is a Shield.
    */
-  | { kind: 'mayPreventDamage'; id: string; controller: PlayerId; preventerId: string; targetId: string; amount: number; source?: DamageSource; combat?: boolean; followUp?: PendingChoice }
+  | { kind: 'mayPreventDamage'; id: string; controller: PlayerId; preventerId: string; targetId: string; amount: number; source?: DamageSource; combat?: boolean; followUp?: PendingChoice; costTargets?: string[]; costText?: string }
+  // "If an upgrade on your base would be defeated, you may defeat this unit instead" (Vice Admiral
+  // Rampart). The defeat of `upgradeCardId` on `baseOwner`'s base waits on this: accepted, `unitId` is
+  // defeated and the upgrade stays; declined, the upgrade is defeated. Whatever the defeat was for goes on
+  // either way, since a replaced cost is still paid.
+  | { kind: 'mayDefeatInstead'; id: string; controller: PlayerId; unitId: string; baseOwner: PlayerId; upgradeCardId: string }
   // Bothan-5: may capture `cardId` from your discard under `unitId`. A yes/no;
   // `markUsed` records the once-each-round use when accepted.
   | { kind: 'mayCapture'; id: string; controller: PlayerId; unitId: string; cardId: string; markUsed?: { instanceId: string; key: string } }

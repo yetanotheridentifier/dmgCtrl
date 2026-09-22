@@ -125,7 +125,28 @@ pick). `hookOnDecline` runs the hook once more on Done, on `selectUnitThen`, `se
 Jump to Lightspeed).
 
 A hook resumed this way runs as its card's (`resumeAbility`): the choices it raises carry that card as
-their source, and damage it deals is dealt by that card.
+their source, and damage it deals is dealt by that card. Answering any choice runs the same way, as the
+card named in its `source`, so damage the answer deals without naming a source is that card's (a
+friendly ability's damage, for Ty Yorrick). The prevention offer is the exception: its `source` is the
+damage being prevented, which is not the answering player's card.
+
+### Replacement effects
+
+A "you may ... instead" (CR 7.7.5) is asked where the event it replaces is about to happen, and the
+event waits on the answer.
+
+- **`mayPreventDamage`** is the damage case. Mid-combat it suspends the attack into `pendingAttack`
+  before any damage is committed; for ability damage the damage is deferred into the choice. With
+  `costTargets` its price is a unit the player picks (Queen Amidala: another friendly unit sharing a
+  trait with her), one accept per unit.
+- **`mayDefeatInstead`** is Vice Admiral Rampart's: "If an upgrade on your base would be defeated, you may
+  defeat this unit instead." Every defeat of an upgrade on a base goes through `defeatUpgradeAt`, which
+  raises it while its controller has such a unit, and the upgrade stays until it is answered. Accepted,
+  the unit is defeated and the upgrade stays; declined, or if the unit has left play meanwhile, the upgrade
+  is defeated. Whatever defeated the upgrade carries on either way, because a replaced cost is still paid
+  (CR 1.8.10) and the text after "If you do" still resolves (CR 8.9.2): Bacta Tank's action still puts the
+  card on the deck, and Insurgent Camp still readies the unit. The unique rule's defeat of a duplicate is
+  not offered, since the rule would find the two copies again at once.
 
 **"Then, ..." after a part that may raise any number of choices** is `thenAfterChoices`: it owes the
 card's `ifYouDo` at a step as an entry in the trigger queue (`PendingTrigger.resume`). The queue
