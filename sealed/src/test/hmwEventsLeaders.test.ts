@@ -36,8 +36,11 @@ const UNITS = ['HMW_041', 'HMW_044', 'HMW_056', 'HMW_064', 'HMW_104', 'HMW_147',
 const LEADERS = ['HMW_006', 'HMW_007', 'HMW_008', 'HMW_009', 'HMW_018']
 const SHIPPED = [...EVENTS, ...UNITS, ...LEADERS]
 
-/** Lifted by comment: each needs a mechanic no card in this batch supplies (#476, #686). */
-const LIFTED = ['HMW_001', 'HMW_005', 'HMW_108']
+/**
+ * Lifted by comment: needs a mechanic no card in this batch supplies (#476). Jar Jar Binks and The
+ * First Legion were lifted with it and have since shipped; `cardsOneOffs.test.ts` covers them.
+ */
+const LIFTED = ['HMW_001']
 
 const POOL = poolFor(['HMW'])
 const real = (id: string, pool = POOL): EngineCard => {

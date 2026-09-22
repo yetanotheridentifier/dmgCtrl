@@ -2,17 +2,17 @@ import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds, isFortify, recordBaseActionUsed } from './types'
-import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant } from './types'
+import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
 import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
-import { drainTriggers, pickNextTrigger } from './triggerQueue'
+import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
 import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
-import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
+import { hasKeyword, cardHasTrait, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, hasToken } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 
@@ -226,7 +226,7 @@ function resolveAction(state: GameState, action: Action): GameState {
     }
     case 'acceptChoice': {
       const parent = findChoice(state, action.choiceId)
-      const next = answeredAs(state, parent, s => resolveAccept(s, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName))
+      const next = answeredAs(state, parent, s => resolveAccept(s, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName, action.traitName))
       return promoteNested(state, inheritSource(state, next, parent))
     }
     case 'resourceCard':
@@ -398,7 +398,7 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
  * it and the board no longer does, since payment happens before the unit exists. It defaults to 0, which
  * is what every free-play door pays.
  */
-function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0, cardOwner?: PlayerId, exploited?: Exploited, fromResources = false): GameState {
+function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0, cardOwner?: PlayerId, exploited?: Exploited, fromResources = false, defeatOnEntry = false): GameState {
   // First, after the cost, so "first X each phase" sees this one as the first and nothing below reads
   // a record that is missing it.
   state = recordCardPlayed(state, owner, cardId)
@@ -491,7 +491,17 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // later see the board the earlier ones left: a leader deployed by the batch is a friendly unit by
   // the time a "give a Shield to another friendly unit" in the same batch picks its targets (#529).
   // The units exploited to pay for it trigger in this same batch (CR 7.5.16.d).
-  next = fireBatch(next, [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities, fromResources)])
+  const arrivals = [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities, fromResources)]
+  if (defeatOnEntry) {
+    // "Play a unit from your hand … Then, defeat it. (When Played abilities resolve after the unit is
+    // defeated.)" (Maul). The defeat is part of the ability that played it, so it happens while the
+    // arrival's abilities are still owed: they are queued rather than fired, and the defeat's own batch
+    // nests under them (CR 7.6.11) and drains first. Nothing the unit's When Played does to itself can
+    // land, which is exactly what the reminder text is there to say.
+    next = defeatUnit(enqueueTriggers(next, arrivals), newUnit.instanceId)
+  } else {
+    next = fireBatch(next, arrivals)
+  }
   return uniqueUnitCheck(next, owner) // two units with the same unique title → defeat one
 }
 
@@ -557,7 +567,7 @@ function ackbarEligible(
     if (c?.type !== 'unit') return []
     if (filter?.arena && c.arena !== filter.arena) return []
     if (filter?.maxCost !== undefined && (c.cost ?? 0) > filter.maxCost) return []
-    if (filter?.trait && !(c.traits ?? []).some(t => t.toLowerCase() === filter.trait!.toLowerCase())) return []
+    if (filter?.trait && !cardHasTrait(state, cardId, filter.trait, owner)) return []
     if (filter?.aspect && !(c.aspects ?? []).some(a => a.toLowerCase() === filter.aspect!.toLowerCase())) return []
     if (costDelta !== undefined && owner) {
       const ready = state.players[owner].resources.filter(r => !r.exhausted).length
@@ -792,7 +802,7 @@ function applyPlayedUnitTail(state: GameState, controller: PlayerId, playedId: s
   if (!tail || !findUnit(state, playedId)) return state
   let next = state
   for (const tokenId of new Set(tail.tokens ?? [])) {
-    next = giveTokens(next, playedId, tokenId, tail.tokens!.filter(t => t === tokenId).length)
+    next = giveTokens(next, playedId, tokenId, tail.tokens!.filter(t => t === tokenId).length, controller)
   }
   if (tail.delay && tail.sourceCardId) {
     next = addDelayedEffect(next, { cardId: tail.sourceCardId, when: tail.delay, owner: controller, unitId: playedId })
@@ -971,7 +981,7 @@ function mayDamageFollowUps(state: GameState, choice: PendingChoice & { kind: 'm
   if (choice.rewardIfDefeated && !findUnit(next, targetInstanceId)) {
     const reward = choice.rewardIfDefeated
     if ('instanceId' in reward) {
-      next = giveTokens(next, reward.instanceId, TOKEN_ADVANTAGE, reward.count)
+      next = giveTokens(next, reward.instanceId, TOKEN_ADVANTAGE, reward.count, choice.controller)
     } else {
       // Justifier: give Advantage to a chosen unit.
       const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
@@ -1111,7 +1121,7 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
 }
 
 /** Accept a pending "may…" choice — pay the cost / play the card / search. */
-function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number, optionIndex?: number, baseTarget?: PlayerId, handIndex?: number, cardName?: string): GameState {
+function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number, optionIndex?: number, baseTarget?: PlayerId, handIndex?: number, cardName?: string, traitName?: string): GameState {
   const choice = findChoice(state, choiceId)
   if (!choice) throw new Error(`acceptChoice: no choice ${choiceId}`)
   let next = removeChoice(state, choice.id)
@@ -1306,7 +1316,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'maySelfDamageShield': {
       // Cobb Vanth: pay 2 damage to himself to shield the unit that just entered play.
       next = dealDamageToUnit(next, choice.selfId, choice.amount)
-      next = giveToken(next, choice.targetId, TOKEN_SHIELD)
+      next = giveToken(next, choice.targetId, TOKEN_SHIELD, choice.controller)
       next = checkWin(next)
       if (next.winner !== null) return next
       break
@@ -1328,14 +1338,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Emperor Palpatine: give the chosen unit an Advantage token per other friendly unit.
       if (targetInstanceId) {
         const others = next.players[choice.controller].units.filter(u => u.instanceId !== targetInstanceId).length
-        next = giveTokens(next, targetInstanceId, TOKEN_ADVANTAGE, others)
+        next = giveTokens(next, targetInstanceId, TOKEN_ADVANTAGE, others, choice.controller)
       }
       break
     case 'mayExhaustLeaderForAdvantage': {
       // Greef Karga front: exhaust the leader to give the just-played or just-created unit an Advantage token.
       if (leaderCanExhaust(next, choice.controller)) {
         next = exhaustLeader(next, choice.controller)
-        next = giveToken(next, choice.unitId, TOKEN_ADVANTAGE)
+        next = giveToken(next, choice.unitId, TOKEN_ADVANTAGE, choice.controller)
       }
       break
     }
@@ -1368,11 +1378,11 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     case 'mayGiveAdvantage':
       // Ezra deployed: give the chosen unit an Advantage token, no cost.
-      if (targetInstanceId) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+      if (targetInstanceId) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE, choice.controller)
       break
     case 'mayGiveTokens':
       // Give `count` of a token to the chosen unit — Attendant Navigator, Anakin, Trexler.
-      if (targetInstanceId) next = giveTokens(next, targetInstanceId, choice.token, choice.count)
+      if (targetInstanceId) next = giveTokens(next, targetInstanceId, choice.token, choice.count, choice.controller)
       // Mislead's second sentence: a separate "give a unit -3/-0", with a target of its own.
       if (choice.thenBuff) {
         const targets = inPlayUnits(next).map(u => u.instanceId)
@@ -1385,7 +1395,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Ezra front: exhaust the leader to give the chosen unit an Advantage token.
       if (targetInstanceId && leaderCanExhaust(next, choice.controller)) {
         next = exhaustLeader(next, choice.controller)
-        next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+        next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE, choice.controller)
       }
       break
     }
@@ -1535,7 +1545,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       else if (targetInstanceId) {
         next = healUnit(next, targetInstanceId, choice.amount)
         // "…and give a Shield token to it" (Perserverance) — the same unit, one effect.
-        if (choice.thenShield) next = giveToken(next, targetInstanceId, TOKEN_SHIELD)
+        if (choice.thenShield) next = giveToken(next, targetInstanceId, TOKEN_SHIELD, choice.controller)
       }
       break
     case 'selectUnitToExhaust':
@@ -1667,7 +1677,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'distributeTokens': {
       // Helgait: give one token to the chosen friendly unit, then re-offer the rest.
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
-        next = giveToken(next, targetInstanceId, choice.token)
+        next = giveToken(next, targetInstanceId, choice.token, choice.controller)
         const remaining = choice.remaining - 1
         // A unit a Weakness token has just taken to 0 HP is still on the board until this action's
         // state-based sweep, but it is already doomed, so it is not offered again.
@@ -1962,7 +1972,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const healed = found ? Math.min(choice.maxHeal, found.unit.damage) : 0
         if (healed > 0) {
           next = healUnit(next, targetInstanceId, healed)
-          next = giveTokens(next, targetInstanceId, TOKEN_ADVANTAGE, healed)
+          next = giveTokens(next, targetInstanceId, TOKEN_ADVANTAGE, healed, choice.controller)
         }
       }
       break
@@ -1990,6 +2000,13 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
               : u)),
         })
       }
+      break
+    }
+    case 'nameTrait': {
+      // The First Legion: the named Trait comes off every card the losing player owns for the phase,
+      // wherever it is. Naming is mandatory, so an answer with no name does nothing rather than
+      // spending the ability on a no-op.
+      if (traitName) next = removeTraitFromCards(next, choice.losesIt, traitName)
       break
     }
     case 'mayResourceTop':
@@ -2049,7 +2066,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'opponentGivesAdvantage':
       // Sabine front: the opponent gives `count` Advantage tokens to their chosen unit.
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
-        next = giveTokens(next, targetInstanceId, TOKEN_ADVANTAGE, choice.count)
+        next = giveTokens(next, targetInstanceId, TOKEN_ADVANTAGE, choice.count, choice.controller)
       }
       break
     case 'multiPick':
@@ -2060,7 +2077,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
           const targets = choice.targets.filter(id => id !== targetInstanceId)
           const remaining = choice.spec.remaining - 1
           if (choice.spec.mode === 'giveAdvantage') {
-            next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+            next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE, choice.controller)
             // Spread the choice so it carries its `source` across the re-offer: it keeps the same
             // id, so the stamper reads it as pre-existing and will not re-attribute it (#374).
             if (remaining > 0 && targets.length > 0) next = pushChoice(next, { ...choice, targets, spec: { mode: 'giveAdvantage', remaining } })
@@ -2195,11 +2212,11 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = updatePlayer(next, choice.controller, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
         // `playUnitCard` names the new unit from the counter it is about to consume, so this is its id.
         const enteredId = `u${next.instanceCounter}`
-        next = playUnitCard(next, choice.controller, cardId!, choice.entersReady, cost)
+        next = playUnitCard(next, choice.controller, cardId!, choice.entersReady, cost, undefined, undefined, false, choice.thenDefeatIt)
         // "Deal 4 damage to it" (Reckless Landing) — the unit just played, which can only be
         // addressed now that it is on the board.
         if (choice.thenDamageIt) next = dealDamageToUnit(next, enteredId, choice.thenDamageIt)
-        if (choice.thenTokens) next = giveMixedTokens(next, enteredId, choice.thenTokens)
+        if (choice.thenTokens) next = giveMixedTokens(next, enteredId, choice.thenTokens, choice.controller)
         if (choice.thenDamageOwnBase) next = dealDamageToBase(next, choice.controller, card.cost)
         if (choice.thenDelay) next = addDelayedEffect(next, { ...choice.thenDelay, owner: choice.controller, unitId: enteredId })
         if (choice.thenLasting) next = addLastingEffect(next, { ...choice.thenLasting, targetInstanceId: enteredId })
@@ -2588,7 +2605,10 @@ function applyEntryKeywords(state: GameState, owner: PlayerId, instanceId: strin
   const shieldable = unitNow(next)
   if (!shieldable) return next
   if (unitHasKeyword(next, shieldable, 'Shielded') && !hasToken(shieldable.upgrades, TOKEN_SHIELD)) {
-    next = attachUpgrades(recordTokenCreated(next, owner), instanceId, [{ cardId: TOKEN_SHIELD, owner }])
+    // Shielded reads "give a Shield token to it", so it counts for "if you gave a token upgrade to a
+    // unit this phase" (Jar Jar Binks). Attached directly rather than through `giveTokens` because the
+    // attach belongs to the arrival batch, which the caller fires.
+    next = attachUpgrades(recordTokenUpgradeGiven(recordTokenCreated(next, owner), owner), instanceId, [{ cardId: TOKEN_SHIELD, owner }])
   }
   const hideable = unitNow(next)!
   if (unitHasKeyword(next, hideable, 'Hidden') && !hideable.hidden) {
@@ -2985,7 +3005,7 @@ function applyChosenMode(state: GameState, owner: PlayerId, mode: string | undef
       return healBase(state, owner, 5)
     case 'mandoToken': { // Choose Your Path — with a Mandalorian unit
       const tokenId = `u${state.instanceCounter}`
-      return giveToken(createTokenUnit(state, owner, TOKEN_MANDALORIAN), tokenId, TOKEN_ADVANTAGE)
+      return giveToken(createTokenUnit(state, owner, TOKEN_MANDALORIAN), tokenId, TOKEN_ADVANTAGE, owner)
     }
     case 'readyResource': // Leia Organa — "either ready a resource or exhaust a unit"
       return readyResource(state, owner)

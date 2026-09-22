@@ -229,11 +229,12 @@ registration (six HMW among them, and "when an opponent plays" now read from the
 mechanic tickets above by comment, #680 for trigger heads no point raises, #678 for the discard
 record, and five new ones, #682 losing abilities (8), #683 re-using abilities (7), #684 replacement
 effects (5, all shipped), #685 cards that need only writing (22) and #686 the one-offs no other ticket owns (23).
-**HMW has 6 cards outstanding**: Asajj Ventress (#476), Vernestra Rwoh (#683), and Jar Jar Binks, The First Legion, Zam Wesell and
-Maul's front (#686).
+**HMW has 2 cards outstanding**: Asajj Ventress (#476) and Vernestra Rwoh (#683). Jar Jar Binks, The
+First Legion, Zam Wesell and Maul's front shipped off #686; the rest of that ticket's one-offs moved
+to #701.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted to the ticket that owns its
-blocker (#686 for a one-off nothing else shares) and the batch ships without it. The classification is regex triage over ability prose: it catches new nouns but not
+blocker (#701 for a one-off nothing else shares) and the batch ships without it. The classification is regex triage over ability prose: it catches new nouns but not
 familiar nouns in an unfamiliar shape.
 
 Three findings that contradict the assumptions the programme started from:

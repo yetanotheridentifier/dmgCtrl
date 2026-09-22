@@ -260,6 +260,7 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'HMW_015', name: 'Bossk', front: true, back: true },
   // Fortify
   { id: 'HMW_004', name: 'Grand Moff Tarkin', front: true, back: true },
+  { id: 'HMW_005', name: 'Jar Jar Binks', front: true, back: true },
   // Homeworlds leaders
   { id: 'HMW_006', name: 'Omega', front: true, back: true },
   { id: 'HMW_007', name: 'Darth Vader', front: true, back: true },
@@ -271,7 +272,7 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'LAW_003', name: 'Agent Kallus', front: true, back: true },
   // Playing a card out of a discard pile. Maul and Kylo Ren reach the pile only once deployed, and
   // each front is a different mechanic's: Maul's plays from hand, Kylo Ren's discards for a draw.
-  { id: 'HMW_016', name: 'Maul', front: false, back: true },
+  { id: 'HMW_016', name: 'Maul', front: true, back: true },
   { id: 'LOF_001', name: 'Kylo Ren', front: true, back: true },
   { id: 'SEC_003', name: 'Lama Su', front: true, back: true },
   // "When this unit completes an attack (and survives)".
@@ -1678,11 +1679,13 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_084', name: 'Gunga City Guard' },
   { id: 'HMW_090', name: 'Opee Sea Killer' },
   { id: 'HMW_107', name: 'Stormtrooper Patrol' },
+  { id: 'HMW_108', name: 'The First Legion' },
   { id: 'HMW_117', name: 'Chewbacca' },
   { id: 'HMW_118', name: 'Ryyk Blademaster' },
   { id: 'HMW_129', name: 'Child of Dathomir' },
   { id: 'HMW_131', name: 'Soaring Can-Cell' },
   { id: 'HMW_133', name: 'Wroshyr Rebel' },
+  { id: 'HMW_134', name: 'Zam Wesell' },
   { id: 'HMW_137', name: 'V-19 Skirmisher' },
   { id: 'HMW_138', name: 'Commander Gree' },
   { id: 'HMW_142', name: 'Wookiee Rangers' },

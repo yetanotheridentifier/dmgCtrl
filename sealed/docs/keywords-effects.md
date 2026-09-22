@@ -43,6 +43,33 @@ contribute.
 
 Abilities travel; **printed traits do not**.
 
+## Traits: one read for a card anywhere
+
+```ts
+cardTraits(state, cardId, owner?)   // a card's traits, in play or not
+unitTraits(state, unit)             // that, plus what is attached to the unit
+```
+
+`cardTraits` is the read every trait question goes through, because a trait is a property of the
+**card**, not of the unit it happens to be on, and two effects address cards no unit hook can reach:
+
+- a card gives itself traits **wherever it is** (`CardDefinition.cardTraits`, Zam Wesell copies her
+  controller's leader's Traits except Force, in hand and deck as well as in play);
+- an effect takes a trait off **one player's whole card pool** for the phase
+  (`GameState.traitsRemoved`, The First Legion names one, and it reaches cards not in play).
+
+Both need to know whose copy is being read, which is what `owner` is for: the grant reads that
+player's board, and the removal is aimed at one player's cards. A read with no owner gets the printed
+traits, which is all that can be said about a card nobody owns.
+
+`unitTraits` adds what an upgrade lends (`grantedTraits`, The Darksaber) and takes away
+(`removedTraits`). It looks the controller up only when a card-level rule is actually live, so the
+ordinary case costs what it always did.
+
+**A filter that takes an `EngineCard` rather than a card id reads the printed row** (`printedTrait`,
+and the `test` hooks on the play-from-hand and play-from-zone choices). Those see neither of the two
+effects above.
+
 ## Auras: constant effects on other units
 
 ```ts
@@ -394,3 +421,11 @@ base this phase", Cassian Andor). `phaseEvents.tokensCreated` holds each player 
 `createTokenUnit`, `giveTokens` and a Shielded entry all record it, crediting a token upgrade to the
 controller of the unit it lands on, which is who created it for every card that gives one to its own
 side (The Client).
+
+`phaseEvents.tokenUpgradesGiven` answers a narrower question and is kept apart for two reasons: it
+counts **token upgrades only**, not a token unit being created, and it credits the player who
+**gave** the token rather than the controller of the unit it landed on ("if you gave a token upgrade
+to a unit this phase", Jar Jar Binks). The two differ for a Weakness token and for a Shield handed to
+the other side, so `giveToken`/`giveTokens`/`giveMixedTokens` take a `givenBy` that defaults to the
+host's controller, and every caller that can land a token on an enemy unit passes it: a choice passes
+whoever answered it, which is exact.

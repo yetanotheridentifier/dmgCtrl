@@ -7,11 +7,11 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
+import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost } from './resources'
-import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
+import { cardHasTrait, cardTraits, unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
 import type { CombatContext, DiscardPlayGrant, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PlayerId, PlayFromTail, PlayFromZone, UnitState, UpgradeAttachment, UpgradeRef } from './types'
 
 /**
@@ -435,7 +435,7 @@ const armorer = (s: GameState, owner: PlayerId): PlayFromZoneOptions => ({
 })
 
 const imperialDefeatedThisPhase = (s: GameState, owner: PlayerId): boolean =>
-  defeatedThisPhase(s, owner).some(id => (s.cards[id]?.traits ?? []).some(t => t.toLowerCase() === 'imperial'))
+  defeatedThisPhase(s, owner).some(id => cardHasTrait(s, id, 'Imperial', owner))
 
 // Deployed Moff Gideon collects keywords from the fallen: for each of these eight, if an
 // Imperial unit in your discard pile has it, this unit gains it too.
@@ -1050,7 +1050,7 @@ registerCard('ASH_107', whenPlayed('Search the top 5 cards of your deck for a ca
   const owner = ctx.owner
   const revealed = s.players[owner].deck.slice(0, searchCount(s, owner, 5))
   const myTraits = new Set(s.players[owner].units.flatMap(u => unitTraits(s, u).map(t => t.toLowerCase())))
-  const eligibleIndices = revealed.flatMap((cardId, i) => (s.cards[cardId]?.traits.some(t => myTraits.has(t.toLowerCase())) ? [i] : []))
+  const eligibleIndices = revealed.flatMap((cardId, i) => (cardTraits(s, cardId, owner).some(t => myTraits.has(t.toLowerCase())) ? [i] : []))
   // Reveal even with no trait match (#413): acknowledging bottoms them all and draws nothing, but
   // the player gets to see which five went to the bottom. Only an empty deck reveals nothing.
   if (revealed.length === 0) return s
@@ -1127,7 +1127,7 @@ registerCard('ASH_097', whenDefeated("You may return a non-unique Imperial unit 
   const seen = new Set<string>()
   const candidates = s.players[ctx.owner].discard.filter(id => {
     const c = s.cards[id]
-    if (!c || c.type !== 'unit' || c.unique || !c.traits.some(t => t.toLowerCase() === 'imperial')) return false
+    if (!c || c.type !== 'unit' || c.unique || !cardHasTrait(s, id, 'Imperial', ctx.owner)) return false
     if (seen.has(id)) return false // list each distinct title once
     seen.add(id)
     return true
@@ -1783,7 +1783,7 @@ registerCard('ASH_128', { // Bothan-5
 
 registerCard('ASH_224', { // Elzar Mann
   // "While you control a Force leader, this unit enters play ready."
-  entersReady: (s, owner) => (s.cards[s.players[owner].leader.cardId]?.traits ?? []).some(t => t.toLowerCase() === 'force'),
+  entersReady: (s, owner) => cardHasTrait(s, s.players[owner].leader.cardId, 'Force', owner),
   abilities: [{
     trigger: 'whenPlayed',
     description: 'Distribute up to 5 Advantage tokens among other friendly units. Then, an opponent searches twice that many cards from the top of their deck for an event, reveals it, and draws it.',
@@ -1809,7 +1809,7 @@ registerCard('ASH_196', { // Gorian Shard's Corsair
   // "Damage dealt by friendly Underworld cards is unpreventable."
   makesDamageUnpreventable: (s, self, source) =>
     source.controller === findUnit(s, self.instanceId)?.owner
-    && (s.cards[source.cardId]?.traits ?? []).some(t => t.toLowerCase() === 'underworld'),
+    && cardHasTrait(s, source.cardId, 'Underworld', source.controller),
   abilities: (['whenPlayed', 'onAttack'] as const).map(trigger => ({
     trigger,
     description: 'You may deal 2 damage to a unit.',
@@ -2852,7 +2852,7 @@ const controlsNamed = (name: string): Holds => (s, u) => { const o = unitOwner(s
 /** "You control a <trait> upgrade": one the unit's controller owns, on any unit. */
 const controlsUpgradeWithTrait = (s: GameState, u: UnitState, trait: string): boolean => {
   const o = unitOwner(s, u)
-  return o !== undefined && allUnits(s).some(x => x.upgrades.some(up => up.owner === o && (s.cards[up.cardId]?.traits ?? []).some(t => t.toLowerCase() === trait.toLowerCase())))
+  return o !== undefined && allUnits(s).some(x => x.upgrades.some(up => up.owner === o && cardHasTrait(s, up.cardId, trait, up.owner)))
 }
 const perEach = (n: number, power: number, hp = 0) => (n > 0 ? { power: n * power, hp: n * hp } : {})
 const KW = {
@@ -2918,7 +2918,7 @@ registerCard('SEC_108', { statModifier: (s, u) => (holdsInitiative(s, u) ? { pow
 registerCard('LOF_062', { statModifier: (_s, u) => perEach(u.upgrades.length, 1, 1) }) // Axe Woves
 registerCard('LOF_083', { statModifier: (s, u) => { // Captain Enoch: Trooper units in your discard pile
   const o = unitOwner(s, u)
-  return o ? perEach(s.players[o].discard.filter(id => s.cards[id]?.type === 'unit' && (s.cards[id]?.traits ?? []).some(t => t.toLowerCase() === 'trooper')).length, 1) : {}
+  return o ? perEach(s.players[o].discard.filter(id => s.cards[id]?.type === 'unit' && cardHasTrait(s, id, 'Trooper', o)).length, 1) : {}
 } })
 registerCard('LOF_049', whileDefending) // Jedi Guardian
 registerCard('SHD_042', whileDefending) // Concord Dawn Interceptors
@@ -3833,7 +3833,8 @@ registerCard('LOF_037', { // Darth Vader
     },
   ],
   ifYouDo: (s, ctx) => {
-    const shielded = giveToken(s, ctx.targetInstanceId!, TOKEN_SHIELD)
+    // The second step shields an ENEMY unit, so the giver is stated rather than read off the host.
+    const shielded = giveToken(s, ctx.targetInstanceId!, TOKEN_SHIELD, ctx.owner)
     return ctx.step === 'friendly' ? unitThen(shielded, ctx, pickedIds(shielded, ctx, pickEnemy), 'give an enemy unit a Shield token', false, 'enemy') : shielded
   },
 })
@@ -3897,7 +3898,7 @@ registerCard('LOF_150', { // Cin Drallig
     const handIndices = s.players[ctx.owner].hand.flatMap((id, i) => {
       const c = s.cards[id]
       const restriction = getCardDefinition(id)?.attachRestriction
-      return c?.type === 'upgrade' && c.traits.some(t => t.toLowerCase() === 'lightsaber') && (!restriction || restriction(s, self, ctx.owner)) ? [i] : []
+      return c?.type === 'upgrade' && cardHasTrait(s, id, 'Lightsaber', ctx.owner) && (!restriction || restriction(s, self, ctx.owner)) ? [i] : []
     })
     return handIndices.length
       ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices, optional: true, text: 'play a Lightsaber upgrade on this unit for free', then: resume(ctx) })
@@ -4775,10 +4776,14 @@ type PlayFromHandOptions = {
   thenTokens?: string[]
   thenDamageOwnBase?: boolean
   thenDamageIt?: number
+  /** "Then, defeat it": the unit just played, before its own When Played resolves (Maul). */
+  thenDefeatIt?: boolean
   /** "It gains <keywords> for this phase": granted to the next unit played, so an Ambush or Hidden takes effect as it enters. */
   gains?: KeywordInstance[]
   /** The card's own follow-up, run once the unit is in play and paid for (Grievous's second play). */
   then?: IfYouDo
+  /** The choice's id, for a source with no instance in play: an undeployed leader's action (Maul). */
+  id?: string
 }
 const FREE = -99
 const playableFromHand = (s: GameState, owner: PlayerId, o: PlayFromHandOptions, extraResourceCost = 0) =>
@@ -4789,9 +4794,10 @@ const playFromHand = (s: GameState, ctx: EventCtx, o: PlayFromHandOptions): Game
   if (!candidates.length) return s
   const granted = o.gains ? grantNextUnit(s, ctx.owner, { keywords: o.gains }) : s
   return pushChoice(granted, {
-    kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta, entersReady: false,
+    kind: 'playUnitFromHand', id: o.id ?? ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta, entersReady: false,
     ...(o.thenTokens ? { thenTokens: o.thenTokens } : {}), ...(o.thenDamageOwnBase ? { thenDamageOwnBase: true } : {}),
     ...(o.thenDamageIt ? { thenDamageIt: o.thenDamageIt } : {}),
+    ...(o.thenDefeatIt ? { thenDefeatIt: true } : {}),
     ...(o.then ? { then: o.then } : {}),
   })
 }
@@ -4807,7 +4813,7 @@ registerCard('TWI_225', whenPlayed('If you control exactly one unit, play a non-
   const units = s.players[ctx.owner].units
   if (units.length !== 1) return s
   const traits = unitTraits(s, units[0]).map(t => t.toLowerCase())
-  return playFromHand(s, ctx, { costDelta: -5, test: c => !printedTrait(c, 'Vehicle') && (c?.traits ?? []).some(t => traits.includes(t.toLowerCase())) })
+  return playFromHand(s, ctx, { costDelta: -5, test: c => !printedTrait(c, 'Vehicle') && (c ? cardTraits(s, c.id, ctx.owner) : []).some(t => traits.includes(t.toLowerCase())) })
 }))
 
 /**
@@ -5034,10 +5040,10 @@ registerCard('LOF_219', { // Psychometry
     return pile.length ? cardThen(s, ctx, pile, 'choose another card in your discard pile', false, 'chosen') : s
   }),
   ifYouDo: (s, ctx) => {
-    const traits = (s.cards[ctx.cardChosen ?? '']?.traits ?? []).map(t => t.toLowerCase())
+    const traits = cardTraits(s, ctx.cardChosen ?? '', ctx.owner).map(t => t.toLowerCase())
     const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, 5))
     if (revealed.length === 0) return s
-    const eligibleIndices = revealed.flatMap((id, i) => ((s.cards[id]?.traits ?? []).some(t => traits.includes(t.toLowerCase())) ? [i] : []))
+    const eligibleIndices = revealed.flatMap((id, i) => (cardTraits(s, id, ctx.owner).some(t => traits.includes(t.toLowerCase())) ? [i] : []))
     return pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices })
   },
 })
@@ -5913,7 +5919,7 @@ registerCard('SEC_220', { // Hired Slicer
     if (revealed.length === 0) return s
     // The cards go under the deck straight away: exhausting a unit cannot change where they end up.
     const bottomed = { ...updatePlayer(s, who, { deck: [...deck.slice(2), ...seededShuffle(revealed, s.rngSeed)] }), rngSeed: nextSeed(s.rngSeed) }
-    const traits = revealed.flatMap(id => s.cards[id]?.traits ?? [])
+    const traits = revealed.flatMap(id => cardTraits(s, id, who))
     const names = revealed.map(id => s.cards[id]?.name ?? id).join(', ')
     return unitThen(bottomed, ctx, pickedIds(bottomed, ctx, (st, u) => traits.some(t => unitHasTrait(st, u, t))), `revealed ${names}: you may exhaust a unit that shares a Trait with one of them`, true, 'exhaust')
   },
@@ -7477,7 +7483,7 @@ registerCard('LAW_152', onAttack(expWp('You may give an Experience token to anot
 /** The traits of a player's leader, whether it is deployed as a unit or still on its front side. */
 const leaderTraitsOf = (s: GameState, owner: PlayerId): string[] => {
   const deployed = s.players[owner].units.find(u => u.isLeader)
-  return deployed ? unitTraits(s, deployed) : s.cards[s.players[owner].leader.cardId]?.traits ?? []
+  return deployed ? unitTraits(s, deployed) : cardTraits(s, s.players[owner].leader.cardId, owner)
 }
 registerCard('LOF_046', onAttack(expWp('You may give an Experience token to another Creature or Spectre unit.', // Ezra Bridger
   pickAll(pickOther, (s, u) => unitHasTrait(s, u, 'Creature') || unitHasTrait(s, u, 'Spectre')), 1, true)))
@@ -7987,7 +7993,8 @@ const weakChoice = (s: GameState, ctx: EventCtx, targets: string[], count = 1, o
 const weakWp = (description: string, test: Pick, count = 1, optional = false, when: When = always) =>
   whenPlayed(description, (s, ctx) => (when(s, ctx) ? weakChoice(s, ctx, pickedIds(s, ctx, test), count, optional) : s))
 const weakened: Pick = (_s, u) => hasToken(u.upgrades, TOKEN_WEAKNESS)
-const giveWeakness = (s: GameState, id: string, count = 1): GameState => giveTokens(s, id, TOKEN_WEAKNESS, count)
+/** A Weakness token goes on an ENEMY unit, so the giver is passed: the host's controller is not who gave it. */
+const giveWeakness = (s: GameState, id: string, givenBy: PlayerId, count = 1): GameState => giveTokens(s, id, TOKEN_WEAKNESS, count, givenBy)
 /** "While you control a <planet> base": a base's planet is its trait. */
 const controlsBaseWith = (s: GameState, owner: PlayerId, trait: string): boolean => printedTrait(s.cards[s.players[owner].base.cardId], trait)
 
@@ -8013,7 +8020,7 @@ registerCard('HMW_100', whenPlayed('Give a Weakness token to a unit. If you cont
 registerCard('HMW_231', unitThenWp("You may give a Weakness token to a unit. If it's a unique unit, exhaust it.", pickAny, 'give a Weakness token to a unit', true, // Dragonboat Freighter
   (s, ctx) => {
     const id = ctx.targetInstanceId!
-    const given = giveWeakness(s, id)
+    const given = giveWeakness(s, id, ctx.owner)
     const target = findUnit(given, id)?.unit
     return target && cardOf(given, target)?.unique ? exhaustUnit(given, id) : given
   }))
@@ -8022,7 +8029,7 @@ const infernoSquad = unitThenWp('You may deal 1 damage to a unit and give a Weak
     const id = ctx.targetInstanceId!
     // "And", not "if you do": a Shield that prevents the damage does not stop the token.
     const hit = dealDamageToUnit(s, id, 1)
-    return findUnit(hit, id) ? giveWeakness(hit, id) : hit
+    return findUnit(hit, id) ? giveWeakness(hit, id, ctx.owner) : hit
   })
 registerCard('HMW_202', alsoAt(infernoSquad, 'whenDefeated')) // Inferno Squad: When Played/When Defeated
 registerCard('HMW_196', defeated({ // Qimir
@@ -8047,7 +8054,7 @@ registerCard('HMW_240', { // Sandstorm
   costModifier: (s, owner) => (controlsBaseWith(s, owner, 'Tatooine') ? -1 : 0),
   ...whenPlayed('Choose an arena. Give a Weakness token to each exhausted enemy unit in that arena.', (s, ctx) =>
     chooseArena(s, ctx, 'give a Weakness token to each exhausted enemy unit in')),
-  ifYouDo: (s, ctx) => pickedIds(s, ctx, pickAll(pickEnemy, exhaustedPick, (_s, u) => u.arena === ctx.arenaChosen)).reduce((acc, id) => giveWeakness(acc, id), s),
+  ifYouDo: (s, ctx) => pickedIds(s, ctx, pickAll(pickEnemy, exhaustedPick, (_s, u) => u.arena === ctx.arenaChosen)).reduce((acc, id) => giveWeakness(acc, id, ctx.owner), s),
 })
 registerCard('HMW_248', { // Defoliator Tank
   ...attacks("If the defending unit isn't a Droid or Vehicle, you may pay 2. If you do, give 2 Weakness tokens to it.", (s, ctx) => {
@@ -8055,7 +8062,7 @@ registerCard('HMW_248', { // Defoliator Tank
     if (!defender || unitHasTrait(s, defender, 'Droid') || unitHasTrait(s, defender, 'Vehicle') || !canAfford(s.players[ctx.owner], 2)) return s
     return pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 2, text: 'give 2 Weakness tokens to the defending unit', then: resume(ctx, undefined, defender.instanceId) })
   }),
-  ifYouDo: (s, ctx) => (ctx.unitChosen ? giveWeakness(s, ctx.unitChosen, 2) : s),
+  ifYouDo: (s, ctx) => (ctx.unitChosen ? giveWeakness(s, ctx.unitChosen, ctx.owner, 2) : s),
 })
 registerCard('HMW_067', { // The Great Progenitor
   abilities: [{ trigger: 'onAttackEnd', description: 'You may give a Weakness token to this unit. If you do, create a Beast token for each Weakness token on this unit.',
@@ -8064,7 +8071,7 @@ registerCard('HMW_067', { // The Great Progenitor
       ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'give this unit a Weakness token and create a Beast token for each one on it', then: resume(ctx) })
       : s) }],
   ifYouDo: (s, ctx) => {
-    const given = giveWeakness(s, ctx.sourceInstanceId!)
+    const given = giveWeakness(s, ctx.sourceInstanceId!, ctx.owner)
     const self = findUnit(given, ctx.sourceInstanceId!)?.unit
     return self ? create(given, ctx.owner, TOKEN_BEAST, self.upgrades.filter(u => u.cardId === TOKEN_WEAKNESS).length) : given
   },
@@ -8073,7 +8080,7 @@ registerCard('HMW_067', { // The Great Progenitor
 // C: control, and reading the token
 registerCard('HMW_110', unitThenWp('You may take control of an enemy non-leader unit that costs 3 or less. If you do, give 2 Weakness tokens to it.', // Emperor Palpatine
   pickAll(pickEnemy, nonLeader, costsAtMost(3)), 'take control of an enemy non-leader unit that costs 3 or less', true,
-  (s, ctx) => giveWeakness(stealTo(s, ctx.owner, ctx.targetInstanceId, 'permanent'), ctx.targetInstanceId!, 2)))
+  (s, ctx) => giveWeakness(stealTo(s, ctx.owner, ctx.targetInstanceId, 'permanent'), ctx.targetInstanceId!, ctx.owner, 2)))
 registerCard('HMW_200', unitThenWp('Take control of an enemy non-leader unit with a Weakness token on it. At the start of the next regroup phase, its owner takes control of it.', // Rish Loo
   pickAll(pickEnemy, nonLeader, weakened), 'take control of an enemy non-leader unit with a Weakness token on it', false,
   // "Until the regroup phase" is the default duration of a change of control.
@@ -8091,14 +8098,14 @@ registerCard('HMW_062', { // Nuvo Vindi
       } },
   ],
   // Only a taken "may" uses up the once each round.
-  ifYouDo: (s, ctx) => markAbilityUsed(giveWeakness(s, ctx.targetInstanceId!), ctx.owner, ctx.sourceInstanceId!, NUVO_ROUND_KEY),
+  ifYouDo: (s, ctx) => markAbilityUsed(giveWeakness(s, ctx.targetInstanceId!, ctx.owner), ctx.owner, ctx.sourceInstanceId!, NUVO_ROUND_KEY),
 })
 registerCard('HMW_199', whenPlayed('Create a Beast token. Then, give a Weakness token to a friendly unit.', (s, ctx) => { // Geonosian Picador
   const made = create(s, ctx.owner, TOKEN_BEAST)
   return weakChoice(made, ctx, pickedIds(made, ctx, pickFriendly))
 }))
 registerCard('HMW_237', whenPlayed('Create a Beast token. An opponent creates a Beast token. Give a Weakness token to it.', (s, ctx) => // Easy Prey
-  create(create(s, ctx.owner, TOKEN_BEAST), opponentOf(ctx.owner), TOKEN_BEAST, 1, (st, id) => giveWeakness(st, id))))
+  create(create(s, ctx.owner, TOKEN_BEAST), opponentOf(ctx.owner), TOKEN_BEAST, 1, (st, id) => giveWeakness(st, id, ctx.owner))))
 
 // D: leaders
 const underworldOrFringe = (c: EngineCard | undefined): boolean => printedUnit(c) && (printedTrait(c, 'Underworld') || printedTrait(c, 'Fringe'))
@@ -8124,7 +8131,7 @@ registerCard('HMW_015', mergeLeaderSides( // Bossk
     effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, damagedEnemy), 'heal 1 damage from a damaged enemy unit and give a Weakness token to it', false),
   }),
   attacks('You may deal 2 damage to a unit with a token upgrade on it.', (s, ctx) => damageChoice(s, ctx, 2, picked(s, ctx, tokenUpgraded), [], true)),
-  { ifYouDo: (s, ctx) => giveWeakness(healUnit(s, ctx.targetInstanceId!, 1), ctx.targetInstanceId!) },
+  { ifYouDo: (s, ctx) => giveWeakness(healUnit(s, ctx.targetInstanceId!, 1), ctx.targetInstanceId!, ctx.owner) },
 ))
 
 // ══ Fortify: upgrades on a base ════════════════════════════════════════
@@ -8395,7 +8402,7 @@ registerCard('HMW_148', whenPlayed('Reveal the top card of your deck. If it shar
   const top = s.cards[s.players[ctx.owner].deck[0]]
   if (!top) return s
   const friendlyTraits = new Set(s.players[ctx.owner].units.flatMap(u => unitTraits(s, u).map(t => t.toLowerCase())))
-  return (top.traits ?? []).some(t => friendlyTraits.has(t.toLowerCase())) ? drawCards(s, ctx.owner, 1) : s
+  return cardTraits(s, top.id, ctx.owner).some(t => friendlyTraits.has(t.toLowerCase())) ? drawCards(s, ctx.owner, 1) : s
 }))
 registerCard('HMW_154', whenPlayed('If you control a unit that costs 1 or less, each opponent discards a card from their hand.', (s, ctx) => // Dooku's Solar Sailer
   (youControl(s, ctx, costsAtMost(1)) ? opponentDiscards(s, ctx.owner, ctx.sourceInstanceId!) : s)))
@@ -9329,10 +9336,64 @@ registerCard('HMW_204', { // Nightbrother
   delayed: defeatItAtRegroup,
 })
 
-// Maul's back. His front (play a unit from hand 1 less, then defeat it) is a hand play, not this
-// ticket's; the deployed side reaches the pile for a unit that fell THIS phase.
-registerCard('HMW_016', whenDeployed('You may play a unit that was defeated this phase from your discard pile. It costs 5 less.', (s, ctx) => // Maul
-  playFromZoneChoice(s, ctx, { zone: 'discard', test: defeatedThisPhaseTest(s, ctx.owner), costDelta: -5, optional: true })))
+registerCard('HMW_016', { // Maul
+  // Front: the unit is played in full, and defeated as part of the same ability, which is why its
+  // When Played lands on a board it has already left (`thenDefeatIt`).
+  leaderAbilities: {
+    actions: [{
+      description: 'Play a unit from your hand. It costs 1 less. Then, defeat it.',
+      usable: (s, owner) => playableFromHand(s, owner, { costDelta: -1 }).length > 0,
+      effect: (s, ctx) => playFromHand(s, ctx, { costDelta: -1, thenDefeatIt: true, id: `${ctx.cardId}-playDefeat` }),
+    }],
+  },
+  // Back: the deployed side reaches the pile for a unit that fell THIS phase.
+  ...whenDeployed('You may play a unit that was defeated this phase from your discard pile. It costs 5 less.', (s, ctx) =>
+    playFromZoneChoice(s, ctx, { zone: 'discard', test: defeatedThisPhaseTest(s, ctx.owner), costDelta: -5, optional: true })),
+})
+
+/**
+ * Jar Jar Binks, both sides: "if you gave a token upgrade to a unit this phase".
+ *
+ * The record is `tokenUpgradesGiven`, which is about the player who GAVE the token and counts only
+ * token upgrades; `tokensCreated` (The Client) answers a different question and would say yes to a
+ * token unit and to a token an opponent put on one of your units.
+ *
+ * "Heal 1 damage from a base" is taken as your own: healing an opponent's base is never the better
+ * answer, so the choice is not put, exactly as `thenHealBase` already does for Grassroots Resistance.
+ */
+const jarJarDamageHeal = (s: GameState, ctx: EventCtx, optional: boolean): GameState => {
+  const targets = allUnits(s)
+  return targets.length
+    ? pushChoice(s, {
+      // The front side has no instance in play, so the id names the card instead.
+      kind: 'selectDamageTarget', id: ctx.sourceInstanceId ?? 'HMW_005-jarJar', controller: ctx.owner,
+      amount: 1, unitTargets: targets.map(u => u.instanceId), baseTargets: [], thenHealBase: 1, ...mayFlag(optional),
+    })
+    : s
+}
+registerCard('HMW_005', { // Jar Jar Binks
+  leaderAbilities: {
+    actions: [{
+      description: 'If you gave a token upgrade to a unit this phase, deal 1 damage to a unit and heal 1 damage from a base.',
+      cost: 1,
+      usable: (s, owner) => tokenUpgradeGivenThisPhase(s, owner) && allUnits(s).length > 0,
+      effect: (s, ctx) => jarJarDamageHeal(s, ctx, false),
+    }],
+  },
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'If you gave a token upgrade to a unit this phase, you may deal 1 damage to a unit and heal 1 damage from a base.',
+    effect: (s, ctx) => (tokenUpgradeGivenThisPhase(s, ctx.owner) ? jarJarDamageHeal(s, ctx, true) : s),
+  }],
+})
+
+registerCard('HMW_108', onAttack(whenPlayed('Name a Trait. Enemy cards, including those not in play, lose that Trait for this phase.', (s, ctx) => // The First Legion
+  pushChoice(s, { kind: 'nameTrait', id: ctx.sourceInstanceId!, controller: ctx.owner, losesIt: opponentOf(ctx.owner) }))))
+
+registerCard('HMW_134', { // Zam Wesell
+  // A card-level grant, not a unit one: she carries the copied Traits in hand, deck and discard too.
+  cardTraits: (s, owner) => leaderTraitsOf(s, owner).filter(t => t.toLowerCase() !== 'force'),
+})
 
 registerCard('TWI_189', { // Unnatural Life
   ...whenPlayed('Play a unit that was defeated this phase from your discard pile. It costs 2 less and enters play ready. At the start of the regroup phase, defeat it.', (s, ctx) =>
