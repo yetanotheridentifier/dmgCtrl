@@ -1,0 +1,47 @@
+name: Close outside pull requests
+
+# The project is not accepting pull requests from outside it yet (see CONTRIBUTING.md). This
+# closes any pull request whose author is not the owner, a member or a collaborator, with a short
+# comment pointing to CONTRIBUTING.md. Issues are untouched: the in-app bug report files issues
+# from the player's own account, so they must stay open to everyone.
+#
+# Which authors pass is decided by `author_association` on the pull request:
+#   pass   OWNER, MEMBER, COLLABORATOR
+#   close  NONE, FIRST_TIME_CONTRIBUTOR, FIRST_TIMER, CONTRIBUTOR, MANNEQUIN
+# CONTRIBUTOR (someone with a previously merged commit) is closed too, deliberately: a trusted
+# contributor is made a collaborator, which lets them through with no change here.
+#
+# Dependabot is not configured (there is no .github/dependabot.yml). If it is ever turned on, its
+# pull requests would be closed by this and it would need an exemption here.
+#
+# Why `pull_request_target` is safe here: it runs this file from the default branch with a
+# write-capable token, even for pull requests from forks. That is only safe because this workflow
+# never checks out, builds or reads anything from the pull request, uses no third-party actions,
+# and passes event data to the script only through `env`, never interpolated into `run:`. Keep it
+# that way. It also means a change to this file only takes effect once it is on `main`.
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+# Everything not listed is none. Commenting on a pull request (the issue comments endpoint) and
+# closing it (updating the pull request) both accept `pull-requests: write`, so that is the only
+# scope granted: no `issues`, and no `contents`, since nothing reads the repository.
+permissions:
+  pull-requests: write
+
+jobs:
+  close:
+    if: ${{ !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment and close
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CONTRIBUTING_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/CONTRIBUTING.md
+        run: |
+          body="Thanks for taking the time to open this. The project isn't accepting pull requests yet, so I'm closing it, and there are no bounties on offer. There are other ways to help today, which are set out in [CONTRIBUTING.md]($CONTRIBUTING_URL)."
+          gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments" -f body="$body" > /dev/null
+          gh api --method PATCH "repos/$REPO/pulls/$PR_NUMBER" -f state=closed > /dev/null
