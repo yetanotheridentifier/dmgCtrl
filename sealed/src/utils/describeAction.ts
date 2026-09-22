@@ -310,6 +310,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return `Exhaust ${target ?? 'unit'}`
       }
       if (choice.kind === 'exploit') {
+        if (choice.resources) {
+          const resource = state.players[choice.controller].resources[action.optionIndex ?? -1]
+          return `Defeat ${resource ? state.cards[resource.cardId]?.name ?? 'resource' : 'resource'}`
+        }
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return choice.damage === undefined ? `Exploit ${target ?? 'unit'}` : `Deal ${choice.damage} to ${target ?? 'unit'}`
       }

@@ -220,8 +220,11 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   return halved ? Math.ceil(total / 2) : total
 }
 
-/** The terms of an `exploit` step: how many units may be chosen, what each saves, and what befalls them. */
-export interface ExploitTerms { limit: number; discount: number; damage?: number }
+/**
+ * The terms of an `exploit` step: how many may be chosen, what each saves, and what befalls them.
+ * `resources` makes the picks ready resources rather than units (Greater Sarlacc).
+ */
+export interface ExploitTerms { limit: number; discount: number; damage?: number; resources?: boolean }
 
 /**
  * Whether playing `card` from hand asks for units to exploit first, and on what terms, or `undefined`
@@ -229,13 +232,18 @@ export interface ExploitTerms { limit: number; discount: number; damage?: number
  *
  * Exploit X (CR 7.5.16) is the printed numeral plus any Exploit the card gains as it is played
  * (instances stack, 7.5.16.b): a "next card you play" grant, or `extra` from the ability doing the
- * playing (Count Dooku). The Marauder's `whilePlaying` is the same step on its own terms. Either way
- * the limit is capped at the friendly units there are, so a step is never offered with nothing to pick.
+ * playing (Count Dooku). The Marauder's `whilePlaying` is the same step on its own terms, and Greater
+ * Sarlacc's on ready resources. Either way the limit is capped at what there is to pick, so a step is
+ * never offered with nothing to pick.
  */
 export function exploitTerms(state: GameState, playerId: PlayerId, card: EngineCard, extra = 0): ExploitTerms | undefined {
+  const own = getCardDefinition(card.id)?.whilePlaying
+  if (own && 'resources' in own) {
+    const readyNow = readyResourceCount(state.players[playerId])
+    return readyNow > 0 ? { limit: readyNow, discount: own.discount, resources: true } : undefined
+  }
   const units = state.players[playerId].units.length
   if (units === 0) return undefined
-  const own = getCardDefinition(card.id)?.whilePlaying
   if (own) return { limit: units, discount: own.discount, damage: own.damage }
   const granted = (state.players[playerId].nextUnitGrants ?? [])
     .reduce((sum, g) => sum + (nextUnitGrantMatches(card, g, state, playerId) ? g.exploit ?? 0 : 0), 0)
@@ -253,19 +261,26 @@ export function raiseExploit(state: GameState, owner: PlayerId, cardId: string, 
   return pushChoice(state, {
     kind: 'exploit', id: `exploit-${cardId}`, controller: owner, cardId, handIndex, picks: [],
     limit: terms.limit, discount: terms.discount, ...(terms.damage !== undefined ? { damage: terms.damage } : {}),
+    ...(terms.resources ? { resources: true } : {}),
     source: { cardId, controller: owner },
   })
 }
 
 /**
- * The least `card` can cost from hand: its effective cost less the most its exploit step could save
- * (CR 6.2.3.e, decreases after increases, floored at 0). A play is legal when THIS is affordable,
- * since the units are chosen as part of paying.
+ * Whether `card` can be played from hand at all: its effective cost less what its exploit step could
+ * save (CR 6.2.3.e, decreases after increases, floored at 0) fits the ready resources, since the picks
+ * are made as part of paying. Units exploited cost nothing to pay with, so the most the step could
+ * save is the case to read. Each ready resource defeated (Greater Sarlacc) is one fewer to pay with,
+ * so there every number of picks is tried.
  */
-export function lowestCost(state: GameState, playerId: PlayerId, card: EngineCard, extra = 0): number {
+export function canAffordFromHand(state: GameState, playerId: PlayerId, card: EngineCard, extra = 0): boolean {
   const terms = exploitTerms(state, playerId, card, extra)
   const cost = effectiveCost(state, playerId, card)
-  return terms ? Math.max(0, cost - terms.limit * terms.discount) : cost
+  const readyNow = readyResourceCount(state.players[playerId])
+  if (!terms) return cost <= readyNow
+  if (!terms.resources) return Math.max(0, cost - terms.limit * terms.discount) <= readyNow
+  for (let k = 0; k <= terms.limit; k++) if (Math.max(0, cost - k * terms.discount) <= readyNow - k) return true
+  return false
 }
 
 /**
@@ -276,6 +291,12 @@ export function lowestCost(state: GameState, playerId: PlayerId, card: EngineCar
 export function exploitCost(state: GameState, choice: Extract<PendingChoice, { kind: 'exploit' }>): number {
   const card = state.cards[choice.cardId]
   return card ? Math.max(0, effectiveCost(state, choice.controller, card) - choice.picks.length * choice.discount) : 0
+}
+
+/** Whether an `exploit` step could finish now: what is left fits the ready resources its picks leave. */
+export function exploitAffordable(state: GameState, choice: Extract<PendingChoice, { kind: 'exploit' }>): boolean {
+  const readyLeft = readyResourceCount(state.players[choice.controller]) - (choice.resources ? choice.picks.length : 0)
+  return exploitCost(state, choice) <= readyLeft
 }
 
 /**
@@ -334,15 +355,25 @@ export function zoneCards(state: GameState, controller: PlayerId, zone: PlayFrom
   }
 }
 
-/**
- * Who OWNS the card at `index` of `zone`, which is not always the player playing it: a card played
- * out of somebody else's discard pile or resource zone is still theirs, and goes back to their
- * discard pile when it leaves play (CR 1.5.2).
- */
-export function zoneCardOwner(state: GameState, controller: PlayerId, zone: PlayFromZone, index: number): PlayerId {
+/** Whose zone holds the card at `index` of `zone`: the player playing it, or the opponent. */
+export function zoneHolder(state: GameState, controller: PlayerId, zone: PlayFromZone, index: number): PlayerId {
   if (zone === 'opponentResources' || zone === 'opponentDiscard') return opponentOf(controller)
   if (zone === 'anyDiscard') return index < state.players[controller].discard.length ? controller : opponentOf(controller)
   return controller
+}
+
+/**
+ * Who OWNS the card at `index` of `zone`, which is not always the player playing it: a card played
+ * out of somebody else's discard pile or resource zone is still theirs, and goes back to their
+ * discard pile when it leaves play (CR 1.5.2). A resource records its owner where that is not the
+ * player whose zone holds it (CR 1.7.5).
+ */
+export function zoneCardOwner(state: GameState, controller: PlayerId, zone: PlayFromZone, index: number): PlayerId {
+  const holder = zoneHolder(state, controller, zone, index)
+  const p = state.players[holder]
+  const resource = zone === 'resources' || zone === 'opponentResources' ? p.resources[index]
+    : zone === 'handOrResources' ? p.resources[index - p.hand.length] : undefined
+  return resource?.owner ?? holder
 }
 
 /**
@@ -509,7 +540,7 @@ function actionPhaseMoves(state: GameState): Action[] {
     const card = state.cards[cardId]
     if (!card || (card.type !== 'unit' && card.type !== 'event')) return
     if (forbiddenNames.has(card.name)) return
-    if (!canAfford(p, lowestCost(state, playerId, card))) return
+    if (!canAffordFromHand(state, playerId, card)) return
     moves.push(card.type === 'unit' ? { type: 'playUnit', handIndex } : { type: 'playEvent', handIndex })
   })
 
@@ -774,7 +805,14 @@ function choiceMoves(state: GameState): Action[] {
       case 'exploit': {
         // Done first, then each friendly unit not yet chosen. Done only once the rest is affordable, so
         // a play that needs its discount cannot be stranded half paid.
-        if (canAfford(state.players[choice.controller], exploitCost(state, choice))) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (exploitAffordable(state, choice)) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (choice.resources) {
+          // Any card in the zone may be one of the ready ones (CR 1.7.4); `limit` caps how many.
+          state.players[choice.controller].resources.forEach((_, i) => {
+            if (!choice.picks.includes(String(i))) moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i })
+          })
+          break
+        }
         for (const u of state.players[choice.controller].units) {
           if (!choice.picks.includes(u.instanceId)) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: u.instanceId })
         }

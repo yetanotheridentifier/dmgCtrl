@@ -165,6 +165,12 @@ export interface UnitState {
 export interface ResourceState {
   cardId: string
   exhausted: boolean
+  /**
+   * Who owns the card, recorded only where it is not the player whose zone holds it (CR 1.7.5: a
+   * resource an opponent owns is open information). It decides whose discard pile or hand the card
+   * goes to when it leaves the zone, and whose card it is if it is played out of the zone.
+   */
+  owner?: PlayerId
 }
 
 export interface LeaderState {
@@ -385,6 +391,12 @@ export interface GameState {
    * drains. `true` = taking the initiative also ended the action phase (CR 1.15.5c).
    */
   pendingInitiativeEndsPhase?: boolean
+  /**
+   * The action phase began with choices still to answer (a delayed effect "at the start of the next
+   * action phase", Han Solo's defeat): once they drain, play begins with the initiative holder, since
+   * nobody has taken a turn yet for `advanceTurn` to pass on.
+   */
+  pendingRoundStart?: boolean
   /**
    * An opponent-interjected choice is pending as part of this player's action (Sabine Wren):
    * `activePlayer` is temporarily the choosing opponent, and this holds the original actor so that
@@ -840,6 +852,8 @@ export interface TriggerContext {
    * Also on a played upgrade's `whenUpgradeAttached`, since an opponent can play one on your unit.
    */
   playingPlayer?: PlayerId
+  /** `whenPlayCard`: the card was played out of a resource zone ("when you play a card from your resources", Bail Organa). */
+  playedFromResources?: boolean
   /**
    * `whenUnitAttacks`: whose unit is attacking. The point fires on both players, so every
    * registration compares this against `ctx.owner` ("a friendly unit attacks" or "an enemy unit attacks").
@@ -1082,7 +1096,9 @@ type ChoiceVariant =
   // friendly units one at a time, up to `limit`, then Done. Each saves `discount`. Exploit defeats
   // them; with `damage` each is dealt that much instead (The Marauder). Done is offered only once what
   // is left to pay is affordable, and reaching `limit` finishes the play by itself.
-  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number }
+  // With `resources` (Greater Sarlacc) the picks are the controller's resources instead, by index into
+  // their zone (as strings), answered with `optionIndex`: each is defeated as a ready one.
+  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean }
   // The one door for playing a card out of somewhere other than the Play a Card action: any card
   // type, out of `zone`, answered by `optionIndex` into `candidates`. `free` bypasses the cost and
   // the aspect penalty (CR 8.5); `costDelta` adjusts it; `waive` forgives aspect penalties. An

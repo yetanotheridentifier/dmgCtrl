@@ -43,7 +43,7 @@ const SHIPPED = [
  * Scoped by the triage but lifted out to the ticket that owns their blocker: the compound head is no
  * longer what holds them back.
  */
-const LIFTED = ['HMW_188', 'SEC_143']
+const LIFTED = ['SEC_143']
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'ASH', 'HMW'])
 const real = (id: string): EngineCard => {

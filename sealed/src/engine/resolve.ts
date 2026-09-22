@@ -3,13 +3,13 @@ import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds, isFortify, recordBaseActionUsed } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant } from './types'
-import { addResourceFromHand, canAfford, payCost, readyAllResources } from './resources'
-import { effectiveCost, exploitTerms, exploitCost, raiseExploit, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, grantZoneRef, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
+import { addResourceFromHand, payCost, readyAllResources } from './resources'
+import { effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
 import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage } from './keywords'
@@ -357,7 +357,7 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
  * it and the board no longer does, since payment happens before the unit exists. It defaults to 0, which
  * is what every free-play door pays.
  */
-function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0, cardOwner?: PlayerId, exploited?: Exploited): GameState {
+function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0, cardOwner?: PlayerId, exploited?: Exploited, fromResources = false): GameState {
   // First, after the cost, so "first X each phase" sees this one as the first and nothing below reads
   // a record that is missing it.
   state = recordCardPlayed(state, owner, cardId)
@@ -450,7 +450,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // later see the board the earlier ones left: a leader deployed by the batch is a friendly unit by
   // the time a "give a Shield to another friendly unit" in the same batch picks its targets (#529).
   // The units exploited to pay for it trigger in this same batch (CR 7.5.16.d).
-  next = fireBatch(next, [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities)])
+  next = fireBatch(next, [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities, fromResources)])
   return uniqueUnitCheck(next, owner) // two units with the same unique title → defeat one
 }
 
@@ -462,7 +462,7 @@ interface Exploited { owed: PendingTrigger[]; powers: number[] }
  * (a Shielded token → Sabine Wren), its own "When Played" (CR 6.2.0f), and "when you play a unit" on
  * the controller's undeployed leader and their other units.
  */
-function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string, cardId: string, keywordAbilities: string[] = []): PendingTrigger[] {
+function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string, cardId: string, keywordAbilities: string[] = [], fromResources = false): PendingTrigger[] {
   const entered = state.players[owner].units.find(u => u.instanceId === newUnitId)
   if (!entered) return []
   const owed: PendingTrigger[] = []
@@ -471,7 +471,7 @@ function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string,
   // Ambush / Support: keyword-printed When Played abilities, ordered with the rest.
   for (const kw of keywordAbilities) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId))
   owed.push(...collectArrivalTriggers(state, 'whenPlayUnit', owner, newUnitId))
-  owed.push(...collectPlayCard(state, owner, cardId))
+  owed.push(...collectPlayCard(state, owner, cardId, fromResources))
   return owed
 }
 
@@ -481,8 +481,8 @@ function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string,
  * from the far side ("when an opponent plays an event", Saw Gerrera), exactly as `whenDrawCards` is.
  * Every registration therefore compares `ctx.playingPlayer` against `ctx.owner`.
  */
-function collectPlayCard(state: GameState, playerId: PlayerId, cardId: string): PendingTrigger[] {
-  const ctx = { playedCardId: cardId, playingPlayer: playerId }
+function collectPlayCard(state: GameState, playerId: PlayerId, cardId: string, fromResources = false): PendingTrigger[] {
+  const ctx = { playedCardId: cardId, playingPlayer: playerId, ...(fromResources ? { playedFromResources: true } : {}) }
   return [playerId, opponentOf(playerId)].flatMap(p =>
     [...collectPlayerTriggers(state, 'whenPlayCard', p, ctx), ...collectUnitsTrigger(state, 'whenPlayCard', p, ctx)])
 }
@@ -590,9 +590,10 @@ function playEvent(state: GameState, handIndex: number): GameState {
 
 /** One more unit chosen: the step finishes by itself at its limit, and is offered again otherwise. */
 function pickExploit(state: GameState, choice: Extract<PendingChoice, { kind: 'exploit' }>, instanceId: string): GameState {
-  if (choice.picks.includes(instanceId) || !state.players[choice.controller].units.some(u => u.instanceId === instanceId)) {
-    return pushChoice(state, choice)
-  }
+  const there = choice.resources
+    ? Number(instanceId) < state.players[choice.controller].resources.length
+    : state.players[choice.controller].units.some(u => u.instanceId === instanceId)
+  if (choice.picks.includes(instanceId) || !there) return pushChoice(state, choice)
   const next = { ...choice, picks: [...choice.picks, instanceId] }
   return next.picks.length >= next.limit ? finishExploit(state, next) : pushChoice(state, next)
 }
@@ -609,12 +610,15 @@ function finishExploit(state: GameState, choice: Extract<PendingChoice, { kind: 
   const card = state.cards[choice.cardId]
   const cost = exploitCost(state, choice)
   const inHand = state.players[owner].hand[choice.handIndex] === choice.cardId
-  if (!card || !inHand || !canAfford(state.players[owner], cost)) return state
+  if (!card || !inHand || !exploitAffordable(state, choice)) return state
   const chosen = state.players[owner].units.filter(u => choice.picks.includes(u.instanceId))
   let next = state
   let owed: PendingTrigger[] = []
   let powers: number[] = []
-  if (choice.damage === undefined) {
+  if (choice.resources) {
+    // Greater Sarlacc: the chosen cards are defeated as ready resources, which triggers nothing.
+    next = defeatResources(next, owner, choice.picks.map(Number), { ready: true })
+  } else if (choice.damage === undefined) {
     powers = chosen.map(u => effectivePower(state, u))
     ;({ state: next, owed } = defeatForCost(next, chosen.map(u => u.instanceId)))
   } else {
@@ -635,7 +639,7 @@ function finishExploit(state: GameState, choice: Extract<PendingChoice, { kind: 
  * zone it was played from. `playEvent` feeds it from hand, `playFromZone` from the resource zone,
  * the top of a deck, or a hand an ability rather than the Play a Card action is reaching into.
  */
-function playEventCard(state: GameState, playerId: PlayerId, cardId: string, cardOwner?: PlayerId, exploitOwed: PendingTrigger[] = []): GameState {
+function playEventCard(state: GameState, playerId: PlayerId, cardId: string, cardOwner?: PlayerId, exploitOwed: PendingTrigger[] = [], fromResources = false): GameState {
   const card = state.cards[cardId]
   if (card?.type !== 'event') return state
   const p = state.players[playerId]
@@ -655,16 +659,16 @@ function playEventCard(state: GameState, playerId: PlayerId, cardId: string, car
   next = fireBatch(next, [
     ...exploitOwed,
     ...collectCardTriggers('whenPlayed', card.id, playerId, sourceInstanceId),
-    ...collectPlayCard(next, playerId, card.id),
+    ...collectPlayCard(next, playerId, card.id, fromResources),
   ])
   return checkWin(next)
 }
 
 /** Take the card at `index` out of the zone a `playCardFrom` played it from. */
 function removeFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone, index: number): GameState {
-  // Which half of a paired zone the index falls in decides whose pile it names, so the owner is read
+  // Which half of a paired zone the index falls in decides whose pile it names, so the holder is read
   // the same way the zone was listed rather than assumed to be the controller.
-  const owner = zoneCardOwner(state, controller, zone, index)
+  const owner = zoneHolder(state, controller, zone, index)
   const p = state.players[owner]
   const drop = (arr: string[], i: number): string[] => arr.filter((_, n) => n !== i)
   switch (zone) {
@@ -706,6 +710,8 @@ function playFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone
   // zone it stays theirs, which is what decides where it goes when it next leaves play. Read before
   // the card is removed, since the zone is what says who owns it.
   const cardOwner = zoneCardOwner(state, controller, zone, ref.index)
+  // "When you play a card from your resources" (Bail Organa) hears where it came from.
+  const fromResources = zone === 'resources' || zone === 'opponentResources' || (zone === 'handOrResources' && ref.index >= state.players[controller].hand.length)
 
   let next = updatePlayer(state, controller, payCost(state.players[controller], cost, selfPayingResource(state, controller, zone, ref.index)))
   next = removeFromZone(next, controller, zone, ref.index)
@@ -719,12 +725,12 @@ function playFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone
     // `playUnitCard` names the new unit from the counter it is about to consume, so this is its id,
     // and the tail's "it" (damage, tokens, the delayed defeat) needs no target pick.
     const playedId = `u${next.instanceCounter}`
-    next = checkWin(playUnitCard(next, controller, card.id, tail?.entersReady === true, cost, cardOwner))
+    next = checkWin(playUnitCard(next, controller, card.id, tail?.entersReady === true, cost, cardOwner, undefined, fromResources))
     if (next.winner !== null) return next
     return applyPlayedUnitTail(next, controller, playedId, tail)
   }
   if (card.type === 'upgrade') {
-    next = playUpgradeCardOnto(next, controller, card.id, targetInstanceId, cardOwner)
+    next = playUpgradeCardOnto(next, controller, card.id, targetInstanceId, cardOwner, fromResources)
     // "At the start of the next regroup phase, defeat it" where "it" is the UPGRADE (Salvaged
     // Materials): the effect names the card and the host it went onto, since a pile can hold two
     // copies and only the one just played is doomed.
@@ -733,7 +739,7 @@ function playFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone
     }
     return next
   }
-  return playEventCard(next, controller, card.id, cardOwner)
+  return playEventCard(next, controller, card.id, cardOwner, [], fromResources)
 }
 
 /**
@@ -878,6 +884,8 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
   // initiative holder — `advanceTurn` below is action-phase logic and would hand the turn to the
   // wrong side here (or worse, re-enter regroup).
   if (state.phase === 'regroup') return { ...state, activePlayer: state.initiative }
+  // The action phase's opening choices are answered: play begins with the initiative holder.
+  if (state.pendingRoundStart) return { ...state, pendingRoundStart: undefined, activePlayer: state.initiative }
   // A "when you take the initiative" choice: complete the deferred turn transition.
   if (state.pendingInitiativeEndsPhase !== undefined) {
     const cleared = { ...state, pendingInitiativeEndsPhase: undefined }
@@ -1065,10 +1073,13 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
   if (!choice) throw new Error(`acceptChoice: no choice ${choiceId}`)
   let next = removeChoice(state, choice.id)
   switch (choice.kind) {
-    case 'exploit':
-      if (targetInstanceId) next = pickExploit(next, choice, targetInstanceId)
+    case 'exploit': {
+      // A unit by instance id, or a resource (Greater Sarlacc) by its index in the zone.
+      const pickedId = choice.resources ? (optionIndex === undefined ? undefined : String(optionIndex)) : targetInstanceId
+      if (pickedId !== undefined) next = pickExploit(next, choice, pickedId)
       if (next.winner !== null) return next
       break
+    }
     case 'payOrExhaust':
       // Pay the cost; the unit simply stays ready (no exhaust).
       next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
@@ -2267,7 +2278,7 @@ export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex:
  * from the resource zone and Camtono from the top of the deck. `upgradeAttachSites.test.ts` fails on a new
  * hand-built attach, so a further zone comes through here too.
  */
-function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: string, targetInstanceId?: string, cardOwner?: PlayerId): GameState {
+function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: string, targetInstanceId?: string, cardOwner?: PlayerId, fromResources = false): GameState {
   const card = state.cards[cardId]
   if (!card || card.type !== 'upgrade') return state
   // Fortify: "Attach this to your base, not a unit", whatever unit the play named.
@@ -2287,7 +2298,7 @@ function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: strin
     ...(onBase ? [] : collectUpgradeAttached(next, targetInstanceId!, true, playerId)),
     ...collectCardTriggers('whenPlayed', card.id, playerId, onBase ? baseSourceId(card.id) : targetInstanceId),
     ...collectPlayUpgrade(next, playerId, card.id, onBase ? undefined : targetInstanceId),
-    ...collectPlayCard(next, playerId, card.id),
+    ...collectPlayCard(next, playerId, card.id, fromResources),
   ])
   // Two upgrades with the same unique title → defeat one, on a base as on a unit.
   next = onBase ? baseUniqueCheck(next, playerId, card.id) : uniqueUpgradeCheck(next, playerId)
@@ -3172,6 +3183,7 @@ function startNextRound(state: GameState): GameState {
     regroupResourced: { player: false, opponent: false },
     // A whenReadies choice (e.g. The Conflict Within) is resolved before play begins.
     activePlayer: firstDecider(next, next.initiative),
+    ...(hasPendingChoices(next) ? { pendingRoundStart: true } : {}),
   }
   return next
 }

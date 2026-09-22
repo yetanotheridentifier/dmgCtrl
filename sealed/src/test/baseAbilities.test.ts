@@ -30,8 +30,6 @@ const GROUP_B = ['SOR_022', 'TS26_10', 'TS26_11']
 const GROUP_C = ['TWI_019', 'TWI_028', 'JTL_021', 'JTL_024', 'JTL_025']
 /** D: the eight LAW bases that play a card of any type from hand, waiving one of four penalties. */
 const GROUP_D = ['LAW_020', 'LAW_021', 'LAW_022', 'LAW_024', 'LAW_025', 'LAW_027', 'LAW_028', 'LAW_030']
-/** Scoped by the triage but lifted out to the ticket that owns their blocker. */
-const LIFTED = ['TS26_12']
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
 const real = (id: string): EngineCard => {
@@ -86,9 +84,8 @@ const offered = (s: GameState): boolean => legalMoves(s).some(m => m.type === 'u
 const useBase = (s: GameState) => resolve(s, { type: 'useBaseAbility' })
 
 describe('base abilities: the scope', () => {
-  it('registers a base ability for every shipped base and none for the lifted ones', () => {
+  it('registers a base ability for every shipped base', () => {
     for (const id of [...GROUP_A, ...GROUP_B, ...GROUP_C, ...GROUP_D]) expect(getCardDefinition(id)?.baseAbilities, id).toBeTruthy()
-    for (const id of LIFTED) expect(getCardDefinition(id), id).toBeUndefined()
   })
 })
 

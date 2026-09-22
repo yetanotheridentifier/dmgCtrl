@@ -191,8 +191,12 @@ export interface CardDefinition {
    * them. For each unit chosen this way, this unit costs 1 less" (The Marauder): Exploit's step with
    * its own terms. `damage` is dealt to each chosen unit and each saves `discount`; the number is
    * any. Exploit itself needs no hook, it is read off the keyword (`exploitTerms`).
+   *
+   * With `resources` the picks are ready resources the player controls, each defeated and each
+   * saving `discount` (Greater Sarlacc: "defeat any number of ready resources you control. For each
+   * resource defeated this way, this unit costs 3 less").
    */
-  whilePlaying?: { damage: number; discount: number }
+  whilePlaying?: { damage: number; discount: number } | { resources: true; discount: number }
   /**
    * Extra keywords this card grants a unit (e.g. an upgrade granting a conditional keyword). `ctx`
    * carries the combat situation where there is one, so a keyword gained only while attacking a
