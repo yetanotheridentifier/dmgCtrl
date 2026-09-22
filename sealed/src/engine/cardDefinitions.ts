@@ -10333,6 +10333,33 @@ registerCard('LOF_148', { // Rey
   ifYouDo: (s, ctx) => damageChoice(damageChoice(s, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-unit` }, 2, allUnits(s)), { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-base` }, 2, [], BOTH_BASES),
 })
 
+registerCard('SEC_017', { // Sabé
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenFriendlyAttackEnds',
+      hears: (_s, ctx) => (ctx.combatDamageToBase ?? 0) > 0,
+      description: "When a friendly unit deals combat damage to a base: You may exhaust this leader. If you do, look at the top 2 cards of the defending player's deck. Discard 1 of those cards.",
+      effect: (s, ctx) => (leaderCanExhaust(s, ctx.owner) && s.players[opponentOf(ctx.owner)].deck.length > 0
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: "exhaust Sabé (leader) to look at the top 2 cards of the defending player's deck and discard 1", then: resume(ctx, 'look') })
+        : s),
+    }],
+  },
+  abilities: [{ trigger: 'onAttackEnd', description: "When this unit deals combat damage to a base: Look at the defending player's hand. You may discard a card from it. If you do, that player draws a card.", effect: (s, ctx) =>
+    ((ctx.combatDamageToBase ?? 0) > 0
+      ? pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, thenDraw: true })
+      : s) }],
+  ifYouDo: (s, ctx) => {
+    const defender = opponentOf(ctx.owner)
+    const deck = s.players[defender].deck
+    if (ctx.step === 'look') {
+      return pushChoice(exhaustLeader(s, ctx.owner), { kind: 'selectCardThen', id: `${ctx.cardId}-look`, controller: ctx.owner, candidates: deck.slice(0, 2), text: "discard 1 of the top 2 cards of the defending player's deck; the other goes back on top", then: resume(ctx, 'discard') })
+    }
+    // The picked position, since the two may be copies of one card.
+    const at = ctx.optionIndex ?? 0
+    return at < deck.length ? updatePlayer(s, defender, { deck: deck.filter((_, i) => i !== at), discard: [...s.players[defender].discard, deck[at]] }) : s
+  },
+})
+
 registerCard('SOR_015', { // Boba Fett
   leaderAbilities: {
     abilities: [{

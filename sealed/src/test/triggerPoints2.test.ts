@@ -1172,6 +1172,36 @@ describe('LOF_148 Rey', () => {
   })
 })
 
+// "Look at the top 2 of the defending player's deck, discard 1" is `selectCardThen` over the two
+// cards, as Admiral Trench picks among revealed deck cards; the hook takes the picked position.
+describe('SEC_017 Sabé', () => {
+  const S: Record<string, EngineCard> = { ...P, SEC_017: card({ id: 'SEC_017', name: 'Sabé', type: 'leader', arena: 'ground', cost: 5, power: 3, hp: 6, traits: ['Naboo'] }) }
+  const front = { cardId: 'SEC_017', deployed: false, epicActionUsed: false, exhausted: false }
+  const deck = ['GRD', 'SMALL', 'BIG']
+  const sBoard = (mine: Side, theirs: Side = {}) => ({ ...board(mine, { deck, hand: ['TOUGH'], ...theirs }), cards: S })
+
+  it('front: when a friendly unit deals combat damage to a base, may exhaust herself to discard 1 of the top 2 of the defending deck', () => {
+    const swung = attackBase(sBoard({ leader: front, units: [unit('g', 'GRD')] }), 'g')
+    expect(choice(swung)).toMatchObject({ kind: 'mayPayThen', controller: 'player' })
+    const paid = accept(swung)
+    expect(paid.players.player.leader.exhausted).toBe(true)
+    expect(choice(paid)).toMatchObject({ kind: 'selectCardThen', controller: 'player', candidates: ['GRD', 'SMALL'] })
+    const binned = accept(paid, { optionIndex: 1 })
+    expect(binned.players.opponent.discard).toEqual(['SMALL'])
+    expect(binned.players.opponent.deck, 'the other goes back on top').toEqual(['GRD', 'BIG'])
+  })
+
+  it('front: not for an attack on a unit', () => {
+    noChoice(attackUnit(sBoard({ leader: front, units: [unit('g', 'GRD')] }, { units: [unit('e', 'TOUGH')] }), 'g', 'e'))
+  })
+
+  it("back: when she deals combat damage to a base, looks at the defending player's hand and may discard a card from it, and they draw", () => {
+    const back = { ...front, deployed: true, epicActionUsed: true }
+    const swung = attackBase(sBoard({ leader: back, units: [unit('sb', 'SEC_017', { isLeader: true })] }), 'sb')
+    expect(choice(swung)).toMatchObject({ kind: 'lookAtHand', target: 'opponent', mayDiscard: true, thenDraw: true })
+  })
+})
+
 describe('SOR_015 Boba Fett', () => {
   const B: Record<string, EngineCard> = { ...P, SOR_015: card({ id: 'SOR_015', name: 'Boba Fett', type: 'leader', arena: 'ground', cost: 5, power: 4, hp: 7, traits: ['Underworld', 'Bounty Hunter'] }) }
   const spent = ready(3).map(r => ({ ...r, exhausted: true }))

@@ -293,6 +293,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'TWI_016', name: 'Jango Fett', front: true, back: true },
   // "When an enemy unit leaves play".
   { id: 'SOR_015', name: 'Boba Fett', front: true, back: true },
+  // "When a friendly unit deals combat damage to a base"; "when this unit deals combat damage to a base".
+  { id: 'SEC_017', name: 'Sabé', front: true, back: true },
 ]
 
 /**

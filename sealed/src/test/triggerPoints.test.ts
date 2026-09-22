@@ -7,7 +7,7 @@ import { TOKEN_EXPERIENCE } from '../engine/tokenUpgrades'
 import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import { unitHasKeyword } from '../engine/keywords'
 import { effectiveCost } from '../engine/legalMoves'
-import { registerCard, registeredCardIds } from '../engine/abilities'
+import { registerCard } from '../engine/abilities'
 import type { GameState, PendingChoice, PlayerId } from '../engine/types'
 
 /**
@@ -367,22 +367,10 @@ describe('SEC_205 Obi-Wan Kenobi', () => {
   })
 })
 
-/**
- * The one card of this group held back, and why, so the guard fails the day its blocker is lifted
- * and nobody has to rediscover the reason.
- *
- * SEC_017 Sabé's front is "look at the top 2 cards of the defending player's deck. Discard 1 of
- * those cards. (Put the other back on top.)" Every deck-top choice the engine has works on the
- * CONTROLLER's own deck (`searchDraw` has no deck field at all) and the only choice that reaches a
- * named player's deck, `mayDiscardTop`, takes the top card with no pick. A pick of 1 from N over
- * somebody else's deck is a new interactive choice kind, which lands in six files, the AI's legal
- * moves and the game screen among them. Its head is not the blocker: `whenFriendlyAttackEnds`
- * already carries `combatDamageToBase`, and its back is a plain `lookAtHand` with `thenDraw`.
- */
-describe('SEC_017 Sabé is held back, not shipped', () => {
-  it('is not registered, and its head is not what is missing', () => {
-    expect(registeredCardIds()).not.toContain('SEC_017')
-    // The point the card needs already fires for a friendly unit's base damage, with the figure on it.
+/** SEC_017 Sabé's front reads a friendly unit's base damage from `whenFriendlyAttackEnds`. */
+describe('whenFriendlyAttackEnds carries the base damage', () => {
+  it('reaches every friendly unit with the attack\'s combat damage to the base', () => {
+    // The point Sabé's front listens on fires for a friendly unit's base damage, with the figure on it.
     const seen: { combatDamageToBase?: number }[] = []
     registerCard('TST_FAE', { abilities: [{ trigger: 'whenFriendlyAttackEnds', description: 'probe', effect: (s, ctx) => { seen.push({ combatDamageToBase: ctx.combatDamageToBase }); return s } }] })
     const s = state({
