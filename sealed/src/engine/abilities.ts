@@ -195,8 +195,13 @@ export interface CardDefinition {
    * With `resources` the picks are ready resources the player controls, each defeated and each
    * saving `discount` (Greater Sarlacc: "defeat any number of ready resources you control. For each
    * resource defeated this way, this unit costs 3 less").
+   *
+   * With `fromDiscard` they are unit cards in the player's discard pile costing at most `maxCost`, up
+   * to `limit` of them, each put on the bottom of the deck (Vernestra Rwoh). That is an ADDITIONAL
+   * COST rather than a discount, so it saves nothing and may be finished with nothing picked; the
+   * cards chosen lend the played unit their "When Played" abilities.
    */
-  whilePlaying?: { damage: number; discount: number } | { resources: true; discount: number }
+  whilePlaying?: { damage: number; discount: number } | { resources: true; discount: number } | { fromDiscard: { limit: number; maxCost: number } }
   /**
    * Extra keywords this card grants a unit (e.g. an upgrade granting a conditional keyword). `ctx`
    * carries the combat situation where there is one, so a keyword gained only while attacking a

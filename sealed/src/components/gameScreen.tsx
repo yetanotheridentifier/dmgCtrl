@@ -1261,7 +1261,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // board unit plus a Decline button, rather than one menu button per target.
     // Greater Sarlacc's step picks facedown resources, which are not on the board, so it is answered
     // from the menu, one button per resource, like any other card pick.
-    const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && (BOARD_TARGET_KINDS as readonly string[]).includes(c.kind) && !(c.kind === 'exploit' && c.resources))
+    // Vernestra Rwoh's step picks cards in the discard pile, also not on the board: it gets the same
+    // card picker as any other "choose a card in a pile", below.
+    const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && (BOARD_TARGET_KINDS as readonly string[]).includes(c.kind) && !(c.kind === 'exploit' && (c.resources || c.fromDiscard)))
     const choiceTargetIds = new Map<string, Action>()
     // Base targets (selectDamageTarget): pick a player's base to take the damage.
     const baseTargetActions = new Map<PlayerId, Action>()
@@ -1456,6 +1458,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
     const fromDiscardActions = fromDiscardChoice
       ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === fromDiscardChoice.id)
+      : []
+
+    // Vernestra Rwoh's additional cost: the same picker over the discard pile, one pick at a time,
+    // with Done as its cancel. The offered indices come from the legal moves, so the cost rule and
+    // the picks already made are stated in one place.
+    const bottomFromDiscardChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'exploit' }> => c.kind === 'exploit' && !!c.fromDiscard && c.controller === 'player',
+    )
+    const bottomFromDiscardActions = bottomFromDiscardChoice
+      ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === bottomFromDiscardChoice.id)
       : []
 
     // Playing a card out of a zone (The Armorer, Osha, a Smuggle): a card picker over that zone,
@@ -1720,6 +1732,19 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           items={fromDiscardChoice.candidates.map((cardId, i) => ({ cardId, optionIndex: i, key: i }))}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: fromDiscardChoice.id, optionIndex })}
           onCancel={cancel ? () => actAndClear(cancel) : undefined}
+        />
+      )
+    } else if (bottomFromDiscardChoice) {
+      const offered = new Set(bottomFromDiscardActions.flatMap(a => (a.type === 'acceptChoice' && a.optionIndex !== undefined ? [a.optionIndex] : [])))
+      const stop = bottomFromDiscardActions.find(a => a.type === 'skipTrigger')
+      const left = bottomFromDiscardChoice.limit - bottomFromDiscardChoice.picks.length
+      choiceOverlay = (
+        <CardSelectOverlay
+          state={gameState}
+          prompt={`Put a unit that costs ${bottomFromDiscardChoice.maxCost} or less on the bottom of your deck to play ${gameState.cards[bottomFromDiscardChoice.cardId]?.name ?? 'this unit'} with its "When Played" abilities (${left} more at most)`}
+          items={gameState.players.player.discard.map((cardId, i) => ({ cardId, optionIndex: i, key: i, disabled: !offered.has(i) }))}
+          onPick={optionIndex => offered.has(optionIndex) && actAndClear({ type: 'acceptChoice', choiceId: bottomFromDiscardChoice.id, optionIndex })}
+          onCancel={stop ? () => actAndClear(stop) : undefined}
         />
       )
     } else if (uniqueChoice && pickedHost !== null) {

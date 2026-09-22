@@ -1874,6 +1874,10 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'TWI_217', name: 'Tri-Droid Suppressor' },
   { id: 'TWI_235', name: 'Battle Droid Legion' },
   { id: 'HMW_125', name: 'The Marauder' },
+  // Another card's "When Played" abilities, borrowed and resolved as the borrower's own: Vernestra Rwoh
+  // names hers in the discard pile, as an additional cost to play her; Fives names a unit in play.
+  { id: 'HMW_048', name: 'Vernestra Rwoh' },
+  { id: 'TS26_34', name: 'Fives' },
   // The resource zone: resources defeated, returned to hand, or put into play, including an opponent's
   // card; Greater Sarlacc's is Exploit's step on ready resources.
   { id: 'HMW_049', name: 'Greater Sarlacc' },

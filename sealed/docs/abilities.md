@@ -63,7 +63,16 @@ card list is snapshotted when the ability triggers rather than recomputed at res
 aura or a lasting effect granted it is settled at the moment of the event.
 
 Each ability is attributed to the card it came from, not the host, so an upgrade's ability names the
-upgrade. The `ctx` argument becomes `PendingTrigger.ctx` and is merged back into the `EffectContext`
+upgrade.
+
+**Borrowing another card's ability** is `collectCardTriggers` with the borrower's instance as the
+source: the ability is read off one card and resolves as another unit's own, so "this unit" in it means
+the borrower. Vernestra Rwoh borrows the "When Played" abilities of the cards her additional cost
+bottoms out of the discard pile, and Fives those of another unit in play. That is the difference from
+`collectUnitTriggers`, which always sources a trigger at the unit it read the ability off: Chimaera's
+"use a When Defeated ability on another friendly unit" leaves the ability on that unit, and uses it.
+
+The `ctx` argument becomes `PendingTrigger.ctx` and is merged back into the `EffectContext`
 when the ability runs, which is how the attack outcome reaches `onAttackEnd` and the captured unit
 reaches `whenDefeated` (the unit has left play by then).
 
@@ -311,7 +320,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | Hook | Effect |
 | --- | --- |
 | `costModifier` | cost delta, applied in `effectiveCost` |
-| `whilePlaying` | Exploit's step on the card's own terms: any number of friendly units, each dealt `damage` and saving `discount` (The Marauder), or with `resources` any number of ready resources, each defeated and saving `discount` (Greater Sarlacc); see `choices.md` |
+| `whilePlaying` | Exploit's step on the card's own terms: any number of friendly units, each dealt `damage` and saving `discount` (The Marauder), with `resources` any number of ready resources, each defeated and saving `discount` (Greater Sarlacc), or with `fromDiscard` up to `limit` unit cards costing at most `maxCost` in the discard pile, bottomed as an additional cost that saves nothing (Vernestra Rwoh); see `choices.md` |
 | `costDiscount` | a unit in play discounting cards its controller plays |
 | `waivesAspectPenalty` | a unit in play zeroing the aspect penalty |
 | `ignoresOwnAspectPenalty` | the aspect icons whose penalty a card ignores while it is played (Rey with Kylo Ren) |
