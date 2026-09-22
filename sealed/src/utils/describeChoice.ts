@@ -278,6 +278,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return [choice.phaseBan
         ? 'name a card nobody may play this phase'
         : 'name a card the opponent may not play while this unit is out']
+    case 'nameTrait':
+      return ['name a Trait: enemy cards, including those not in play, lose it for this phase']
     case 'playCardFrom': {
       const price = choice.free ? ' for free' : choice.costDelta ? ` for ${Math.abs(choice.costDelta)} less` : ''
       return [`choose a card to play from ${playFromZoneName(choice.zone)}${price}`]

@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { nameableCardNames, zoneCards } from '../engine/legalMoves'
+import { nameableCardNames, nameableTraits, zoneCards } from '../engine/legalMoves'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
@@ -592,13 +592,16 @@ export function NextTriggerOverlay({ state, candidates, onPick }: {
  * "Name a card" overlay (Ryder Azadi): a text box that filters the nameable card list (every
  * card in the current game — both decks) by substring; clicking one names it. Portalled to body so it
  * clears the board's stacking context. The full-ASH-set list is a later extension (follow-up).
+ *
+ * `what` names what is being picked, so "name a Trait" (The First Legion) uses the same overlay: the
+ * two choices differ in the list and the heading and in nothing else.
  */
-export function NameCardOverlay({ names, onPick }: { names: string[]; onPick: (name: string) => void }) {
+export function NameCardOverlay({ names, onPick, what = 'card' }: { names: string[]; onPick: (name: string) => void; what?: string }) {
   const [query, setQuery] = useState('')
   const filtered = query.trim() ? names.filter(n => n.toLowerCase().includes(query.trim().toLowerCase())) : names
   return createPortal(
     <div data-testid="name-card-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/75 p-4">
-      <p className="text-xs uppercase tracking-[0.14em] text-ink-dim">Name a card</p>
+      <p className="text-xs uppercase tracking-[0.14em] text-ink-dim">Name a {what}</p>
       <input
         data-testid="name-card-input"
         autoFocus
@@ -1431,6 +1434,12 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
     const nameCardActions = nameCardChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === nameCardChoice.id) : []
 
+    // A "name a Trait" choice (The First Legion): the same overlay over the Trait list.
+    const nameTraitChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'nameTrait' }> => c.kind === 'nameTrait' && c.controller === 'player',
+    )
+    const nameTraitActions = nameTraitChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === nameTraitChoice.id) : []
+
     // A "select an upgrade to defeat" choice (Vane) and the unique-copy version. Both are picked
     // in two steps: highlight the units carrying candidates on the board, then show that unit's
     // upgrades in the card picker. Neither goes in the action menu.
@@ -1489,7 +1498,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !discardTopActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !searchUpgradeActions.includes(a) && !nameCardActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !playFromActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !discardTopActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !searchUpgradeActions.includes(a) && !nameCardActions.includes(a) && !nameTraitActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !playFromActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
       : []
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
@@ -1658,6 +1667,14 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         <NameCardOverlay
           names={nameableCardNames(gameState)}
           onPick={cardName => actAndClear({ type: 'acceptChoice', choiceId: nameCardChoice.id, cardName })}
+        />
+      )
+    } else if (nameTraitChoice) {
+      choiceOverlay = (
+        <NameCardOverlay
+          what="Trait"
+          names={nameableTraits(gameState)}
+          onPick={traitName => actAndClear({ type: 'acceptChoice', choiceId: nameTraitChoice.id, traitName })}
         />
       )
     } else if (selectUpgradeChoice && pickedHost !== null) {

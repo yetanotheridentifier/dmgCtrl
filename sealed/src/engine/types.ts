@@ -286,7 +286,13 @@ export interface NextUnitGrant {
 export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state?: GameState, owner?: PlayerId): boolean {
   if (!card) return false
   if (grant.anyCard ? card.type !== 'unit' && card.type !== 'event' : card.type !== (grant.event ? 'event' : 'unit')) return false
-  if (grant.trait && !card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase())) return false
+  // Traits the card has lost for the phase are gone here too (The First Legion). The card-level
+  // grants `cardTraits` adds are not read here: this module sits below the registry, and no grant a
+  // card makes itself has ever been what a "your next <Trait> unit" discount turned on.
+  if (grant.trait) {
+    const lost = state && owner ? traitsRemovedFrom(state, owner) : EMPTY_TRAITS
+    if (!card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase() && !lost.has(t.toLowerCase()))) return false
+  }
   if (grant.maxPower !== undefined && (card.power ?? 0) > grant.maxPower) return false
   if (grant.cardId !== undefined && card.id !== grant.cardId) return false
   if (grant.sharesKeywordWithFriendly) {
@@ -446,6 +452,13 @@ export interface GameState {
   shieldedBases?: PlayerId[]
   /** Bases can't be healed for this phase (Shifty Suspects). Cleared as the regroup phase starts. */
   basesUnhealable?: boolean
+  /**
+   * Traits each player's cards have lost for this phase (The First Legion names one). Keyed by the
+   * player whose cards lose it, and it reaches **every** card they own, in play or not, which is why
+   * it is held here rather than as a `LastingEffect` per unit. Read through `cardTraits`; cleared as
+   * the regroup phase starts.
+   */
+  traitsRemoved?: Partial<Record<PlayerId, string[]>>
   /**
    * Events the engine tracks within a boundary so abilities can query them:
    * which units entered play this phase and which cards were defeated this phase
@@ -778,6 +791,14 @@ export interface PhaseEvents {
    */
   tokensCreated?: PlayerId[]
   /**
+   * Players who GAVE a token upgrade to a unit this phase (Jar Jar Binks). Deliberately not
+   * `tokensCreated`: that also counts a token unit being created, and it credits the controller of
+   * the unit the token landed on, where this credits whoever gave it, which is what "if **you** gave
+   * a token upgrade to a unit" asks. The two differ for a card that puts a token on an enemy unit
+   * (a Weakness token, or a Shield handed to the other side).
+   */
+  tokenUpgradesGiven?: PlayerId[]
+  /**
    * Base action abilities each player has used this phase, as `${cardId}#${index}` once per use (Heavy
    * Ion Cannon: "Use this ability only once each phase"). Counted against the copies on the base.
    */
@@ -1089,11 +1110,14 @@ type ChoiceVariant =
   // `thenDelay` leaves a delayed effect about the played unit (Sneak Attack defeats it at the regroup phase).
   // `thenLasting` gives the played unit a lasting effect (Shien Flurry's prevention). `thenDefeat` defeats
   // these units once the play is settled, played or declined (Consolidation of Power).
+  // `thenDefeatIt` defeats the unit just played, as part of the same ability, before its own When Played
+  // resolves ("Then, defeat it. (When Played abilities resolve after the unit is defeated.)", Maul).
+  // Distinct from `thenDefeat`, which names OTHER units and runs after the play is complete.
   // `then` is the card's own follow-up, run once the unit is on the board and paid for, with the
   // played card in `cardChosen` ("Play 2 units from your hand, one at a time" — General Grievous
   // offers the second play from the state the first one left, so its cost is read against what is
   // still ready). It does not run when the play is declined.
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenTokens?: string[]; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; thenLasting?: Omit<LastingEffect, 'targetInstanceId'>; thenDefeat?: string[]; then?: IfYouDo }
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenTokens?: string[]; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; thenLasting?: Omit<LastingEffect, 'targetInstanceId'>; thenDefeat?: string[]; thenDefeatIt?: boolean; then?: IfYouDo }
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
@@ -1276,6 +1300,10 @@ type ChoiceVariant =
   // `phaseBan` records the name on the game instead, so nobody can play it this phase (Transmission Jamming).
   // `then` hands the name to the card's `ifYouDo` hook as `nameChosen` instead of recording it (Zuckuss, Chimaera).
   | { kind: 'nameCard'; id: string; controller: PlayerId; unitId: string; surcharge?: number; phaseBan?: boolean; then?: IfYouDo }
+  // Name a Trait (The First Legion) — resolved by an `acceptChoice` carrying `traitName`. `losesIt`
+  // is the player whose cards lose the named Trait for the phase. The nameable set is every Trait in
+  // the game's cards, as `nameCard`'s is every card name in them. Mandatory.
+  | { kind: 'nameTrait'; id: string; controller: PlayerId; losesIt: PlayerId }
   // "You may put the top card of your deck into play as a resource" (Resupply Carrier, Cham
   // Syndulla) — a yes/no, raised only when there is a card to take.
   | { kind: 'mayResourceTop'; id: string; controller: PlayerId }
@@ -1426,13 +1454,35 @@ export function addLastingEffect(state: GameState, effect: LastingEffect): GameS
  * until `clearRoundEffects`.
  */
 export function clearLastingEffects(state: GameState): GameState {
-  if (!state.lastingEffects && !state.bannedNames && !state.shieldedBases && !state.basesUnhealable && !state.discardPlayGrants) return state
+  if (!state.lastingEffects && !state.bannedNames && !state.shieldedBases && !state.basesUnhealable && !state.discardPlayGrants && !state.traitsRemoved) return state
   const kept = (state.lastingEffects ?? []).filter(e => e.untilRoundEnd)
   return {
     ...state, lastingEffects: kept.length > 0 ? kept : undefined,
     bannedNames: undefined, shieldedBases: undefined, basesUnhealable: undefined, discardPlayGrants: undefined,
+    traitsRemoved: undefined,
   }
 }
+
+/**
+ * "Enemy cards, including those not in play, lose that Trait for this phase" (The First Legion).
+ *
+ * Stated once, about the player rather than about each card, because the cards it reaches are in
+ * zones no per-card effect can address. `cardTraits` is the single read that applies it.
+ */
+export function removeTraitFromCards(state: GameState, owner: PlayerId, trait: string): GameState {
+  const removed = state.traitsRemoved ?? {}
+  const mine = removed[owner] ?? []
+  if (mine.some(t => t.toLowerCase() === trait.toLowerCase())) return state
+  return { ...state, traitsRemoved: { ...removed, [owner]: [...mine, trait] } }
+}
+
+/** Lower-cased Traits `owner`'s cards have lost for this phase. Empty is the overwhelmingly common case. */
+export function traitsRemovedFrom(state: GameState, owner: PlayerId): ReadonlySet<string> {
+  const removed = state.traitsRemoved?.[owner]
+  return removed && removed.length > 0 ? new Set(removed.map(t => t.toLowerCase())) : EMPTY_TRAITS
+}
+
+const EMPTY_TRAITS: ReadonlySet<string> = new Set<string>()
 
 /** Add a "for this phase, you may play that card from <a> discard pile" permission. */
 export function addDiscardPlayGrant(state: GameState, grant: DiscardPlayGrant): GameState {
@@ -1549,6 +1599,18 @@ export function recordTokenCreated(state: GameState, owner: PlayerId): GameState
   const events = state.phaseEvents ?? emptyPhaseEvents()
   const created = events.tokensCreated ?? []
   return created.includes(owner) ? state : { ...state, phaseEvents: { ...events, tokensCreated: [...created, owner] } }
+}
+
+/** Record that `giver` gave a token upgrade to a unit this phase. Idempotent. */
+export function recordTokenUpgradeGiven(state: GameState, giver: PlayerId): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  const given = events.tokenUpgradesGiven ?? []
+  return given.includes(giver) ? state : { ...state, phaseEvents: { ...events, tokenUpgradesGiven: [...given, giver] } }
+}
+
+/** Whether `giver` gave a token upgrade to a unit this phase (Jar Jar Binks). */
+export function tokenUpgradeGivenThisPhase(state: GameState, giver: PlayerId): boolean {
+  return state.phaseEvents?.tokenUpgradesGiven?.includes(giver) ?? false
 }
 
 /** Note one use of a base action this phase, for "use this ability only once each phase" (Heavy Ion Cannon). */

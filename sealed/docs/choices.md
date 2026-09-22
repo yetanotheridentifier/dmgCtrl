@@ -411,6 +411,10 @@ action looks like a heal that never happened.
   costs the opponent that much more, charged in `effectiveCost` (Qi'ra). The two must not be confused:
   a surcharge left in the prohibition set would make the card unplayable instead of dear, so
   `namedByOpponent` filters those units out.
+- **Naming a Trait is the same shape over a different list.** `nameTrait` offers every Trait printed
+  on a card in the game (`nameableTraits`), as `nameCard` offers every card name in it, and the answer
+  carries `traitName`. It records the Trait against the player named in `losesIt`, whose cards lose it
+  for the phase wherever they are (The First Legion). The same overlay serves both.
 
 ### Searching always shows what it looked at
 

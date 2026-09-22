@@ -313,6 +313,19 @@ export function nameableCardNames(state: GameState): string[] {
   return [...names].sort((a, b) => a.localeCompare(b))
 }
 
+/**
+ * Traits that can be named (The First Legion). Every Trait printed on a card in this game, which is
+ * the same reach `nameableCardNames` has: naming is a free choice in the rules, and the two decks are
+ * the only Traits that can matter. Case is the card data's own, de-duplicated case-insensitively.
+ */
+export function nameableTraits(state: GameState): string[] {
+  const seen = new Map<string, string>()
+  for (const card of Object.values(state.cards)) {
+    for (const trait of card?.traits ?? []) if (!seen.has(trait.toLowerCase())) seen.set(trait.toLowerCase(), trait)
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b))
+}
+
 /** Card names the opponent has forbidden us from playing via a Ryder Azadi they control. */
 export function namedByOpponent(state: GameState, playerId: PlayerId): Set<string> {
   // A name carrying a surcharge (Qi'ra) makes the card dearer rather than unplayable, so it is
@@ -965,6 +978,11 @@ function choiceMoves(state: GameState): Action[] {
         // Ryder Azadi: name any card. The nameable set is the cards in play (both decks) — the
         // UI filters it by typing; the AI just picks one. Mandatory.
         for (const name of nameableCardNames(state)) moves.push({ type: 'acceptChoice', choiceId: choice.id, cardName: name })
+        break
+      }
+      case 'nameTrait': {
+        // The First Legion: name any Trait, from the same set of cards `nameableCardNames` reads.
+        for (const trait of nameableTraits(state)) moves.push({ type: 'acceptChoice', choiceId: choice.id, traitName: trait })
         break
       }
       case 'searchPlayFree': {

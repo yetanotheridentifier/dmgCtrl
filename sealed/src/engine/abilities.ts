@@ -376,6 +376,15 @@ export interface CardDefinition {
   dealsCombatDamageByHp?: (state: GameState, unit: UnitState) => boolean
   /** Extra traits this card grants a unit — The Darksaber grants Mandalorian. */
   grantedTraits?: (state: GameState, unit: UnitState) => string[]
+  /**
+   * Extra traits this card has **wherever it is**, in play or not (Zam Wesell copies her controller's
+   * leader's Traits "even while she's not in play"). Read by `cardTraits`, so a card in hand, deck or
+   * discard carries them too; `grantedTraits` is the in-play-only form, asked about a unit.
+   *
+   * `owner` is the player whose copy of the card is being read, since a card in an opponent's deck
+   * reads their side of the board, not yours.
+   */
+  cardTraits?: (state: GameState, owner: PlayerId) => string[]
   /** Traits this card takes away from its unit, printed or granted (Abandoned the Order: loses Jedi). */
   removedTraits?: (state: GameState, unit: UnitState) => string[]
   /** True if this card makes its unit a leader unit — The Darksaber. */

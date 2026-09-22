@@ -1,5 +1,5 @@
-import type { GameState, KeywordInstance, UnitState, CombatContext } from './types'
-import { lastingEffectTotals, abilityCardIds, baseAbilityCardIds } from './types'
+import type { GameState, KeywordInstance, PlayerId, UnitState, CombatContext } from './types'
+import { lastingEffectTotals, abilityCardIds, baseAbilityCardIds, traitsRemovedFrom } from './types'
 import { getCardDefinition } from './abilities'
 import type { AttackContext, AuraContribution, StatModContext } from './abilities'
 
@@ -195,9 +195,43 @@ export function unitAttacksEitherArena(state: GameState, unit: UnitState): boole
   return abilityCardIds(unit).some(id => getCardDefinition(id)?.attacksEitherArena?.(state, unit) ?? false)
 }
 
-/** A unit's traits — its card's plus any granted by an upgrade (The Darksaber → Mandalorian). */
+/**
+ * **The one read of a card's traits**, for a card anywhere: in play, in hand, in a deck, in a discard
+ * pile. Printed traits, plus any the card gives itself wherever it is (Zam Wesell copies her leader's),
+ * minus any an effect has taken off that player's cards for the phase (The First Legion names one).
+ *
+ * `owner` is the player whose copy is being read, and both halves need it: the grant reads that
+ * player's board, and the removal is aimed at one player's cards. Omit it only where there is
+ * genuinely no owner to name, and the printed traits are then all that can be said.
+ *
+ * `unitTraits` is this plus the traits a unit picks up from what is attached to it.
+ */
+export function cardTraits(state: GameState, cardId: string, owner?: PlayerId): string[] {
+  const printed = state.cards[cardId]?.traits ?? []
+  const granted = owner ? getCardDefinition(cardId)?.cardTraits?.(state, owner) ?? [] : []
+  const out = granted.length > 0 ? [...printed, ...granted] : printed
+  const lost = owner ? traitsRemovedFrom(state, owner) : undefined
+  return lost && lost.size > 0 ? out.filter(t => !lost.has(t.toLowerCase())) : out
+}
+
+/** Case-insensitive trait test for a card anywhere. See {@link cardTraits}. */
+export function cardHasTrait(state: GameState, cardId: string, name: string, owner?: PlayerId): boolean {
+  return cardTraits(state, cardId, owner).some(t => t.toLowerCase() === name.toLowerCase())
+}
+
+/**
+ * A unit's traits — its card's (through {@link cardTraits}) plus any granted by an upgrade
+ * (The Darksaber → Mandalorian).
+ *
+ * The controller is looked up only when something on the board could make a difference: a card-level
+ * grant registered for this card, or a trait removal in force. Every other call, which is nearly all
+ * of them in an AI search, does the same work it always did.
+ */
 export function unitTraits(state: GameState, unit: UnitState): string[] {
-  const out = [...(state.cards[unit.cardId]?.traits ?? [])]
+  const cardLevel = state.traitsRemoved !== undefined || getCardDefinition(unit.cardId)?.cardTraits !== undefined
+  const out = cardLevel
+    ? [...cardTraits(state, unit.cardId, controllerOf(state, unit))]
+    : [...(state.cards[unit.cardId]?.traits ?? [])]
   const removed = new Set<string>()
   for (const cardId of abilityCardIds(unit)) {
     const def = getCardDefinition(cardId)
@@ -205,6 +239,13 @@ export function unitTraits(state: GameState, unit: UnitState): string[] {
     for (const t of def?.removedTraits?.(state, unit) ?? []) removed.add(t.toLowerCase())
   }
   return removed.size > 0 ? out.filter(t => !removed.has(t.toLowerCase())) : out
+}
+
+/** Which player has this unit in their units array. Only asked where a card-level trait rule is live. */
+function controllerOf(state: GameState, unit: UnitState): PlayerId | undefined {
+  return state.players.player.units.some(u => u.instanceId === unit.instanceId) ? 'player'
+    : state.players.opponent.units.some(u => u.instanceId === unit.instanceId) ? 'opponent'
+      : undefined
 }
 
 /** Case-insensitive trait test that includes granted traits. */

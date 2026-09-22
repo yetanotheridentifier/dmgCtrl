@@ -1,5 +1,5 @@
 import type { DamageDealt, DamageSource, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
-import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
+import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint } from './abilities'
@@ -140,12 +140,18 @@ function patchUnit(state: GameState, owner: PlayerId, instanceId: string, patch:
  * confirmed: Unfettered Ambition attaching, then its own effect granting Advantage, is two.
  *
  * A count of zero is not an attach event, so it neither attaches nor fires.
+ *
+ * `givenBy` is the player who **gave** the tokens, recorded for "if you gave a token upgrade to a unit
+ * this phase" (Jar Jar Binks). It defaults to the unit's controller, which is who gave them for every
+ * grant a card makes to its own side; the callers that can land a token on an enemy unit (the choice
+ * that raised it knows who answered it, and Weakness tokens) pass the giver.
  */
-export function giveTokens(state: GameState, instanceId: string, tokenId: string, count: number): GameState {
+export function giveTokens(state: GameState, instanceId: string, tokenId: string, count: number, givenBy?: PlayerId): GameState {
   const found = findUnit(state, instanceId)
   if (!found || count <= 0) return state
   const tokens = Array.from({ length: count }, () => ({ cardId: tokenId, owner: found.owner }))
-  return fireUpgradeAttached(attachUpgrades(recordTokenCreated(state, found.owner), instanceId, tokens), instanceId)
+  const recorded = recordTokenUpgradeGiven(recordTokenCreated(state, found.owner), givenBy ?? found.owner)
+  return fireUpgradeAttached(attachUpgrades(recorded, instanceId, tokens), instanceId)
 }
 
 /**
@@ -174,8 +180,8 @@ export function attachUpgrades(state: GameState, instanceId: string, upgrades: U
 }
 
 /** Attach a single token upgrade. See {@link giveTokens} for why the count-many form exists. */
-export function giveToken(state: GameState, instanceId: string, tokenId: string): GameState {
-  return giveTokens(state, instanceId, tokenId, 1)
+export function giveToken(state: GameState, instanceId: string, tokenId: string, givenBy?: PlayerId): GameState {
+  return giveTokens(state, instanceId, tokenId, 1, givenBy)
 }
 
 /**
@@ -183,10 +189,10 @@ export function giveToken(state: GameState, instanceId: string, tokenId: string)
  * "give an Experience token and a Shield token to it". {@link giveTokens} is one kind at a time, and
  * calling it twice would be two events, firing Sabine Wren twice for what the card states as one grant.
  */
-export function giveMixedTokens(state: GameState, instanceId: string, tokenIds: readonly string[]): GameState {
+export function giveMixedTokens(state: GameState, instanceId: string, tokenIds: readonly string[], givenBy?: PlayerId): GameState {
   const found = findUnit(state, instanceId)
   if (!found || tokenIds.length === 0) return state
-  const recorded = tokenIds.reduce(acc => recordTokenCreated(acc, found.owner), state)
+  const recorded = recordTokenUpgradeGiven(tokenIds.reduce(acc => recordTokenCreated(acc, found.owner), state), givenBy ?? found.owner)
   const tokens = tokenIds.map(cardId => ({ cardId, owner: found.owner }))
   return fireUpgradeAttached(attachUpgrades(recorded, instanceId, tokens), instanceId)
 }
@@ -583,11 +589,14 @@ export function createTokenUnit(state: GameState, owner: PlayerId, tokenCardId: 
     upgrades: shielded ? [{ cardId: TOKEN_SHIELD, owner }] : [],
   }
   // A created token enters play, so it counts for "units that entered play this phase" (Padmé Amidala).
-  const next = recordUnitEntered(recordTokenCreated({
+  // A Shielded token arrives with a Shield token, which is a token upgrade given to a unit; the token
+  // UNIT itself is not one, which is the distinction `tokenUpgradesGiven` draws against `tokensCreated`.
+  const given = (s: GameState) => (shielded ? recordTokenUpgradeGiven(s, owner) : s)
+  const next = given(recordUnitEntered(recordTokenCreated({
     ...state,
     instanceCounter: state.instanceCounter + 1,
     players: { ...state.players, [owner]: { ...p, units: [...p.units, token] } },
-  }, owner), owner, token.instanceId)
+  }, owner), owner, token.instanceId))
   // Every token unit is created here, so this is the one place "when you create a unit" fires. Each
   // token is its own arrival: "create 2" gives Greef Karga two Advantage tokens to hand out.
   return fireBatch(next, collectArrivalTriggers(next, 'whenCreateUnit', owner, token.instanceId))
