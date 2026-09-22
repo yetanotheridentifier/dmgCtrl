@@ -46,7 +46,7 @@ const computingKeywords = new Set<string>()
  * and any keywords granted for a single attack (Support).
  */
 export function unitKeywords(state: GameState, unit: UnitState, ctx?: StatModContext): KeywordInstance[] {
-  if (computingKeywords.has(unit.instanceId)) return printedKeywordList(state, unit)
+  if (computingKeywords.has(unit.instanceId)) return withKeywordSwaps(state, unit, printedKeywordList(state, unit))
   computingKeywords.add(unit.instanceId)
   try {
     const out = baseKeywordList(state, unit, ctx)
@@ -58,10 +58,38 @@ export function unitKeywords(state: GameState, unit: UnitState, ctx?: StatModCon
     // ("enemy/all units lose X"). Applied after all grants — a keyword survives unless removed by name.
     const suppressed = suppressedKeywordsOf(state, unit)
     for (const name of aura.removeKeywords) suppressed.add(name)
-    return suppressed.size > 0 ? out.filter(k => !suppressed.has(k.name)) : out
+    return withKeywordSwaps(state, unit, suppressed.size > 0 ? out.filter(k => !suppressed.has(k.name)) : out)
   } finally {
     computingKeywords.delete(unit.instanceId)
   }
+}
+
+/**
+ * Keyword names a card currently exchanges on its unit, as a lookup from each name to the one it is
+ * read as (Asajj Ventress trades Raid for Restore and Restore for Raid, for one attack). Each pair
+ * registers in both directions, which is what "or vice versa" asks for.
+ */
+function keywordSwapsOf(state: GameState, unit: UnitState): Map<string, string> {
+  const swaps = new Map<string, string>()
+  for (const cardId of abilityCardIds(unit)) {
+    for (const [from, to] of getCardDefinition(cardId)?.swappedKeywords?.(state, unit) ?? []) {
+      swaps.set(from, to)
+      swaps.set(to, from)
+    }
+  }
+  return swaps
+}
+
+/**
+ * The swap, applied as a **rename over a finished keyword list**: every instance keeps its numeral
+ * and answers to the other name. Running last is what makes "replace any Raid it **has or gains**"
+ * true of a keyword from any source, printed, conditional, granted or aura, and it needs neither a
+ * read of the old value before hiding it nor a suppression that the grant would then have to dodge.
+ */
+function withKeywordSwaps(state: GameState, unit: UnitState, keywords: KeywordInstance[]): KeywordInstance[] {
+  const swaps = keywordSwapsOf(state, unit)
+  if (swaps.size === 0) return keywords
+  return keywords.map(k => (swaps.has(k.name) ? { ...k, name: swaps.get(k.name)! } : k))
 }
 
 /**
@@ -94,23 +122,26 @@ function baseKeywordList(state: GameState, unit: UnitState, ctx?: StatModContext
 }
 
 /**
- * Distinct keyword names a unit has from non-aura sources, after its own conditional removals — used
- * by auras that *count* a target's keywords (Gallius Rax) without recursing back through auras.
+ * A unit's keyword instances from NON-aura sources, after its own conditional removals and swaps.
+ * This is what an aura reads when it needs a unit's keywords from inside the keyword pass: about its
+ * target, to count or scale them (Gallius Rax, Marchion Ro), or about its own source, to lend them
+ * on (The Ghost). `unitKeywords` there would recurse back through the aura pass, and a scaling aura
+ * would go on to double its own contribution.
  */
-export function nonAuraKeywordNames(state: GameState, unit: UnitState): Set<string> {
-  const names = new Set(baseKeywordList(state, unit).map(k => k.name))
-  for (const name of suppressedKeywordsOf(state, unit)) names.delete(name)
-  return names
+export function nonAuraKeywords(state: GameState, unit: UnitState): KeywordInstance[] {
+  const suppressed = suppressedKeywordsOf(state, unit)
+  const base = baseKeywordList(state, unit)
+  return withKeywordSwaps(state, unit, suppressed.size > 0 ? base.filter(k => !suppressed.has(k.name)) : base)
 }
 
-/**
- * A unit's keyword NUMERAL from non-aura sources — what an aura that scales a keyword it can see on
- * its target reads (Marchion Ro doubles each friendly unit's Raid). Asking `unitKeywordValue` there
- * would recurse through the aura pass, and the doubling would double its own contribution.
- */
+/** Distinct keyword names a unit has from non-aura sources. See {@link nonAuraKeywords}. */
+export function nonAuraKeywordNames(state: GameState, unit: UnitState): Set<string> {
+  return new Set(nonAuraKeywords(state, unit).map(k => k.name))
+}
+
+/** A unit's keyword NUMERAL from non-aura sources. See {@link nonAuraKeywords}. */
 export function nonAuraKeywordValue(state: GameState, unit: UnitState, name: string): number {
-  if (suppressedKeywordsOf(state, unit).has(name)) return 0
-  return baseKeywordList(state, unit).reduce((sum, k) => (k.name === name ? sum + (k.value ?? 0) : sum), 0)
+  return nonAuraKeywords(state, unit).reduce((sum, k) => (k.name === name ? sum + (k.value ?? 0) : sum), 0)
 }
 
 /** Keyword names conditionally removed from a unit by its own card or an upgrade. */

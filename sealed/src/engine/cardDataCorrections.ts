@@ -159,6 +159,15 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   // A keyword the source lists that the card does not print, alongside one it omits.
   LAW_081: { keywords: [{ name: 'Ambush' }, { name: 'Overwhelm' }] }, // Sullustan Sapper: the card prints Ambush and Overwhelm, not Shielded
 
+  // The literal word "Keyword"/"Keywords" parsed out of ability text into the card's own keyword
+  // list, on the cards whose ability treats a keyword as a value. None of them is a keyword; each
+  // card's real printed set is whatever is left once the ability's words are taken back out.
+  HMW_001: { keywords: [{ name: 'Restore', value: 2 }] }, // Asajj Ventress: her back prints Restore 2; the Raid and Restore she swaps are her front's text
+  JTL_047: { keywords: [] }, // Admiral Yularen: "Keyword", and the four he offers, are his ability's options
+  JTL_053: { keywords: [] }, // The Ghost: "Keywords" is his ability's subject; Sentinel is conditional (while upgraded)
+  TS26_3: { keywords: [] }, // Maul: "Keywords" is what his ability counts
+  LOF_105: { keywords: [] }, // Oppo Rancisis: all nine are keywords he gains while another friendly unit has them
+
   // An arena the source gets wrong. "This unit can attack space units" is printed on a GROUND unit;
   // shipped as Space it could not have been printed at all.
   JTL_259: { arena: 'ground' }, // Retrofitted Airspeeder

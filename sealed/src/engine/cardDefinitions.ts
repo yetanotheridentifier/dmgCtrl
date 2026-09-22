@@ -11,7 +11,7 @@ import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDel
 import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost } from './resources'
-import { cardHasTrait, cardTraits, unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
+import { cardHasTrait, cardTraits, unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywords, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
 import type { CombatContext, DiscardPlayGrant, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PlayerId, PlayFromTail, PlayFromZone, UnitState, UpgradeAttachment, UpgradeRef } from './types'
 
 /**
@@ -10887,3 +10887,92 @@ registerCard('LOF_206', { actionAbilities: [{ // Babu Frik
   usable: (s, u) => babuOffer(s, s.activePlayer, u.instanceId) !== s,
   effect: (s, ctx) => babuOffer(s, ctx.owner, ctx.sourceInstanceId!),
 }] })
+
+// ══ Keyword identity as a runtime value ════════════════════════════════════════════════════
+// Cards whose ability treats a keyword as a value: one swaps two of them, one hands out the one its
+// controller picked, one lends its own set to other units, and one counts how many different ones a
+// unit has. The source data parses the literal word "Keyword"/"Keywords" out of each one's ability
+// text into its own `Keywords` array; `cardDataCorrections.ts` takes them back out.
+
+/**
+ * Asajj Ventress's rider: Raid and Restore trade names on the attacker for that attack. It is a
+ * `swappedKeywords` rename over the finished list rather than a grant plus a suppression, so a Raid
+ * the unit only *gains* (an upgrade, an aura) is swapped alongside its printed one, and the numeral
+ * travels with it.
+ */
+const GRANT_ASAJJ_VENTRESS = 'GRANT_ASAJJ_VENTRESS'
+registerCard(GRANT_ASAJJ_VENTRESS, { sourceCardId: 'HMW_001', swappedKeywords: () => [['Raid', 'Restore']] })
+const ASAJJ_ATTACK = 'Attack with a unit. For this attack, replace any Raid it has or gains with Restore, or vice versa.'
+const asajjOffer: AttackOffer = { grantCardId: GRANT_ASAJJ_VENTRESS }
+registerCard('HMW_001', mergeLeaderSides( // Asajj Ventress
+  leaderAttack(ASAJJ_ATTACK, () => asajjOffer),
+  // Her back's Action has no exhaust cost, so the leader unit is as eligible an attacker as any other.
+  attackAction(ASAJJ_ATTACK, () => asajjOffer, {}),
+))
+
+/** Maul counts how many DIFFERENT keywords a unit has, so Raid 2 and a Raid 1 upgrade are one. */
+const differentKeywords = (s: GameState, u: UnitState): number => new Set(unitKeywords(s, u).map(k => k.name)).size
+const experienceOn = (u: UnitState): number => u.upgrades.filter(g => g.cardId === TOKEN_EXPERIENCE).length
+const MAUL_CHOICE = 'Choose a unit. If it has more different Keywords than it has Experience tokens on it, give an Experience token to it and deal 1 damage to it.'
+const maulChoice = (s: GameState, ctx: Resumable): GameState =>
+  unitThen(s, ctx, allUnits(s).map(u => u.instanceId), 'choose a unit; if it has more different Keywords than Experience tokens on it, it takes an Experience token and 1 damage', false)
+registerCard('TS26_3', mergeLeaderSides( // Maul
+  leaderFront(MAUL_CHOICE, { usable: s => allUnits(s).length > 0, effect: maulChoice }),
+  whenDeployed(MAUL_CHOICE, maulChoice),
+  attacks(MAUL_CHOICE, maulChoice),
+  {
+    ifYouDo: (s, ctx) => {
+      const chosen = findUnit(s, ctx.targetInstanceId ?? '')?.unit
+      if (!chosen || differentKeywords(s, chosen) <= experienceOn(chosen)) return s
+      return dealDamageToUnit(giveToken(s, chosen.instanceId, TOKEN_EXPERIENCE, ctx.owner), chosen.instanceId, 1)
+    },
+  },
+))
+
+/**
+ * The Ghost lends the other friendly Spectres whatever keywords it has. Read through
+ * `nonAuraKeywords`, since this runs inside the aura pass: what another aura gives The Ghost does not
+ * travel on, which is the same boundary Gallius Rax and Marchion Ro read their targets across.
+ */
+registerCard('JTL_053', { // The Ghost
+  ...gains(upgraded, KW.sentinel),
+  aura: (s, source, target, friendly) =>
+    (friendly && target.instanceId !== source.instanceId && unitHasTrait(s, target, 'Spectre')
+      ? { keywords: nonAuraKeywords(s, source) }
+      : undefined),
+})
+
+/**
+ * Oppo Rancisis gains each of seven keywords while another friendly unit has it, and Raid 2 or
+ * Restore 2 (his own numeral, not theirs) while another has Raid or Restore. Read through
+ * `nonAuraKeywordNames`, which is the same boundary an aura reads its target across: what another
+ * unit has only from an aura does not reach him, and nothing here can re-enter the aura pass. He is
+ * unique and reads only FRIENDLY units, so the one cycle his own hook could make is himself, and he
+ * leaves himself out.
+ */
+const OPPO_UNVALUED = ['Ambush', 'Grit', 'Hidden', 'Overwhelm', 'Saboteur', 'Sentinel', 'Shielded']
+registerCard('LOF_105', { // Oppo Rancisis
+  conditionalKeywords: (s, u) => {
+    const others = friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId)
+    if (others.length === 0) return []
+    const held = new Set(others.flatMap(x => [...nonAuraKeywordNames(s, x)]))
+    const out: KeywordInstance[] = OPPO_UNVALUED.filter(name => held.has(name)).map(name => ({ name }))
+    if (held.has('Raid')) out.push(KW.raid(2))
+    if (held.has('Restore')) out.push(KW.restore(2))
+    return out
+  },
+})
+
+/** The keyword Admiral Yularen's controller chose, remembered on him for as long as he is in play. */
+const rememberKeyword = (s: GameState, owner: PlayerId, instanceId: string, keyword: string): GameState =>
+  updatePlayer(s, owner, { units: s.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, namedKeyword: keyword } : u)) })
+const YULAREN_OPTIONS: [mode: string, label: string][] = [['Grit', 'Grit'], ['Restore', 'Restore 1'], ['Sentinel', 'Sentinel'], ['Shielded', 'Shielded']]
+registerCard('JTL_047', { // Admiral Yularen
+  ...whenPlayed('Choose Grit, Restore 1, Sentinel, or Shielded. While this unit is in play, each friendly Vehicle unit gains the chosen Keyword.',
+    (s, ctx) => chooseModeThen(s, ctx, ctx.sourceInstanceId!, YULAREN_OPTIONS)),
+  ifYouDo: (s, ctx) => rememberKeyword(s, ctx.owner, ctx.sourceInstanceId!, ctx.step ?? 'Grit'),
+  aura: (s, source, target, friendly) =>
+    (friendly && source.namedKeyword !== undefined && unitHasTrait(s, target, 'Vehicle')
+      ? { keywords: [source.namedKeyword === 'Restore' ? KW.restore(1) : { name: source.namedKeyword }] }
+      : undefined),
+})

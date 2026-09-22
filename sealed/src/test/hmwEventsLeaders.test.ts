@@ -36,12 +36,6 @@ const UNITS = ['HMW_041', 'HMW_044', 'HMW_056', 'HMW_064', 'HMW_104', 'HMW_147',
 const LEADERS = ['HMW_006', 'HMW_007', 'HMW_008', 'HMW_009', 'HMW_018']
 const SHIPPED = [...EVENTS, ...UNITS, ...LEADERS]
 
-/**
- * Lifted by comment: needs a mechanic no card in this batch supplies (#476). Jar Jar Binks and The
- * First Legion were lifted with it and have since shipped; `cardsOneOffs.test.ts` covers them.
- */
-const LIFTED = ['HMW_001']
-
 const POOL = poolFor(['HMW'])
 const real = (id: string, pool = POOL): EngineCard => {
   const [set, number] = id.split('_')
@@ -55,7 +49,6 @@ const base = (id: string, trait?: string) => card({ id, type: 'base', hp: 30, as
 const F: Record<string, EngineCard> = {
   ...CARDS,
   ...Object.fromEntries(SHIPPED.map(id => [id, real(id)])),
-  ...Object.fromEntries(LIFTED.map(id => [id, real(id)])),
   GRD: src('GRD'),
   SPC: src('SPC', { arena: 'space' }),
   BIG: src('BIG', { power: 7 }),
@@ -157,10 +150,6 @@ describe('HMW events, leaders and trigger points: registration', () => {
   // HMW_239 is a reprint: the definition lives on the LOF printing every copy canonicalises to.
   it('registers a definition for every shipped card', () => {
     for (const id of SHIPPED.filter(x => x !== 'HMW_239')) expect(getCardDefinition(id), id).toBeDefined()
-  })
-
-  it('leaves the lifted cards unregistered, so the bench still counts them as outstanding', () => {
-    for (const id of LIFTED) expect(getCardDefinition(id), id).toBeUndefined()
   })
 
   it('canonicalises Pounce (HMW_239) onto its LOF printing rather than registering it twice', () => {

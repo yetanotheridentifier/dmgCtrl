@@ -141,6 +141,13 @@ export interface UnitState {
    */
   namedCardSurcharge?: number
   /**
+   * A keyword name this unit's controller chose as it arrived, which its constant ability then hands
+   * out for as long as it is in play (Admiral Yularen: "choose Grit, Restore 1, Sentinel, or
+   * Shielded … each friendly Vehicle unit gains the chosen Keyword"). Held on the unit for the same
+   * reason as `namedCard`: the grant ends by itself when the unit leaves play and the field goes with it.
+   */
+  namedKeyword?: string
+  /**
    * The player who OWNS this card, when that differs from the player who controls it (Rehabilitation
    * takes control of an enemy unit). Which `players[…].units` array a unit sits in is its
    * *controller*; ownership decides where the card goes when it leaves play — a stolen unit is
