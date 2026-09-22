@@ -1,5 +1,5 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
-import { registerCard, getCardDefinition, collectUnitTriggers } from './abilities'
+import { registerCard, getCardDefinition, collectUnitTriggers, collectCardTriggers } from './abilities'
 import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
@@ -7,12 +7,12 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
+import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer, abilityCardIds } from './types'
 import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost } from './resources'
 import { cardHasTrait, cardTraits, unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywords, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
-import type { CombatContext, DiscardPlayGrant, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PlayerId, PlayFromTail, PlayFromZone, UnitState, UpgradeAttachment, UpgradeRef } from './types'
+import type { CombatContext, DiscardPlayGrant, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PendingTrigger, PlayerId, PlayFromTail, PlayFromZone, UnitState, UpgradeAttachment, UpgradeRef } from './types'
 
 /**
  * Real card definitions. Side-effect module: importing it registers every
@@ -7705,6 +7705,26 @@ registerCard('JTL_039', allOf( // Chimaera
   } },
   createWd('Create 2 TIE Fighter tokens.', TOKEN_TIE_FIGHTER, 2),
 ))
+/**
+ * Another unit's "When Played" abilities, collected to resolve as `sourceInstanceId`'s OWN: the source
+ * is the BORROWER, so "this unit" in a borrowed ability means the unit that gained the ability rather
+ * than the card it is printed on. `collectUnitTriggers` cannot say that, since it always sources a
+ * trigger at the unit it read the ability off, which is what Chimaera above wants and this is not.
+ */
+const whenPlayedOf = (u: UnitState, owner: PlayerId, sourceInstanceId: string): PendingTrigger[] =>
+  abilityCardIds(u).flatMap(id => collectCardTriggers('whenPlayed', id, owner, sourceInstanceId))
+const lendsWhenPlayed: Pick = (_s, u, ctx) => whenPlayedOf(u, ctx.owner, ctx.sourceInstanceId!).length > 0
+registerCard('TS26_34', unitThenWp( // Fives
+  'You may have this unit enter play with the "When Played" abilities of another unit in play.',
+  // "Another unit in play", so either side's: a borrowed ability resolves for Fives' controller either way.
+  pickAll(pickOther, lendsWhenPlayed),
+  'enter play with another unit\'s "When Played" abilities',
+  true,
+  (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    return target ? fireBatch(s, whenPlayedOf(target, ctx.owner, ctx.sourceInstanceId!)) : s
+  },
+))
 registerCard('SEC_198', onAttack(mayDiscardThen('You may discard a card from your hand. If you do, create a Spy token.', (s, ctx) => create(s, ctx.owner, TOKEN_SPY)))) // Bail Organa
 registerCard('TWI_080', { // Poggle the Lesser
   // A created token raises `whenCreateUnit`, not `whenPlayUnit` (only a unit arriving through a play does), which
@@ -10641,6 +10661,14 @@ const defeatPicked = (s: GameState, ctx: IfYouDoContext): GameState => {
 }
 
 registerCard('HMW_049', { whilePlaying: { resources: true, discount: 3 } }) // Greater Sarlacc
+
+// Vernestra Rwoh: "As an additional cost to play this unit, put up to 2 units that each cost 5 or less
+// from your discard pile on the bottom of your deck. This unit gains those units' 'When Played'
+// abilities for this phase." The whole card is the additional-cost step: `whilePlaying.fromDiscard`
+// asks for the cards while she is played, and `collectEntersPlay` fires their When Played abilities
+// with her as the source, in the same batch as her own arrival. "For this phase" needs nothing of its
+// own: a When Played ability is only ever used as its card enters play, which is this moment.
+registerCard('HMW_048', { whilePlaying: { fromDiscard: { limit: 2, maxCost: 5 } } })
 
 registerCard('HMW_188', { // Giant Gorax
   ...onAttack(alsoAt(whenPlayed('If you control an Endor base, each opponent chooses one: You deal 3 damage to a unit or base they control. They discard a card from their hand and defeat a resource they control.', (s, ctx) =>

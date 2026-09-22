@@ -315,6 +315,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return `Exhaust ${target ?? 'unit'}`
       }
       if (choice.kind === 'exploit') {
+        if (choice.fromDiscard) {
+          const cardId = state.players[choice.controller].discard[action.optionIndex ?? -1]
+          return `Bottom ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
+        }
         if (choice.resources) {
           const resource = state.players[choice.controller].resources[action.optionIndex ?? -1]
           return `Defeat ${resource ? state.cards[resource.cardId]?.name ?? 'resource' : 'resource'}`

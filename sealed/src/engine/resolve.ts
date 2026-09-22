@@ -4,7 +4,7 @@ import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, PlayFromRef
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds, isFortify, recordBaseActionUsed } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
+import { effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
 import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
@@ -491,7 +491,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // later see the board the earlier ones left: a leader deployed by the batch is a friendly unit by
   // the time a "give a Shield to another friendly unit" in the same batch picks its targets (#529).
   // The units exploited to pay for it trigger in this same batch (CR 7.5.16.d).
-  const arrivals = [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities, fromResources)]
+  const arrivals = [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities, fromResources, exploited?.borrowed)]
   if (defeatOnEntry) {
     // "Play a unit from your hand … Then, defeat it. (When Played abilities resolve after the unit is
     // defeated.)" (Maul). The defeat is part of the ability that played it, so it happens while the
@@ -505,20 +505,30 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   return uniqueUnitCheck(next, owner) // two units with the same unique title → defeat one
 }
 
-/** What exploiting units while playing a card leaves for the play: their defeats' abilities, and their powers. */
-interface Exploited { owed: PendingTrigger[]; powers: number[] }
+/**
+ * What exploiting units while playing a card leaves for the play: their defeats' abilities, and their
+ * powers. `borrowed` is the other shape the step takes: cards whose "When Played" abilities the unit
+ * arriving gains (Vernestra Rwoh), rather than units it defeated.
+ */
+interface Exploited { owed: PendingTrigger[]; powers: number[]; borrowed?: string[] }
 
 /**
  * Everything that triggers off a unit arriving, as one batch: any upgrades it entered with attaching
  * (a Shielded token → Sabine Wren), its own "When Played" (CR 6.2.0f), and "when you play a unit" on
  * the controller's undeployed leader and their other units.
+ *
+ * `borrowed` names cards whose "When Played" abilities this unit GAINED as it was played (Vernestra
+ * Rwoh's additional cost). They are collected with the arriving unit as their source, so "this unit"
+ * in a borrowed ability means the borrower, and they join its own arrival batch: they triggered off
+ * the same event, so the controller orders the lot (CR 7.6.9).
  */
-function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string, cardId: string, keywordAbilities: string[] = [], fromResources = false): PendingTrigger[] {
+function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string, cardId: string, keywordAbilities: string[] = [], fromResources = false, borrowed: string[] = []): PendingTrigger[] {
   const entered = state.players[owner].units.find(u => u.instanceId === newUnitId)
   if (!entered) return []
   const owed: PendingTrigger[] = []
   if (entered.upgrades.length > 0) owed.push(...collectUpgradeAttached(state, newUnitId))
   owed.push(...collectCardTriggers('whenPlayed', cardId, owner, newUnitId))
+  for (const lent of borrowed) owed.push(...collectCardTriggers('whenPlayed', lent, owner, newUnitId))
   // Ambush / Support: keyword-printed When Played abilities, ordered with the rest.
   for (const kw of keywordAbilities) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId))
   owed.push(...collectArrivalTriggers(state, 'whenPlayUnit', owner, newUnitId))
@@ -641,9 +651,11 @@ function playEvent(state: GameState, handIndex: number): GameState {
 
 /** One more unit chosen: the step finishes by itself at its limit, and is offered again otherwise. */
 function pickExploit(state: GameState, choice: Extract<PendingChoice, { kind: 'exploit' }>, instanceId: string): GameState {
-  const there = choice.resources
-    ? Number(instanceId) < state.players[choice.controller].resources.length
-    : state.players[choice.controller].units.some(u => u.instanceId === instanceId)
+  const there = choice.fromDiscard
+    ? discardUnitPicks(state, choice.controller, choice.maxCost ?? 0).includes(Number(instanceId))
+    : choice.resources
+      ? Number(instanceId) < state.players[choice.controller].resources.length
+      : state.players[choice.controller].units.some(u => u.instanceId === instanceId)
   if (choice.picks.includes(instanceId) || !there) return pushChoice(state, choice)
   const next = { ...choice, picks: [...choice.picks, instanceId] }
   return next.picks.length >= next.limit ? finishExploit(state, next) : pushChoice(state, next)
@@ -666,7 +678,19 @@ function finishExploit(state: GameState, choice: Extract<PendingChoice, { kind: 
   let next = state
   let owed: PendingTrigger[] = []
   let powers: number[] = []
-  if (choice.resources) {
+  let borrowed: string[] = []
+  if (choice.fromDiscard) {
+    // Vernestra Rwoh: the picks are places in the discard pile, and they go on the BOTTOM of the deck
+    // (the end of the array) in the order they were chosen. Taken all at once, so the indices the
+    // player picked against are still the ones being read. Nothing triggers off the move.
+    const from = next.players[owner]
+    const at = choice.picks.map(Number)
+    borrowed = at.flatMap(i => (from.discard[i] !== undefined ? [from.discard[i]] : []))
+    next = updatePlayer(next, owner, {
+      discard: from.discard.filter((_, i) => !at.includes(i)),
+      deck: [...from.deck, ...borrowed],
+    })
+  } else if (choice.resources) {
     // Greater Sarlacc: the chosen cards are defeated as ready resources, which triggers nothing.
     next = defeatResources(next, owner, choice.picks.map(Number), { ready: true })
   } else if (choice.damage === undefined) {
@@ -682,7 +706,7 @@ function finishExploit(state: GameState, choice: Extract<PendingChoice, { kind: 
   const paid = payCost(p, cost)
   next = updatePlayer(next, owner, { ...paid, hand: paid.hand.filter((_, i) => i !== at) })
   if (card.type === 'event') return playEventCard(next, owner, card.id, undefined, owed)
-  return checkWin(playUnitCard(next, owner, card.id, undefined, cost, undefined, { owed, powers }))
+  return checkWin(playUnitCard(next, owner, card.id, undefined, cost, undefined, { owed, powers, ...(borrowed.length > 0 ? { borrowed } : {}) }))
 }
 
 /**
@@ -1127,8 +1151,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
   let next = removeChoice(state, choice.id)
   switch (choice.kind) {
     case 'exploit': {
-      // A unit by instance id, or a resource (Greater Sarlacc) by its index in the zone.
-      const pickedId = choice.resources ? (optionIndex === undefined ? undefined : String(optionIndex)) : targetInstanceId
+      // A unit by instance id, or a resource (Greater Sarlacc) / a discard-pile card (Vernestra Rwoh)
+      // by its index in that pile.
+      const byIndex = choice.resources || choice.fromDiscard
+      const pickedId = byIndex ? (optionIndex === undefined ? undefined : String(optionIndex)) : targetInstanceId
       if (pickedId !== undefined) next = pickExploit(next, choice, pickedId)
       if (next.winner !== null) return next
       break

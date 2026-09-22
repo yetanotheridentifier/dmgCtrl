@@ -365,9 +365,13 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'exploit': {
       // Says what is being paid for and what each pick costs and saves, since the card is not on the
       // board yet and the highlight alone reads as "pick something to hit".
+      const left = choice.limit - choice.picks.length
+      if (choice.fromDiscard) {
+        // An additional cost, not a discount: it saves nothing, so the prompt says what it buys.
+        return [`put units that cost ${choice.maxCost} or less from your discard pile on the bottom of your deck to play ${cardName(state, choice.cardId)} with their "When Played" abilities (${left} more at most), or Done`]
+      }
       const each = choice.damage === undefined ? 'defeat' : `deal ${choice.damage} damage to`
       const what = choice.resources ? 'ready resources you control' : 'friendly units'
-      const left = choice.limit - choice.picks.length
       return [`${each} ${what} while playing ${cardName(state, choice.cardId)}, ${choice.discount} less each (${left} more at most), or Done`]
     }
     case 'damageAnyBases':

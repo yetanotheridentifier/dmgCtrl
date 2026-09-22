@@ -143,8 +143,8 @@ Two phases:
   **When Played units and upgrades are finished**, and so are **constant abilities on units and
   upgrades**: the ones existing primitives expressed shipped first, and the hooks and choices the rest
   needed followed, group by group. Vult Skerris's Defender (needs "discarded a card this phase") is
-  on #678, and the 14 other constant-ability cards lifted out are on #682 (losing abilities), #683
-  (Fives borrowing When Played abilities), #465 (Phantom II) and #686. **When Defeated units are
+  on #678, and the 14 other constant-ability cards lifted out are on #682 (losing abilities), #465
+  (Phantom II) and #686; Fives, borrowing another unit's When Played abilities, shipped with #683. **When Defeated units are
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
   shared with another trigger point ("When Played/When Defeated") is built on the compound-head framework
 (#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
@@ -216,7 +216,7 @@ remaining trigger points (#653, 36 of 40) are built. 58 play
 as printed (all 16 bases are vanilla). Of the 214 with ability text, **128 were blocked by nothing** once
 four the triage passed are lifted to their mechanic's ticket, cut like Phase 1 by trigger point, and
 **all three batches have now shipped**. Of the constants, Vernestra Rwoh (an additional cost from the
-discard pile, and borrowed When Played abilities) is on #683, Zam Wesell (a leader's traits while she
+discard pile, and borrowed When Played abilities) shipped with #683, Zam Wesell (a leader's traits while she
 is out of play) on #686, and The Marauder shipped with Exploit (#473), whose step it shares. Of the events and leaders, The First Legion (enemy cards out
 of play lose a Trait) and Jar Jar Binks (reading who gave a token upgrade, which the phase record does
 not distinguish from who received one) are on #686, Ty Yorrick (a replacement on every friendly
@@ -232,11 +232,13 @@ cards held on it, and read against the engine as it now is, 28 needed no engine 
 registration (six HMW among them, and "when an opponent plays" now read from the far side of
 `whenPlayCard`), and shipped. Every other card went to the ticket that owns its real blocker: the
 mechanic tickets above by comment, #680 for trigger heads no point raises, #678 for the discard
-record, and five new ones, #682 losing abilities (8), #683 re-using abilities (7), #684 replacement
+record, and five new ones, #682 losing abilities (8), #683 re-using abilities (7, of which the two that
+borrow another card's When Played abilities shipped and the five that re-run an ability already used
+moved to #704), #684 replacement
 effects (5, all shipped), #685 cards that need only writing (22) and #686 the one-offs no other ticket owns (23).
-**HMW has 1 card outstanding**: Vernestra Rwoh (#683). Jar Jar Binks, The
-First Legion, Zam Wesell and Maul's front shipped off #686; the rest of that ticket's one-offs moved
-to #701. Asajj Ventress shipped with #476.
+**Homeworlds is complete: every HMW card is built.** Vernestra Rwoh, the last of them, shipped with
+#683. Jar Jar Binks, The First Legion, Zam Wesell and Maul's front shipped off #686; the rest of that
+ticket's one-offs moved to #701. Asajj Ventress shipped with #476.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted to the ticket that owns its
 blocker (#701 for a one-off nothing else shares) and the batch ships without it. The classification is regex triage over ability prose: it catches new nouns but not

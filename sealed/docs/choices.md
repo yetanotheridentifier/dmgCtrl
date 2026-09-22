@@ -463,6 +463,16 @@ you control; for each, this unit costs 3 less". Its picks are cards in the resou
 the zone may be picked, up to the ready count, because which cards are the ready ones is the player's to
 arrange (CR 1.7.4); each defeated counts as a ready one, so the ready count falls by one per pick.
 
+The same step also carries an **additional cost** that saves nothing (Vernestra Rwoh: "as an additional
+cost to play this unit, put up to 2 units that each cost 5 or less from your discard pile on the bottom
+of your deck"), declared as `whilePlaying.fromDiscard` with a `limit` and a `maxCost`. Its picks are
+places in the controller's discard pile, answered by `optionIndex`, so two copies of one card are two
+picks; `discount` is 0, so Done is offered from the start and the card costs the same however many are
+taken. The chosen cards go to the **bottom** of the deck in the order they were picked, and lend the
+unit their "When Played" abilities: they are collected with the arriving unit as their source, so "this
+unit" in a borrowed ability means the borrower, and they join the unit's own arrival batch for the
+controller to order. A card whose "When Played" ability is borrowed this way is never itself played.
+
 - **Legality reads the best case.** `canAffordFromHand` asks whether the effective cost less what the
   step could save fits the ready resources. For units that is the most it could save. For resources
   each pick is also one fewer resource to pay with, so every number of picks is tried: three ready

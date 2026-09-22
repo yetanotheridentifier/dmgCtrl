@@ -1134,7 +1134,11 @@ type ChoiceVariant =
   // is left to pay is affordable, and reaching `limit` finishes the play by itself.
   // With `resources` (Greater Sarlacc) the picks are the controller's resources instead, by index into
   // their zone (as strings), answered with `optionIndex`: each is defeated as a ready one.
-  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean }
+  // With `fromDiscard` (Vernestra Rwoh) they are unit cards in the controller's discard pile costing at
+  // most `maxCost`, again by index and answered with `optionIndex`: each goes on the bottom of the deck
+  // and lends the played card its "When Played" abilities. That is an additional cost rather than a
+  // discount, so `discount` is 0 and Done is offered from the start ("up to 2").
+  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number }
   // The one door for playing a card out of somewhere other than the Play a Card action: any card
   // type, out of `zone`, answered by `optionIndex` into `candidates`. `free` bypasses the cost and
   // the aspect penalty (CR 8.5); `costDelta` adjusts it; `waive` forgives aspect penalties. An

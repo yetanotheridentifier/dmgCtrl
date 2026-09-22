@@ -222,9 +222,22 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
 
 /**
  * The terms of an `exploit` step: how many may be chosen, what each saves, and what befalls them.
- * `resources` makes the picks ready resources rather than units (Greater Sarlacc).
+ * `resources` makes the picks ready resources rather than units (Greater Sarlacc), and `fromDiscard`
+ * unit cards in the discard pile costing at most `maxCost` (Vernestra Rwoh).
  */
-export interface ExploitTerms { limit: number; discount: number; damage?: number; resources?: boolean }
+export interface ExploitTerms { limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number }
+
+/**
+ * Where in `playerId`'s discard pile the unit cards costing at most `maxCost` are: the picks Vernestra
+ * Rwoh's additional cost offers. By index rather than by card id, since a pile can hold two copies of
+ * one card and each is a separate pick.
+ */
+export function discardUnitPicks(state: GameState, playerId: PlayerId, maxCost: number): number[] {
+  return state.players[playerId].discard.flatMap((cardId, i) => {
+    const card = state.cards[cardId]
+    return card?.type === 'unit' && card.cost <= maxCost ? [i] : []
+  })
+}
 
 /**
  * Whether playing `card` from hand asks for units to exploit first, and on what terms, or `undefined`
@@ -238,6 +251,12 @@ export interface ExploitTerms { limit: number; discount: number; damage?: number
  */
 export function exploitTerms(state: GameState, playerId: PlayerId, card: EngineCard, extra = 0): ExploitTerms | undefined {
   const own = getCardDefinition(card.id)?.whilePlaying
+  if (own && 'fromDiscard' in own) {
+    const there = discardUnitPicks(state, playerId, own.fromDiscard.maxCost).length
+    return there > 0
+      ? { limit: Math.min(own.fromDiscard.limit, there), discount: 0, fromDiscard: true, maxCost: own.fromDiscard.maxCost }
+      : undefined
+  }
   if (own && 'resources' in own) {
     const readyNow = readyResourceCount(state.players[playerId])
     return readyNow > 0 ? { limit: readyNow, discount: own.discount, resources: true } : undefined
@@ -262,6 +281,7 @@ export function raiseExploit(state: GameState, owner: PlayerId, cardId: string, 
     kind: 'exploit', id: `exploit-${cardId}`, controller: owner, cardId, handIndex, picks: [],
     limit: terms.limit, discount: terms.discount, ...(terms.damage !== undefined ? { damage: terms.damage } : {}),
     ...(terms.resources ? { resources: true } : {}),
+    ...(terms.fromDiscard ? { fromDiscard: true, maxCost: terms.maxCost } : {}),
     source: { cardId, controller: owner },
   })
 }
@@ -819,6 +839,13 @@ function choiceMoves(state: GameState): Action[] {
         // Done first, then each friendly unit not yet chosen. Done only once the rest is affordable, so
         // a play that needs its discount cannot be stranded half paid.
         if (exploitAffordable(state, choice)) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (choice.fromDiscard) {
+          // Vernestra Rwoh: a place in the discard pile, so two copies of one card are two picks.
+          for (const i of discardUnitPicks(state, choice.controller, choice.maxCost ?? 0)) {
+            if (!choice.picks.includes(String(i))) moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i })
+          }
+          break
+        }
         if (choice.resources) {
           // Any card in the zone may be one of the ready ones (CR 1.7.4); `limit` caps how many.
           state.players[choice.controller].resources.forEach((_, i) => {
