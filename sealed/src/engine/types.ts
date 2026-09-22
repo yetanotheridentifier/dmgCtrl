@@ -814,6 +814,8 @@ export interface TriggerContext {
    * it was (`damageDealt.dealer`).
    */
   damageDealt?: DamageDealt
+  /** `whenUnitLeavesPlay`: the unit as it last was in play, and who controlled it. */
+  unitLeftPlay?: { unit: UnitState; controller: PlayerId }
   /**
    * `whenDrawCards`: who drew. The point fires on **both** players' units, because a card reads it
    * either about itself ("when you draw", Axe Woves) or about the other side ("when an opponent
@@ -906,7 +908,8 @@ type WithChoiceSource<T> = T extends unknown ? T & { source?: DamageSource } : n
 type ChoiceVariant =
   | { kind: 'ambush'; id: string; controller: PlayerId; unitId: string }
   | { kind: 'support'; id: string; controller: PlayerId; unitId: string }
-  | { kind: 'payOrExhaust'; id: string; controller: PlayerId; unitId: string; cost: number; resumeAtInitiative?: boolean }
+  // `orReturn`: declining returns the unit to its owner's hand instead of exhausting it (Millennium Falcon).
+  | { kind: 'payOrExhaust'; id: string; controller: PlayerId; unitId: string; cost: number; resumeAtInitiative?: boolean; orReturn?: boolean }
   | { kind: 'mayPlayTopFree'; id: string; controller: PlayerId; unitId: string; cardId: string }
   | { kind: 'mayDamageExhaust'; id: string; controller: PlayerId; unitId: string; arena: Arena }
   // Improvised Identity: search the revealed top cards for a ground unit to

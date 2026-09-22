@@ -3,7 +3,7 @@ import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, record
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint } from './abilities'
-import { getCardDefinition, collectArrivalTriggers, collectPlayerTriggers, collectUnitTriggers } from './abilities'
+import { getCardDefinition, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers } from './abilities'
 import { enqueueTriggers, drainTriggers } from './triggerQueue'
 
 /**
@@ -533,7 +533,9 @@ export function drawCards(state: GameState, owner: PlayerId, n: number): GameSta
   // controller's draws could not express that. Who drew is in `ctx.drawingPlayer`, and every
   // registration compares it against `ctx.owner` rather than assuming one side.
   const ctx = { drawingPlayer: owner, cardsDrawn: drawn.length }
-  return fireUnitsTrigger(fireUnitsTrigger(next, 'whenDrawCards', owner, ctx), 'whenDrawCards', opponentOf(owner), ctx)
+  const heard = fireUnitsTrigger(fireUnitsTrigger(next, 'whenDrawCards', owner, ctx), 'whenDrawCards', opponentOf(owner), ctx)
+  // "When you draw this card" (Rey): each drawn card's own ability, from the hand it has just reached.
+  return fireBatch(heard, drawn.flatMap((cardId, i) => collectCardTriggers('whenDrawn', cardId, owner, `drawn-${cardId}-${i}`, { drawingPlayer: owner })))
 }
 
 /** Every ability `owner`'s units have at `point`: one event, so one batch. */
@@ -567,9 +569,19 @@ export function returnUnitToHand(state: GameState, instanceId: string): GameStat
     }
     next = recordUnitLeftPlay(next, owner, u.cardId, u.isLeader)
     // Leaving play releases whatever it had captured.
-    return releaseCaptured(next, owner, u.captured ?? [])
+    next = releaseCaptured(next, owner, u.captured ?? [])
+    return fireBatch(next, collectLeavesPlay(next, u, owner))
   }
   return state
+}
+
+/** "When a unit leaves play" (Boba Fett), heard on both sides: `unit` has just left `controller`'s control. */
+export function collectLeavesPlay(state: GameState, unit: UnitState, controller: PlayerId): PendingTrigger[] {
+  const ctx = { unitLeftPlay: { unit, controller } }
+  return [controller, opponentOf(controller)].flatMap(p => [
+    ...collectPlayerTriggers(state, 'whenUnitLeavesPlay', p, ctx),
+    ...collectUnitsTrigger(state, 'whenUnitLeavesPlay', p, ctx),
+  ])
 }
 
 /**

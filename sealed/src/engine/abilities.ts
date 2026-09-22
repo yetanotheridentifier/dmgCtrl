@@ -32,6 +32,16 @@ export type TriggerPoint =
   // `onAttackEnd` ("when THIS unit's attack ends", the attacker only).
   | 'whenFriendlyAttackEnds'
   | 'whenReadies'
+  // "When you ready cards during the regroup phase" (Millennium Falcon): the player's ready step, on
+  // every unit they control whether or not it was exhausted, in the same batch as `whenReadies`.
+  | 'whenReadyStep'
+  // "When you draw this card" (Rey): a card in hand, raised by `drawCards` for each card it drew, as
+  // that card's own ability. `ctx.drawingPlayer` is who drew.
+  | 'whenDrawn'
+  // "When an enemy unit leaves play" (Boba Fett): defeated or returned to hand, the two ways a unit
+  // leaves play that the phase record (`leftPlay`) also counts. Heard by both players' undeployed
+  // leaders, bases and units, with the unit and its controller in `ctx.unitLeftPlay`.
+  | 'whenUnitLeavesPlay'
   | 'whenRegroupStarts'
   // "When you take the initiative" (Mandalorian) — fires for the taker's undeployed leader.
   | 'whenTakeInitiative'

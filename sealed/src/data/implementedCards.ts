@@ -291,6 +291,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'HMW_011', name: 'Darth Sidious', front: true, back: true },
   { id: 'HMW_013', name: 'Cham Syndulla', front: true, back: true },
   { id: 'TWI_016', name: 'Jango Fett', front: true, back: true },
+  // "When an enemy unit leaves play".
+  { id: 'SOR_015', name: 'Boba Fett', front: true, back: true },
 ]
 
 /**
@@ -1830,6 +1832,9 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LAW_047', name: 'Baze Malbus' },
   // "When another friendly unit that costs 3 or less is dealt damage".
   { id: 'HMW_045', name: 'Logray' },
+  // "When you ready cards during the regroup phase"; "when you draw this card".
+  { id: 'SOR_193', name: 'Millennium Falcon' },
+  { id: 'LOF_148', name: 'Rey' },
 ]
 
 /**

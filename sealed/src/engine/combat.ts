@@ -7,7 +7,7 @@ import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { collectPlayerTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
-import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt } from './effects'
+import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay } from './effects'
 
 /**
  * How much of an instance of damage the cards in play stop before it lands (Cassian Andor, Boba
@@ -233,6 +233,8 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
     for (const u of result.players[opponentOf(owner)].units) {
       owed.push(...collectUnitTriggers(result, 'whenEnemyUnitDefeated', u, opponentOf(owner), { defeatedUnit: dead, ...attacking }))
     }
+    // A defeat is also the unit leaving play (Boba Fett).
+    owed.push(...collectLeavesPlay(result, dead, owner))
   }
   // `sameEvent` when the caller is still filling this batch: its remaining calls are simultaneous with
   // this one, not nested under it.

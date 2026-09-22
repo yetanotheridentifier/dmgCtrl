@@ -10313,6 +10313,42 @@ registerCard('SOR_203', chooseTwoWp([ // Cunning
     run: (s, ctx) => discardAtRandom(s, opponentOf(ctx.owner)) },
 ]))
 
+// ── One-offs ─────────────────────────────────────────────────────────────────────────────────
+
+registerCard('SOR_193', { // Millennium Falcon
+  entersReady: () => true,
+  // The ready step, not this unit readying: it is usually ready already, having entered play ready.
+  abilities: [{ trigger: 'whenReadyStep', description: 'When you ready cards during the regroup phase: Either pay 1 or return this unit to her owner\'s hand.', effect: (s, ctx) =>
+    pushChoice(s, { kind: 'payOrExhaust', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, cost: 1, resumeAtInitiative: true, orReturn: true }) }],
+})
+
+/** "If you control an Aggression leader or base" (Rey): the leader's card, deployed or not, or the base's. */
+const controlsAspectLeaderOrBase = (s: GameState, owner: PlayerId, aspect: string): boolean =>
+  [s.players[owner].leader.cardId, s.players[owner].base.cardId].some(id => s.cards[id]?.aspects.includes(aspect) ?? false)
+registerCard('LOF_148', { // Rey
+  abilities: [{ trigger: 'whenDrawn', description: 'When you draw this card during the action phase: If you control an Aggression leader or base, you may reveal this card from your hand. If you do, deal 2 damage to a unit and 2 damage to a base.', effect: (s, ctx) =>
+    (s.phase === 'action' && controlsAspectLeaderOrBase(s, ctx.owner, 'Aggression') && s.players[ctx.owner].hand.includes(ctx.cardId)
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'reveal Rey to deal 2 damage to a unit and 2 damage to a base', then: resume(ctx) })
+      : s) }],
+  ifYouDo: (s, ctx) => damageChoice(damageChoice(s, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-unit` }, 2, allUnits(s)), { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-base` }, 2, [], BOTH_BASES),
+})
+
+registerCard('SOR_015', { // Boba Fett
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenUnitLeavesPlay',
+      hears: (_s, ctx) => ctx.unitLeftPlay !== undefined && ctx.unitLeftPlay.controller !== ctx.owner,
+      description: 'When an enemy unit leaves play: You may exhaust this leader. If you do, ready a resource.',
+      effect: (s, ctx) => (leaderCanExhaust(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Boba Fett (leader) to ready a resource', then: resume(ctx) })
+        : s),
+    }],
+  },
+  abilities: [{ trigger: 'onAttackEnd', description: 'When this unit completes an attack: If an enemy unit left play this phase, ready up to 2 resources.', effect: (s, ctx) =>
+    (survivedAttack(s, ctx) && leftPlayThisPhase(s, opponentOf(ctx.owner)).length > 0 ? readyResource(readyResource(s, ctx.owner), ctx.owner) : s) }],
+  ifYouDo: (s, ctx) => readyResource(exhaustLeader(s, ctx.owner), ctx.owner),
+})
+
 // ── "When you play an event" ───────────────────────────────────────────────────────────────────
 // `whenPlayCard` covers every type on both sides, so the card states both.
 const playedOwnEvent = (s: GameState, ctx: EffectContext): boolean =>

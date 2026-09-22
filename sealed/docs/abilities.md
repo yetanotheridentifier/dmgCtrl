@@ -127,7 +127,7 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 ### Trigger points
 
 `whenPlayed`, `onAttack`, `whenUnitAttacks`, `onAttackEnd`, `onDefense`, `whenHealed`, `whenDefeated`, `whenReadies`,
-`whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
+`whenReadyStep`, `whenDrawn`, `whenUnitLeavesPlay`, `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
 `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenDamageDealt`, `whenEnemyAttacksBase`,
@@ -158,6 +158,20 @@ surviving units (Luthen Rael).
 `whenHealed` ("when 1 or more damage is healed from this unit", Silver Angel) fires on the healed unit
 from `healUnit`, which is the one place a unit is healed, with what the heal actually removed in
 `ctx.amountHealed` (Baze Malbus deals that much). A heal that removes nothing raises nothing.
+
+`whenReadyStep` ("when you ready cards during the regroup phase", Millennium Falcon) is the player's
+ready step, raised on every unit they control whether or not it was exhausted, in the same batch as
+`whenReadies` (which fires only on a unit that actually readied). Its `payOrExhaust` with `orReturn`
+returns the unit to its owner's hand on a decline, and resumes with the initiative holder as every
+ready-step choice does.
+
+`whenDrawn` ("when you draw this card", Rey) is an ability of a card in **hand**: `drawCards` collects it
+from each card it drew, once the draw's `whenDrawCards` batch is done, with `ctx.drawingPlayer`. The
+source instance is a `drawn-<card>-<index>` id, since a hand card has none.
+
+`whenUnitLeavesPlay` ("when an enemy unit leaves play", Boba Fett) is raised wherever the phase
+record's `leftPlay` is written: a defeat (in the defeat batch) and a return to hand. It is heard by both
+players' undeployed leaders, bases and units, with the unit and its controller in `ctx.unitLeftPlay`.
 
 `whenActionPhaseStarts` ("when the action phase starts", Beast Lair) fires for every unit in play and
 each player's leader and base as the next round's action phase begins, on the same boundary as an

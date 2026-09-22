@@ -924,7 +924,9 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   const choice = choiceId ? findChoice(state, choiceId) : activeChoice(state)
   if (!choice) throw new Error('skipTrigger: no pending choice')
   let next = removeChoice(state, choice.id)
-  if (choice.kind === 'ambush' || choice.kind === 'payOrExhaust') {
+  if (choice.kind === 'payOrExhaust' && choice.orReturn) {
+    next = returnUnitToHand(next, choice.unitId)
+  } else if (choice.kind === 'ambush' || choice.kind === 'payOrExhaust') {
     next = updatePlayer(next, choice.controller, {
       units: next.players[choice.controller].units.map(u => (u.instanceId === choice.unitId ? { ...u, exhausted: true } : u)),
     })
@@ -3057,11 +3059,15 @@ function readyEverything(state: GameState, id: PlayerId): GameState {
       : u)),
     leader: p.leader.exhausted ? { ...p.leader, exhausted: false } : p.leader,
   })
-  // "When this unit readies" abilities: everything readies at once, so one batch.
-  return fireBatch(next, justReadied.flatMap(instanceId => {
-    const unit = next.players[id].units.find(u => u.instanceId === instanceId)
-    return unit ? collectUnitTriggers(next, 'whenReadies', unit, id) : []
-  }))
+  // "When this unit readies" abilities: everything readies at once, so one batch, which "when you
+  // ready cards during the regroup phase" joins on every unit, readied or not (Millennium Falcon).
+  return fireBatch(next, [
+    ...justReadied.flatMap(instanceId => {
+      const unit = next.players[id].units.find(u => u.instanceId === instanceId)
+      return unit ? collectUnitTriggers(next, 'whenReadies', unit, id) : []
+    }),
+    ...collectUnitsTrigger(next, 'whenReadyStep', id),
+  ])
 }
 
 /** Whoever decides the first pending choice — the initiative holder if they have one

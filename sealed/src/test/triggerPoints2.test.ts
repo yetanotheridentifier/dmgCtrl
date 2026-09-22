@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { dealDamageToUnit } from '../engine/combat'
-import { dealDamageToBase, healUnit } from '../engine/effects'
+import { dealDamageToBase, drawCards, healUnit, returnUnitToHand } from '../engine/effects'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_EXPERIENCE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_BATTLE_DROID, TOKEN_CLONE_TROOPER } from '../engine/tokenUnits'
@@ -1111,5 +1111,94 @@ describe('choose two, in any order', () => {
     const shielded = accept(accept(played, { optionIndex: 0 }), { targetInstanceId: 'g' })
     expect(U(shielded, 'g')!.upgrades.map(u => u.cardId)).toEqual([TOKEN_SHIELD])
     noChoice(shielded)
+  })
+})
+
+// ── One-offs ──────────────────────────────────────────────────────────────────────────────────
+
+describe('SOR_193 Millennium Falcon', () => {
+  const M: Record<string, EngineCard> = { ...P, SOR_193: card({ id: 'SOR_193', name: 'Millennium Falcon', type: 'unit', arena: 'space', cost: 3, power: 3, hp: 4, traits: ['Underworld', 'Vehicle', 'Transport'], unique: true }) }
+  const regroup = (resources = 5) => ({
+    ...board({ resources: ready(resources).map(r => ({ ...r, exhausted: true })), units: [unit('mf', 'SOR_193', { arena: 'space' })] }),
+    cards: M, phase: 'regroup' as const, regroupResourced: { player: false, opponent: false },
+  })
+  const intoNextRound = (s: GameState) => resolve(resolve(s, { type: 'skipResource' }), { type: 'skipResource' })
+
+  it('enters play ready', () => {
+    const played = resolve({ ...board({ hand: ['SOR_193'] }), cards: M, activePlayer: 'player' }, { type: 'playUnit', handIndex: 0 })
+    expect(played.players.player.units[0].exhausted).toBe(false)
+  })
+
+  it('when you ready cards in the regroup phase, pay 1 or return it to its owner\'s hand, though it was already ready', () => {
+    const next = intoNextRound(regroup())
+    expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'payOrExhaust', unitId: 'mf', cost: 1, controller: 'player', orReturn: true })
+    const paid = accept(next)
+    expect(U(paid, 'mf')).toBeDefined()
+    expect(paid.players.player.resources.filter(r => !r.exhausted)).toHaveLength(4)
+    const kept = skip(next)
+    expect(U(kept, 'mf')).toBeUndefined()
+    expect(kept.players.player.hand).toEqual(['SOR_193'])
+    expect(kept.activePlayer, 'play resumes with the initiative holder').toBe(kept.initiative)
+  })
+})
+
+describe('LOF_148 Rey', () => {
+  const R: Record<string, EngineCard> = {
+    ...P,
+    LOF_148: card({ id: 'LOF_148', name: 'Rey', type: 'unit', arena: 'ground', cost: 5, power: 5, hp: 5, traits: ['Force', 'Jedi', 'Resistance'] }),
+    AGG_LEADER: card({ id: 'AGG_LEADER', type: 'leader', arena: 'ground', cost: 5, power: 3, hp: 6, aspects: ['Aggression'] }),
+    CALM_LEADER: card({ id: 'CALM_LEADER', type: 'leader', arena: 'ground', cost: 5, power: 3, hp: 6, aspects: ['Vigilance'] }),
+  }
+  const rBoard = (leader: string, phase: 'action' | 'regroup' = 'action') => ({
+    ...board({ deck: ['LOF_148', 'GRD'], leader: { cardId: leader, deployed: false, epicActionUsed: false, exhausted: false }, units: [unit('g', 'GRD')] }, { units: [unit('e', 'GRD')] }),
+    cards: R, phase,
+  })
+
+  it('drawn during the action phase with an Aggression leader: may reveal it to deal 2 damage to a unit and 2 to a base', () => {
+    const drawn = drawCards(rBoard('AGG_LEADER'), 'player', 1)
+    expect(choice(drawn)).toMatchObject({ kind: 'mayPayThen', controller: 'player', cost: 0 })
+    const revealed = accept(drawn)
+    expect(revealed.pendingChoices?.map(c => c.kind)).toEqual(['selectDamageTarget', 'selectDamageTarget'])
+    expect(targetsOf(revealed.pendingChoices![0])).toEqual(['e', 'g'])
+    expect(revealed.pendingChoices![1]).toMatchObject({ amount: 2, unitTargets: [] })
+    expect(revealed.players.player.hand, 'revealed, not played').toEqual(['LOF_148'])
+  })
+
+  it('nothing without an Aggression leader or base, outside the action phase, or for another card', () => {
+    noChoice(drawCards(rBoard('CALM_LEADER'), 'player', 1))
+    noChoice(drawCards(rBoard('AGG_LEADER', 'regroup'), 'player', 1))
+    const other = rBoard('AGG_LEADER')
+    noChoice(drawCards({ ...other, players: { ...other.players, player: { ...other.players.player, deck: ['GRD', 'LOF_148'] } } }, 'player', 1))
+  })
+})
+
+describe('SOR_015 Boba Fett', () => {
+  const B: Record<string, EngineCard> = { ...P, SOR_015: card({ id: 'SOR_015', name: 'Boba Fett', type: 'leader', arena: 'ground', cost: 5, power: 4, hp: 7, traits: ['Underworld', 'Bounty Hunter'] }) }
+  const spent = ready(3).map(r => ({ ...r, exhausted: true }))
+  const bBoard = (leader: NonNullable<Side>['leader'], units: UnitState[], theirs: UnitState[]) =>
+    ({ ...board({ leader, resources: spent, units }, { units: theirs }), cards: B })
+  const front = { cardId: 'SOR_015', deployed: false, epicActionUsed: false, exhausted: false }
+  const readyCount = (s: GameState) => s.players.player.resources.filter(r => !r.exhausted).length
+
+  it('front: when an enemy unit leaves play, defeated or returned to hand, may exhaust himself to ready a resource', () => {
+    const killed = attackUnit(bBoard(front, [unit('b', 'BIG')], [unit('e', 'SMALL')]), 'b', 'e')
+    expect(choice(killed)).toMatchObject({ kind: 'mayPayThen', controller: 'player' })
+    const paid = accept(killed)
+    expect(paid.players.player.leader.exhausted).toBe(true)
+    expect(readyCount(paid)).toBe(1)
+    const bounced = returnUnitToHand(bBoard(front, [], [unit('e', 'SMALL')]), 'e')
+    expect(choice(bounced)).toMatchObject({ kind: 'mayPayThen' })
+  })
+
+  it('front: not for a friendly unit leaving play', () => {
+    noChoice(returnUnitToHand(bBoard(front, [unit('g', 'GRD')], []), 'g'))
+  })
+
+  it('back: completing an attack after an enemy unit left play this phase readies up to 2 resources', () => {
+    const back = { ...front, deployed: true, epicActionUsed: true }
+    const swung = attackUnit(bBoard(back, [unit('bf', 'SOR_015', { isLeader: true })], [unit('e', 'SMALL')]), 'bf', 'e')
+    expect(readyCount(swung)).toBe(2)
+    const noneLeft = attackBase(bBoard(back, [unit('bf', 'SOR_015', { isLeader: true })], [unit('e', 'SMALL')]), 'bf')
+    expect(readyCount(noneLeft)).toBe(0)
   })
 })

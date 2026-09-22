@@ -222,7 +222,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
 
     // ── Costs and yes/no offers ───────────────────────────────────────────────────────────────
     case 'payOrExhaust':
-      return [`pay ${choice.cost} to keep this unit ready, or let it exhaust`]
+      return [choice.orReturn
+        ? `pay ${choice.cost} to keep this unit in play, or return it to its owner's hand`
+        : `pay ${choice.cost} to keep this unit ready, or let it exhaust`]
     case 'mayPayExhaustArena':
       return [`pay ${choice.cost} to exhaust every unit in an arena`]
     case 'mayPayToDraw':
