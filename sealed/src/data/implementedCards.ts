@@ -302,6 +302,10 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SHD_009', name: 'Hunter', front: true, back: true },
   { id: 'SOR_017', name: 'Han Solo', front: true, back: true },
   { id: 'SEC_008', name: 'Bail Organa', front: true, back: true },
+  // Keyword identity as a runtime value: a keyword swapped for another, and a count of how many
+  // different ones a unit has.
+  { id: 'HMW_001', name: 'Asajj Ventress', front: true, back: true },
+  { id: 'TS26_3', name: 'Maul', front: true, back: true },
 ]
 
 /**
@@ -1890,6 +1894,10 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_185', name: 'Ty Yorrick' },
   { id: 'SHD_090', name: 'Maul' },
   { id: 'LOF_206', name: 'Babu Frik' },
+  // Keyword identity as a runtime value: a keyword its controller chose, and a unit's own set lent on.
+  { id: 'JTL_047', name: 'Admiral Yularen' },
+  { id: 'JTL_053', name: 'The Ghost' },
+  { id: 'LOF_105', name: 'Oppo Rancisis' },
 ]
 
 /**

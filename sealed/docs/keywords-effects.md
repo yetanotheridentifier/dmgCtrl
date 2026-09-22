@@ -25,6 +25,11 @@ ships it as a printed keyword of its own. Only what is printed on the card belon
 `cardDataCorrections.ts` strips the rest, and the ability grants it back where it belongs, at step 3
 or 4. A wrongly printed Sentinel is the one that bites, since it redirects enemy attacks.
 
+The union is literal enough to catch the **word** "Keyword" or "Keywords" where a card's text names a
+keyword it does not have: a card that hands out "the chosen Keyword" (Admiral Yularen) or counts "more
+different Keywords" (Maul) ships `Keyword` in its own list. None of those is a keyword, and they are
+`cardDataCorrections.ts` entries like the rest.
+
 For a **leader**, the source's `Keywords` describes the unit side, and the card's BackText spells that
 side's keywords out line by line. So a keyword the source lists that the back does not print belongs to
 whichever units the leader gives it to (Omega's Grit), one the back prints that the source omits is
@@ -42,6 +47,25 @@ Duplicates are deliberate and must not be collapsed: two copies of the same upgr
 contribute.
 
 Abilities travel; **printed traits do not**.
+
+### Swapping one keyword for another
+
+```ts
+CardDefinition.swappedKeywords?: (state, unit) => [from, to][]
+```
+
+"For this attack, replace any Raid it has or gains with Restore, or vice versa" (Asajj Ventress).
+Each pair is registered in both directions and applied as a **rename over the unit's finished keyword
+list**, after every grant and every removal: each instance keeps its numeral and answers to the other
+name, so a Raid 2 reads as Restore 2 wherever Restore is read.
+
+Running last is what makes "has **or gains**" true. The alternative, granting the counterpart and
+suppressing the original, has to read the old numeral before hiding it, and suppression is by name
+and applies to the whole list, so the grant would strip itself. A rename has neither problem and sees
+sources that do not exist yet when the ability resolves.
+
+A swap is a property of the cards on the unit, so it rides in on `abilityCardIds` like any other
+hook: Asajj's is on a carrier card lent to the attacker for one attack, and it ends when the loan does.
 
 ## Traits: one read for a card anywhere
 
@@ -81,9 +105,12 @@ Applies while the source unit (or an attached upgrade) is in play, to **other** 
 
 **Constraint:** an aura must not read the target's *computed* keywords or power, because that
 recurses through the aura pass. Inspect card data and traits instead; `unitHasTrait` is safe, and
-`nonAuraKeywordNames` / `nonAuraKeywordValue` answer "does the target have this keyword, and what is
-its numeral" from every source except auras, which is what a card that reacts to a keyword
-(Kylo Ren's Command Shuttle) or scales one (Marchion Ro doubles Raid) needs.
+`nonAuraKeywords` answers "which keywords does this unit have, with their numerals" from every source
+except auras. `nonAuraKeywordNames` and `nonAuraKeywordValue` are the two shapes of it callers
+usually want. That is what a card which reacts to a keyword (Kylo Ren's Command Shuttle) or scales
+one (Marchion Ro doubles Raid) needs, and the same read serves an aura asking about its own
+**source** rather than its target: The Ghost lends the other friendly Spectres whatever it has, so
+what another aura gives The Ghost does not travel on.
 
 An aura can be combat-conditional: the combat roles are threaded into the aura call, so "while
 attacking" and "while defending" auras work. `CombatContext` carries `attackerInstanceId`,
@@ -97,6 +124,8 @@ damaged defender).
 **"While this unit is in play, the chosen unit gets ..."** (BD-1, Huyang) is an aura, not a lasting
 effect: the source records its pick in `UnitState.chosenUnitId` and its aura reads that field. It
 outlives the phase, and it ends the moment either unit leaves play, with nothing to clean up.
+A pick that is a **keyword** rather than a unit works the same way in `UnitState.namedKeyword`
+(Admiral Yularen: "each friendly Vehicle unit gains the chosen Keyword").
 
 ## Reading a computed stat from inside the pass that computes it
 

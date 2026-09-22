@@ -318,6 +318,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `attachRestriction` | may this upgrade attach to that unit, when this player plays it ("a friendly unit") |
 | `conditionalKeywords` | extra keywords, folded into `unitKeywords` |
 | `suppressedKeywords` | keywords removed while a condition holds |
+| `swappedKeywords` | pairs of keyword names traded for one another, renamed over the finished list (Asajj Ventress); see `keywords-effects.md` |
 | `statModifier` | power/HP deltas, folded into `effectivePower`/`effectiveHp` |
 | `aura` | power/HP/keywords granted to **other** units |
 | `damageMultiplier` | scales each incoming damage instance |
