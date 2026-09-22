@@ -47,7 +47,7 @@ const SHIPPED = [
   'LAW_051', 'LAW_197', 'LOF_204', 'SOR_185',
 ]
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
-const LIFTED = ['TWI_038', 'SHD_216', 'SHD_139', 'LOF_197', 'SHD_090', 'SHD_153', 'SOR_056']
+const LIFTED = ['SHD_216', 'SHD_139', 'LOF_197', 'SHD_090', 'SHD_153', 'SOR_056']
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
 const real = (id: string): EngineCard => {

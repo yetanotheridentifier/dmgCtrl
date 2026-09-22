@@ -303,6 +303,25 @@ export function defeatUnits(state: GameState, instanceIds: string[]): GameState 
   return hit ? drainTriggers(next) : state
 }
 
+/**
+ * Defeat units as part of paying for a card (Exploit). The units go now, but what their defeat
+ * triggers is handed back rather than resolved: "Abilities that trigger while defeating units using
+ * Exploit resolve only after the Play a Card action has finished resolving, at the same time that a
+ * unit's When Played abilities resolve" (CR 7.5.16.d). The play fires them in its own batch.
+ */
+export function defeatForCost(state: GameState, instanceIds: string[]): { state: GameState; owed: PendingTrigger[] } {
+  const doomed = new Set(instanceIds)
+  const waiting = state.pendingTriggers ?? []
+  let next = state
+  for (const owner of ['player', 'opponent'] as PlayerId[]) {
+    const units = next.players[owner].units
+    const dead = units.filter(u => doomed.has(u.instanceId))
+    if (dead.length > 0) next = finishDefeats(next, owner, units.filter(u => !doomed.has(u.instanceId)), dead, false, [], true)
+  }
+  const owed = (next.pendingTriggers ?? []).filter(t => !waiting.some(w => w.id === t.id))
+  return { state: { ...next, pendingTriggers: waiting.length > 0 ? waiting : undefined }, owed }
+}
+
 /** Defeat a unit outright — a targeted "defeat" (Thrawn), which bypasses Shields (those
  *  prevent damage, not defeat). No-op if the unit isn't in play. */
 export function defeatUnit(state: GameState, instanceId: string): GameState {

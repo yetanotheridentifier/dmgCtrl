@@ -117,6 +117,12 @@ export interface UnitState {
    */
   resourcesPaidToPlay?: number
   /**
+   * The power of each unit exploited while playing this unit, read as it was defeated, for the When
+   * Played that counts them (Count Dooku). Absent when none were. Recorded for the same reason as
+   * `resourcesPaidToPlay`: the units are gone by the time the ability resolves.
+   */
+  exploitedPowers?: number[]
+  /**
    * Cards this unit has captured (Bothan-5) — card ids held face-down under it, out of every
    * other zone. Released to their owner's discard when the captor leaves play.
    */
@@ -264,11 +270,16 @@ export interface NextUnitGrant {
   sharesKeywordWithFriendly?: boolean
   // The grant is for the next EVENT played instead of the next unit (Rex): only `costDelta` applies.
   event?: boolean
+  // The grant is for the next CARD played, unit or event ("the next Separatist card you play").
+  anyCard?: boolean
+  // The matching card gains Exploit this many (Count Dooku), read by `exploitTerms` as it is played.
+  exploit?: number
 }
 
 /** True if `card` is a unit satisfying a grant's filter. `state` and `owner` are needed only by a board-reading filter. */
 export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state?: GameState, owner?: PlayerId): boolean {
-  if (!card || card.type !== (grant.event ? 'event' : 'unit')) return false
+  if (!card) return false
+  if (grant.anyCard ? card.type !== 'unit' && card.type !== 'event' : card.type !== (grant.event ? 'event' : 'unit')) return false
   if (grant.trait && !card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase())) return false
   if (grant.maxPower !== undefined && (card.power ?? 0) > grant.maxPower) return false
   if (grant.cardId !== undefined && card.id !== grant.cardId) return false
@@ -1067,6 +1078,11 @@ type ChoiceVariant =
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
+  // Exploit (CR 7.5.16) while playing the hand card at `handIndex`, before anything is paid: pick
+  // friendly units one at a time, up to `limit`, then Done. Each saves `discount`. Exploit defeats
+  // them; with `damage` each is dealt that much instead (The Marauder). Done is offered only once what
+  // is left to pay is affordable, and reaching `limit` finishes the play by itself.
+  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number }
   // The one door for playing a card out of somewhere other than the Play a Card action: any card
   // type, out of `zone`, answered by `optionIndex` into `candidates`. `free` bypasses the cost and
   // the aspect penalty (CR 8.5); `costDelta` adjusts it; `waive` forgives aspect penalties. An

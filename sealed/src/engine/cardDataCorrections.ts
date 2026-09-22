@@ -150,6 +150,11 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   SHD_016: { keywords: [{ name: 'Saboteur' }] }, // Fennec Shand (leader)
   SHD_188: { keywords: [{ name: 'Ambush' }] }, // 4-LOM
   JTL_054: { keywords: [{ name: 'Shielded' }] }, // Gold Leader
+  TWI_037: { keywords: [{ name: 'Exploit', value: 2 }, { name: 'Sentinel' }] }, // Droideka Security
+  TWI_038: { keywords: [{ name: 'Exploit', value: 2 }] }, // Providence Destroyer
+
+  // A leader whose Exploit is what it gives other cards: its deployed side prints Overwhelm only.
+  TWI_005: { keywords: [{ name: 'Overwhelm' }] }, // Count Dooku (leader)
 
   // A keyword the source lists that the card does not print, alongside one it omits.
   LAW_081: { keywords: [{ name: 'Ambush' }, { name: 'Overwhelm' }] }, // Sullustan Sapper: the card prints Ambush and Overwhelm, not Shielded

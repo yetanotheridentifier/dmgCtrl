@@ -1500,7 +1500,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     const declineButton = declineChoice ?? discardDecline ?? handPlayDecline ?? upgradeDefeatDecline
     // Distribute HUD (Ninth Sister damage / Helgait tokens): how much of the pool is allocated.
     const distribute = targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens' ? targetChoice : undefined
-    const repeatable = targetChoice?.kind === 'multiPick' || targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens'
+    const repeatable = targetChoice?.kind === 'multiPick' || targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens' || targetChoice?.kind === 'exploit'
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
         {distribute && (

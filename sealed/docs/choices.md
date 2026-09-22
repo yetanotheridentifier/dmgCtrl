@@ -410,6 +410,44 @@ spent as the card is taken.
 cost less its `discount`, bottoms the leftovers, and then plays the chosen card through the same door as
 an upgrade played from hand.
 
+### Exploit: units chosen while paying
+
+**Exploit X** (CR 7.5.16) is "while playing this card, you may defeat up to X friendly units; for each
+unit defeated this way, this card costs 2 less". It is used at step 3 of Play a Card (determine the
+cost), so it is a step inside the play rather than an ability that triggers from it.
+
+`exploitTerms` says whether a card asks and on what terms: the printed numeral, plus any Exploit the
+card gains as it is played (instances stack, 7.5.16.b): a `NextUnitGrant` with `exploit` (Count
+Dooku's deployed side), or `extra` from the ability doing the playing (his front). The limit is capped
+at the friendly units there are, and a card with none to pick asks nothing. The Marauder is the same
+step on its own terms, declared as its `whilePlaying` hook: any number of units, each dealt 1 damage
+and each saving 1.
+
+- **Legality reads the best case.** `lowestCost` is the effective cost less the most the step could
+  save, and the hand play is offered when that is affordable.
+- **The `exploit` choice comes before anything is paid.** The card stays in hand; the player picks
+  friendly units one at a time. **Done is offered only once what is left to pay is affordable**, so a
+  play that needs its discount cannot be stranded half paid, and reaching the limit finishes the play
+  by itself.
+- **The cost is read before the units go** (`exploitCost`), with the chosen units still in play: a
+  unit that was discounting the card or providing an aspect icon still counts, since the cost is
+  determined at step 3.
+- **The defeats' abilities join the play's batch.** "Abilities that trigger while defeating units using
+  Exploit resolve only after the Play a Card action has finished resolving, at the same time that a
+  unit's When Played abilities resolve" (7.5.16.d). `defeatForCost` defeats the units and hands their
+  collected abilities back, and the play fires them with its own, so the player orders an exploited
+  unit's When Defeated against the new card's When Played. The Marauder's damage is dealt as ordinary
+  damage and resolves what it triggers at once.
+- **The exploited units' powers are recorded** on the unit played (`exploitedPowers`), as read when
+  they were defeated, for the When Played that counts them (Count Dooku).
+
+The step belongs to the Play a Card action from hand (`playUnit`, `playEvent`) and to Count Dooku's
+front, which raises it itself with its Exploit 1. **The other ways to play a card do not offer it**:
+`playCardFrom`, `playUnitFromHand`, the free plays and the discard grants pay the card's effective cost
+with no exploit step. No card in the sealed sets both has Exploit and is commonly played that way.
+
+In the AI the step is an ordinary chain: quiescence scores Done and each pick, within its budget.
+
 ### Playing a card out of another zone
 
 **`playCardFrom` is the one door for a play that is not the Play a Card action**: a card of any type,

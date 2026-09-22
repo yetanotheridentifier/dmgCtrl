@@ -8,7 +8,7 @@ import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_
 import { playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
 import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
-import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
+import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, lowestCost, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
@@ -10439,3 +10439,98 @@ registerCard('TWI_025', { abilities: [{ trigger: 'whenFriendlyEntersPlay', descr
 
 registerCard('TS26_78', { abilities: [{ trigger: 'whenUnitAttacks', description: 'When an enemy unit attacks: You may give an Experience token to that unit.', effect: (s, ctx) => // Barriss Offee
   (!friendlyAttack(ctx) && attackerOf(s, ctx) ? expChoice(s, ctx, [ctx.attackerInstanceId!], 1, true) : s) }] })
+
+// ── Exploit ───────────────────────────────────────────────────────────────────────────────────
+// The keyword itself is the play's own step (`exploitTerms`, `raiseExploit`), so a card whose only
+// ability is Exploit needs no definition. These are the Exploit cards' other abilities, and the three
+// cards about Exploit: Count Dooku's leader gives it, his unit reads what it defeated, and The Marauder
+// is the same step on its own terms.
+const isSeparatist = (c: EngineCard | undefined): boolean => printedTrait(c, 'Separatist')
+registerCard('HMW_125', { whilePlaying: { damage: 1, discount: 1 } }) // The Marauder
+// Exploit 2 and Sentinel and nothing else, but the source lists neither keyword, so the triage cannot
+// credit it as playing as printed: both come from `cardDataCorrections`, and it is registered to be counted.
+registerCard('TWI_037', {}) // Droideka Security
+registerCard('TWI_235', createWd('Create 3 Battle Droid tokens.', TOKEN_BATTLE_DROID, 3)) // Battle Droid Legion
+registerCard('TWI_066', onAttack(createWp('Create a Battle Droid token.', TOKEN_BATTLE_DROID))) // Multi-Troop Transport
+registerCard('TWI_217', targetWp('Exhaust an enemy ground unit.', 'mayExhaustUnit', pickAll(pickEnemy, pickGround), false)) // Tri-Droid Suppressor
+registerCard('TWI_167', damageWp('You may deal 2 damage to a ground unit.', pickGround, 2, true)) // Heavy Persuader Tank
+registerCard('TWI_215', targetWp("You may return a non-leader unit that costs 3 or less to its owner's hand.", 'selectUnitToReturn', // Geonosis Patrol Fighter
+  (s, u) => nonLeader(s, u) && printedCost(s, u) <= 3, true))
+registerCard('TWI_039', unitThenWp("Give an enemy unit -4/-0 for this phase. It can't attack for this phase.", pickEnemy, // Malevolence
+  "give an enemy unit -4/-0 for this phase; it can't attack for this phase", false,
+  (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: -4, cannotAttack: true })))
+registerCard('TWI_038', onAttack(buffWp('Give an enemy space unit -2/-2 for this phase.', pickAll(pickEnemy, pickArena('space')), () => ({ power: -2, hp: -2 }), false))) // Providence Destroyer
+registerCard('TWI_134', attacks("If you've attacked with another Separatist unit this phase, this unit gets +3/+0 for this phase.", (s, ctx) => // Asajj Ventress
+  (attackedWithThisPhase(pickTrait('Separatist'))(s, ctx) ? addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, power: 3 }) : s)))
+registerCard('TWI_186', attacks('For each friendly unit that was defeated this phase, ready a friendly resource.', (s, ctx) => // San Hill
+  defeatedThisPhase(s, ctx.owner).reduce(acc => readyResource(acc, ctx.owner), s)))
+// "Choose an opponent": there is one.
+registerCard('TWI_078', whenPlayed('Choose an opponent. Defeat each unit that player controls.', (s, ctx) => // The Invasion of Christophsis
+  defeatUnits(s, s.players[opponentOf(ctx.owner)].units.map(u => u.instanceId))))
+registerCard('TWI_178', eachOfUpTo('Ready up to 3 units. Each of those units gets +1/+0 and gains Overwhelm for this phase.', 3, { // Planetary Invasion
+  text: 'ready a unit; it gets +1/+0 and Overwhelm for this phase',
+  test: pickAny,
+  apply: (s, _ctx, id) => addLastingEffect(readyUnit(s, id), { targetInstanceId: id, power: 1, keywords: [KW.overwhelm] }),
+}))
+registerCard('TWI_184', { abilities: [{ trigger: 'whenPlayUnit', description: 'When you play another Separatist unit: You may exhaust a unit that costs the same as or less than the played unit.', effect: (s, ctx) => { // Tactical Droid Commander
+  const entered = findUnit(s, ctx.targetInstanceId ?? '')?.unit
+  if (!entered || !isSeparatist(cardOf(s, entered))) return s
+  const cap = printedCost(s, entered)
+  return targetChoice(s, ctx, 'mayExhaustUnit', allUnits(s).filter(u => printedCost(s, u) <= cap).map(u => u.instanceId), true)
+} }] })
+
+/** Admiral Trench: one card at a time, each a unit of yours defeated this phase that is still in the pile. */
+const trenchReturn = (s: GameState, ctx: Resumable, returned: string[]): GameState => {
+  if (returned.length >= 3) return s
+  const pile = s.players[ctx.owner].discard
+  const owed = withoutEach(defeatedThisPhase(s, ctx.owner).filter(id => s.cards[id]?.type === 'unit'), returned)
+  const candidates = [...new Set(owed)].filter(id => pile.includes(id))
+  return candidates.length ? cardThen(s, ctx, candidates, `return a unit defeated this phase to your hand (${returned.length + 1} of up to 3)`, true, picksStep(returned)) : s
+}
+registerCard('TWI_086', { // Admiral Trench
+  ...whenPlayed('Return up to 3 units that were defeated this phase from your discard pile to your hand.', (s, ctx) => trenchReturn(s, ctx, [])),
+  ifYouDo: (s, ctx) => (ctx.cardChosen
+    ? trenchReturn(returnCardFromDiscardToHand(s, ctx.owner, ctx.cardChosen), ctx, [...picksOf(ctx.step), ctx.cardChosen])
+    : s),
+})
+
+/** Count Dooku: one "you may" per exploited unit, each dealt as its power, in turn. */
+const dookuOffer = (s: GameState, ctx: Resumable, powers: number[]): GameState => {
+  const [power, ...rest] = powers
+  if (power === undefined) return s
+  if (power <= 0) return dookuOffer(s, ctx, rest)
+  const targets = pickedIds(s, ctx, pickEnemy)
+  return targets.length ? pushChoice(s, {
+    kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, hookOnDecline: true,
+    text: `deal ${power} damage to an enemy unit`, then: resume(ctx, powers.join(',')),
+  }) : s
+}
+registerCard('TWI_138', { // Count Dooku
+  ...whenPlayed('For each unit you exploited while playing this card, you may deal damage to an enemy unit equal to the power of the exploited unit.', (s, ctx) =>
+    dookuOffer(s, ctx, selfOf(s, ctx)?.exploitedPowers ?? [])),
+  ifYouDo: (s, ctx) => {
+    const [power, ...rest] = (ctx.step ?? '').split(',').filter(Boolean).map(Number)
+    const next = ctx.targetInstanceId && power ? dealDamageToUnit(s, ctx.targetInstanceId, power, { cardId: ctx.cardId, controller: ctx.owner, instanceId: ctx.sourceInstanceId }) : s
+    return dookuOffer(next, ctx, rest)
+  },
+})
+
+/** Count Dooku's front: the Separatist cards he could play, with the Exploit 1 he gives them priced in. */
+const dookuPlayable = (s: GameState, owner: PlayerId): number[] => s.players[owner].hand.flatMap((id, i) => {
+  const c = s.cards[id]
+  return c && (c.type === 'unit' || c.type === 'event') && isSeparatist(c) && canAfford(s.players[owner], lowestCost(s, owner, c, 1)) ? [i] : []
+})
+registerCard('TWI_005', allOf( // Count Dooku
+  leaderFront('Play a Separatist card from your hand. It gains Exploit 1.', {
+    usable: (s, ctx) => dookuPlayable(s, ctx.owner).length > 0,
+    effect: (s, ctx) => pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices: dookuPlayable(s, ctx.owner), text: 'play a Separatist card; it gains Exploit 1', then: resume(ctx, 'front') }),
+  }),
+  // The exploit step is raised even with no unit to pick, since this is what plays the card: Done
+  // is then its only answer.
+  { ifYouDo: (s, ctx) => {
+    const c = ctx.cardChosen ? s.cards[ctx.cardChosen] : undefined
+    if (ctx.handIndex === undefined || !c) return s
+    return raiseExploit(s, ctx.owner, c.id, ctx.handIndex, exploitTerms(s, ctx.owner, c, 1) ?? { limit: 0, discount: 2 })
+  } },
+  attacks('The next Separatist card you play this phase gains Exploit 3.', (s, ctx) => grantNextUnit(s, ctx.owner, { trait: 'Separatist', anyCard: true, exploit: 3 })),
+))
