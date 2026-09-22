@@ -156,6 +156,24 @@ describe('bench argument parsing', () => {
     })
   })
 
+  /**
+   * The matrix rates one set's leaders against each other, so it takes exactly one set. A mixed pool
+   * would pair leaders with bases from other sets, which is not a deck anyone builds in sealed.
+   */
+  describe('the matrix set', () => {
+    it('defaults to ASH, the set every recorded matrix ran on', () => {
+      expect(parseArgs(['--matrix']).poolSets).toEqual(['ASH'])
+    })
+
+    it('takes one named set', () => {
+      expect(parseArgs(['--matrix', '--set', 'hmw', 'beam-reply']).poolSets).toEqual(['HMW'])
+    })
+
+    it('refuses more than one set at parse time', () => {
+      expect(() => parseArgs(['--matrix', '--set', 'HMW,ASH'])).toThrow('--matrix takes one set')
+    })
+  })
+
   describe('writing fixtures', () => {
     it('takes set codes positionally, as --triage does', () => {
       const args = parseArgs(['--fixture', 'law', 'sec'])

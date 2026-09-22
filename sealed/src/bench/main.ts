@@ -32,10 +32,11 @@ import { runAiMatchups } from './aiMatchups'
 import type { DecisionReport } from './decisions'
 import { runGeneralisation } from './generalisation'
 import type { GeneralisationReport } from './generalisation'
-import { buildMatchupDecks, type MatchupDeck } from './matchupDecks'
+import { buildMatchupDecks } from './matchupDecks'
 import {
   runMatchupMatrix, dealPairs, matrixShardIds, matrixPayloadUsable, pendingMatrixShards,
-  mergeMatrixParts, matrixResumeRefusal, deckSuiteId, type MatrixResult,
+  mergeMatrixParts, matrixResumeRefusal, deckSuiteId, matrixDecks, matrixRunKey, matrixChildArgs,
+  type MatrixResult,
 } from './matrix'
 import { saveMatrix, deckStrength, leaderStrength, baseStrength, firstPlayerAdvantage, type StrengthRow } from './store'
 import type { FirstPlayerSplit } from './stats'
@@ -191,7 +192,8 @@ export function parseArgs(argv: string[]): Args {
     }
     else if (arg === '--triage') triage = true
     else if (arg === '--fixture') fixture = true
-    // `--set LAW,SEC` names the sweep's pool. A flag, because the sweep's positionals are AI names.
+    // `--set LAW,SEC` names the sweep's pool, or the matrix's one set. A flag, because both modes'
+    // positionals are AI names.
     else if (arg === '--set') {
       const v = argv[++i]
       if (v === undefined || v.startsWith('--')) throw new Error('--set needs a set code, a comma-separated list of them, or all')
@@ -208,6 +210,8 @@ export function parseArgs(argv: string[]): Args {
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
   if (fixture && positional.length === 0) throw new Error('--fixture needs at least one set code, e.g. --fixture LAW SEC, or --fixture all')
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
+  // The matrix rates one set's leaders against each other; a mixed pool builds decks nobody builds.
+  if (matrix && poolSets.length !== 1) throw new Error(`--matrix takes one set, got ${poolSets.join(',')}`)
   return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, poolSets, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
@@ -1294,19 +1298,6 @@ function turnOrderSection(db: ReturnType<typeof openDb>, runId: string, limit = 
 }
 
 /**
- * The deck set a matrix plays, built the same way by the parent and by every child.
- *
- * `--seed` picks the deck suite as well as seeding the games, so one seed is one whole experiment, and
- * the run directory (which already keys on the seed) banks and resumes each suite separately. **Both
- * paths build their decks here** because each process builds its own: when the children built the
- * default seed instead, a four-suite run played one suite four times and every merge check passed. The
- * payload's `deckSuite` is what now refuses that.
- */
-function matrixDecks(seed: number): MatchupDeck[] {
-  return buildMatchupDecks(undefined, 4, seed)
-}
-
-/**
  * The matrix across N child processes, which is what makes it affordable at all: roughly 169 hours
  * serial against about 23 sharded.
  *
@@ -1318,10 +1309,11 @@ async function runShardedMatrixMode(args: Args): Promise<void> {
   const model = args.aiExplicit ? args.aiA : 'greedy'
   const gamesPerCell = args.gamesSet ? args.games : 10
   const shards = args.shards ?? 1
-  const decks = matrixDecks(args.seed)
+  const set = args.poolSets[0]
+  const decks = matrixDecks(args.seed, set)
   const total = dealPairs(decks.length).length
   const expectedCells = decks.length * decks.length
-  const key = `matrix__${model.replace(/[^A-Za-z0-9._-]/g, '_')}__g${gamesPerCell}__s${args.seed}`
+  const key = matrixRunKey(model, gamesPerCell, args.seed, set)
   const dir = join(SHARD_DIR, key)
   mkdirSync(dir, { recursive: true })
 
@@ -1346,7 +1338,7 @@ async function runShardedMatrixMode(args: Args): Promise<void> {
   const todo = pendingMatrixShards(shards, banked)
 
   console.log(
-    `\nmatchup matrix: ${model}, ${decks.length} decks, ${gamesPerCell} games/cell, seed ${args.seed}` +
+    `\nmatchup matrix: ${model}, ${set}, ${decks.length} decks, ${gamesPerCell} games/cell, seed ${args.seed}` +
     `\n  ${shards} shards over ${total.toLocaleString()} pairs ` +
     `= ${(total * gamesPerCell).toLocaleString()} games\n  ${dir}/\n`,
   )
@@ -1372,12 +1364,12 @@ async function runShardedMatrixMode(args: Args): Promise<void> {
   const start = Date.now()
   const jobs = todo.map(id => ({
     id,
-    args: [
-      'src/bench/main.ts', '--matrix', '--games', String(gamesPerCell), '--seed', String(args.seed),
-      '--shard-index', String(matrixShardIds(shards).indexOf(id)), '--shard-count', String(shards),
-      '--out', shardPayloadPath(dir, id),
-      ...(args.aiExplicit ? [model] : []),
-    ],
+    args: matrixChildArgs({
+      gamesPerCell, seed: args.seed, set,
+      shardIndex: matrixShardIds(shards).indexOf(id), shardCount: shards,
+      out: shardPayloadPath(dir, id),
+      model: args.aiExplicit ? model : undefined,
+    }),
   }))
   const outcomes = await spawnShards(dir, jobs, outcome => {
     // Banked the moment its shard lands, exactly as the head-to-head has done since #492. This is the
@@ -1463,18 +1455,19 @@ function bankedMatrixShard(payload: MatrixResult | null, seed: number, exitCode 
 function runMatrixMode(args: Args): void {
   const model = args.aiExplicit ? args.aiA : 'greedy'
   const gamesPerCell = args.gamesSet ? args.games : 10
-  const decks = matrixDecks(args.seed)
+  const set = args.poolSets[0]
+  const decks = matrixDecks(args.seed, set)
   const cells = decks.length * decks.length
   const shardIndex = args.shardIndex ?? 0
   const shardCount = args.shardCount ?? 1
   const share = shardCount > 1 ? `  [shard ${shardIndex + 1} of ${shardCount}]` : ''
   const pairs = dealPairs(decks.length, shardIndex, shardCount).length
-  console.log(`\nmatchup matrix: ${model}, ${decks.length} decks (${cells} cells), ${gamesPerCell} games/cell, seed ${args.seed}${share}`)
+  console.log(`\nmatchup matrix: ${model}, ${set}, ${decks.length} decks (${cells} cells), ${gamesPerCell} games/cell, seed ${args.seed}${share}`)
   console.log(`about ${(pairs * gamesPerCell).toLocaleString()} games to play; this takes a while...\n`)
 
   const start = Date.now()
   const result = runMatchupMatrix(decks, resolveAi(model), model, {
-    gamesPerCell, seed: args.seed, shardIndex, shardCount,
+    gamesPerCell, seed: args.seed, shardIndex, shardCount, pool: poolFor([set]),
     onProgress: shardProgress(args.out, pairs * gamesPerCell),
   })
 
