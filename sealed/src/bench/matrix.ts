@@ -1,13 +1,14 @@
 import ashSet from '../test/fixtures/ashSet.json'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 import type { SwuCard } from '../data/cards'
-import { buildCardDb } from '../engine/cardDb'
 import { nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
 import type { Ai } from '../ai/types'
 import { playGame } from './selfPlay'
 import { seating, resultForA, movedFirstForA } from './seating'
-import type { MatchupDeck } from './matchupDecks'
+import { buildMatchupDecks, type MatchupDeck } from './matchupDecks'
+import { poolFor } from './setPools'
+import { engineDeck, sweepCardDb } from './sweep'
 
 /**
  * Deck-vs-deck matchup matrix (#392 follow-up): with one fixed AI model, play every deck against
@@ -166,9 +167,14 @@ export function runMatchupMatrix(
     /** Called with the running count of games played, so a 23-hour child is not silent for all of it.
      *  See `BenchConfig.onProgress`, which this mirrors. */
     onProgress?: (gamesPlayed: number) => void
+    /** The set the decks were built from. ASH when absent. */
+    pool?: SwuCard[]
   },
 ): MatrixResult {
-  const cardDb = buildCardDb(POOL)
+  // Reprints are played under the id the engine implements them as, exactly as the sweep plays them.
+  // ASH holds only canonical printings, so for ASH this is the plain card database.
+  const cardDb = sweepCardDb(config.pool ?? POOL)
+  const engineDecks = decks.map(d => engineDeck(d.deck))
   const cells: MatchupCell[] = []
   let dropped = 0
   let played = 0
@@ -193,8 +199,8 @@ export function runMatchupMatrix(
         // the two directions are the same games, which an uncancelled seat bias would falsify.
         const seats = seating(g)
         const r = playGame({
-          deckPlayer: seats.swapped ? decks[j].deck : decks[i].deck,
-          deckOpponent: seats.swapped ? decks[i].deck : decks[j].deck,
+          deckPlayer: seats.swapped ? engineDecks[j] : engineDecks[i],
+          deckOpponent: seats.swapped ? engineDecks[i] : engineDecks[j],
           cardDb,
           aiPlayer: ai,
           aiOpponent: ai,
@@ -257,6 +263,41 @@ export function runMatchupMatrix(
  * different set of pairs than shard 0 of an eight-shard run. The count is a resume condition here
  * rather than a free parameter.
  */
+
+/**
+ * The deck set a matrix plays, built the same way by the parent and by every child.
+ *
+ * `--seed` picks the deck suite as well as seeding the games, so one seed is one whole experiment, and
+ * the run directory (which already keys on the seed) banks and resumes each suite separately. **Both
+ * paths build their decks here** because each process builds its own: when the children built the
+ * default seed instead, a four-suite run played one suite four times and every merge check passed. The
+ * payload's `deckSuite` is what now refuses that, and `matrixChildArgs` is what hands the set on.
+ */
+export function matrixDecks(seed: number, set = 'ASH'): MatchupDeck[] {
+  return buildMatchupDecks(poolFor([set]), 4, seed)
+}
+
+/**
+ * The run directory's name. The set joins it only when it is not ASH, so every ASH run banked before
+ * the matrix took a set keeps its directory and still resumes.
+ */
+export function matrixRunKey(model: string, gamesPerCell: number, seed: number, set: string): string {
+  const base = `matrix__${model.replace(/[^A-Za-z0-9._-]/g, '_')}__g${gamesPerCell}__s${seed}`
+  return set === 'ASH' ? base : `${base}__${set}`
+}
+
+/** A child's command line. `model` is absent when the parent was given none, so the child defaults
+ *  the same way. */
+export function matrixChildArgs(c: {
+  gamesPerCell: number, seed: number, set: string, shardIndex: number, shardCount: number, out: string, model?: string,
+}): string[] {
+  return [
+    'src/bench/main.ts', '--matrix', '--games', String(c.gamesPerCell), '--seed', String(c.seed), '--set', c.set,
+    '--shard-index', String(c.shardIndex), '--shard-count', String(c.shardCount),
+    '--out', c.out,
+    ...(c.model !== undefined ? [c.model] : []),
+  ]
+}
 
 /** One id per child, naming its log, its payload and its banked result, as `seed-N` does for the
  *  head-to-head. */

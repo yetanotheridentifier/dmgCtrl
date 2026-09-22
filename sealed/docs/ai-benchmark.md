@@ -1530,8 +1530,16 @@ same 52 pairings, and the run directory keys on the seed, so several suites bank
 Read one suite's leader ratings as describing that suite: a change to how the generator picks cards
 has moved leaders by up to 12 points (see `experiments.md`).
 
+**`--set` picks the set the decks are built from**, ASH when absent. The matrix takes exactly one set,
+because it rates a set's leaders against each other and a mixed pool would pair leaders with bases no
+sealed player could open together. HMW also builds 52 decks. A reprint plays under the id the engine
+implements it as, as in the sweep. The set joins the run directory's key when it is not ASH, so an HMW
+suite and an ASH suite on the same seed bank and resume apart, and every sharded child is handed the
+set with its seed. The readout names the set; the database does not, but the leader names identify it.
+
 ```bash
 npm run bench --prefix sealed -- --matrix --games 14 --seed 42 greedy   # ~14 games/cell => ~1000/deck
+npm run bench --prefix sealed -- --matrix --set HMW --shard 10 --games 10 --seed 101 beam-reply
 ```
 
 `--games` is games *per cell*, and **the model dominates the cost**: under 40 min at 14 for `greedy`,

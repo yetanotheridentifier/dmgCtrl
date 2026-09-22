@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   dealPairs, pairSeed, runMatchupMatrix, deckSuiteId,
   matrixShardIds, matrixPayloadUsable, pendingMatrixShards, mergeMatrixParts, matrixResumeRefusal,
+  matrixDecks, matrixRunKey, matrixChildArgs,
   type MatrixResult, type MatchupCell,
 } from '../bench/matrix'
 import { buildMatchupDecks } from '../bench/matchupDecks'
@@ -300,6 +301,41 @@ describe('matrixResumeRefusal', () => {
     expect(refusal).not.toBeNull()
     expect(refusal).toContain('10')
     expect(refusal).toContain('8')
+  })
+})
+
+/**
+ * The matrix plays one sealed set, ASH when none is named.
+ *
+ * Each child builds its own decks, so the set has to reach the children as well as the parent: a
+ * child that fell back to ASH would play a different suite, which the `deckSuite` check would refuse
+ * only after the whole run had been spent.
+ */
+describe('the matrix set', () => {
+  const leaderSet = (decks: ReturnType<typeof matrixDecks>) =>
+    new Set(decks.map(d => d.deck.leader.split('_')[0]))
+
+  it('builds the ASH suite by default, unchanged, so an existing run still resumes', () => {
+    expect(deckSuiteId(matrixDecks(42))).toBe(deckSuiteId(buildMatchupDecks(undefined, 4, 42)))
+  })
+
+  it('builds a named set\'s decks from that set alone', () => {
+    const decks = matrixDecks(42, 'HMW')
+    expect(decks).toHaveLength(52)
+    expect(leaderSet(decks)).toEqual(new Set(['HMW']))
+  })
+
+  it('keys a non-ASH run apart from an ASH one on the same seed, and leaves the ASH key alone', () => {
+    expect(matrixRunKey('beam-reply', 10, 42, 'ASH')).toBe('matrix__beam-reply__g10__s42')
+    expect(matrixRunKey('beam-reply', 10, 42, 'HMW')).toBe('matrix__beam-reply__g10__s42__HMW')
+  })
+
+  it('hands every child the set its parent built', () => {
+    const args = matrixChildArgs({ gamesPerCell: 10, seed: 42, set: 'HMW', shardIndex: 3, shardCount: 10, out: 'x.out', model: 'beam-reply' })
+    expect(args).toEqual([
+      'src/bench/main.ts', '--matrix', '--games', '10', '--seed', '42', '--set', 'HMW',
+      '--shard-index', '3', '--shard-count', '10', '--out', 'x.out', 'beam-reply',
+    ])
   })
 })
 
