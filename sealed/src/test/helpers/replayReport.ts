@@ -148,9 +148,10 @@ export function replayWith(
 }
 
 /**
- * An insert for a report recorded while an answered choice could leave a stale resume marker, which
- * gave one player two actions in a row. The engine now passes the turn there, so the other player's
- * missing turn is filled with a pass, which leaves the board as the reporter saw it.
+ * An insert for a report recorded while a turn-order defect gave one player two actions in a row: a
+ * resume marker left behind after its choices drained, or none recorded when a choice was handed
+ * over. The engine now passes the turn there, so the other player's missing turn is filled with a
+ * pass, which leaves the board as the reporter saw it.
  */
 export const missingTurn = (): Action[] => [{ type: 'pass' }]
 

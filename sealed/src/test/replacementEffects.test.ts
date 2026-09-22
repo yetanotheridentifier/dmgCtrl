@@ -206,6 +206,10 @@ describe('Vice Admiral Rampart (HMW_060): defeat him instead of an upgrade on yo
     expect(baseUpgrades(done)).toEqual(['HMW_216'])
     expect(U(done, 'ramp')).toBeUndefined()
     noChoice(done)
+    // #696: Confiscate was the opponent's action, so answering the offer ends it and the turn passes.
+    expect(picked.pendingResumeActive).toBe('opponent')
+    expect(done.activePlayer).toBe('player')
+    expect.soft(done.pendingResumeActive).toBeUndefined()
   })
 
   it("does nothing without Rampart, or for the opponent's base", () => {

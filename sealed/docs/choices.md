@@ -82,7 +82,15 @@ pick, or a delayed effect "at the start of the next action phase" such as Han So
 
 **Control returns to the player whose action it was.** A choice another player answers (an opponent's
 On Attack pick, a combat prevention offer, a trigger order that puts the other side first, a reactive
-trigger's "may") hands `activePlayer` to its controller and records the actor in `pendingResumeActive`.
+trigger's "may", or a choice of your own whose answer raises one for them) hands `activePlayer` to its
+controller, and `pendingResumeActive` records the actor.
+
+Whose action it is is read **once, as the action begins** (`resolve`: the marker if one is set, else
+the active player) and written by `rememberActor` while anything is still outstanding, rather than
+inferred at each place control changes hands. `activePlayer` says both whose turn it is and who is
+being asked, and it follows a resolving ability: a drain that stops on a choice leaves it on that
+trigger's controller, so at the hand-over itself it is not reliably the actor.
+
 Once every choice and trigger has drained, `resumeAfterChoice` restores that actor and clears the
 marker **before** any of its exits (a suspended attack, regroup, a deferred initiative), so no marker
 outlives its choices. A leftover one would be read by the next choice to drain and give the other
