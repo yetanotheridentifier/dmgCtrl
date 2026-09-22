@@ -3,7 +3,7 @@ import { resolve } from '../engine/resolve'
 import { dealDamageToUnit } from '../engine/combat'
 import { dealDamageToBase, healUnit } from '../engine/effects'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
-import { TOKEN_EXPERIENCE } from '../engine/tokenUpgrades'
+import { TOKEN_EXPERIENCE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_BATTLE_DROID, TOKEN_CLONE_TROOPER } from '../engine/tokenUnits'
 import { effectiveCost } from '../engine/legalMoves'
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
@@ -993,5 +993,123 @@ describe('the damage-dealt group', () => {
       noChoice(dealDamageToBase(cassian(), 'opponent', 1, byOpponent))
       noChoice(dealDamageToBase(cassian(), 'opponent', 1))
     })
+  })
+})
+
+// ── "Choose two, in any order" ────────────────────────────────────────────────────────────────
+// A `chooseMode` over the modes that can do something, then, once the first has resolved in full
+// (its own choices included), a second over what is left.
+
+describe('choose two, in any order', () => {
+  const C: Record<string, EngineCard> = {
+    ...P,
+    SOR_058: card({ id: 'SOR_058', name: 'Vigilance', type: 'event', cost: 4, aspects: ['Vigilance', 'Vigilance'] }),
+    SOR_107: card({ id: 'SOR_107', name: 'Command', type: 'event', cost: 4, aspects: ['Command', 'Command'] }),
+    SOR_155: card({ id: 'SOR_155', name: 'Aggression', type: 'event', cost: 4, aspects: ['Aggression', 'Aggression'] }),
+    SOR_203: card({ id: 'SOR_203', name: 'Cunning', type: 'event', cost: 4, aspects: ['Cunning', 'Cunning'] }),
+  }
+  const play = (cardId: string, mine: Side = {}, theirs: Side = {}) =>
+    resolve({ ...board({ hand: [cardId], ...mine }, theirs), cards: C, activePlayer: 'player' }, { type: 'playEvent', handIndex: 0 })
+  const labels = (s: GameState): string[] => {
+    const c = choice(s)
+    return c.kind === 'chooseMode' ? [...(c.labels ?? [])] : []
+  }
+  /** Answer the open `chooseMode` with the option whose label starts with `label`. */
+  const pick = (s: GameState, label: string) => {
+    const at = labels(s).findIndex(l => l.startsWith(label))
+    expect(at, `"${label}" is offered`).toBeGreaterThanOrEqual(0)
+    return accept(s, { optionIndex: at })
+  }
+
+  it('offers the four modes, then the other three once the first has resolved', () => {
+    const played = play('SOR_155', { deck: ['GRD', 'GRD'], units: [unit('g', 'GRD', { exhausted: true })] }, { units: [unit('e', 'GRD', { upgrades: [{ cardId: 'UPG', owner: 'opponent' }] })] })
+    expect(labels(played)).toEqual(['Draw a card.', 'Defeat up to 2 upgrades.', 'Ready a unit with 3 or less power.', 'Deal 4 damage to a unit.'])
+    const drew = pick(played, 'Draw')
+    expect(drew.players.player.hand).toHaveLength(1)
+    expect(labels(drew)).toEqual(['Defeat up to 2 upgrades.', 'Ready a unit with 3 or less power.', 'Deal 4 damage to a unit.'])
+    const second = pick(drew, 'Deal 4')
+    expect(choice(second)).toMatchObject({ kind: 'selectDamageTarget', amount: 4 })
+    const done = accept(second, { targetInstanceId: 'e' })
+    expect(U(done, 'e')!.damage).toBe(4)
+    noChoice(done)
+  })
+
+  it('offers the second choice only after the first mode has resolved, choices and all', () => {
+    const played = play('SOR_155', { deck: ['GRD'], units: [unit('g', 'GRD', { exhausted: true })] }, { units: [unit('e', 'TOUGH')] })
+    const first = pick(played, 'Deal 4')
+    expect(first.pendingChoices, 'only the damage target is open').toHaveLength(1)
+    expect(choice(first).kind).toBe('selectDamageTarget')
+    const hit = accept(first, { targetInstanceId: 'e' })
+    expect(labels(hit)).toEqual(['Draw a card.', 'Ready a unit with 3 or less power.'])
+  })
+
+  it('a two-stage mode finishes before the second choice (Command: a friendly unit deals damage equal to its power)', () => {
+    const played = play('SOR_107', { units: [unit('b', 'BIG')] }, { units: [unit('e', 'TOUGH'), unit('u', 'UNIQ')] })
+    expect(labels(played)).toEqual(['Give 2 Experience tokens to a unit.', 'A friendly unit deals damage equal to its power to a non-unique enemy unit.', 'Put this event into play as a resource.'])
+    const dealer = pick(played, 'A friendly unit')
+    expect(targetsOf(choice(dealer))).toEqual(['b'])
+    const target = accept(dealer, { targetInstanceId: 'b' })
+    expect(targetsOf(choice(target)), 'non-unique enemy units').toEqual(['e'])
+    const hit = accept(target, { targetInstanceId: 'e' })
+    expect(U(hit, 'e')!.damage).toBe(9)
+    const resourced = pick(hit, 'Put this event')
+    expect(resourced.players.player.resources.map(r => r.cardId)).toContain('SOR_107')
+    expect(resourced.players.player.discard).not.toContain('SOR_107')
+  })
+
+  it('Command: 2 Experience tokens, and a unit back from the discard pile', () => {
+    const played = play('SOR_107', { discard: ['GRD'], units: [unit('g', 'GRD')] })
+    const exp = accept(pick(played, 'Give 2'), { targetInstanceId: 'g' })
+    expect(U(exp, 'g')!.upgrades.filter(u => u.cardId === TOKEN_EXPERIENCE)).toHaveLength(2)
+    const back = accept(pick(exp, 'Return a unit'), { optionIndex: 0 })
+    expect(back.players.player.hand).toEqual(['GRD'])
+  })
+
+  it('Vigilance: mill 6, heal 5 from a base, defeat a unit with 3 or less remaining HP, give a Shield', () => {
+    const deck = ['GRD', 'GRD', 'GRD', 'GRD', 'GRD', 'GRD', 'GRD']
+    const played = play('SOR_058', { units: [unit('g', 'GRD')], base: { cardId: 'TST_B', damage: 6 } }, { deck, units: [unit('s', 'SMALL')] })
+    expect(labels(played)).toEqual(["Discard 6 cards from an opponent's deck.", 'Heal 5 damage from a base.', 'Defeat a unit with 3 or less remaining HP.', 'Give a Shield token to a unit.'])
+    const milled = pick(played, 'Discard 6')
+    expect(milled.players.opponent.deck).toHaveLength(1)
+    expect(milled.players.opponent.discard).toHaveLength(6)
+    const healed = accept(pick(milled, 'Heal 5'), { baseTarget: 'player' } as never)
+    expect(healed.players.player.base.damage).toBe(1)
+    const other = play('SOR_058', { units: [unit('g', 'GRD')] }, { units: [unit('s', 'SMALL')] })
+    const defeat = pick(other, 'Defeat a unit')
+    expect(targetsOf(choice(defeat)), 'only units with 3 or less remaining HP').toEqual(['s'])
+    const shield = pick(accept(defeat, { targetInstanceId: 's' }), 'Give a Shield')
+    expect(choice(shield)).toMatchObject({ kind: 'mayGiveTokens' })
+  })
+
+  it('Aggression: defeat up to 2 upgrades, one at a time; ready a unit with 3 or less power', () => {
+    const played = play('SOR_155', { units: [unit('g', 'GRD', { exhausted: true })] }, { units: [unit('e', 'GRD', { upgrades: [{ cardId: 'UPG', owner: 'opponent' }, { cardId: 'UPG', owner: 'opponent' }] })] })
+    const first = accept(pick(played, 'Defeat up to 2'), { optionIndex: 0 })
+    expect(U(first, 'e')!.upgrades).toHaveLength(1)
+    const second = accept(first, { optionIndex: 0 })
+    expect(U(second, 'e')!.upgrades).toHaveLength(0)
+    const ready = pick(second, 'Ready a unit')
+    expect(targetsOf(choice(ready))).toEqual(['g'])
+  })
+
+  it('Cunning: bounce a non-leader unit with 4 or less power, +4/+0, exhaust up to 2, a random discard', () => {
+    const played = play('SOR_203', { units: [unit('g', 'GRD')] }, { hand: ['GRD'], units: [unit('e', 'GRD'), unit('b', 'BIG')] })
+    expect(labels(played)).toEqual(["Return a non-leader unit with 4 or less power to its owner's hand.", 'Give a unit +4/+0 for this phase.', 'Exhaust up to 2 units.', 'An opponent discards a random card from their hand.'])
+    const bounce = pick(played, 'Return')
+    expect(targetsOf(choice(bounce)), 'not the 9-power unit').toEqual(['e', 'g'])
+    const discarded = pick(accept(bounce, { targetInstanceId: 'e' }), 'An opponent')
+    expect(discarded.players.opponent.hand).toEqual(['GRD'])
+    expect(discarded.players.opponent.discard).toEqual(['GRD'])
+    const other = play('SOR_203', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'GRD')] })
+    expect(choice(pick(other, 'Give a unit'))).toMatchObject({ kind: 'mayLastingBuff', power: 4 })
+    expect(choice(pick(other, 'Exhaust'))).toMatchObject({ kind: 'multiPick' })
+  })
+
+  it('offers only the modes that can do something', () => {
+    // No damaged base, no unit with 3 or less remaining HP, an empty enemy deck: only the Shield.
+    const played = play('SOR_058', { units: [unit('g', 'GRD')] })
+    expect(labels(played)).toEqual(['Give a Shield token to a unit.'])
+    const shielded = accept(accept(played, { optionIndex: 0 }), { targetInstanceId: 'g' })
+    expect(U(shielded, 'g')!.upgrades.map(u => u.cardId)).toEqual([TOKEN_SHIELD])
+    noChoice(shielded)
   })
 })

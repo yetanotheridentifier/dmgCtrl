@@ -842,6 +842,11 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'TWI_201', name: 'Aid from the Innocent' },
   // "A friendly unit was defeated while attacking this phase".
   { id: 'SEC_158', name: 'Oppression Breeds Rebellion' },
+  // "Choose two, in any order".
+  { id: 'SOR_058', name: 'Vigilance' },
+  { id: 'SOR_107', name: 'Command' },
+  { id: 'SOR_155', name: 'Aggression' },
+  { id: 'SOR_203', name: 'Cunning' },
 ]
 
 /**

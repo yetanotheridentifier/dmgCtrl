@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers } from './abilities'
-import { fireBatch, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade } from './effects'
+import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -3342,13 +3342,15 @@ registerCard('SOR_190', whenPlayed('If you played another card this phase, each 
   // means a second entry in the phase's record.
   if (cardsPlayedThisPhase(s, ctx.owner).length < 2) return s
   const enemy = opponentOf(ctx.owner)
-  const drawn = drawCards(s, enemy, 1)
-  const hand = drawn.players[enemy].hand
-  if (hand.length === 0) return drawn
-  // Random, not chosen: the seed on the state keeps it deterministic under replay.
-  const pick = Math.floor(seededUnit(drawn.rngSeed) * hand.length)
-  return { ...discardFromHand(drawn, enemy, pick), rngSeed: nextSeed(drawn.rngSeed) }
+  return discardAtRandom(drawCards(s, enemy, 1), enemy)
 }))
+/** `who` discards a random card from their hand. Random, not chosen: the seed on the state keeps it deterministic under replay. */
+const discardAtRandom = (s: GameState, who: PlayerId): GameState => {
+  const hand = s.players[who].hand
+  if (hand.length === 0) return s
+  const pick = Math.floor(seededUnit(s.rngSeed) * hand.length)
+  return { ...discardFromHand(s, who, pick), rngSeed: nextSeed(s.rngSeed) }
+}
 
 // Resources
 registerCard('LAW_083', whenPlayed('If you have fewer cards in hand than an opponent, draw a card. If you control fewer resources than an opponent, resource the top card of your deck.', (s, ctx) => { // Broken Horn
@@ -10204,6 +10206,112 @@ registerCard('TWI_016', { // Jango Fett
   }],
   ifYouDo: (s, ctx) => exhaustUnit(ctx.step === 'front' ? exhaustLeader(s, ctx.owner) : s, ctx.unitChosen!),
 })
+
+// ── "Choose two, in any order" ─────────────────────────────────────────────────────────────────
+// A `chooseMode` with `then` over the modes that can do something, keyed `1:<mode>`. The picked mode
+// runs, and the second choice (`2:<mode>`, over the rest) is owed through `thenAfterChoices`, so it
+// waits for every pick the first mode raised. A mode that needs a pick of its own chains it through
+// the card's other steps (`more`), never through a second `thenAfterChoices`.
+
+interface ChooseTwoMode {
+  key: string
+  /** The printed sentence, which is the button. */
+  label: string
+  can: (s: GameState, ctx: Resumable) => boolean
+  run: (s: GameState, ctx: Resumable) => GameState
+}
+const chooseTwoOffer = (s: GameState, ctx: Resumable, modes: ChooseTwoMode[], round: 1 | 2, taken?: string): GameState => {
+  const open = modes.filter(m => m.key !== taken && m.can(s, ctx))
+  return open.length
+    ? pushChoice(s, { kind: 'chooseMode', id: `${ctx.sourceInstanceId ?? ctx.cardId}-choose${round}`, controller: ctx.owner, modes: open.map(m => `${round}:${m.key}`), labels: open.map(m => m.label), then: resume(ctx) })
+    : s
+}
+const chooseTwoWp = (modes: ChooseTwoMode[], more: NonNullable<CardDefinition['ifYouDo']> = s => s): CardDefinition => ({
+  ...whenPlayed(`Choose two, in any order: ${modes.map(m => m.label).join(' ')}`, (s, ctx) => chooseTwoOffer(s, ctx, modes, 1)),
+  ifYouDo: (s, ctx) => {
+    const [round, key] = (ctx.step ?? '').split(':')
+    const mode = modes.find(m => m.key === key)
+    if (round === '1' && mode) return thenAfterChoices(mode.run(s, ctx), resume(ctx, `after:${key}`))
+    if (round === 'after') return chooseTwoOffer(s, ctx, modes, 2, key)
+    if (round === '2' && mode) return mode.run(s, ctx)
+    return more(s, ctx)
+  },
+})
+const idsOf = (units: UnitState[]): string[] => units.map(u => u.instanceId)
+const unitsWhere = (s: GameState, test: (u: UnitState) => boolean): string[] => idsOf(allUnits(s).filter(test))
+
+registerCard('SOR_058', chooseTwoWp([ // Vigilance
+  { key: 'mill', label: "Discard 6 cards from an opponent's deck.",
+    can: (s, ctx) => s.players[opponentOf(ctx.owner)].deck.length > 0,
+    run: (s, ctx) => millTop(s, opponentOf(ctx.owner), 6)[0] },
+  { key: 'heal', label: 'Heal 5 damage from a base.',
+    can: s => BOTH_BASES.some(p => s.players[p].base.damage > 0),
+    run: (s, ctx) => healChoice(s, ctx, 5, [], BOTH_BASES.filter(p => s.players[p].base.damage > 0)) },
+  { key: 'defeat', label: 'Defeat a unit with 3 or less remaining HP.',
+    can: s => unitsWhere(s, u => remainingHp(s, u) <= 3).length > 0,
+    run: (s, ctx) => targetChoice(s, ctx, 'selectUnitToDefeat', unitsWhere(s, u => remainingHp(s, u) <= 3)) },
+  { key: 'shield', label: 'Give a Shield token to a unit.',
+    can: s => allUnits(s).length > 0,
+    run: (s, ctx) => shieldChoice(s, ctx, idsOf(allUnits(s)), false) },
+]))
+
+const nonUniqueEnemies = (s: GameState, owner: PlayerId): string[] => idsOf(enemyUnitsOf(s, owner).filter(u => !s.cards[u.cardId]?.unique))
+registerCard('SOR_107', chooseTwoWp([ // Command
+  { key: 'experience', label: 'Give 2 Experience tokens to a unit.',
+    can: s => allUnits(s).length > 0,
+    run: (s, ctx) => expChoice(s, ctx, idsOf(allUnits(s)), 2) },
+  { key: 'deals', label: 'A friendly unit deals damage equal to its power to a non-unique enemy unit.',
+    can: (s, ctx) => s.players[ctx.owner].units.length > 0 && nonUniqueEnemies(s, ctx.owner).length > 0,
+    run: (s, ctx) => unitThen(s, ctx, idsOf(s.players[ctx.owner].units), 'choose the friendly unit that deals the damage', false, 'dealer') },
+  { key: 'resource', label: 'Put this event into play as a resource.',
+    can: (s, ctx) => s.players[ctx.owner].discard.includes(ctx.cardId),
+    run: (s, ctx) => resourceThisEvent(s, ctx) },
+  { key: 'return', label: 'Return a unit from your discard pile to your hand.',
+    can: (s, ctx) => s.players[ctx.owner].discard.some(id => printedUnit(s.cards[id])),
+    run: (s, ctx) => pushChoice(s, { kind: 'selectFromDiscard', id: `${ctx.sourceInstanceId}-return`, controller: ctx.owner, candidates: [...new Set(s.players[ctx.owner].discard.filter(id => printedUnit(s.cards[id])))], optional: false }) },
+], (s, ctx) => {
+  if (ctx.step === 'dealer') return unitThen(s, ctx, nonUniqueEnemies(s, ctx.owner), 'choose the non-unique enemy unit to damage', false, 'hit', ctx.targetInstanceId)
+  const from = ctx.step === 'hit' ? findUnit(s, ctx.unitChosen ?? '')?.unit : undefined
+  // The friendly unit deals it, so it is that unit's damage ("when a friendly unit deals damage").
+  return from ? dealDamageToUnit(s, ctx.targetInstanceId!, effectivePower(s, from), { cardId: from.cardId, controller: ctx.owner, instanceId: from.instanceId }) : s
+}))
+
+registerCard('SOR_155', chooseTwoWp([ // Aggression
+  { key: 'draw', label: 'Draw a card.', can: () => true, run: (s, ctx) => drawCards(s, ctx.owner, 1) },
+  { key: 'upgrades', label: 'Defeat up to 2 upgrades.',
+    can: s => upgradeCandidates(s).length > 0,
+    run: (s, ctx) => pushChoice(s, { kind: 'selectUpgradeThen', id: `${ctx.sourceInstanceId}-upgrade`, controller: ctx.owner, candidates: upgradeCandidates(s), optional: true, text: 'defeat an upgrade', then: resume(ctx, 'upgrade1') }) },
+  { key: 'ready', label: 'Ready a unit with 3 or less power.',
+    can: s => unitsWhere(s, u => u.exhausted && effectivePower(s, u) <= 3).length > 0,
+    run: (s, ctx) => targetChoice(s, ctx, 'selectUnitToReady', unitsWhere(s, u => u.exhausted && effectivePower(s, u) <= 3)) },
+  { key: 'damage', label: 'Deal 4 damage to a unit.',
+    can: s => allUnits(s).length > 0,
+    run: (s, ctx) => damageChoice(s, ctx, 4, allUnits(s)) },
+], (s, ctx) => {
+  const up = ctx.upgradeChosen
+  if (!up || (ctx.step !== 'upgrade1' && ctx.step !== 'upgrade2')) return s
+  const next = defeatUpgradeAt(s, up.unitId, up.upgradeIndex)
+  // "Up to 2": the second is picked from what is left, and may be declined.
+  const rest = upgradeCandidates(next)
+  return ctx.step === 'upgrade1' && rest.length
+    ? pushChoice(next, { kind: 'selectUpgradeThen', id: `${ctx.sourceInstanceId}-upgrade2`, controller: ctx.owner, candidates: rest, optional: true, text: 'defeat another upgrade', then: resume(ctx, 'upgrade2') })
+    : next
+}))
+
+registerCard('SOR_203', chooseTwoWp([ // Cunning
+  { key: 'bounce', label: "Return a non-leader unit with 4 or less power to its owner's hand.",
+    can: s => unitsWhere(s, u => !u.isLeader && effectivePower(s, u) <= 4).length > 0,
+    run: (s, ctx) => targetChoice(s, ctx, 'selectUnitToReturn', unitsWhere(s, u => !u.isLeader && effectivePower(s, u) <= 4)) },
+  { key: 'buff', label: 'Give a unit +4/+0 for this phase.',
+    can: s => allUnits(s).length > 0,
+    run: (s, ctx) => lastingBuffChoice(s, ctx, idsOf(allUnits(s)), { power: 4 }) },
+  { key: 'exhaust', label: 'Exhaust up to 2 units.',
+    can: s => unitsWhere(s, u => !u.exhausted).length > 0,
+    run: (s, ctx) => pushChoice(s, { kind: 'multiPick', id: `${ctx.sourceInstanceId}-exhaust`, controller: ctx.owner, targets: unitsWhere(s, u => !u.exhausted), spec: { mode: 'exhaust', remaining: 2 } }) },
+  { key: 'discard', label: 'An opponent discards a random card from their hand.',
+    can: (s, ctx) => s.players[opponentOf(ctx.owner)].hand.length > 0,
+    run: (s, ctx) => discardAtRandom(s, opponentOf(ctx.owner)) },
+]))
 
 // ── "When you play an event" ───────────────────────────────────────────────────────────────────
 // `whenPlayCard` covers every type on both sides, so the card states both.

@@ -1,4 +1,4 @@
-import type { DamageDealt, DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
+import type { DamageDealt, DamageSource, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
 import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
@@ -19,6 +19,24 @@ import { enqueueTriggers, drainTriggers } from './triggerQueue'
  */
 export function fireBatch(state: GameState, owed: PendingTrigger[], sameEvent = false): GameState {
   return owed.length === 0 ? state : drainTriggers(enqueueTriggers(state, owed, sameEvent))
+}
+
+/**
+ * "Then, ...": owe the rest of an ability (its card's `ifYouDo` at `then`) until everything it has
+ * raised so far has resolved, however many choices deep that goes ("choose two, in any order": the
+ * second choice waits for the first mode's own picks). Queued as a trigger entry, because the queue
+ * already resolves nothing while a choice is open; it is drained by whatever answers the last one.
+ *
+ * Inside a choice's own continuation, chain the next choice directly instead. Two of these owed at
+ * once would nest the second under the first and resolve it first.
+ */
+export function thenAfterChoices(state: GameState, then: IfYouDo): GameState {
+  return enqueueTriggers(state, [{
+    id: `then-${then.cardId}-${then.step ?? ''}`,
+    controller: then.owner, point: 'whenPlayed', cardId: then.cardId, abilityIndex: -1, layer: 0,
+    ...(then.sourceInstanceId ? { sourceInstanceId: then.sourceInstanceId } : {}),
+    resume: then,
+  }])
 }
 
 /**

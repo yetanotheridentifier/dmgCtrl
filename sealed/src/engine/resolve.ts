@@ -5,7 +5,7 @@ import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPe
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, grantZoneRef, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
-import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, whileResolving, type TriggerPoint } from './abilities'
+import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
@@ -2826,12 +2826,8 @@ function finishHealing(state: GameState, damageUnit: string | undefined, healed:
 
 /** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */
 function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef; playerChosen?: PlayerId; arenaChosen?: Arena; optionIndex?: number; nameChosen?: string } = {}): GameState {
-  const hook = getCardDefinition(then.cardId)?.ifYouDo
-  if (!hook) return state
   // Attributed like the ability it resumes, so "if you do, deal 2 damage" is dealt by that card.
-  const source = { cardId: then.cardId, controller: then.owner, ...(then.sourceInstanceId ? { instanceId: then.sourceInstanceId } : {}) }
-  const next = whileResolving(state, source, s => hook(s, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, unitChosen: then.unit, ...settled }))
-  return checkWin(next)
+  return checkWin(resumeAbility(state, then, settled))
 }
 
 function inPlayUnits(state: GameState): UnitState[] {

@@ -1,4 +1,4 @@
-import type { Arena, DelayedEffect, EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeRef } from './types'
+import type { Arena, DelayedEffect, EngineCard, GameState, IfYouDo, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeRef } from './types'
 import { abilityCardIds, baseAbilityCardIds } from './types'
 
 /**
@@ -646,8 +646,8 @@ export function runAttributed(state: GameState, source: DamageSource, run: (s: G
   return stampChoiceSource(state, whileResolving(state, source, run), source)
 }
 
-/** The damage-event half of `runAttributed` alone, for a resumed ability whose choices were never stamped. */
-export function whileResolving(state: GameState, source: DamageSource, run: (s: GameState) => GameState): GameState {
+/** The damage-event half of `runAttributed`: `GameState.resolvingSource` for the duration of `run`. */
+function whileResolving(state: GameState, source: DamageSource, run: (s: GameState) => GameState): GameState {
   const outer = state.resolvingSource
   const marked: GameState = { ...state, resolvingSource: source }
   const after = run(marked)
@@ -655,6 +655,17 @@ export function whileResolving(state: GameState, source: DamageSource, run: (s: 
   const rest = { ...after }
   delete rest.resolvingSource
   return outer ? { ...rest, resolvingSource: outer } : rest
+}
+
+/**
+ * Run a card's `ifYouDo` hook at `then`, attributed to that card like the ability it continues.
+ * `settled` is what the answered choice decided, when a choice is what resumed it.
+ */
+export function resumeAbility(state: GameState, then: IfYouDo, settled: Partial<IfYouDoContext> = {}): GameState {
+  const hook = registry.get(then.cardId)?.ifYouDo
+  if (!hook) return state
+  const source: DamageSource = { cardId: then.cardId, controller: then.owner, ...(then.sourceInstanceId ? { instanceId: then.sourceInstanceId } : {}) }
+  return runAttributed(state, source, s => hook(s, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, unitChosen: then.unit, ...settled }))
 }
 
 /** Run one ability effect, attributing whatever choices it raises (and damage it deals) to its card. */
@@ -861,6 +872,7 @@ export function triggerAbility(trigger: PendingTrigger): AbilityDef | undefined 
 
 /** Resolve exactly one collected trigger. A no-op if its card's abilities are no longer registered. */
 export function runPendingTrigger(state: GameState, trigger: PendingTrigger): GameState {
+  if (trigger.resume) return resumeAbility(state, trigger.resume)
   const ability = triggerAbility(trigger)
   if (!ability || ability.trigger !== trigger.point) return state
   return runEffect(state, ability.effect, {

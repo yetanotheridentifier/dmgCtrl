@@ -862,6 +862,13 @@ export interface PendingTrigger {
   /** The in-play instance the ability fires from, when it still exists. */
   sourceInstanceId?: string
   /**
+   * Not a triggered ability but **the rest of one** ("Then, ..."): the card's `ifYouDo` at this step,
+   * owed once everything the ability has raised so far has resolved (`thenAfterChoices`). The queue
+   * already waits for every open choice before it resolves the next entry, which is exactly that.
+   * `abilityIndex` is unused.
+   */
+  resume?: IfYouDo
+  /**
    * The controller has already named this one as the next to resolve (CR 7.6.9), so the dispatcher
    * runs it instead of asking again. Without it, moving the pick to the front is invisible to a
    * dispatcher that only counts how many are owed, and the same question repeats forever.
