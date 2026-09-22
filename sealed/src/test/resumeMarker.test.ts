@@ -8,6 +8,7 @@ import { randomAi } from '../ai/randomAi'
 import { setupAi } from '../ai/setupAi'
 import { buildCoverageDecks } from '../bench/coverageDecks'
 import { poolFor } from '../bench/setPools'
+import { loadReport, replayUpTo } from './helpers/replayReport'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
@@ -19,11 +20,12 @@ import type { EngineCard, GameState, UnitState } from '../engine/types'
  * left behind after its choices drained is read by the NEXT choice to drain, which then restores a
  * player who is not acting and advances the turn from them: the other player acts twice in a row.
  *
- * Every position here ends one action with the marker set, then has the next player answer a choice
- * of their own (Cutthroat Podracer's When Played) and checks the turn passes to the other side.
+ * Every position in the first block below ends one action with the marker set, then has the next
+ * player answer a choice of their own (Cutthroat Podracer's When Played) and checks the turn passes
+ * to the other side. The blocks after it take the opposite failure, a marker that is never set.
  */
 
-const POOL = poolFor(['LAW', 'TS26'])
+const POOL = poolFor(['LAW', 'TS26', 'ASH'])
 const real = (id: string): EngineCard => {
   const [set, number] = id.split('_')
   const row = POOL.find(c => c.Set === set && String(c.Number) === number)
@@ -36,6 +38,8 @@ const F: Record<string, EngineCard> = {
   LAW_079: real('LAW_079'), // K-2SO: On Attack, you may deal 3 damage to a damaged ground unit
   LAW_213: real('LAW_213'), // Cutthroat Podracer: When Played, you may deal 2 damage to an exhausted ground unit
   TS26_66: real('TS26_66'), // Wartime Pirate: On Attack, an opponent deals 1 damage to a unit
+  ASH_092: real('ASH_092'), // Foundling Rescue: you may defeat a unit with 2 or less remaining HP
+  ASH_153: real('ASH_153'), // Green Leader: When Defeated, you may deal 2 damage to a unit
   ASH_062: card({ id: 'ASH_062', type: 'unit', arena: 'ground', cost: 4, power: 5, hp: 4, keywords: [{ name: 'Shielded' }] }), // The Mandalorian
   GRD: card({ id: 'GRD', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 8 }),
 }
@@ -101,6 +105,83 @@ describe('the resume marker does not outlive the choices it was set for', () => 
 
     const answered = playPodracerAndAnswer(done, 'e')
     expect(answered.activePlayer).toBe('opponent')
+  })
+})
+
+/**
+ * **#696.** The other half of the same rule: a marker that is never set at all.
+ *
+ * Answering your OWN choice can raise one for the other player, and control has to go to them to
+ * answer it. Without the actor recorded at that hand-over, the turn advances from whoever answered
+ * last, which gives the player who acted a second action in a row.
+ *
+ * Foundling Rescue is the shape the report caught (below): the caster answers their own
+ * "defeat a unit", the defeated Green Leader's When Defeated belongs to the other player, and the
+ * turn must pass to that player once it is answered, not back to the caster.
+ */
+describe('answering your own choice, when it hands one to the other player', () => {
+  const rescue = () =>
+    board(
+      { hand: ['ASH_092'], units: [unit('mine', 'GRD')] },
+      { units: [unit('green', 'ASH_153')] },
+    )
+
+  it('records the caster as the actor while the other player answers', () => {
+    const played = resolve(rescue(), { type: 'playEvent', handIndex: 0 })
+    expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToDefeat', controller: 'player' })
+    expect(played.activePlayer).toBe('player')
+
+    const defeated = accept(played, 'green')
+    expect(defeated.pendingChoices?.[0], "Green Leader's When Defeated").toMatchObject({ kind: 'mayDamage', controller: 'opponent' })
+    expect(defeated.activePlayer, 'the opponent answers it').toBe('opponent')
+    expect(defeated.pendingResumeActive, "the player's action is still unfinished").toBe('player')
+  })
+
+  it('passes the turn to the other player once they have answered', () => {
+    const played = resolve(rescue(), { type: 'playEvent', handIndex: 0 })
+    const answered = accept(accept(played, 'green'), 'mine')
+    expect(answered.activePlayer, 'the caster does not act twice in a row').toBe('opponent')
+    expect.soft(answered.pendingResumeActive).toBeUndefined()
+    expect(answered.players.player.units.find(u => u.instanceId === 'mine')?.damage).toBe(2)
+  })
+
+  it('passes the turn the same way when the other player declines', () => {
+    const played = resolve(rescue(), { type: 'playEvent', handIndex: 0 })
+    const defeated = accept(played, 'green')
+    const declined = resolve(defeated, { type: 'skipTrigger', choiceId: defeated.pendingChoices![0].id })
+    expect(declined.activePlayer).toBe('opponent')
+    expect.soft(declined.pendingResumeActive).toBeUndefined()
+  })
+})
+
+/**
+ * **#696 on the board it was reported from.** The same fixture `nestedDeployTargets.test.ts`
+ * replays for #529, read at the earlier moment it also caught:
+ *
+ * - move 34: the opponent plays an event (their first action of the round: they hold the initiative)
+ * - move 35: they answer its own choice, defeating the player's Green Leader
+ * - move 36: the player answers Green Leader's When Defeated
+ *
+ * The opponent's action is over at that point, so the turn is the player's. The report's move 37 is
+ * another opponent action, which is the defect recorded in the move list.
+ *
+ * `replayUpTo` counts moves, so the board after move 35 is `replayUpTo(report, 36)`.
+ */
+describe('#696: the reported game', () => {
+  const report = loadReport('nestedDeployShieldTarget')
+
+  it('hands control to the player with the opponent recorded as the actor', () => {
+    const handed = replayUpTo(report, 36)
+    expect(handed.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamage', controller: 'player' })
+    expect(handed.activePlayer).toBe('player')
+    expect(handed.pendingResumeActive).toBe('opponent')
+  })
+
+  it('gives the turn to the player once they have answered', () => {
+    const answered = replayUpTo(report, 37)
+    expect(answered.pendingChoices ?? []).toEqual([])
+    expect(answered.activePlayer, 'the opponent acted at move 34 and does not act again at 37').toBe('player')
+    expect.soft(answered.pendingResumeActive).toBeUndefined()
   })
 })
 

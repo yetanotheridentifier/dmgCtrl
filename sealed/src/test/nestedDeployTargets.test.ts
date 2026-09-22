@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { loadReport, replayUpTo } from './helpers/replayReport'
+import { loadReport, missingTurn, replayWith } from './helpers/replayReport'
 import { resolve } from '../engine/resolve'
 import type { GameState } from '../engine/types'
 import '../engine/cardDefinitions'
@@ -18,14 +18,22 @@ import '../engine/cardDefinitions'
  *
  * The report's own move list stops being replayable at the fix, because ordering the batch is a
  * question the reporter was never asked. It is driven by hand from the play instead.
+ *
+ * The same game also carried the turn-order defect of #696: at move 36 the player answers a When
+ * Defeated raised by the opponent's event, and the engine then gave the opponent the turn again
+ * rather than passing it. The recorded list has no player move there, so with that fixed the moves
+ * after it land on the wrong side. Their missing turn is filled with a pass (`missingTurn`), which
+ * reaches Anakin's play on the board the reporter had.
  */
 const ANAKIN = 'ASH_255'
 const GROGU = 'ASH_018'
 /** The move index of `playUnit` Anakin: the last decision before the batch. */
 const ANAKIN_PLAYED = 44
+/** The move index of the opponent's second action in a row, which is now the player's turn. */
+const SKIPPED_TURN = 37
 
 const report = loadReport('nestedDeployShieldTarget')
-const played = (): GameState => replayUpTo(report, ANAKIN_PLAYED)
+const played = (): GameState => replayWith(report, { [SKIPPED_TURN]: missingTurn }, ANAKIN_PLAYED)
 
 const choice = (s: GameState, kind: string) => (s.pendingChoices ?? []).find(c => c.kind === kind)
 

@@ -28,14 +28,19 @@ import { TOKEN_MANDALORIAN } from './tokenUnits'
  * (Morgan Elsbeth's −2/−2) defeats it without dealing damage, so every action ends with a sweep.
  */
 export function resolve(state: GameState, action: Action): GameState {
+  // Whose action this is, read before anything can move `activePlayer`. Answering a handed-over
+  // choice is still the marked player's action, not the answerer's (see `rememberActor`).
+  const actor = state.pendingResumeActive ?? state.activePlayer
   const next = resolveAction(state, action)
   // Advance the randomness stream once per action, whether or not this action consumed any.
   // Keeping the step here — rather than wherever a consumer happens to draw — is what makes a
   // move list replay to an identical state: the seed depends only on the sequence of actions.
   const stepped = { ...next, rngSeed: nextSeed(next.rngSeed) }
+  if (stepped.winner !== null) return stepped
   // "When this unit leaves play, that unit's owner takes control of it" (Grand Moff Tarkin) is settled
   // here, once per action, rather than at each of the ways a unit can leave play.
-  return stepped.winner !== null ? stepped : settleChoiceControl(checkWin(sweepStateBasedDefeats(returnControlledUnits(stepped, false))))
+  const swept = checkWin(sweepStateBasedDefeats(returnControlledUnits(stepped, false)))
+  return rememberActor(settleChoiceControl(swept, actor), actor)
 }
 
 /**
@@ -49,14 +54,40 @@ export function resolve(state: GameState, action: Action): GameState {
  * unless an earlier interjection already set it. This only ever fires on an otherwise-stuck position
  * — one where the active player controls NONE of the pending choices, which is exactly the set of
  * states that currently have no legal move — so it cannot disturb a turn that was progressing.
+ *
+ * `actor` is the player whose action this is, which is not always the one holding `activePlayer` on
+ * the way in: a drain that stopped on a choice leaves it on that trigger's controller.
  */
-function settleChoiceControl(state: GameState): GameState {
+function settleChoiceControl(state: GameState, actor: PlayerId): GameState {
   if (state.winner !== null || !hasPendingChoices(state)) return state
-  const actor = state.activePlayer
-  if (state.pendingChoices!.some(c => c.controller === actor)) return state
+  if (state.pendingChoices!.some(c => c.controller === state.activePlayer)) return state
   const controller = state.pendingChoices![0].controller
-  if (controller === actor) return state
+  if (controller === state.activePlayer) return state
   return { ...state, activePlayer: controller, pendingResumeActive: state.pendingResumeActive ?? actor }
+}
+
+/**
+ * Remember whose action is still unfinished (#696).
+ *
+ * `activePlayer` says both whose turn it is and who is being asked right now, and answering a
+ * choice can raise one for the OTHER player: their own "defeat a unit" defeats a unit whose When
+ * Defeated belongs to the other side, so control goes there to have it answered. With no record of
+ * the actor, the queue drains with the answerer active and `advanceTurn` runs from them, giving the
+ * player who acted a second action in a row.
+ *
+ * Stated once here, from the actor as it stood when the action began, rather than at each place
+ * control changes hands. There are several of those — `resumeAfterChoice` passing to the other
+ * side's outstanding choices, `drainTriggers` stopping on a choice with `activePlayer` left on the
+ * trigger's controller — and each would otherwise have to infer the actor from a board that has
+ * already moved on.
+ *
+ * Only while something is still outstanding, and never over a marker already set: a marker that
+ * outlives its choices restores a player who is not acting (`resumeMarker.test.ts`).
+ */
+function rememberActor(state: GameState, actor: PlayerId): GameState {
+  if (state.winner !== null || state.pendingResumeActive !== undefined || state.activePlayer === actor) return state
+  if (!hasPendingChoices(state) && (state.pendingTriggers ?? []).length === 0) return state
+  return { ...state, pendingResumeActive: actor }
 }
 
 /**

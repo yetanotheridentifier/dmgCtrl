@@ -845,8 +845,8 @@ first move, inside `defeated`, for reasons that have nothing to do with the bug 
 **A fixed engine can make an older report unreplayable**, because its moves answer the position the
 defect produced. `replayUpTo` stops before that point. `replayWith` and `replaySteps` take inserts,
 actions applied just before a given move, to play past it: `pickTrigger` answers an ordering question
-the reporter was never asked, and `missingTurn` fills in a pass where a stale resume marker once gave
-the other player two actions in a row. Each move carries `by`, so the first move whose `by` differs
+the reporter was never asked, and `missingTurn` fills in a pass where a turn-order defect once gave
+one player two actions in a row. Each move carries `by`, so the first move whose `by` differs
 from `activePlayer` is where a replay has drifted.
 
 **A `threw` is not necessarily in `resolve`.** A move is appended to the record *before* it is
