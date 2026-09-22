@@ -43,9 +43,9 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
   'when own base damaged', 'when friendly attack ends', 'when this unit completes an attack', 'when deployed',
   'when a friendly unit is defeated',
   // Printed spellings of two points the engine dispatches through context rather than a point of
-  // their own. "Dealt damage and survives" is `whenFriendlyDamagedSurvives` filtered to one unit;
+  // their own. "Dealt damage and survives" is `whenDamageDealt` filtered to one surviving unit;
   // "deals combat damage to a base" is `onAttackEnd` with `combatDamageToBase`, read from the
-  // attacker's side or, for the last one, the base owner's (`whenOwnBaseDamaged` with `byCombat`).
+  // attacker's side or, for the last one, the base owner's (`whenDamageDealt` with `byCombat`).
   'when this unit is dealt damage and survives', 'when a friendly unit is dealt damage and survives',
   'when this unit deals combat damage to a base', "when this unit deals combat damage to an opponent's base",
   'when a friendly unit deals combat damage to a base', 'when an enemy unit deals combat damage to your base',

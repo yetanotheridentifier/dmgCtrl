@@ -1,9 +1,9 @@
-import type { DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
+import type { DamageDealt, DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
 import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint } from './abilities'
-import { getCardDefinition, collectArrivalTriggers, collectUnitTriggers } from './abilities'
+import { getCardDefinition, collectArrivalTriggers, collectPlayerTriggers, collectUnitTriggers } from './abilities'
 import { enqueueTriggers, drainTriggers } from './triggerQueue'
 
 /**
@@ -259,12 +259,36 @@ export function dealDamageToBase(state: GameState, player: PlayerId, amount: num
   // Only combat damage that actually LANDED counts, which is why this sits below the prevention
   // above rather than beside `recordBaseAttacked` at the declaration (Moff Gideon).
   if (combat) next = recordBaseCombatDamage(next, combat.attackerInstanceId)
-  // "When your base is dealt damage" (Blade Three) — the base owner's units react.
-  next = fireUnitsTrigger(next, 'whenOwnBaseDamaged', player, combat ? { byCombat: true, attackerInstanceId: combat.attackerInstanceId } : {})
-  // "When you deal damage to an enemy base" (Cassian Andor): the other side's units, unless the base's
-  // own controller's card dealt it.
-  const dealer = player === 'player' ? 'opponent' : 'player'
-  return source?.controller === player ? next : fireUnitsTrigger(next, 'whenEnemyBaseDamaged', dealer)
+  // One damage event, heard by both sides: "when your base is dealt damage" (Blade Three) and "when
+  // you deal damage to an enemy base" (Cassian Andor) are its two readings.
+  const dealer = damageDealer(state, source, combat !== undefined)
+  return fireBatch(next, collectDamageDealt(next, { owner: player, units: [], base: dealt, byCombat: combat !== undefined, ...(dealer ? { dealer } : {}) }))
+}
+
+/**
+ * Who dealt damage from `source`: the card and controller, and the unit when a unit in play dealt it.
+ * With no source named, the effect resolving at the time dealt it (`GameState.resolvingSource`); with
+ * neither, nobody is named, and a card that reads "you deal" does not hear it.
+ *
+ * Combat damage is always a unit's, including a defender that the same damage step defeats, so its
+ * instance is taken as given rather than looked up.
+ */
+export function damageDealer(state: GameState, source: DamageSource | undefined, byCombat: boolean): DamageDealt['dealer'] {
+  const from = source ?? state.resolvingSource
+  if (!from) return undefined
+  // A choice's stamped source names the card; the resolving effect may also know its instance.
+  const instanceId = from.instanceId ?? (state.resolvingSource?.cardId === from.cardId ? state.resolvingSource.instanceId : undefined)
+  const isUnit = instanceId !== undefined && (byCombat || findUnit(state, instanceId) !== undefined)
+  return { controller: from.controller, cardId: from.cardId, ...(isUnit ? { unitId: instanceId } : {}) }
+}
+
+/** Everything one damage event triggers: both players' undeployed leaders, bases and units, the damaged side first. */
+export function collectDamageDealt(state: GameState, event: DamageDealt): PendingTrigger[] {
+  const ctx = { damageDealt: event }
+  return [event.owner, opponentOf(event.owner)].flatMap(p => [
+    ...collectPlayerTriggers(state, 'whenDamageDealt', p, ctx),
+    ...collectUnitsTrigger(state, 'whenDamageDealt', p, ctx),
+  ])
 }
 
 /**

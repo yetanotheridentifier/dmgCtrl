@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { dealDamageToUnit } from '../engine/combat'
-import { healUnit } from '../engine/effects'
+import { dealDamageToBase, healUnit } from '../engine/effects'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_EXPERIENCE } from '../engine/tokenUpgrades'
 import { TOKEN_BATTLE_DROID, TOKEN_CLONE_TROOPER } from '../engine/tokenUnits'
@@ -840,5 +840,158 @@ describe('SEC_013 Luthen Rael and SEC_158 Oppression Breeds Rebellion', () => {
     expect(resolve({ ...lost, activePlayer: 'player' }, { type: 'playEvent', handIndex: 0 }).players.player.hand).toHaveLength(3)
     const defended = attackUnit(lBoard({ hand: ['SEC_158'], deck, units: [unit('s', 'SMALL')] }, { units: [unit('e', 'BIG')] }), 'e', 's', 'opponent')
     expect(resolve({ ...defended, activePlayer: 'player' }, { type: 'playEvent', handIndex: 0 }).players.player.hand).toHaveLength(0)
+  })
+})
+
+// ── Damage dealt ─────────────────────────────────────────────────────────────────────────────
+// `whenDamageDealt` is one damage event, heard on both sides (undeployed leaders, bases and units),
+// naming every unit dealt damage whether or not it survived, the base, and who dealt it.
+
+describe('the damage-dealt group', () => {
+  const W: Record<string, EngineCard> = {
+    ...P,
+    HMW_011: card({ id: 'HMW_011', name: 'Darth Sidious', type: 'leader', arena: 'ground', cost: 6, power: 4, hp: 5, traits: ['Force', 'Sith'] }),
+    HMW_013: card({ id: 'HMW_013', name: 'Cham Syndulla', type: 'leader', arena: 'ground', cost: 6, power: 3, hp: 8, traits: ["Twi'lek"] }),
+    HMW_045: card({ id: 'HMW_045', name: 'Logray', type: 'unit', arena: 'ground', cost: 2, power: 1, hp: 5, traits: ['Ewok'] }),
+    HMW_156: card({ id: 'HMW_156', name: 'Arena Acklay', type: 'unit', arena: 'ground', cost: 5, power: 5, hp: 7 }),
+    TWI_016: card({ id: 'TWI_016', name: 'Jango Fett', type: 'leader', arena: 'ground', cost: 5, power: 3, hp: 7, traits: ['Underworld', 'Bounty Hunter'] }),
+    SOR_013: card({ id: 'SOR_013', name: 'Cassian Andor', type: 'leader', arena: 'ground', cost: 5, power: 3, hp: 6, traits: ['Rebel'] }),
+    SOR_014: card({ id: 'SOR_014', name: 'Sabine Wren', type: 'leader', arena: 'ground', cost: 4, power: 2, hp: 5, traits: ['Mandalorian'] }),
+    EVT: card({ id: 'EVT', type: 'event', cost: 1 }),
+  }
+  const wBoard = (mine: Side = {}, theirs: Side = {}) => ({ ...board(mine, theirs), cards: W })
+  const front = (cardId: string) => ({ cardId, deployed: false, epicActionUsed: false, exhausted: false })
+  const back = (cardId: string) => ({ cardId, deployed: true, epicActionUsed: true, exhausted: false })
+  const byPlayer = { cardId: 'EVT', controller: 'player' as PlayerId }
+  const byOpponent = { cardId: 'EVT', controller: 'opponent' as PlayerId }
+  const baseTargetsOf = (c: PendingChoice): PlayerId[] => ('baseTargets' in c ? [...(c.baseTargets as PlayerId[])] : []).sort()
+
+  describe('HMW_011 Darth Sidious', () => {
+    it('front: when you deal 4 or more damage to a unit, may exhaust himself to deal 1 damage to a different unit or base', () => {
+      const swung = attackUnit(wBoard({ leader: front('HMW_011'), units: [unit('b', 'BIG')] }, { units: [unit('e', 'TOUGH'), unit('o', 'GRD')] }), 'b', 'e')
+      expect(choice(swung)).toMatchObject({ kind: 'mayPayThen', controller: 'player' })
+      const paid = accept(swung)
+      expect(paid.players.player.leader.exhausted).toBe(true)
+      expect(choice(paid)).toMatchObject({ kind: 'selectDamageTarget', amount: 1 })
+      expect(targetsOf(choice(paid)), 'not the unit dealt the 4').toEqual(['b', 'o'])
+    })
+
+    it('front: counts ability damage you deal, and damage to a base, whose base is then not a target', () => {
+      const pinged = dealDamageToUnit(wBoard({ leader: front('HMW_011') }, { units: [unit('e', 'TOUGH')] }), 'e', 4, byPlayer)
+      expect(choice(pinged)).toMatchObject({ kind: 'mayPayThen' })
+      const swung = attackBase(wBoard({ leader: front('HMW_011'), units: [unit('b', 'BIG')] }), 'b')
+      const paid = accept(swung)
+      expect(baseTargetsOf(choice(paid))).toEqual(['player'])
+    })
+
+    it('front: not for less than 4, nor for damage the opponent deals', () => {
+      noChoice(attackUnit(wBoard({ leader: front('HMW_011'), units: [unit('g', 'GRD')] }, { units: [unit('e', 'TOUGH')] }), 'g', 'e'))
+      noChoice(dealDamageToUnit(wBoard({ leader: front('HMW_011'), units: [unit('t', 'TOUGH')] }), 't', 5, byOpponent))
+    })
+
+    it('back: may deal 1 damage to a different unit or base', () => {
+      const s = wBoard({ leader: back('HMW_011'), units: [unit('ds', 'HMW_011', { isLeader: true })] }, { units: [unit('e', 'TOUGH'), unit('o', 'GRD')] })
+      const pinged = dealDamageToUnit(s, 'e', 4, byPlayer)
+      expect(choice(pinged)).toMatchObject({ kind: 'selectDamageTarget', amount: 1 })
+      expect(optional(choice(pinged))).toBe(true)
+      expect(targetsOf(choice(pinged))).toEqual(['ds', 'o'])
+    })
+  })
+
+  describe('HMW_013 Cham Syndulla', () => {
+    it('front: when non-combat damage is dealt to a friendly unit, may exhaust himself to deal 1 damage to an enemy unit or base', () => {
+      const pinged = dealDamageToUnit(wBoard({ leader: front('HMW_013'), units: [unit('g', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'g', 1, byOpponent)
+      expect(choice(pinged)).toMatchObject({ kind: 'mayPayThen', controller: 'player' })
+      const paid = accept(pinged)
+      expect(paid.players.player.leader.exhausted).toBe(true)
+      expect(targetsOf(choice(paid))).toEqual(['e'])
+      expect(baseTargetsOf(choice(paid))).toEqual(['opponent'])
+    })
+
+    it('front: includes a friendly unit the damage defeats, and the friendly base', () => {
+      const killed = dealDamageToUnit(wBoard({ leader: front('HMW_013'), units: [unit('s', 'SMALL')] }), 's', 1, byOpponent)
+      expect(U(killed, 's')).toBeUndefined()
+      expect(choice(killed)).toMatchObject({ kind: 'mayPayThen' })
+      expect(choice(dealDamageToBase(wBoard({ leader: front('HMW_013') }), 'player', 2, byOpponent))).toMatchObject({ kind: 'mayPayThen' })
+    })
+
+    it('front: not for combat damage, nor for damage to an enemy unit', () => {
+      noChoice(attackUnit(wBoard({ leader: front('HMW_013'), units: [unit('g', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'e', 'g', 'opponent'))
+      noChoice(dealDamageToUnit(wBoard({ leader: front('HMW_013') }, { units: [unit('e', 'GRD')] }), 'e', 1, byPlayer))
+    })
+
+    it('back: may deal 1 damage to an enemy unit or base', () => {
+      const s = wBoard({ leader: back('HMW_013'), units: [unit('ch', 'HMW_013', { isLeader: true }), unit('g', 'GRD')] }, { units: [unit('e', 'GRD')] })
+      const pinged = dealDamageToUnit(s, 'g', 1, byOpponent)
+      expect(choice(pinged)).toMatchObject({ kind: 'selectDamageTarget', amount: 1 })
+      expect(optional(choice(pinged))).toBe(true)
+      expect(targetsOf(choice(pinged))).toEqual(['e'])
+    })
+  })
+
+  describe('HMW_045 Logray', () => {
+    it('when another friendly unit that costs 3 or less is dealt damage, even one it defeats, may deal 1 damage to an enemy unit', () => {
+      const killed = dealDamageToUnit(wBoard({ units: [unit('lg', 'HMW_045'), unit('s', 'SMALL')] }, { units: [unit('e', 'GRD')] }), 's', 1, byOpponent)
+      expect(U(killed, 's')).toBeUndefined()
+      expect(choice(killed)).toMatchObject({ kind: 'selectDamageTarget', amount: 1 })
+      expect(optional(choice(killed))).toBe(true)
+      expect(targetsOf(choice(killed))).toEqual(['e'])
+    })
+
+    it('not for a friendly unit that costs 4, for himself, or for an enemy unit', () => {
+      noChoice(dealDamageToUnit(wBoard({ units: [unit('lg', 'HMW_045'), unit('b', 'BIG')] }, { units: [unit('e', 'GRD')] }), 'b', 1, byOpponent))
+      noChoice(dealDamageToUnit(wBoard({ units: [unit('lg', 'HMW_045')] }, { units: [unit('e', 'GRD')] }), 'lg', 1, byOpponent))
+      noChoice(dealDamageToUnit(wBoard({ units: [unit('lg', 'HMW_045')] }, { units: [unit('e', 'GRD')] }), 'e', 1, byPlayer))
+    })
+
+    it('an event the far side hears but whose condition it does not meet raises no ordering prompt', () => {
+      // The opponent's Cham Syndulla hears every damage event, but only damage to their own side.
+      const s = wBoard({ units: [unit('lg', 'HMW_045'), unit('g', 'GRD')] }, { leader: front('HMW_013'), units: [unit('e', 'GRD')] })
+      expect(choice(dealDamageToUnit(s, 'g', 1, byOpponent)).kind).toBe('selectDamageTarget')
+    })
+  })
+
+  describe('TWI_016 Jango Fett', () => {
+    it('front: when a friendly unit deals damage to an enemy unit, may exhaust himself to exhaust that unit', () => {
+      const swung = attackUnit(wBoard({ leader: front('TWI_016'), units: [unit('g', 'GRD')] }, { units: [unit('e', 'TOUGH')] }), 'g', 'e')
+      expect(choice(swung)).toMatchObject({ kind: 'mayPayThen', controller: 'player' })
+      const paid = accept(swung)
+      expect(paid.players.player.leader.exhausted).toBe(true)
+      expect(U(paid, 'e')!.exhausted).toBe(true)
+    })
+
+    it("front: a friendly defender's damage to the attacker counts too", () => {
+      const s = wBoard({ leader: front('TWI_016'), units: [unit('g', 'GRD')] }, { units: [unit('e', 'TOUGH')] })
+      const defended = attackUnit(s, 'e', 'g', 'opponent')
+      expect(choice(defended)).toMatchObject({ kind: 'mayPayThen', controller: 'player' })
+    })
+
+    it('front: not for damage no unit dealt, nor for an enemy unit the damage defeated', () => {
+      noChoice(dealDamageToUnit(wBoard({ leader: front('TWI_016') }, { units: [unit('e', 'TOUGH')] }), 'e', 1, byPlayer))
+      noChoice(attackUnit(wBoard({ leader: front('TWI_016'), units: [unit('b', 'BIG')] }, { units: [unit('e', 'SMALL')] }), 'b', 'e'))
+    })
+
+    it("back: a friendly unit's ability damage counts, and he may exhaust that unit", () => {
+      const s = wBoard({ leader: back('TWI_016'), units: [unit('jf', 'TWI_016', { isLeader: true }), unit('g', 'GRD')] }, { units: [unit('e', 'TOUGH')] })
+      const pinged = dealDamageToUnit(s, 'e', 1, { cardId: 'GRD', controller: 'player', instanceId: 'g' })
+      expect(choice(pinged)).toMatchObject({ kind: 'mayPayThen', controller: 'player' })
+      expect(U(accept(pinged), 'e')!.exhausted).toBe(true)
+      expect(U(skip(pinged), 'e')!.exhausted).toBe(false)
+    })
+  })
+
+  describe('SOR_013 Cassian Andor, on the same event', () => {
+    const cassian = (theirs: Side = {}) => wBoard({ deck: ['GRD'], units: [unit('sw', 'SOR_014', { isLeader: true }), unit('ca', 'SOR_013', { isLeader: true })] }, theirs)
+
+    it('hears damage his side deals to the enemy base, including damage an effect deals without naming itself', () => {
+      // Sabine Wren's On Attack deals 1 to each enemy base without passing a source.
+      const swung = attackUnit(cassian({ units: [unit('e', 'TOUGH')] }), 'sw', 'e')
+      expect(choice(swung)).toMatchObject({ kind: 'mayPayThen', controller: 'player', text: 'draw a card' })
+    })
+
+    it('not for damage the enemy base takes from its own side, or damage nobody is named as dealing', () => {
+      noChoice(dealDamageToBase(cassian(), 'opponent', 1, byOpponent))
+      noChoice(dealDamageToBase(cassian(), 'opponent', 1))
+    })
   })
 })

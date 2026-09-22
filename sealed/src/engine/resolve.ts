@@ -5,7 +5,7 @@ import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPe
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, grantZoneRef, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
-import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, type TriggerPoint } from './abilities'
+import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
@@ -2279,7 +2279,7 @@ function useBaseUpgradeAction(state: GameState, cardId: string, index: number): 
   if (offered.ability.defeatsSelf) next = defeatBaseUpgrade(next, owner, cardId)
   if (offered.ability.oncePerPhase) next = recordBaseActionUsed(next, owner, baseActionKey(cardId, index))
   const ctx = { owner, cardId, sourceInstanceId: baseSourceId(cardId) }
-  next = stampChoiceSource(next, offered.ability.effect(next, ctx), { cardId, controller: owner })
+  next = runAttributed(next, { cardId, controller: owner }, s => offered.ability.effect(s, ctx))
   next = checkWin(next)
   if (next.winner !== null) return next
   next = handOffOpponentChoice(next, owner)
@@ -2312,7 +2312,7 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
       ),
     })
   }
-  next = stampChoiceSource(next, ability.effect(next, { owner, cardId, sourceInstanceId: instanceId }), { cardId, controller: owner })
+  next = runAttributed(next, { cardId, controller: owner, instanceId }, s => ability.effect(s, { owner, cardId, sourceInstanceId: instanceId }))
   next = checkWin(next)
   if (next.winner !== null) return next
   return hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
@@ -2332,7 +2332,7 @@ function useLeaderAbility(state: GameState, index: number, targetInstanceId?: st
 
   const paid = ability.cost ? payCost(p, ability.cost) : p
   let next = updatePlayer(state, owner, { ...paid, leader: { ...p.leader, exhausted: true } })
-  next = stampChoiceSource(next, ability.effect(next, { owner, cardId: p.leader.cardId, targetInstanceId }), { cardId: p.leader.cardId, controller: owner })
+  next = runAttributed(next, { cardId: p.leader.cardId, controller: owner }, s => ability.effect(s, { owner, cardId: p.leader.cardId, targetInstanceId }))
   next = checkWin(next)
   if (next.winner !== null) return next
   next = handOffOpponentChoice(next, owner)
@@ -2352,7 +2352,7 @@ function useBaseAbility(state: GameState): GameState {
   if (p.base.epicActionUsed) throw new Error('useBaseAbility: already used this game')
 
   let next = updatePlayer(state, owner, { base: { ...p.base, epicActionUsed: true } })
-  next = stampChoiceSource(next, ability.effect(next, { owner, cardId: p.base.cardId }), { cardId: p.base.cardId, controller: owner })
+  next = runAttributed(next, { cardId: p.base.cardId, controller: owner }, s => ability.effect(s, { owner, cardId: p.base.cardId }))
   next = checkWin(next)
   if (next.winner !== null) return next
   next = handOffOpponentChoice(next, owner)
@@ -2685,7 +2685,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   if (target.kind === 'base') {
     // Through `dealDamageToBase` so base-damage prevention applies (At Attin Safety Droid);
     // the attack-end ctx reports what actually landed, not the raw power.
-    const baseSource = { cardId: attacker.cardId, controller: playerId }
+    const baseSource = { cardId: attacker.cardId, controller: playerId, instanceId: attackerId }
     const dealtToBase = baseDamageAfterPrevention(state, enemyId, attackerPower, baseSource)
     let next = dealDamageToBase(state, enemyId, attackerPower, baseSource, { attackerInstanceId: attackerId })
     next = recordBaseAttacked(next, enemyId, attackerId) // "your base was attacked this phase" (Greef Karga, Qui-Gon Jinn)
@@ -2733,8 +2733,8 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // stat context goes through so combat-only debuffs count in the defeat check (Scion Shuttle).
   // Combat damage is attributed to the unit dealing it, so "damage dealt by friendly Underworld
   // cards is unpreventable" can see where it came from (Gorian Shard's Corsair).
-  const attackerSource = { cardId: attacker.cardId, controller: playerId }
-  const counterSource = { cardId: defender.cardId, controller: enemyId }
+  const attackerSource = { cardId: attacker.cardId, controller: playerId, instanceId: attackerId }
+  const counterSource = { cardId: defender.cardId, controller: enemyId, instanceId: defender.instanceId }
 
   // Damage prevention (The Mandalorian) is settled HERE — after the powers are known but
   // before anything is committed — so the logic below (first strike, Overwhelm, attack-end) still
@@ -2828,7 +2828,9 @@ function finishHealing(state: GameState, damageUnit: string | undefined, healed:
 function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef; playerChosen?: PlayerId; arenaChosen?: Arena; optionIndex?: number; nameChosen?: string } = {}): GameState {
   const hook = getCardDefinition(then.cardId)?.ifYouDo
   if (!hook) return state
-  const next = hook(state, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, unitChosen: then.unit, ...settled })
+  // Attributed like the ability it resumes, so "if you do, deal 2 damage" is dealt by that card.
+  const source = { cardId: then.cardId, controller: then.owner, ...(then.sourceInstanceId ? { instanceId: then.sourceInstanceId } : {}) }
+  const next = whileResolving(state, source, s => hook(s, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, unitChosen: then.unit, ...settled }))
   return checkWin(next)
 }
 

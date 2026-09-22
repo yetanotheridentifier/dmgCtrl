@@ -14,11 +14,11 @@ import type { GameState, PendingChoice, PlayerId } from '../engine/types'
  * Ticket #474's first two groups. Both read events the engine ALREADY dispatches, so nothing here
  * adds a trigger point: the work is the context those points carry.
  *
- * - "When this unit is dealt damage and survives" is `whenFriendlyDamagedSurvives` filtered to the
- *   registering unit. Tarfful is the only one that needs more, and only `ctx.byCombat`.
+ * - "When this unit is dealt damage and survives" is `whenDamageDealt` with its survivors filtered
+ *   to the registering unit. Tarfful is the only one that needs more, and only `byCombat`.
  * - "When this unit deals combat damage to a base" is `onAttackEnd` with `ctx.combatDamageToBase`,
  *   which is the attacker itself and combat damage only. Populist Advisor reads the same event from
- *   the far side (`whenOwnBaseDamaged`), and Sabé's front reads it for any friendly attacker
+ *   the far side (`whenDamageDealt` on its own base), and Sabé's front reads it for any friendly attacker
  *   (`whenFriendlyAttackEnds`).
  */
 const F = {

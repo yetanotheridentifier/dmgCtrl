@@ -286,6 +286,11 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SHD_018', name: 'The Mandalorian', front: true, back: true },
   // "When a friendly unit is defeated while attacking".
   { id: 'SEC_013', name: 'Luthen Rael', front: true, back: true },
+  // The damage event: "when you deal 4 or more", "when non-combat damage is dealt to a friendly unit
+  // or base", "when a friendly unit deals damage to an enemy unit".
+  { id: 'HMW_011', name: 'Darth Sidious', front: true, back: true },
+  { id: 'HMW_013', name: 'Cham Syndulla', front: true, back: true },
+  { id: 'TWI_016', name: 'Jango Fett', front: true, back: true },
 ]
 
 /**
@@ -1730,7 +1735,7 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_122', name: 'Boga' },
   { id: 'JTL_221', name: 'Stolen AT-Hauler' },
   { id: 'SHD_115', name: 'Cobb Vanth' },
-  // "When this unit is dealt damage and survives": the existing `whenFriendlyDamagedSurvives`
+  // "When this unit is dealt damage and survives": `whenDamageDealt` with the survivors
   // filtered to the registering unit. Tarfful reads combat damage only.
   { id: 'HMW_156', name: 'Arena Acklay' },
   { id: 'HMW_166', name: 'Gungi' },
@@ -1818,6 +1823,8 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // "When 1 or more damage is healed from this unit".
   { id: 'JTL_062', name: 'Silver Angel' },
   { id: 'LAW_047', name: 'Baze Malbus' },
+  // "When another friendly unit that costs 3 or less is dealt damage".
+  { id: 'HMW_045', name: 'Logray' },
 ]
 
 /**

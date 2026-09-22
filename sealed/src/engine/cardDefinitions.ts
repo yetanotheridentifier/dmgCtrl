@@ -320,6 +320,20 @@ const friendlyUpgradeCandidates = (s: GameState, owner: PlayerId, on?: 'unit'): 
 
 const BOTH_BASES: PlayerId[] = ['player', 'opponent']
 
+// ── Reading the damage event ───────────────────────────────────────────────────────────────────
+// `whenDamageDealt` is heard on both sides, so each reader states whose units or base it means. These
+// are trigger conditions (`hears`): an event they do not describe never collects the ability.
+/** The damage fell on `ctx.owner`'s side. */
+const damageToFriendly = (ctx: EffectContext): boolean => ctx.damageDealt?.owner === ctx.owner
+/** Friendly units the event dealt damage to and which survived it ("is dealt damage and survives"). */
+const friendlySurvivors = (ctx: EffectContext) => (damageToFriendly(ctx) ? ctx.damageDealt!.units.filter(d => d.survived) : [])
+/** "When THIS unit is dealt damage and survives." */
+const survivedItself = (ctx: EffectContext): boolean => friendlySurvivors(ctx).some(d => d.instanceId === ctx.sourceInstanceId)
+/** "When your base is dealt damage." */
+const friendlyBaseDamaged = (ctx: EffectContext): boolean => damageToFriendly(ctx) && (ctx.damageDealt!.base ?? 0) > 0
+/** The damage was dealt by `ctx.owner` ("when you deal damage"). */
+const dealtByYou = (ctx: EffectContext): boolean => ctx.damageDealt?.dealer?.controller === ctx.owner
+
 registerCard('ASH_012', { // Vane — front (undeployed) + deployed (On Attack)
   // The player chooses which upgrade to defeat (any upgrade, token or card), then where the 2 damage
   // lands: front = "a base" (either); deployed = "the defending unit or a base".
@@ -1572,7 +1586,7 @@ registerCard('ASH_169', { // Axe Woves
 })
 
 registerCard('ASH_204', { // Blade Three
-  abilities: [{ trigger: 'whenOwnBaseDamaged', description: 'Give an Advantage token to this unit.', effect: (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE) }],
+  abilities: [{ trigger: 'whenDamageDealt', hears: (_s, ctx) => friendlyBaseDamaged(ctx), description: 'Give an Advantage token to this unit.', effect: (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE) }],
 })
 
 registerCard('ASH_161', { // Zeb Orrelios
@@ -1589,7 +1603,8 @@ registerCard('ASH_161', { // Zeb Orrelios
 const RANCOR_KEEPER_KEY = 'ASH_032#round'
 registerCard('ASH_032', { // Rancor Keeper
   abilities: [{
-    trigger: 'whenFriendlyDamagedSurvives',
+    trigger: 'whenDamageDealt',
+    hears: (_s, ctx) => friendlySurvivors(ctx).length > 0,
     description: 'Deal 1 damage to any number of bases. Use this ability only once each round.',
     effect: (s, ctx) => {
       const self = findUnit(s, ctx.sourceInstanceId!)?.unit
@@ -6753,7 +6768,9 @@ registerCard('SOR_013', { // Cassian Andor
     effect: (s, ctx) => drawCards(s, ctx.owner, 1),
   }),
   abilities: [{
-    trigger: 'whenEnemyBaseDamaged',
+    trigger: 'whenDamageDealt',
+    // "When you deal damage to an enemy base."
+    hears: (_s, ctx) => dealtByYou(ctx) && !damageToFriendly(ctx) && (ctx.damageDealt!.base ?? 0) > 0,
     description: 'You may draw a card. Use this ability only once each round.',
     effect: (s, ctx) => (selfOf(s, ctx)?.usedAbilities?.includes(CASSIAN_ROUND_KEY)
       ? s
@@ -6787,11 +6804,12 @@ registerCard('SEC_002', { // Jabba the Hutt
     effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, damagedFriendly), 'choose the damaged friendly unit that deals the damage', false, 'dealer'),
   }),
   abilities: [{
-    trigger: 'whenFriendlyDamagedSurvives',
+    trigger: 'whenDamageDealt',
+    hears: (_s, ctx) => friendlySurvivors(ctx).some(d => d.instanceId !== ctx.sourceInstanceId),
     description: 'You may have that unit deal that much damage to an enemy unit. Use this ability only once each round.',
     effect: (s, ctx) => {
       if (selfOf(s, ctx)?.usedAbilities?.includes(JABBA_ROUND_KEY)) return s
-      const hurt = (ctx.damagedSurvivors ?? []).filter(d => d.instanceId !== ctx.sourceInstanceId && findUnit(s, d.instanceId)?.owner === ctx.owner)
+      const hurt = friendlySurvivors(ctx).filter(d => d.instanceId !== ctx.sourceInstanceId && findUnit(s, d.instanceId)?.owner === ctx.owner)
       if (hurt.length === 0 || !pickedIds(s, ctx, pickEnemy).length) return s
       return hurt.length === 1
         ? unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), `have it deal ${hurt[0].amount} damage to an enemy unit`, true, `deal:${hurt[0].amount}`, hurt[0].instanceId)
@@ -9510,32 +9528,29 @@ const searchDiscardGrant = (s: GameState, ctx: EventCtx, depth: number, test: (c
 
 // ── #474: "When this unit is dealt damage and survives" ──────────────────────────────────────────
 //
-// The point is `whenFriendlyDamagedSurvives`, which fires on every unit its controller has and names
-// each survivor in `ctx.damagedSurvivors`. "THIS unit" is therefore the opposite filter to the one
-// Jabba the Hutt already applies: he drops his own instance id, these cards keep only it.
-const survivedItself = (ctx: EffectContext): boolean =>
-  (ctx.damagedSurvivors ?? []).some(d => d.instanceId === ctx.sourceInstanceId)
+// `whenDamageDealt` with the survivors on this unit's side filtered to this unit (`survivedItself`):
+// the opposite filter to the one Jabba the Hutt applies, who drops his own instance id.
+const hearsOwnSurvival = { trigger: 'whenDamageDealt' as const, hears: (_s: GameState, ctx: EffectContext) => survivedItself(ctx) }
 
-registerCard('HMW_156', { abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'Deal 2 damage to each enemy base.', effect: (s, ctx) => // Arena Acklay
-  (survivedItself(ctx) ? dealDamageToBase(s, opponentOf(ctx.owner), 2, { cardId: ctx.cardId, controller: ctx.owner }) : s) }] })
+registerCard('HMW_156', { abilities: [{ ...hearsOwnSurvival, description: 'Deal 2 damage to each enemy base.', effect: (s, ctx) => // Arena Acklay
+  dealDamageToBase(s, opponentOf(ctx.owner), 2, { cardId: ctx.cardId, controller: ctx.owner }) }] })
 
 registerCard('HMW_166', { // Gungi
-  abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'You may discard a card from your hand. If you do, ready this unit.', effect: (s, ctx) =>
-    (survivedItself(ctx) && s.players[ctx.owner].hand.length > 0
+  abilities: [{ ...hearsOwnSurvival, description: 'You may discard a card from your hand. If you do, ready this unit.', effect: (s, ctx) =>
+    (s.players[ctx.owner].hand.length > 0
       ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1, optional: true, then: { ifYouDo: resume(ctx) } })
       : s) }],
   ifYouDo: (s, ctx) => readyUnit(s, ctx.sourceInstanceId!),
 })
 
-registerCard('HMW_211', { abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'You may exhaust a unit.', effect: (s, ctx) => { // Tech
-  if (!survivedItself(ctx)) return s
+registerCard('HMW_211', { abilities: [{ ...hearsOwnSurvival, description: 'You may exhaust a unit.', effect: (s, ctx) => { // Tech
   const targets = allUnits(s).filter(u => !u.exhausted).map(u => u.instanceId)
   return targets.length ? pushChoice(s, { kind: 'mayExhaustUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true }) : s
 } }] })
 
 registerCard('HMW_169', { abilities: [ // Crosshair
-  { trigger: 'whenFriendlyDamagedSurvives', description: 'Each player draws a card.', effect: (s, ctx) =>
-    (survivedItself(ctx) ? drawCards(drawCards(s, ctx.owner, 1), opponentOf(ctx.owner), 1) : s) },
+  { ...hearsOwnSurvival, description: 'Each player draws a card.', effect: (s, ctx) =>
+    drawCards(drawCards(s, ctx.owner, 1), opponentOf(ctx.owner), 1) },
   // The second head is why `whenDrawCards` now fires on both sides: it reads an OPPONENT drawing,
   // and "during the action phase" excludes the regroup draw, which is the bulk of a game's draws.
   { trigger: 'whenDrawCards', description: 'When an opponent draws 1 or more cards during the action phase, deal 2 damage to their base.', effect: (s, ctx) =>
@@ -9546,13 +9561,16 @@ registerCard('HMW_169', { abilities: [ // Crosshair
 
 registerCard('SHD_250', { // Tarfful
   abilities: [{
-    trigger: 'whenFriendlyDamagedSurvives',
+    trigger: 'whenDamageDealt',
+    // `byCombat` is the whole difference between this card and Arena Acklay above: an ability's
+    // ping damages a Wookiee and survives it, and Tarfful reads combat damage only.
+    hears: (s, ctx) => ctx.damageDealt?.byCombat === true && friendlySurvivors(ctx).some(d => {
+      const found = findUnit(s, d.instanceId)
+      return found !== undefined && unitHasTrait(s, found.unit, 'Wookiee')
+    }),
     description: 'When a friendly Wookiee unit is dealt combat damage and survives, it deals that much damage to an enemy ground unit.',
     effect: (s, ctx) => {
-      // `byCombat` is the whole difference between this card and Arena Acklay above: an ability's
-      // ping damages a Wookiee and survives it, and Tarfful reads combat damage only.
-      if (!ctx.byCombat) return s
-      const hurt = (ctx.damagedSurvivors ?? []).filter(d => {
+      const hurt = friendlySurvivors(ctx).filter(d => {
         const found = findUnit(s, d.instanceId)
         return found?.owner === ctx.owner && unitHasTrait(s, found.unit, 'Wookiee')
       })
@@ -9577,7 +9595,7 @@ registerCard('SHD_250', { // Tarfful
 // ── #474: "When this unit deals combat damage to a base" ─────────────────────────────────────────
 //
 // `onAttackEnd` with `ctx.combatDamageToBase`, which is already exactly this event: the attacker
-// itself (not every friendly unit, as `whenEnemyBaseDamaged` would be) and combat damage only.
+// itself (not every unit that hears `whenDamageDealt`) and combat damage only.
 const dealtToBase = (ctx: EffectContext): boolean => (ctx.combatDamageToBase ?? 0) > 0
 
 registerCard('LOF_166', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a base, you may give an Experience token to this unit.', effect: (s, ctx) => // Blockade Runner
@@ -9625,16 +9643,14 @@ registerCard('JTL_188', { // Moff Gideon
   enemyCostDelta: (s, source, ctx) => (ctx.card.type === 'unit' && dealtBaseCombatDamageThisPhase(s, source.instanceId) ? 1 : 0),
 })
 
-// The far side of the same event: `whenOwnBaseDamaged` now says whether the damage was combat and
-// which unit dealt it, so "an ENEMY UNIT deals COMBAT damage to your base" is expressible without a
-// second dispatch point.
-registerCard('SEC_041', { abilities: [{ trigger: 'whenOwnBaseDamaged', description: 'When an enemy unit deals combat damage to your base, this unit gains Sentinel for this phase.', effect: (s, ctx) => { // Populist Advisor
-  if (!ctx.byCombat || ctx.attackerInstanceId === undefined) return s
-  const attacker = findUnit(s, ctx.attackerInstanceId)
-  return attacker && attacker.owner !== ctx.owner
-    ? addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: [{ name: 'Sentinel' }] })
-    : s
-} }] })
+// The far side of the same event: the damage event says whether it was combat and which unit dealt
+// it, so "an ENEMY UNIT deals COMBAT damage to your base" is a condition on it.
+registerCard('SEC_041', { abilities: [{ // Populist Advisor
+  trigger: 'whenDamageDealt',
+  hears: (_s, ctx) => friendlyBaseDamaged(ctx) && ctx.damageDealt!.byCombat && ctx.damageDealt!.dealer?.unitId !== undefined && !dealtByYou(ctx),
+  description: 'When an enemy unit deals combat damage to your base, this unit gains Sentinel for this phase.',
+  effect: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: [{ name: 'Sentinel' }] }),
+}] })
 
 registerCard('SEC_205', { abilities: [{ trigger: 'onAttackEnd', description: "If this unit dealt combat damage to a base, discard a card from the defending player's deck; for this phase you may play it from their discard pile, ignoring its aspect penalties.", effect: (s, ctx) => { // Obi-Wan Kenobi
   const defender = opponentOf(ctx.owner)
@@ -9699,8 +9715,8 @@ registerCard('SOR_109', { abilities: [ // Colonel Yularen: "when you play a Comm
     (printedAspect(playedUnitCard(s, ctx), 'Command') ? healBase(s, ctx.owner, 1) : s) },
 ] })
 
-registerCard('TS26_73', { abilities: [{ trigger: 'whenOwnBaseDamaged', description: 'When your base is dealt combat damage: You may deal 1 damage to a unit.', effect: (s, ctx) => // Moralo Eval
-  (ctx.byCombat ? damageChoice(s, ctx, 1, allUnits(s), [], true) : s) }] })
+registerCard('TS26_73', { abilities: [{ trigger: 'whenDamageDealt', hears: (_s, ctx) => friendlyBaseDamaged(ctx) && ctx.damageDealt!.byCombat, description: 'When your base is dealt combat damage: You may deal 1 damage to a unit.', effect: (s, ctx) => // Moralo Eval
+  damageChoice(s, ctx, 1, allUnits(s), [], true) }] })
 
 registerCard('SHD_241', { abilities: [{ trigger: 'whenEnemyAttacksBase', description: 'When an enemy unit attacks your base: Give a Shield token to a friendly unit in the same arena as the attacker.', effect: (s, ctx) => { // Kragan Gorr
   const attacker = ctx.attackerInstanceId ? findUnit(s, ctx.attackerInstanceId)?.unit : undefined
@@ -9786,8 +9802,8 @@ registerCard('SHD_255', { abilities: [{ trigger: 'whenPlayCard', description: 'W
     ? damageChoice(s, ctx, 1, [], BOTH_BASES, true)
     : s) }] })
 
-registerCard('SHD_084', { abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'When combat damage is dealt to this unit: Give an Experience token to this unit (if it survives the damage).', effect: (s, ctx) => // Phase-III Dark Trooper
-  (ctx.byCombat && survivedItself(ctx) ? expSelf(s, ctx) : s) }] })
+registerCard('SHD_084', { abilities: [{ trigger: 'whenDamageDealt', hears: (_s, ctx) => ctx.damageDealt?.byCombat === true && survivedItself(ctx), description: 'When combat damage is dealt to this unit: Give an Experience token to this unit (if it survives the damage).', effect: (s, ctx) => // Phase-III Dark Trooper
+  expSelf(s, ctx) }] })
 
 // ── "When this unit completes an attack (and survives)" ─────────────────────────────────────────
 // `onAttackEnd`. It fires for an attacker the combat defeated too (CR 7.6), so "(and survives)" is
@@ -10082,6 +10098,112 @@ registerCard('SEC_013', { // Luthen Rael
 })
 registerCard('SEC_158', whenPlayed('If a friendly unit was defeated while attacking this phase, draw 3 cards.', (s, ctx) => // Oppression Breeds Rebellion
   ((s.phaseEvents?.defeatedWhileAttacking ?? []).includes(ctx.owner) ? drawCards(s, ctx.owner, 3) : s)))
+
+// ── Damage dealt ─────────────────────────────────────────────────────────────────────────────
+// `whenDamageDealt`, heard on both sides; each card's trigger condition is its `hears`.
+
+/** "A different unit or base" than the ones this event dealt 4 or more damage to (Darth Sidious). */
+const fourOrMore = (ctx: EffectContext): { units: string[]; base?: PlayerId } => {
+  const event = ctx.damageDealt
+  if (!event) return { units: [] }
+  return { units: event.units.filter(d => d.amount >= 4).map(d => d.instanceId), ...((event.base ?? 0) >= 4 ? { base: event.owner } : {}) }
+}
+const hearsFourOrMore = (_s: GameState, ctx: EffectContext): boolean => {
+  const hit = fourOrMore(ctx)
+  return dealtByYou(ctx) && (hit.units.length > 0 || hit.base !== undefined)
+}
+/** Deal 1 damage to a unit or base other than the ones in `step` (a `fourOrMore` as JSON). */
+const sidiousDamage = (s: GameState, ctx: EventCtx, step: string, optional: boolean): GameState => {
+  const hit = JSON.parse(step) as { units: string[]; base?: PlayerId }
+  return damageChoice(s, ctx, 1, allUnits(s).filter(u => !hit.units.includes(u.instanceId)), BOTH_BASES.filter(p => p !== hit.base), optional)
+}
+registerCard('HMW_011', { // Darth Sidious
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenDamageDealt',
+      hears: hearsFourOrMore,
+      description: 'When you deal 4 or more damage to a unit or base: You may exhaust this leader. If you do, deal 1 damage to a different unit or base.',
+      effect: (s, ctx) => (leaderCanExhaust(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Darth Sidious (leader) to deal 1 damage to a different unit or base', then: resume(ctx, JSON.stringify(fourOrMore(ctx))) })
+        : s),
+    }],
+  },
+  abilities: [{
+    trigger: 'whenDamageDealt',
+    hears: hearsFourOrMore,
+    description: 'When you deal 4 or more damage to a unit or base: You may deal 1 damage to a different unit or base.',
+    effect: (s, ctx) => sidiousDamage(s, ctx, JSON.stringify(fourOrMore(ctx)), true),
+  }],
+  ifYouDo: (s, ctx) => sidiousDamage(exhaustLeader(s, ctx.owner), { owner: ctx.owner, sourceInstanceId: `${ctx.cardId}-front` }, ctx.step!, false),
+})
+
+/** "When non-combat damage is dealt to a friendly unit or base" (Cham Syndulla). */
+const hearsNonCombatToFriendly = (_s: GameState, ctx: EffectContext): boolean =>
+  damageToFriendly(ctx) && !ctx.damageDealt!.byCombat
+const enemyUnitOrBase = (s: GameState, ctx: EventCtx, optional: boolean): GameState =>
+  damageChoice(s, ctx, 1, enemyUnitsOf(s, ctx.owner), [opponentOf(ctx.owner)], optional)
+registerCard('HMW_013', { // Cham Syndulla
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenDamageDealt',
+      hears: hearsNonCombatToFriendly,
+      description: 'When non-combat damage is dealt to a friendly unit or base: You may exhaust this leader. If you do, deal 1 damage to an enemy unit or base.',
+      effect: (s, ctx) => (leaderCanExhaust(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Cham Syndulla (leader) to deal 1 damage to an enemy unit or base', then: resume(ctx) })
+        : s),
+    }],
+  },
+  abilities: [{
+    trigger: 'whenDamageDealt',
+    hears: hearsNonCombatToFriendly,
+    description: 'When non-combat damage is dealt to a friendly unit or base: You may deal 1 damage to an enemy unit or base.',
+    effect: (s, ctx) => enemyUnitOrBase(s, ctx, true),
+  }],
+  ifYouDo: (s, ctx) => enemyUnitOrBase(exhaustLeader(s, ctx.owner), { owner: ctx.owner, sourceInstanceId: `${ctx.cardId}-front` }, false),
+})
+
+registerCard('HMW_045', { abilities: [{ // Logray
+  trigger: 'whenDamageDealt',
+  // A unit the damage defeated is still named by the event, and its card still has a cost.
+  hears: (s, ctx) => damageToFriendly(ctx) && ctx.damageDealt!.units.some(d => d.instanceId !== ctx.sourceInstanceId && (s.cards[d.cardId]?.cost ?? 0) <= 3),
+  description: 'When another friendly unit that costs 3 or less is dealt damage: You may deal 1 damage to an enemy unit.',
+  effect: (s, ctx) => damageChoice(s, ctx, 1, enemyUnitsOf(s, ctx.owner), [], true),
+}] })
+
+/**
+ * "When a friendly unit deals damage to an enemy unit" (Jango Fett): the event's dealer is a unit of
+ * this side, and the unit it damaged is still there to exhaust. Returns that unit.
+ */
+const jangoTarget = (s: GameState, ctx: EffectContext): string | undefined => {
+  const event = ctx.damageDealt
+  if (!event || event.owner === ctx.owner || event.dealer?.unitId === undefined || event.dealer.controller !== ctx.owner) return undefined
+  return event.units.find(d => findUnit(s, d.instanceId) !== undefined)?.instanceId
+}
+registerCard('TWI_016', { // Jango Fett
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenDamageDealt',
+      hears: (s, ctx) => jangoTarget(s, ctx) !== undefined,
+      description: 'When a friendly unit deals damage to an enemy unit: You may exhaust this leader. If you do, exhaust that enemy unit.',
+      effect: (s, ctx) => {
+        const target = jangoTarget(s, ctx)
+        return target && leaderCanExhaust(s, ctx.owner)
+          ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Jango Fett (leader) to exhaust that enemy unit', then: resume(ctx, 'front', target) })
+          : s
+      },
+    }],
+  },
+  abilities: [{
+    trigger: 'whenDamageDealt',
+    hears: (s, ctx) => jangoTarget(s, ctx) !== undefined,
+    description: 'When a friendly unit deals damage to an enemy unit: You may exhaust that unit.',
+    effect: (s, ctx) => {
+      const target = jangoTarget(s, ctx)
+      return target ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-exhaust`, controller: ctx.owner, cost: 0, text: 'exhaust that enemy unit', then: resume(ctx, 'back', target) }) : s
+    },
+  }],
+  ifYouDo: (s, ctx) => exhaustUnit(ctx.step === 'front' ? exhaustLeader(s, ctx.owner) : s, ctx.unitChosen!),
+})
 
 // ── "When you play an event" ───────────────────────────────────────────────────────────────────
 // `whenPlayCard` covers every type on both sides, so the card states both.

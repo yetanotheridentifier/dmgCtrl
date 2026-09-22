@@ -1,4 +1,4 @@
-import type { DamageSource, GameState, PendingChoice, PendingTrigger, PlayerId, UnitState } from './types'
+import type { DamageDealt, DamageSource, GameState, PendingChoice, PendingTrigger, PlayerId, UnitState } from './types'
 import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordDamagePrevented, recordUnitLeftPlay, recordDefeatedWhileAttacking, pushChoice, abilityCardIds } from './types'
 import type { DamagePreventionContext } from './abilities'
 import { enqueueTriggers, drainTriggers } from './triggerQueue'
@@ -7,7 +7,7 @@ import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { collectPlayerTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
-import { fireUpgradesDefeated, fireUnitsTrigger, damageIsUnpreventable, releaseCaptured } from './effects'
+import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt } from './effects'
 
 /**
  * How much of an instance of damage the cards in play stop before it lands (Cassian Andor, Boba
@@ -83,7 +83,8 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   const p = state.players[owner]
   const survivors: UnitState[] = []
   const defeated: UnitState[] = []
-  const damagedSurvivors: { instanceId: string; amount: number }[] = []
+  // Every unit actually dealt damage, survivor or not, for the damage event.
+  const dealt: DamageDealt['units'] = []
   const damagedIds: string[] = []
   // Spending a shield DEFEATS the token (#419), so its owner reacts just as they would to a card
   // upgrade dying. Collected here and settled in `finishDefeats` alongside the upgrades lost to
@@ -127,18 +128,18 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
     const total = u.damage + extra
     const next = extra > 0 || upgrades !== u.upgrades ? { ...u, damage: total, upgrades } : u
     // `statCtx` lets the combat defeat check see combat-only debuffs (Scion Shuttle's -1-1).
-    if (total >= effectiveHp(state, next, statCtx) && !survivesNoHp(state, u)) {
-      defeated.push(next)
-    } else {
-      survivors.push(next)
-      // "When a friendly unit is dealt damage and survives" (Rancor Keeper).
-      if (extra > 0) damagedSurvivors.push({ instanceId: u.instanceId, amount: extra })
-    }
+    const dies = total >= effectiveHp(state, next, statCtx) && !survivesNoHp(state, u)
+    if (dies) defeated.push(next)
+    else survivors.push(next)
+    if (extra > 0) dealt.push({ instanceId: u.instanceId, cardId: u.cardId, amount: extra, survived: !dies })
   }
 
   // The attacker's own combat damage is applied with `attacking` set, which is what "defeated while
   // attacking" reads.
+  const queued = state.pendingTriggers?.length ?? 0
   let result = finishDefeats(state, owner, survivors, defeated, byCombat, spentShieldOwners, defer, byCombat && statCtx.attacking === true)
+  // The defeats this damage caused were just batched; its damage-dealt abilities join that batch.
+  const joinsDefeats = (result.pendingTriggers?.length ?? 0) > queued
   if (preventNextSpent.length > 0) {
     const kept = (result.lastingEffects ?? []).filter(e => !(e.preventNext && preventNextSpent.includes(e.targetInstanceId)))
     result = { ...result, lastingEffects: kept.length > 0 ? kept : undefined }
@@ -150,7 +151,12 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   for (const id of preventedIds) result = recordDamagePrevented(result, id)
   // `byCombat` travels with the event: cards are printed at this point both ways ("dealt damage and
   // survives" vs Tarfful's "dealt COMBAT damage and isn't defeated"), and only the caller knows which.
-  if (damagedSurvivors.length > 0) result = fireUnitsTrigger(result, 'whenFriendlyDamagedSurvives', owner, { damagedSurvivors, byCombat })
+  // The dealer is read off the board before the damage, while a unit it defeats is still there to name.
+  if (dealt.length > 0) {
+    const dealer = damageDealer(state, source, byCombat)
+    const event: DamageDealt = { owner, units: dealt, byCombat, ...(dealer ? { dealer } : {}) }
+    result = enqueueTriggers(result, collectDamageDealt(result, event), defer || joinsDefeats)
+  }
   // Resolve the batch here, which is where it used to resolve. `drainTriggers` stops of its own accord
   // as soon as a player has something to order, so deferral costs nothing when there is no decision:
   // the overwhelmingly common single-ability defeat behaves exactly as it did.

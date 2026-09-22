@@ -294,7 +294,7 @@ describe('whenDrawCards — Axe Woves (169)', () => {
   })
 })
 
-describe('whenOwnBaseDamaged — Blade Three (204)', () => {
+describe('your base is dealt damage — Blade Three (204)', () => {
   it('gains an Advantage token when its controller’s base is damaged', () => {
     const s = state({ cards: G, players: { player: rich({ units: [unit('b', 'ASH_204')] }), opponent: player() } })
     expect(adv(U(dealDamageToBase(s, 'player', 3), 'b'))).toBe(1)

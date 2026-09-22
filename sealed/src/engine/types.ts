@@ -222,6 +222,32 @@ export interface PlayerState {
 export interface DamageSource {
   cardId: string
   controller: PlayerId
+  /**
+   * The in-play instance whose ability or combat it was, when there is one: the attacker or defender
+   * in combat, or the unit an ability belongs to. "When a friendly unit deals damage" (Jango Fett)
+   * reads it; a leader's front, a base or an event names none.
+   */
+  instanceId?: string
+}
+
+/**
+ * One damage event, as `whenDamageDealt` carries it: every unit of one player dealt damage by a single
+ * application (whether or not it survived), or that player's base, and who dealt it.
+ */
+export interface DamageDealt {
+  /** Whose units or base were dealt the damage. */
+  owner: PlayerId
+  /** Each unit dealt damage, after prevention and Shields, with whether it survived. */
+  units: { instanceId: string; cardId: string; amount: number; survived: boolean }[]
+  /** Damage dealt to `owner`'s base, after prevention. */
+  base?: number
+  byCombat: boolean
+  /**
+   * Who dealt it, where the engine knows: the attacking or defending unit in combat, the card an
+   * ability or a choice belongs to, or the effect that was resolving when the damage was dealt.
+   * `unitId` is set only when the dealer is a unit in play ("a friendly unit deals damage").
+   */
+  dealer?: { controller: PlayerId; cardId: string; unitId?: string }
 }
 
 /** A pending "your next unit …" grant. All fields are plain data (GameState is JSON). */
@@ -367,6 +393,12 @@ export interface GameState {
    * are two abilities the player orders (the reported case was exactly that).
    */
   pendingTriggers?: PendingTrigger[]
+  /**
+   * The card whose effect is resolving right now, set only for the duration of the effect call and
+   * never at rest. Damage the effect deals without naming a source is attributed to it for the damage
+   * event (`DamageDealt.dealer`) and for nothing else: prevention still reads only a named source.
+   */
+  resolvingSource?: DamageSource
   /**
    * Which side is currently entitled to resolve its triggers, once CR 7.6.10 has been answered.
    *
@@ -776,17 +808,12 @@ export interface TriggerContext {
   upgradePlayed?: boolean
   /** `whenPlayUpgrade`: the upgrade card just played. */
   playedCardId?: string
-  /** `whenFriendlyDamagedSurvives`: each unit that was dealt damage and survived, with how much (Jabba the Hutt). */
-  damagedSurvivors?: { instanceId: string; amount: number }[]
   /**
-   * `whenFriendlyDamagedSurvives` / `whenOwnBaseDamaged`: the damage was **combat** damage.
-   *
-   * Cards are printed both ways at both points and the two readings are not interchangeable:
-   * "dealt damage and survives" (Arena Acklay) fires on an ability's ping, "dealt combat damage and
-   * isn't defeated" (Tarfful) does not. The flag is the one already threaded through
-   * `applyUnitDamage`, surfaced rather than recomputed.
+   * `whenDamageDealt`: the damage event. The point fires on **both** players, so every registration
+   * states which side's units or base it reads (`damageDealt.owner`) and, where it cares, whose damage
+   * it was (`damageDealt.dealer`).
    */
-  byCombat?: boolean
+  damageDealt?: DamageDealt
   /**
    * `whenDrawCards`: who drew. The point fires on **both** players' units, because a card reads it
    * either about itself ("when you draw", Axe Woves) or about the other side ("when an opponent
