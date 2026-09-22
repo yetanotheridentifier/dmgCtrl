@@ -395,6 +395,61 @@ export function resourceTopOfDeck(state: GameState, owner: PlayerId): GameState 
 }
 
 /**
+ * Put `cardId` into play as a resource of `controller`: exhausted (CR 1.7.7) unless the card says to
+ * ready it. The card must already be out of the zone it came from. `owner` is recorded only where it
+ * is not `controller`, as `UnitState.owner` is.
+ */
+export function addResource(state: GameState, controller: PlayerId, cardId: string, owner: PlayerId = controller, ready = false): GameState {
+  const resource = { cardId, exhausted: !ready, ...(owner !== controller ? { owner } : {}) }
+  return updatePlayer(state, controller, { resources: [...state.players[controller].resources, resource] })
+}
+
+/**
+ * Take the resources at `indices` out of `controller`'s zone and put each card in its owner's discard
+ * pile or hand. CR 1.7.4: which of a player's resources are ready is theirs to rearrange, and only the
+ * two counts are game state. So the cards leaving are whichever the ability chose, but the counts fall
+ * as the controller would have them: exhausted resources go first, unless the ability names ready ones
+ * (`ready`, Greater Sarlacc), when the ready count falls by one for each.
+ */
+function removeResources(state: GameState, controller: PlayerId, indices: number[], to: 'discard' | 'hand', ready: boolean): GameState {
+  const p = state.players[controller]
+  const leaving = new Set(indices.filter(i => i >= 0 && i < p.resources.length))
+  if (leaving.size === 0) return state
+  const readyBefore = p.resources.filter(r => !r.exhausted).length
+  const kept = p.resources.filter((_, i) => !leaving.has(i))
+  const readyAfter = ready ? Math.max(0, readyBefore - leaving.size) : Math.min(readyBefore, kept.length)
+  // Keep each card's own state where the counts allow, changing as few as it takes.
+  let surplus = kept.filter(r => !r.exhausted).length - readyAfter
+  const resources = kept.map(r => {
+    if (surplus > 0 && !r.exhausted) { surplus--; return { ...r, exhausted: true } }
+    if (surplus < 0 && r.exhausted) { surplus++; return { ...r, exhausted: false } }
+    return r
+  })
+  let next = updatePlayer(state, controller, { resources })
+  for (const i of [...leaving].sort((a, b) => a - b)) {
+    const { cardId, owner = controller } = p.resources[i]
+    const o = next.players[owner]
+    next = updatePlayer(next, owner, to === 'hand' ? { hand: [...o.hand, cardId] } : { discard: [...o.discard, cardId] })
+  }
+  return next
+}
+
+/** Defeat the resource at `index` of `controller`'s zone into its owner's discard pile (CR 1.x.f). See `removeResources`. */
+export function defeatResource(state: GameState, controller: PlayerId, index: number, opts: { ready?: boolean } = {}): GameState {
+  return removeResources(state, controller, [index], 'discard', opts.ready === true)
+}
+
+/** Defeat several of `controller`'s resources at once (Greater Sarlacc's ready ones). See `removeResources`. */
+export function defeatResources(state: GameState, controller: PlayerId, indices: number[], opts: { ready?: boolean } = {}): GameState {
+  return removeResources(state, controller, indices, 'discard', opts.ready === true)
+}
+
+/** Return the resource at `index` of `controller`'s zone to its owner's hand. See `removeResources`. */
+export function returnResourceToHand(state: GameState, controller: PlayerId, index: number): GameState {
+  return removeResources(state, controller, [index], 'hand', false)
+}
+
+/**
  * Heal `amount` damage from a player's base — never below 0.
  *
  * **The only place a base is healed**, Restore included, which is what lets one card shut all of it

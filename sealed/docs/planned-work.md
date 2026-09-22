@@ -155,7 +155,8 @@ Two phases:
   the one leader that flips between two faces rather than deploying).
   **Bases are finished** (#460), which completes Phase 1: the engine gained base abilities (an Epic
   Action once a game, an aura over units in play, and the two setup numbers a base can change), and
-  the eight LAW bases that play any card type from hand went to #468 with Sundari Palace to #475.
+  the eight LAW bases that play any card type from hand went to #468, and Sundari Palace has shipped
+  with the resource zone (#475).
   The ticket bodies carry the sizes from before token units, Credit
   tokens, Disclose and indirect damage were blockers, so most are smaller than they say (bases barely); the corrected counts are commented on each.
 - **Phase 2 (#461 to #476, #602 to #605), 585 cards blocked by exactly one thing each**, ordered by how
@@ -176,12 +177,21 @@ Two phases:
   TWI's 23 Exploit cards shipped (seven play as printed, Count Dooku's leader gives it) with HMW's The
   Marauder on the same step, and Osi Sobeck waits on capture (#466). Exploit is not offered on a play
   an ability makes (`playCardFrom`, `playUnitFromHand`), which no sealed Exploit card needs yet.
+  **The resource zone is finished** (#475): resources are defeated, returned to hand and put into play
+  from any zone, a resource records its owner where that is not its controller, and Greater Sarlacc is
+  Exploit's step on ready resources. 19 cards shipped (HMW's Greater Sarlacc and Giant Gorax among
+  them). Each card left touching the zone waits on another mechanic's ticket: Smuggle #469 (Lando
+  Calrissian's leader, Enterprising Lackeys, and DJ, which also needs taking control of a resource, the
+  one piece of the zone not built), Credit #602 (Chewbacca, Intimidator), the Force #462 (Eeth Koth),
+  Disclose #603 (Chancellor Valorum), Plot #470 (When Has Become Now) and Bounty #467 (Outlaw Corona,
+  Price on Your Head).
   **The trigger-head batch is finished** (#474, #680). Most heads needed only context on points that
   already fired; the damage points became one both-sides event (`whenDamageDealt`), and the heads no
   point raised got their own (a unit attacking, healing, the ready step, a card being drawn, a unit
   leaving play). "Choose two, in any order" is `chooseMode` with a queued continuation. The cards
   whose other blocker is a keyword are on that keyword's ticket (Disclose #603, the Force #462,
-  Pilot #465, Plot #470, Bounty #467, capture #466, an opponent-owned resource #475), and
+  Pilot #465, Plot #470, Bounty #467, capture #466), Arquitens Assault Cruiser (an opponent-owned
+  resource) shipped with #475, and
   Traitorous, Nabat Village and Lux Bonteri are on #686.
   Darth Vader, Victor Squadron Leader waits on #465 (his
   back is a Pilot), Queen Amidala (defeat a unit to prevent damage) is on #684, and Roger Roger (an
@@ -209,7 +219,7 @@ ability's damage) on #684, and Asajj Ventress (Raid swapped for Restore on an at
 
 **70 were blocked by exactly one thing**: the 18 Fortify, 18 Weakness and 14 Beast-token cards are
 built (less one Fortify card lifted, above), and the rest are the 3 compound-head cards (built, #463), 3 trigger-head cards (built, #680),
-#468 (1), #475 (1) and the one-off heads. The 2 play-from-discard cards are built (#471), which also
+#468 (1), the resource zone (1, built, #475) and the one-off heads. The 2 play-from-discard cards are built (#471), which also
 closed Boga, Tireless Magnaguard and L3-37's other blockers.
 
 **The deferred-cards spike (#477) closed with no twin.** A recount against the registry found 192
@@ -219,8 +229,7 @@ registration (six HMW among them, and "when an opponent plays" now read from the
 mechanic tickets above by comment, #680 for trigger heads no point raises, #678 for the discard
 record, and five new ones, #682 losing abilities (8), #683 re-using abilities (7), #684 replacement
 effects (5), #685 cards that need only writing (22) and #686 the one-offs no other ticket owns (23).
-**HMW has 10 cards outstanding**: Asajj Ventress (#476), Giant Gorax and Greater Sarlacc (#475), Vernestra Rwoh
-(#683), Ty Yorrick and Vice Admiral Rampart (#684), and Jar Jar Binks, The First Legion, Zam Wesell and
+**HMW has 8 cards outstanding**: Asajj Ventress (#476), Vernestra Rwoh (#683), Ty Yorrick and Vice Admiral Rampart (#684), and Jar Jar Binks, The First Legion, Zam Wesell and
 Maul's front (#686).
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted to the ticket that owns its
@@ -233,9 +242,9 @@ Three findings that contradict the assumptions the programme started from:
   set, and with Shield the most common token in the game. They also cost the least of any mechanic in the
   programme: the token was already a card in the db and the token machinery already attached it, so the
   work was registrations plus a handful of helpers.
-- **Resource manipulation is near the bottom at 15 cards, not the top.** Most resource prose already
-  exists. What matters is *playing a card out of the resource zone*, which gates Smuggle (#469) and
-  Plot (#470), roughly 50 cards. That door is built: see `playCardFrom` in `choices.md`.
+- **Resource manipulation was near the bottom at 15 cards, not the top.** What matters is *playing a
+  card out of the resource zone*, which gates Smuggle (#469) and Plot (#470), roughly 50 cards. That
+  door is built: see `playCardFrom` in `choices.md`.
 - **Bounty is gated behind capture**, not resources.
 
 The 292 vanilla and keyword-only cards need no ticket: `PLAYABLE_AS_PRINTED` in

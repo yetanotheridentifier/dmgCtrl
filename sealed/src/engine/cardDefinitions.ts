@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers } from './abilities'
-import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade } from './effects'
+import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -8,9 +8,9 @@ import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_
 import { playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
 import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
-import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, lowestCost, raiseExploit } from './legalMoves'
+import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
-import { canAfford } from './resources'
+import { canAfford, payCost } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
 import type { CombatContext, DiscardPlayGrant, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PlayerId, PlayFromTail, PlayFromZone, UnitState, UpgradeAttachment, UpgradeRef } from './types'
 
@@ -4637,14 +4637,7 @@ registerCard('LAW_103', unitThenWp("Defeat an enemy non-leader unit. Its control
   (s, ctx) => {
     const found = findUnit(s, ctx.targetInstanceId!)
     if (!found) return s
-    const cardOwner = found.unit.owner ?? found.owner
-    const next = defeatUnit(s, found.unit.instanceId)
-    const discard = next.players[cardOwner].discard
-    const at = discard.lastIndexOf(found.unit.cardId)
-    if (at === -1) return next // a token leaves no card behind
-    // Resourced exhausted, as every resource an ability puts into play is.
-    const moved = updatePlayer(next, cardOwner, { discard: discard.filter((_, i) => i !== at) })
-    return updatePlayer(moved, found.owner, { resources: [...moved.players[found.owner].resources, { cardId: found.unit.cardId, exhausted: true }] })
+    return resourceFromDiscard(defeatUnit(s, found.unit.instanceId), found.unit.owner ?? found.owner, found.owner, found.unit.cardId)
   }))
 registerCard('JTL_043', unitThenWp('Take control of a non-leader unit, then defeat it.', nonLeader, 'take control of a non-leader unit, then defeat it', false, // No Glory, Only Results
   (s, ctx) => {
@@ -4817,14 +4810,20 @@ registerCard('TWI_225', whenPlayed('If you control exactly one unit, play a non-
   return playFromHand(s, ctx, { costDelta: -5, test: c => !printedTrait(c, 'Vehicle') && (c?.traits ?? []).some(t => traits.includes(t.toLowerCase())) })
 }))
 
-// Resourcing. The event is already in its owner's discard pile as its When Played resolves.
-const resourceThisEvent = (s: GameState, ctx: { owner: PlayerId; cardId: string }): GameState => {
-  const p = s.players[ctx.owner]
-  const at = p.discard.lastIndexOf(ctx.cardId)
+/**
+ * Move `cardId` out of `pile`'s discard pile into play as a resource of `controller`: exhausted, as
+ * every resource an ability puts into play is (CR 1.7.7), unless the card says to ready it. The pile
+ * is the card's owner's, so a card resourced out of an opponent's pile stays theirs. No-op if the
+ * card is not there (a token leaves no card behind).
+ */
+const resourceFromDiscard = (s: GameState, pile: PlayerId, controller: PlayerId, cardId: string, ready = false): GameState => {
+  const discard = s.players[pile].discard
+  const at = discard.lastIndexOf(cardId)
   if (at === -1) return s
-  // Exhausted, as every resource an ability puts into play is.
-  return updatePlayer(s, ctx.owner, { discard: p.discard.filter((_, i) => i !== at), resources: [...p.resources, { cardId: ctx.cardId, exhausted: true }] })
+  return addResource(updatePlayer(s, pile, { discard: discard.filter((_, i) => i !== at) }), controller, cardId, pile, ready)
 }
+// Resourcing. The event is already in its owner's discard pile as its When Played resolves.
+const resourceThisEvent = (s: GameState, ctx: { owner: PlayerId; cardId: string }): GameState => resourceFromDiscard(s, ctx.owner, ctx.owner, ctx.cardId)
 const resupply = whenPlayed('Put this event into play as a resource.', (s, ctx) => resourceThisEvent(s, ctx))
 registerCard('TWI_127', resupply) // Resupply
 registerCard('SOR_126', resupply) // Resupply
@@ -6942,15 +6941,12 @@ registerCard('TS26_39', { // Captain Vaughn
   ifYouDo: (s, ctx) => (ctx.step === 'hand' ? handCardThen(s, ctx, 'put a card from your hand on top of your deck', 'top') : handToDeck(s, ctx.owner, ctx.handIndex, 'top')),
 })
 /** The defeated card itself, out of whichever discard pile it went to and into play as a ready resource. */
-const resourceDefeatedReady = (s: GameState, ctx: { owner: PlayerId; cardId: string }): GameState => {
+const resourceDefeated = (ready: boolean) => (s: GameState, ctx: { owner: PlayerId; cardId: string }): GameState => {
   const pile = [ctx.owner, opponentOf(ctx.owner)].find(p => s.players[p].discard.includes(ctx.cardId))
-  if (!pile) return s
-  const discard = s.players[pile].discard
-  const at = discard.lastIndexOf(ctx.cardId)
-  const removed = updatePlayer(s, pile, { discard: discard.filter((_, i) => i !== at) })
-  return updatePlayer(removed, ctx.owner, { resources: [...removed.players[ctx.owner].resources, { cardId: ctx.cardId, exhausted: false }] })
+  return pile ? resourceFromDiscard(s, pile, ctx.owner, ctx.cardId, ready) : s
 }
-const superlaserTechnician = defeated(mayPayWp('You may put this unit into play as a resource and ready it.', 0, 'put this unit into play as a resource and ready it', resourceDefeatedReady))
+const superlaserTechnician = defeated(mayPayWp('You may put this unit into play as a resource and ready it.', 0, 'put this unit into play as a resource and ready it', resourceDefeated(true)))
+registerCard('LAW_159', defeated(mayPayWp("You may resource this unit from its owner's discard pile.", 0, "resource this unit from its owner's discard pile", resourceDefeated(false)))) // Expendable Mercenary
 registerCard('SHD_085', superlaserTechnician) // Superlaser Technician
 registerCard('SOR_083', superlaserTechnician) // Superlaser Technician (a different card with the same text: 2/1 rather than 2/3)
 
@@ -8950,12 +8946,12 @@ registerCard('HMW_041', { // Keeper of Skara Nal
   },
 })
 
-/** Put the hand card at `handIndex` into play as an exhausted resource. */
-const resourceFromHand = (s: GameState, owner: PlayerId, handIndex: number | undefined): GameState => {
+/** Put the hand card at `handIndex` into play as a resource: exhausted, unless the card says to ready it. */
+const resourceFromHand = (s: GameState, owner: PlayerId, handIndex: number | undefined, ready = false): GameState => {
   const p = s.players[owner]
   const cardId = handIndex === undefined ? undefined : p.hand[handIndex]
   if (cardId === undefined) return s
-  return updatePlayer(s, owner, { hand: p.hand.filter((_, i) => i !== handIndex), resources: [...p.resources, { cardId, exhausted: true }] })
+  return addResource(updatePlayer(s, owner, { hand: p.hand.filter((_, i) => i !== handIndex) }), owner, cardId, owner, ready)
 }
 registerCard('HMW_044', { // Ima-Gun Di
   ...defeated(whenPlayed('If you control fewer resources than an opponent, you may resource a card from your hand. If you do, resource the top card of your deck.', (s, ctx) => {
@@ -10518,7 +10514,7 @@ registerCard('TWI_138', { // Count Dooku
 /** Count Dooku's front: the Separatist cards he could play, with the Exploit 1 he gives them priced in. */
 const dookuPlayable = (s: GameState, owner: PlayerId): number[] => s.players[owner].hand.flatMap((id, i) => {
   const c = s.cards[id]
-  return c && (c.type === 'unit' || c.type === 'event') && isSeparatist(c) && canAfford(s.players[owner], lowestCost(s, owner, c, 1)) ? [i] : []
+  return c && (c.type === 'unit' || c.type === 'event') && isSeparatist(c) && canAffordFromHand(s, owner, c, 1) ? [i] : []
 })
 registerCard('TWI_005', allOf( // Count Dooku
   leaderFront('Play a Separatist card from your hand. It gains Exploit 1.', {
@@ -10534,3 +10530,258 @@ registerCard('TWI_005', allOf( // Count Dooku
   } },
   attacks('The next Separatist card you play this phase gains Exploit 3.', (s, ctx) => grantNextUnit(s, ctx.owner, { trait: 'Separatist', anyCard: true, exploit: 3 })),
 ))
+
+// ── The resource zone: resources defeated, returned to hand, or taken ─────────────────────────────
+// Which card leaves is the ability's pick, but only the ready and exhausted counts are game state
+// (CR 1.7.4), which `defeatResource` and `returnResourceToHand` apply. A resource goes to its owner's
+// discard pile or hand (CR 1.7.5), which `ResourceState.owner` records where it is not the holder.
+
+interface ResourcePick { holder: PlayerId; text: string; step: string; optional?: boolean; chooser?: PlayerId; indices?: number[] }
+/**
+ * Pick one of `holder`'s resources (every one, or `indices`) for the card's `ifYouDo`, which reads the
+ * pick back with `resourcePicked`. The candidates are the cards, which whoever picks may look at: their
+ * own resources, or enemy ones an ability lets them see.
+ */
+const resourceThen = (s: GameState, ctx: Resumable, o: ResourcePick): GameState => {
+  const zone = s.players[o.holder].resources
+  const indices = o.indices ?? zone.map((_, i) => i)
+  if (indices.length === 0) return s
+  return pushChoice(s, {
+    // Two delayed effects can raise one at the same moment, so the id counts what is already waiting.
+    kind: 'selectCardThen', id: `${ctx.sourceInstanceId ?? ctx.cardId}-${o.step}-${s.pendingChoices?.length ?? 0}`,
+    controller: o.chooser ?? ctx.owner, candidates: indices.map(i => zone[i].cardId), text: o.text,
+    then: resume(ctx, `${o.step}@${o.holder}@${indices.join(',')}`), ...mayFlag(o.optional ?? false),
+  })
+}
+/** The resource a `resourceThen` pick named: the step it was raised at, whose zone, and where the card is now. */
+const resourcePicked = (s: GameState, ctx: IfYouDoContext): { step: string; holder: PlayerId; index: number } | undefined => {
+  const [step, holder, list] = (ctx.step ?? '').split('@') as [string, PlayerId | undefined, string | undefined]
+  if (!holder || list === undefined || ctx.optionIndex === undefined) return undefined
+  const zone = s.players[holder].resources
+  const index = Number(list.split(',')[ctx.optionIndex])
+  const at = zone[index]?.cardId === ctx.cardChosen ? index : zone.findIndex(r => r.cardId === ctx.cardChosen)
+  return at === -1 ? undefined : { step, holder, index: at }
+}
+/** Up to 3 of `holder`'s resources, at random where there are more: "look at" or "reveal 3 enemy resources". */
+const threeResources = (s: GameState, holder: PlayerId): [GameState, number[]] => {
+  const all = s.players[holder].resources.map((_, i) => i)
+  if (all.length <= 3) return [s, all]
+  return [{ ...s, rngSeed: nextSeed(s.rngSeed) }, seededShuffle(all, s.rngSeed).slice(0, 3).sort((a, b) => a - b)]
+}
+/** The context a delayed effect's own pick resumes with: it has no unit, so the card names it. */
+const delayedCtx = (e: { cardId: string; owner: PlayerId }): Resumable => ({ owner: e.owner, cardId: e.cardId, sourceInstanceId: `${e.cardId}-delayed` })
+/** "Defeat a resource you control" (or a friendly one), as a pick; `step` must be `'defeat'` for `defeatPicked`. */
+const defeatOwnResource = (s: GameState, ctx: Resumable, text: string, chooser = ctx.owner): GameState =>
+  resourceThen(s, ctx, { holder: chooser, chooser, text, step: 'defeat' })
+/** Defeat the resource a `resourceThen` pick named, or nothing if it has gone. */
+const defeatPicked = (s: GameState, ctx: IfYouDoContext): GameState => {
+  const pick = resourcePicked(s, ctx)
+  return pick ? defeatResource(s, pick.holder, pick.index) : s
+}
+
+registerCard('HMW_049', { whilePlaying: { resources: true, discount: 3 } }) // Greater Sarlacc
+
+registerCard('HMW_188', { // Giant Gorax
+  ...onAttack(alsoAt(whenPlayed('If you control an Endor base, each opponent chooses one: You deal 3 damage to a unit or base they control. They discard a card from their hand and defeat a resource they control.', (s, ctx) =>
+    (controlsBaseWith(s, ctx.owner, 'Endor')
+      ? pushChoice(s, {
+        kind: 'chooseMode', id: `${ctx.sourceInstanceId}-gorax`, controller: opponentOf(ctx.owner), modes: ['damage', 'discard'],
+        labels: ['Your opponent deals 3 damage to a unit or base you control', 'Discard a card from your hand and defeat a resource you control'],
+        then: resume(ctx),
+      })
+      : s)), 'whenDefeated')),
+  ifYouDo: (s, ctx) => {
+    const opp = opponentOf(ctx.owner)
+    const defeatTheirs = (next: GameState) => defeatOwnResource(next, ctx, 'defeat a resource you control', opp)
+    if (ctx.step === 'damage') return damageChoice(s, ctx, 3, s.players[opp].units, [opp])
+    if (ctx.step === 'discard') return s.players[opp].hand.length ? discards(s, opp, 1, `${ctx.sourceInstanceId}-discard`, resume(ctx, 'discarded')) : defeatTheirs(s)
+    if (ctx.step === 'discarded') return defeatTheirs(s)
+    return defeatPicked(s, ctx)
+  },
+})
+
+registerCard('SEC_242', { // Elia Kane
+  ...whenPlayed('Look at 3 enemy resources. You may defeat 1 of them. If you do, its controller puts the top card of their deck into play as a resource and readies it.', (s, ctx) => {
+    const [next, seen] = threeResources(s, opponentOf(ctx.owner))
+    return resourceThen(next, ctx, { holder: opponentOf(ctx.owner), indices: seen, optional: true, step: 'elia', text: 'defeat 1 of these enemy resources; its controller resources the top card of their deck, ready' })
+  }),
+  ifYouDo: (s, ctx) => {
+    const pick = resourcePicked(s, ctx)
+    return pick ? resourceTopReady(defeatResource(s, pick.holder, pick.index), pick.holder) : s
+  },
+})
+
+registerCard('SHD_102', { // The Marauder
+  ...whenPlayed('Choose a card in your discard pile. Put it into play as a resource if it shares a name with a unit you control.', (s, ctx) => {
+    // Choosing one that shares no name does nothing, so only the ones that do are offered.
+    const names = new Set(s.players[ctx.owner].units.map(u => s.cards[u.cardId]?.name))
+    const pile = s.players[ctx.owner].discard.filter(id => names.has(s.cards[id]?.name))
+    return pile.length ? cardThen(s, ctx, pile, 'choose a card in your discard pile to put into play as a resource', false, 'marauder') : s
+  }),
+  ifYouDo: (s, ctx) => resourceFromDiscard(s, ctx.owner, ctx.owner, ctx.cardChosen!),
+})
+
+const landoPick = (s: GameState, ctx: Resumable, n: number): GameState =>
+  resourceThen(s, ctx, { holder: ctx.owner, optional: true, step: `lando${n}`, text: `return a friendly resource to its owner's hand (${n} of up to 2)` })
+registerCard('SOR_197', { // Lando Calrissian
+  ...whenPlayed("Return up to 2 friendly resources to their owners' hands.", (s, ctx) => landoPick(s, ctx, 1)),
+  ifYouDo: (s, ctx) => {
+    const pick = resourcePicked(s, ctx)
+    if (!pick) return s
+    const next = returnResourceToHand(s, pick.holder, pick.index)
+    return pick.step === 'lando1' ? landoPick(next, ctx, 2) : next
+  },
+})
+
+const sundariOffer = (s: GameState, ctx: Resumable, left: number): GameState =>
+  (left > 0 ? handCardThen(s, ctx, 'resource a card from your hand and ready it (a friendly resource is defeated as the regroup phase starts)', `sundari:${left}`, undefined, true) : s)
+registerCard('TS26_12', { // Sundari Palace
+  ...baseEpic('For each friendly leader unit, you may resource a card from your hand and ready it. If you do, defeat that many friendly resources at the start of the regroup phase.', {
+    usable: (s, ctx) => leaderUnitCount(s, ctx.owner) > 0 && s.players[ctx.owner].hand.length > 0,
+    effect: (s, ctx) => sundariOffer(s, ctx, leaderUnitCount(s, ctx.owner)),
+  }),
+  ifYouDo: (s, ctx) => {
+    if (!ctx.step?.startsWith('sundari:')) return defeatPicked(s, ctx)
+    // One delayed defeat for each card resourced, so "that many" is counted as they happen.
+    const next = addDelayedEffect(resourceFromHand(s, ctx.owner, ctx.handIndex!, true), { cardId: 'TS26_12', owner: ctx.owner, when: 'regroupStart' })
+    return sundariOffer(next, ctx, Number(ctx.step.slice('sundari:'.length)) - 1)
+  },
+  delayed: (s, e) => defeatOwnResource(s, delayedCtx(e), 'defeat a friendly resource (Sundari Palace)'),
+})
+
+registerCard('LAW_029', { // Citadel Research Center
+  // "Epic Action [C=1]": the cost is paid before the effect, as it would be for a leader's action.
+  ...baseEpic("[C=1]: Return a friendly resource to its owner's hand. If you do, resource the top card of your deck.", {
+    usable: (s, ctx) => canAfford(s.players[ctx.owner], 1),
+    effect: (s, ctx) => resourceThen(updatePlayer(s, ctx.owner, payCost(s.players[ctx.owner], 1)), ctx, {
+      holder: ctx.owner, step: 'citadel', text: "return a friendly resource to its owner's hand, then resource the top card of your deck",
+    }),
+  }),
+  ifYouDo: (s, ctx) => {
+    const pick = resourcePicked(s, ctx)
+    return pick ? resourceTopOfDeck(returnResourceToHand(s, pick.holder, pick.index), ctx.owner) : s
+  },
+})
+
+const opponentMayReadyResource: CardDefinition = {
+  ...defeated(whenPlayed('Each opponent may ready a resource.', (s, ctx) =>
+    (s.players[opponentOf(ctx.owner)].resources.some(r => r.exhausted)
+      ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-ready`, controller: opponentOf(ctx.owner), cost: 0, text: 'ready a resource', then: resume(ctx) })
+      : s))),
+  ifYouDo: (s, ctx) => readyResource(s, opponentOf(ctx.owner)),
+}
+registerCard('SEC_215', opponentMayReadyResource) // Emissary's Sheathipede
+registerCard('TS26_76', opponentMayReadyResource) // Wartime Profiteer
+
+const HUNTER = 'reveal a resource you control; if it shares a name with a friendly unique unit, it returns to its owner\'s hand and the top card of your deck is resourced'
+const hunterReveal = (optional: boolean) => (s: GameState, ctx: Resumable): GameState =>
+  resourceThen(s, ctx, { holder: ctx.owner, optional, step: 'hunter', text: HUNTER })
+registerCard('SHD_009', { // Hunter
+  ...leaderFront("Reveal a resource you control. If it shares a name with a friendly unique unit, return the resource to its owner's hand and put the top card of your deck into play as a resource.", {
+    cost: 1,
+    usable: (s, ctx) => s.players[ctx.owner].resources.length > 0,
+    effect: hunterReveal(false),
+  }),
+  ...attacks("You may reveal a resource you control. If it shares a name with a friendly unique unit, return the resource to its owner's hand and put the top card of your deck into play as a resource.",
+    (s, ctx) => hunterReveal(true)(s, { ...ctx, cardId: 'SHD_009' })),
+  ifYouDo: (s, ctx) => {
+    const pick = resourcePicked(s, ctx)
+    const name = s.cards[ctx.cardChosen ?? '']?.name
+    const shared = s.players[ctx.owner].units.some(u => s.cards[u.cardId]?.unique && s.cards[u.cardId]?.name === name)
+    return pick && shared ? resourceTopOfDeck(returnResourceToHand(s, pick.holder, pick.index), ctx.owner) : s
+  },
+})
+
+registerCard('SHD_105', { // Spark of Hope
+  ...whenPlayed('Choose a unit in your discard pile. If it was defeated this phase, put it into play as a resource.', (s, ctx) => {
+    const units = s.players[ctx.owner].discard.filter(id => printedUnit(s.cards[id]))
+    return units.length ? cardThen(s, ctx, units, 'choose a unit in your discard pile; it becomes a resource if it was defeated this phase', false, 'spark') : s
+  }),
+  ifYouDo: (s, ctx) => {
+    const id = ctx.cardChosen!
+    // Defeated under either player's control: a unit an opponent had taken is still in its owner's pile.
+    const fell = [...defeatedThisPhase(s, ctx.owner), ...defeatedThisPhase(s, opponentOf(ctx.owner))].includes(id)
+    return fell ? resourceFromDiscard(s, ctx.owner, ctx.owner, id) : s
+  },
+})
+
+registerCard('SHD_114', whenPlayed('Reveal 3 enemy resources. Defeat each resource with the Smuggle keyword revealed this way. For each resource defeated this way, its controller puts the top card of their deck into play as a resource.', (s, ctx) => { // Scanning Officer
+  const opp = opponentOf(ctx.owner)
+  const [next, seen] = threeResources(s, opp)
+  const zone = next.players[opp].resources
+  const smuggled = seen.filter(i => (next.cards[zone[i].cardId]?.keywords ?? []).some(k => k.name === 'Smuggle'))
+  return smuggled.reduce(acc => resourceTopOfDeck(acc, opp), defeatResources(next, opp, smuggled))
+}))
+
+registerCard('SHD_154', { // Wrecker
+  ...whenPlayed('You may defeat a friendly resource. If you do, deal 5 damage to a ground unit.', (s, ctx) =>
+    resourceThen(s, ctx, { holder: ctx.owner, optional: true, step: 'wrecker', text: 'defeat a friendly resource to deal 5 damage to a ground unit' })),
+  ifYouDo: (s, ctx) => {
+    const pick = resourcePicked(s, ctx)
+    if (!pick) return s
+    const next = defeatResource(s, pick.holder, pick.index)
+    return damageChoice(next, ctx, 5, allUnits(next).filter(u => u.arena === 'ground'))
+  },
+})
+
+registerCard('SHD_214', { // Frontier Trader
+  ...whenPlayed("You may return a resource you control to its owner's hand. If you do, you may put the top card of your deck into play as a resource.", (s, ctx) =>
+    resourceThen(s, ctx, { holder: ctx.owner, optional: true, step: 'trader', text: "return a resource you control to its owner's hand" })),
+  ifYouDo: (s, ctx) => {
+    const pick = resourcePicked(s, ctx)
+    if (!pick) return s
+    const next = returnResourceToHand(s, pick.holder, pick.index)
+    return next.players[ctx.owner].deck.length ? pushChoice(next, { kind: 'mayResourceTop', id: `${ctx.sourceInstanceId}-top`, controller: ctx.owner }) : next
+  },
+})
+
+const hanDefeatsLater = (s: GameState, owner: PlayerId): GameState => addDelayedEffect(s, { cardId: 'SOR_017', owner, when: 'actionPhaseStart' })
+registerCard('SOR_017', { // Han Solo
+  ...leaderFront('Put a card from your hand into play as a resource and ready it. At the start of the next action phase, defeat a resource you control.', {
+    usable: (s, ctx) => s.players[ctx.owner].hand.length > 0,
+    effect: (s, ctx) => handCardThen(s, ctx, 'put a card from your hand into play as a resource and ready it', 'hand'),
+  }),
+  ...attacks('Put the top card of your deck into play as a resource and ready it. At the start of the next action phase, defeat a resource you control.', (s, ctx) =>
+    hanDefeatsLater(resourceTopReady(s, ctx.owner), ctx.owner)),
+  ifYouDo: (s, ctx) => (ctx.step === 'hand' ? hanDefeatsLater(resourceFromHand(s, ctx.owner, ctx.handIndex!, true), ctx.owner) : defeatPicked(s, ctx)),
+  delayed: (s, e) => defeatOwnResource(s, delayedCtx(e), 'defeat a resource you control (Han Solo)'),
+})
+
+/** Guerilla Insurgency, for one player: defeat a resource, then discard 2; then the other player, then the damage. */
+const insurgencyFor = (s: GameState, ctx: Resumable, who: PlayerId): GameState => {
+  if (s.players[who].resources.length) return resourceThen(s, ctx, { holder: who, chooser: who, step: 'insurgency', text: 'defeat a resource you control' })
+  return insurgencyDiscard(s, ctx, who)
+}
+const insurgencyDiscard = (s: GameState, ctx: Resumable, who: PlayerId): GameState =>
+  (s.players[who].hand.length ? discards(s, who, 2, `${ctx.sourceInstanceId}-discard-${who}`, resume(ctx, `discarded:${who}`)) : insurgencyNext(s, ctx, who))
+const insurgencyNext = (s: GameState, ctx: Resumable, who: PlayerId): GameState =>
+  (who === ctx.owner ? insurgencyFor(s, ctx, opponentOf(ctx.owner)) : allUnits(s).filter(u => u.arena === 'ground').reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 4), s))
+registerCard('TWI_177', { // Guerilla Insurgency
+  ...whenPlayed('Each player defeats a resource they control and discards 2 cards from their hand. Deal 4 damage to each ground unit.', (s, ctx) => insurgencyFor(s, ctx, ctx.owner)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step?.startsWith('discarded:')) return insurgencyNext(s, ctx, ctx.step.slice('discarded:'.length) as PlayerId)
+    const pick = resourcePicked(s, ctx)
+    return pick ? insurgencyDiscard(defeatResource(s, pick.holder, pick.index), ctx, pick.holder) : s
+  },
+})
+
+registerCard('SHD_122', { abilities: [{ trigger: 'onAttackEnd', description: 'When this unit attacks and defeats a non-leader unit: Put the defeated unit into play as a resource under your control.', effect: (s, ctx) => { // Arquitens Assault Cruiser
+  const d = ctx.defeatedDefender
+  if (!ctx.defenderDefeated || !d || d.isLeader) return s
+  // Its owner's discard pile: a token leaves nothing there, and the card stays its owner's.
+  return resourceFromDiscard(s, d.owner ?? opponentOf(ctx.owner), ctx.owner, d.cardId)
+} }] })
+
+registerCard('SEC_008', { // Bail Organa
+  ...leaderFront("If a friendly unit was defeated this phase, return a friendly resource to its owner's hand. If you do, put the top card of your deck into play as a resource.", {
+    cost: 1,
+    usable: (s, ctx) => defeatedThisPhase(s, ctx.owner).length > 0 && s.players[ctx.owner].resources.length > 0,
+    effect: (s, ctx) => resourceThen(s, ctx, { holder: ctx.owner, step: 'bail', text: "return a friendly resource to its owner's hand, then resource the top card of your deck" }),
+  }),
+  abilities: [{ trigger: 'whenPlayCard', description: 'When you play a card from your resources: Heal 1 damage from your base.', effect: (s, ctx) =>
+    (ctx.playingPlayer === ctx.owner && ctx.playedFromResources ? healBase(s, ctx.owner, 1) : s) }],
+  ifYouDo: (s, ctx) => {
+    const pick = resourcePicked(s, ctx)
+    return pick ? resourceTopOfDeck(returnResourceToHand(s, pick.holder, pick.index), ctx.owner) : s
+  },
+})

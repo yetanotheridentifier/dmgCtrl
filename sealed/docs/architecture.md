@@ -164,7 +164,13 @@ upgrades in `BaseState.upgrades`. A unit controlled by someone other than its ow
 owner in `UnitState.owner`, and how long that lasts in `controlUntil`: absent is until the regroup
 phase starts, `'permanent'` never ends (C-3P0, Galen Erso), and an instance id ends once that unit is
 no longer in play (Grand Moff Tarkin), which `resolve` settles once per action rather than at every
-way a unit can leave. Token upgrades (Shield/Experience/Advantage/Weakness) and
+way a unit can leave. A resource another player owns records them in `ResourceState.owner` (CR 1.7.5:
+it is open information), so it leaves the zone for its owner's discard pile or hand, and a card played
+out of the zone is theirs. `effects.ts` holds the doors a resource leaves or arrives by
+(`defeatResource`, `returnResourceToHand`, `addResource`). Which card leaves is the ability's pick, but
+only the ready and exhausted counts are game state (CR 1.7.4), so the controller keeps as many ready as
+the zone allows: a resource leaving is one of the exhausted ones while any is, unless the card says a
+ready one (Greater Sarlacc). Token upgrades (Shield/Experience/Advantage/Weakness) and
 token units (`TOKEN_*` ids) live in the card db as built-ins. Transient per-attack
 grants (`grantedKeywords`, `grantedAbilityCardIds`), once-per-round ability usage
 (`usedAbilities`), the **pending-choice queue** (`pendingChoices`), the **triggered-ability queue**

@@ -74,8 +74,11 @@ A mode that needs picks of its own (Command's friendly unit, then the enemy it d
 second upgrade) chains them through the card's `ifYouDo` steps.
 
 `resumeAfterChoice` decides what happens as the queue drains: the active player finishes theirs
-first, then control passes; round-start choices (`resumeAtInitiative`) begin the action phase with
-the initiative holder, mid-turn choices `advanceTurn`.
+first, then control passes; round-start choices begin the action phase with the initiative holder,
+mid-turn choices `advanceTurn`. A round-start choice is one the action phase opened with (a `whenReadies`
+pick, or a delayed effect "at the start of the next action phase" such as Han Solo's defeat), which
+`startNextRound` marks with `pendingRoundStart`; a `payOrExhaust` raised by readying also carries
+`resumeAtInitiative`.
 
 **Control returns to the player whose action it was.** A choice another player answers (an opponent's
 On Attack pick, a combat prevention offer, a trigger order that puts the other side first, a reactive
@@ -421,10 +424,16 @@ card gains as it is played (instances stack, 7.5.16.b): a `NextUnitGrant` with `
 Dooku's deployed side), or `extra` from the ability doing the playing (his front). The limit is capped
 at the friendly units there are, and a card with none to pick asks nothing. The Marauder is the same
 step on its own terms, declared as its `whilePlaying` hook: any number of units, each dealt 1 damage
-and each saving 1.
+and each saving 1. Greater Sarlacc is the step on **resources**: "defeat any number of ready resources
+you control; for each, this unit costs 3 less". Its picks are cards in the resource zone, answered by
+`optionIndex` from the menu rather than the board, since facedown resources are not on it. Any card in
+the zone may be picked, up to the ready count, because which cards are the ready ones is the player's to
+arrange (CR 1.7.4); each defeated counts as a ready one, so the ready count falls by one per pick.
 
-- **Legality reads the best case.** `lowestCost` is the effective cost less the most the step could
-  save, and the hand play is offered when that is affordable.
+- **Legality reads the best case.** `canAffordFromHand` asks whether the effective cost less what the
+  step could save fits the ready resources. For units that is the most it could save. For resources
+  each pick is also one fewer resource to pay with, so every number of picks is tried: three ready
+  resources play a 9-cost Greater Sarlacc for nothing, and two cannot.
 - **The `exploit` choice comes before anything is paid.** The card stays in hand; the player picks
   friendly units one at a time. **Done is offered only once what is left to pay is affordable**, so a
   play that needs its discount cannot be stranded half paid, and reaching the limit finishes the play
@@ -437,7 +446,7 @@ and each saving 1.
   unit's When Played abilities resolve" (7.5.16.d). `defeatForCost` defeats the units and hands their
   collected abilities back, and the play fires them with its own, so the player orders an exploited
   unit's When Defeated against the new card's When Played. The Marauder's damage is dealt as ordinary
-  damage and resolves what it triggers at once.
+  damage and resolves what it triggers at once. A defeated resource triggers nothing.
 - **The exploited units' powers are recorded** on the unit played (`exploitedPowers`), as read when
   they were defeated, for the When Played that counts them (Count Dooku).
 
@@ -464,7 +473,9 @@ pick from the player, since every penalty is the same 2 resources.
 
 **A card played out of a zone somebody else owns is still theirs.** CR 1.5.2 ties ownership to the
 deck a card started in, and playing it does not move it: `zoneCardOwner` reads the owner off the zone
-and the index, and the three type doors take it as `cardOwner`. So a unit played out of an opponent's
+and the index (for a resource, off `ResourceState.owner` where it is recorded), and the three type doors
+take it as `cardOwner`. The doors also tell "when you play a card" whether the card came out of a
+resource zone (`ctx.playedFromResources`, Bail Organa). So a unit played out of an opponent's
 discard pile enters play under its player but is defeated into **its owner's** pile, an upgrade
 attaches with that owner recorded on the attachment, and an event goes back to their discard when it
 resolves. A unit whose owner and controller differ this way is `controlUntil: 'permanent'`, since

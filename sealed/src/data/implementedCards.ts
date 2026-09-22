@@ -297,6 +297,10 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SEC_017', name: 'Sabé', front: true, back: true },
   // Exploit: gives it to a Separatist card as it is played, from either side.
   { id: 'TWI_005', name: 'Count Dooku', front: true, back: true },
+  // The resource zone: resources defeated, returned to hand, or put into play; a card played out of it.
+  { id: 'SHD_009', name: 'Hunter', front: true, back: true },
+  { id: 'SOR_017', name: 'Han Solo', front: true, back: true },
+  { id: 'SEC_008', name: 'Bail Organa', front: true, back: true },
 ]
 
 /**
@@ -331,6 +335,9 @@ export const IMPLEMENTED_BASES: UpgradeStatus[] = [
   // "When you deploy a leader".
   { id: 'TWI_022', name: 'Droid Manufactory' },
   { id: 'TWI_025', name: 'Shadow Collective Camp' },
+  // The resource zone.
+  { id: 'LAW_029', name: 'Citadel Research Center' },
+  { id: 'TS26_12', name: 'Sundari Palace' },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
@@ -856,6 +863,9 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   // Exploit.
   { id: 'TWI_078', name: 'The Invasion of Christophsis' },
   { id: 'TWI_178', name: 'Planetary Invasion' },
+  // The resource zone.
+  { id: 'SHD_105', name: 'Spark of Hope' },
+  { id: 'TWI_177', name: 'Guerilla Insurgency' },
 ]
 
 /**
@@ -1857,6 +1867,20 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'TWI_217', name: 'Tri-Droid Suppressor' },
   { id: 'TWI_235', name: 'Battle Droid Legion' },
   { id: 'HMW_125', name: 'The Marauder' },
+  // The resource zone: resources defeated, returned to hand, or put into play, including an opponent's
+  // card; Greater Sarlacc's is Exploit's step on ready resources.
+  { id: 'HMW_049', name: 'Greater Sarlacc' },
+  { id: 'HMW_188', name: 'Giant Gorax' },
+  { id: 'SEC_242', name: 'Elia Kane' },
+  { id: 'SHD_102', name: 'The Marauder' },
+  { id: 'SOR_197', name: 'Lando Calrissian' },
+  { id: 'LAW_159', name: 'Expendable Mercenary' },
+  { id: 'SEC_215', name: "Emissary's Sheathipede" },
+  { id: 'TS26_76', name: 'Wartime Profiteer' },
+  { id: 'SHD_114', name: 'Scanning Officer' },
+  { id: 'SHD_154', name: 'Wrecker' },
+  { id: 'SHD_214', name: 'Frontier Trader' },
+  { id: 'SHD_122', name: 'Arquitens Assault Cruiser' },
 ]
 
 /**

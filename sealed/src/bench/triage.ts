@@ -83,8 +83,12 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
   // A card that is both a unit and an upgrade.
   ['pilot', /\bPilot(ing)?\b|\bpilot\b/i],
   // `granted-ability-block` is read from the trigger heads instead: see GRANTED_ABILITY_LEAD_IN.
-  // Zone manipulation beyond resourceTopOfDeck / ready / exhaust, which do exist.
-  ['resource-zone', /(?:return|take|move|defeat|discard)[^.\n]{0,40}\bresource\b|\bresource\b[^.\n]{0,30}\bto (?:your|their) hand|put[^.\n]{0,30}into (?:your|their) resource/i],
+  // Resources are defeated, returned to hand, and put into play from any zone, including another
+  // player's card (`ResourceState.owner`). Taking control of a resource already in play is not.
+  ['resource-zone', /\btake control of (?:an? )?(?:enemy )?resource\b/i],
+  // "Play a card using Smuggle" printed on a card without the keyword (Lando Calrissian's leader)
+  // waits on the keyword itself. Delete this line when Smuggle joins IMPLEMENTED_KEYWORDS.
+  ['kw:Smuggle', /\busing Smuggle\b/i],
   ['sideboard', /\bsideboard\b/i],
   // Keyword identity as a runtime value rather than a static property.
   ['dynamic-keywords', /\bthe chosen Keyword\b|\bthis unit's Keywords\b|different Keywords\b/i],

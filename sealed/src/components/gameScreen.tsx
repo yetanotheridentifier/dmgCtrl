@@ -1256,7 +1256,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
     // Optional targeted pending choices — resolved by clicking a highlighted
     // board unit plus a Decline button, rather than one menu button per target.
-    const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && (BOARD_TARGET_KINDS as readonly string[]).includes(c.kind))
+    // Greater Sarlacc's step picks facedown resources, which are not on the board, so it is answered
+    // from the menu, one button per resource, like any other card pick.
+    const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && (BOARD_TARGET_KINDS as readonly string[]).includes(c.kind) && !(c.kind === 'exploit' && c.resources))
     const choiceTargetIds = new Map<string, Action>()
     // Base targets (selectDamageTarget): pick a player's base to take the damage.
     const baseTargetActions = new Map<PlayerId, Action>()

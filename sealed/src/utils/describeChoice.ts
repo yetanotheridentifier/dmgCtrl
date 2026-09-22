@@ -362,8 +362,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       // Says what is being paid for and what each pick costs and saves, since the card is not on the
       // board yet and the highlight alone reads as "pick something to hit".
       const each = choice.damage === undefined ? 'defeat' : `deal ${choice.damage} damage to`
+      const what = choice.resources ? 'ready resources you control' : 'friendly units'
       const left = choice.limit - choice.picks.length
-      return [`${each} friendly units while playing ${cardName(state, choice.cardId)}, ${choice.discount} less each (${left} more at most), or Done`]
+      return [`${each} ${what} while playing ${cardName(state, choice.cardId)}, ${choice.discount} less each (${left} more at most), or Done`]
     }
     case 'damageAnyBases':
       return [choice.heal ? `heal ${choice.amount} damage from a base, or stop` : `deal ${choice.amount} damage to a base, or stop`]

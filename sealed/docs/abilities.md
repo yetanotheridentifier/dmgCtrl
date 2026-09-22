@@ -145,7 +145,8 @@ covers a card of **any** type, so it fires from all three play doors; the card i
 players' leaders, bases and units, the playing player's first, with who played in
 `ctx.playingPlayer`, because the point is also printed from the far side ("when an opponent plays an
 event", Saw Gerrera). As with `whenDrawCards`, every registration at this point compares
-`ctx.playingPlayer` against `ctx.owner`. `whenUnitEntersPlay`
+`ctx.playingPlayer` against `ctx.owner`. A card played out of a resource zone carries
+`ctx.playedFromResources` ("when you play a card from your resources", Bail Organa). `whenUnitEntersPlay`
 is collected from both players' bases and from every unit in play but the one arriving, for any unit
 either player brings into play (Trap Field, and Phee Genoa hearing an enemy leader deploy).
 
@@ -310,7 +311,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | Hook | Effect |
 | --- | --- |
 | `costModifier` | cost delta, applied in `effectiveCost` |
-| `whilePlaying` | Exploit's step on the card's own terms: any number of friendly units, each dealt `damage` and saving `discount` (The Marauder); see `choices.md` |
+| `whilePlaying` | Exploit's step on the card's own terms: any number of friendly units, each dealt `damage` and saving `discount` (The Marauder), or with `resources` any number of ready resources, each defeated and saving `discount` (Greater Sarlacc); see `choices.md` |
 | `costDiscount` | a unit in play discounting cards its controller plays |
 | `waivesAspectPenalty` | a unit in play zeroing the aspect penalty |
 | `ignoresOwnAspectPenalty` | the aspect icons whose penalty a card ignores while it is played (Rey with Kylo Ren) |
