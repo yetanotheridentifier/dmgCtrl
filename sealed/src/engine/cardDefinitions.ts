@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers } from './abilities'
-import { fireBatch, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck, defeatBaseUpgrade } from './effects'
+import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -319,6 +319,20 @@ const friendlyUpgradeCandidates = (s: GameState, owner: PlayerId, on?: 'unit'): 
   upgradeCandidates(s, { owner, on })
 
 const BOTH_BASES: PlayerId[] = ['player', 'opponent']
+
+// ── Reading the damage event ───────────────────────────────────────────────────────────────────
+// `whenDamageDealt` is heard on both sides, so each reader states whose units or base it means. These
+// are trigger conditions (`hears`): an event they do not describe never collects the ability.
+/** The damage fell on `ctx.owner`'s side. */
+const damageToFriendly = (ctx: EffectContext): boolean => ctx.damageDealt?.owner === ctx.owner
+/** Friendly units the event dealt damage to and which survived it ("is dealt damage and survives"). */
+const friendlySurvivors = (ctx: EffectContext) => (damageToFriendly(ctx) ? ctx.damageDealt!.units.filter(d => d.survived) : [])
+/** "When THIS unit is dealt damage and survives." */
+const survivedItself = (ctx: EffectContext): boolean => friendlySurvivors(ctx).some(d => d.instanceId === ctx.sourceInstanceId)
+/** "When your base is dealt damage." */
+const friendlyBaseDamaged = (ctx: EffectContext): boolean => damageToFriendly(ctx) && (ctx.damageDealt!.base ?? 0) > 0
+/** The damage was dealt by `ctx.owner` ("when you deal damage"). */
+const dealtByYou = (ctx: EffectContext): boolean => ctx.damageDealt?.dealer?.controller === ctx.owner
 
 registerCard('ASH_012', { // Vane — front (undeployed) + deployed (On Attack)
   // The player chooses which upgrade to defeat (any upgrade, token or card), then where the 2 damage
@@ -1220,11 +1234,14 @@ registerCard('ASH_036', { abilities: [{ trigger: 'onAttackEnd', description: 'If
   return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 3, targets, optional: true }) : s
 } }] })
 
-registerCard('ASH_101', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a non-leader unit, defeat that unit.', effect: (s, ctx) => { // The Great Mothers
+/** "If this unit dealt combat damage to a non-leader unit (while attacking), defeat that unit." */
+const defeatDamagedDefender: AbilityDef['effect'] = (s, ctx) => {
   if (!ctx.combatDamageToDefender || ctx.attackTarget?.kind !== 'unit') return s
   const d = allUnits(s).find(u => u.instanceId === (ctx.attackTarget as { instanceId: string }).instanceId)
   return d && !isLeaderUnit(s, d) ? defeatUnit(s, d.instanceId) : s // already gone if combat killed it
-} }] })
+}
+registerCard('ASH_101', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a non-leader unit, defeat that unit.', effect: defeatDamagedDefender }] }) // The Great Mothers
+registerCard('SOR_085', { abilities: [{ trigger: 'onAttackEnd', description: 'When this unit deals combat damage to a non-leader unit while attacking: Defeat that unit.', effect: defeatDamagedDefender }] }) // Rukh
 
 registerCard('ASH_031', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a base, heal that much damage from your base.', effect: (s, ctx) => // Hera Syndulla
   (ctx.combatDamageToBase ?? 0) > 0 ? healBase(s, ctx.owner, ctx.combatDamageToBase!) : s }] })
@@ -1569,7 +1586,7 @@ registerCard('ASH_169', { // Axe Woves
 })
 
 registerCard('ASH_204', { // Blade Three
-  abilities: [{ trigger: 'whenOwnBaseDamaged', description: 'Give an Advantage token to this unit.', effect: (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE) }],
+  abilities: [{ trigger: 'whenDamageDealt', hears: (_s, ctx) => friendlyBaseDamaged(ctx), description: 'Give an Advantage token to this unit.', effect: (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE) }],
 })
 
 registerCard('ASH_161', { // Zeb Orrelios
@@ -1586,7 +1603,8 @@ registerCard('ASH_161', { // Zeb Orrelios
 const RANCOR_KEEPER_KEY = 'ASH_032#round'
 registerCard('ASH_032', { // Rancor Keeper
   abilities: [{
-    trigger: 'whenFriendlyDamagedSurvives',
+    trigger: 'whenDamageDealt',
+    hears: (_s, ctx) => friendlySurvivors(ctx).length > 0,
     description: 'Deal 1 damage to any number of bases. Use this ability only once each round.',
     effect: (s, ctx) => {
       const self = findUnit(s, ctx.sourceInstanceId!)?.unit
@@ -3324,13 +3342,15 @@ registerCard('SOR_190', whenPlayed('If you played another card this phase, each 
   // means a second entry in the phase's record.
   if (cardsPlayedThisPhase(s, ctx.owner).length < 2) return s
   const enemy = opponentOf(ctx.owner)
-  const drawn = drawCards(s, enemy, 1)
-  const hand = drawn.players[enemy].hand
-  if (hand.length === 0) return drawn
-  // Random, not chosen: the seed on the state keeps it deterministic under replay.
-  const pick = Math.floor(seededUnit(drawn.rngSeed) * hand.length)
-  return { ...discardFromHand(drawn, enemy, pick), rngSeed: nextSeed(drawn.rngSeed) }
+  return discardAtRandom(drawCards(s, enemy, 1), enemy)
 }))
+/** `who` discards a random card from their hand. Random, not chosen: the seed on the state keeps it deterministic under replay. */
+const discardAtRandom = (s: GameState, who: PlayerId): GameState => {
+  const hand = s.players[who].hand
+  if (hand.length === 0) return s
+  const pick = Math.floor(seededUnit(s.rngSeed) * hand.length)
+  return { ...discardFromHand(s, who, pick), rngSeed: nextSeed(s.rngSeed) }
+}
 
 // Resources
 registerCard('LAW_083', whenPlayed('If you have fewer cards in hand than an opponent, draw a card. If you control fewer resources than an opponent, resource the top card of your deck.', (s, ctx) => { // Broken Horn
@@ -6750,7 +6770,9 @@ registerCard('SOR_013', { // Cassian Andor
     effect: (s, ctx) => drawCards(s, ctx.owner, 1),
   }),
   abilities: [{
-    trigger: 'whenEnemyBaseDamaged',
+    trigger: 'whenDamageDealt',
+    // "When you deal damage to an enemy base."
+    hears: (_s, ctx) => dealtByYou(ctx) && !damageToFriendly(ctx) && (ctx.damageDealt!.base ?? 0) > 0,
     description: 'You may draw a card. Use this ability only once each round.',
     effect: (s, ctx) => (selfOf(s, ctx)?.usedAbilities?.includes(CASSIAN_ROUND_KEY)
       ? s
@@ -6784,11 +6806,12 @@ registerCard('SEC_002', { // Jabba the Hutt
     effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, damagedFriendly), 'choose the damaged friendly unit that deals the damage', false, 'dealer'),
   }),
   abilities: [{
-    trigger: 'whenFriendlyDamagedSurvives',
+    trigger: 'whenDamageDealt',
+    hears: (_s, ctx) => friendlySurvivors(ctx).some(d => d.instanceId !== ctx.sourceInstanceId),
     description: 'You may have that unit deal that much damage to an enemy unit. Use this ability only once each round.',
     effect: (s, ctx) => {
       if (selfOf(s, ctx)?.usedAbilities?.includes(JABBA_ROUND_KEY)) return s
-      const hurt = (ctx.damagedSurvivors ?? []).filter(d => d.instanceId !== ctx.sourceInstanceId && findUnit(s, d.instanceId)?.owner === ctx.owner)
+      const hurt = friendlySurvivors(ctx).filter(d => d.instanceId !== ctx.sourceInstanceId && findUnit(s, d.instanceId)?.owner === ctx.owner)
       if (hurt.length === 0 || !pickedIds(s, ctx, pickEnemy).length) return s
       return hurt.length === 1
         ? unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), `have it deal ${hurt[0].amount} damage to an enemy unit`, true, `deal:${hurt[0].amount}`, hurt[0].instanceId)
@@ -9507,32 +9530,29 @@ const searchDiscardGrant = (s: GameState, ctx: EventCtx, depth: number, test: (c
 
 // ── #474: "When this unit is dealt damage and survives" ──────────────────────────────────────────
 //
-// The point is `whenFriendlyDamagedSurvives`, which fires on every unit its controller has and names
-// each survivor in `ctx.damagedSurvivors`. "THIS unit" is therefore the opposite filter to the one
-// Jabba the Hutt already applies: he drops his own instance id, these cards keep only it.
-const survivedItself = (ctx: EffectContext): boolean =>
-  (ctx.damagedSurvivors ?? []).some(d => d.instanceId === ctx.sourceInstanceId)
+// `whenDamageDealt` with the survivors on this unit's side filtered to this unit (`survivedItself`):
+// the opposite filter to the one Jabba the Hutt applies, who drops his own instance id.
+const hearsOwnSurvival = { trigger: 'whenDamageDealt' as const, hears: (_s: GameState, ctx: EffectContext) => survivedItself(ctx) }
 
-registerCard('HMW_156', { abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'Deal 2 damage to each enemy base.', effect: (s, ctx) => // Arena Acklay
-  (survivedItself(ctx) ? dealDamageToBase(s, opponentOf(ctx.owner), 2, { cardId: ctx.cardId, controller: ctx.owner }) : s) }] })
+registerCard('HMW_156', { abilities: [{ ...hearsOwnSurvival, description: 'Deal 2 damage to each enemy base.', effect: (s, ctx) => // Arena Acklay
+  dealDamageToBase(s, opponentOf(ctx.owner), 2, { cardId: ctx.cardId, controller: ctx.owner }) }] })
 
 registerCard('HMW_166', { // Gungi
-  abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'You may discard a card from your hand. If you do, ready this unit.', effect: (s, ctx) =>
-    (survivedItself(ctx) && s.players[ctx.owner].hand.length > 0
+  abilities: [{ ...hearsOwnSurvival, description: 'You may discard a card from your hand. If you do, ready this unit.', effect: (s, ctx) =>
+    (s.players[ctx.owner].hand.length > 0
       ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1, optional: true, then: { ifYouDo: resume(ctx) } })
       : s) }],
   ifYouDo: (s, ctx) => readyUnit(s, ctx.sourceInstanceId!),
 })
 
-registerCard('HMW_211', { abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'You may exhaust a unit.', effect: (s, ctx) => { // Tech
-  if (!survivedItself(ctx)) return s
+registerCard('HMW_211', { abilities: [{ ...hearsOwnSurvival, description: 'You may exhaust a unit.', effect: (s, ctx) => { // Tech
   const targets = allUnits(s).filter(u => !u.exhausted).map(u => u.instanceId)
   return targets.length ? pushChoice(s, { kind: 'mayExhaustUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true }) : s
 } }] })
 
 registerCard('HMW_169', { abilities: [ // Crosshair
-  { trigger: 'whenFriendlyDamagedSurvives', description: 'Each player draws a card.', effect: (s, ctx) =>
-    (survivedItself(ctx) ? drawCards(drawCards(s, ctx.owner, 1), opponentOf(ctx.owner), 1) : s) },
+  { ...hearsOwnSurvival, description: 'Each player draws a card.', effect: (s, ctx) =>
+    drawCards(drawCards(s, ctx.owner, 1), opponentOf(ctx.owner), 1) },
   // The second head is why `whenDrawCards` now fires on both sides: it reads an OPPONENT drawing,
   // and "during the action phase" excludes the regroup draw, which is the bulk of a game's draws.
   { trigger: 'whenDrawCards', description: 'When an opponent draws 1 or more cards during the action phase, deal 2 damage to their base.', effect: (s, ctx) =>
@@ -9543,13 +9563,16 @@ registerCard('HMW_169', { abilities: [ // Crosshair
 
 registerCard('SHD_250', { // Tarfful
   abilities: [{
-    trigger: 'whenFriendlyDamagedSurvives',
+    trigger: 'whenDamageDealt',
+    // `byCombat` is the whole difference between this card and Arena Acklay above: an ability's
+    // ping damages a Wookiee and survives it, and Tarfful reads combat damage only.
+    hears: (s, ctx) => ctx.damageDealt?.byCombat === true && friendlySurvivors(ctx).some(d => {
+      const found = findUnit(s, d.instanceId)
+      return found !== undefined && unitHasTrait(s, found.unit, 'Wookiee')
+    }),
     description: 'When a friendly Wookiee unit is dealt combat damage and survives, it deals that much damage to an enemy ground unit.',
     effect: (s, ctx) => {
-      // `byCombat` is the whole difference between this card and Arena Acklay above: an ability's
-      // ping damages a Wookiee and survives it, and Tarfful reads combat damage only.
-      if (!ctx.byCombat) return s
-      const hurt = (ctx.damagedSurvivors ?? []).filter(d => {
+      const hurt = friendlySurvivors(ctx).filter(d => {
         const found = findUnit(s, d.instanceId)
         return found?.owner === ctx.owner && unitHasTrait(s, found.unit, 'Wookiee')
       })
@@ -9574,7 +9597,7 @@ registerCard('SHD_250', { // Tarfful
 // ── #474: "When this unit deals combat damage to a base" ─────────────────────────────────────────
 //
 // `onAttackEnd` with `ctx.combatDamageToBase`, which is already exactly this event: the attacker
-// itself (not every friendly unit, as `whenEnemyBaseDamaged` would be) and combat damage only.
+// itself (not every unit that hears `whenDamageDealt`) and combat damage only.
 const dealtToBase = (ctx: EffectContext): boolean => (ctx.combatDamageToBase ?? 0) > 0
 
 registerCard('LOF_166', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a base, you may give an Experience token to this unit.', effect: (s, ctx) => // Blockade Runner
@@ -9622,16 +9645,14 @@ registerCard('JTL_188', { // Moff Gideon
   enemyCostDelta: (s, source, ctx) => (ctx.card.type === 'unit' && dealtBaseCombatDamageThisPhase(s, source.instanceId) ? 1 : 0),
 })
 
-// The far side of the same event: `whenOwnBaseDamaged` now says whether the damage was combat and
-// which unit dealt it, so "an ENEMY UNIT deals COMBAT damage to your base" is expressible without a
-// second dispatch point.
-registerCard('SEC_041', { abilities: [{ trigger: 'whenOwnBaseDamaged', description: 'When an enemy unit deals combat damage to your base, this unit gains Sentinel for this phase.', effect: (s, ctx) => { // Populist Advisor
-  if (!ctx.byCombat || ctx.attackerInstanceId === undefined) return s
-  const attacker = findUnit(s, ctx.attackerInstanceId)
-  return attacker && attacker.owner !== ctx.owner
-    ? addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: [{ name: 'Sentinel' }] })
-    : s
-} }] })
+// The far side of the same event: the damage event says whether it was combat and which unit dealt
+// it, so "an ENEMY UNIT deals COMBAT damage to your base" is a condition on it.
+registerCard('SEC_041', { abilities: [{ // Populist Advisor
+  trigger: 'whenDamageDealt',
+  hears: (_s, ctx) => friendlyBaseDamaged(ctx) && ctx.damageDealt!.byCombat && ctx.damageDealt!.dealer?.unitId !== undefined && !dealtByYou(ctx),
+  description: 'When an enemy unit deals combat damage to your base, this unit gains Sentinel for this phase.',
+  effect: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: [{ name: 'Sentinel' }] }),
+}] })
 
 registerCard('SEC_205', { abilities: [{ trigger: 'onAttackEnd', description: "If this unit dealt combat damage to a base, discard a card from the defending player's deck; for this phase you may play it from their discard pile, ignoring its aspect penalties.", effect: (s, ctx) => { // Obi-Wan Kenobi
   const defender = opponentOf(ctx.owner)
@@ -9696,8 +9717,8 @@ registerCard('SOR_109', { abilities: [ // Colonel Yularen: "when you play a Comm
     (printedAspect(playedUnitCard(s, ctx), 'Command') ? healBase(s, ctx.owner, 1) : s) },
 ] })
 
-registerCard('TS26_73', { abilities: [{ trigger: 'whenOwnBaseDamaged', description: 'When your base is dealt combat damage: You may deal 1 damage to a unit.', effect: (s, ctx) => // Moralo Eval
-  (ctx.byCombat ? damageChoice(s, ctx, 1, allUnits(s), [], true) : s) }] })
+registerCard('TS26_73', { abilities: [{ trigger: 'whenDamageDealt', hears: (_s, ctx) => friendlyBaseDamaged(ctx) && ctx.damageDealt!.byCombat, description: 'When your base is dealt combat damage: You may deal 1 damage to a unit.', effect: (s, ctx) => // Moralo Eval
+  damageChoice(s, ctx, 1, allUnits(s), [], true) }] })
 
 registerCard('SHD_241', { abilities: [{ trigger: 'whenEnemyAttacksBase', description: 'When an enemy unit attacks your base: Give a Shield token to a friendly unit in the same arena as the attacker.', effect: (s, ctx) => { // Kragan Gorr
   const attacker = ctx.attackerInstanceId ? findUnit(s, ctx.attackerInstanceId)?.unit : undefined
@@ -9783,5 +9804,638 @@ registerCard('SHD_255', { abilities: [{ trigger: 'whenPlayCard', description: 'W
     ? damageChoice(s, ctx, 1, [], BOTH_BASES, true)
     : s) }] })
 
-registerCard('SHD_084', { abilities: [{ trigger: 'whenFriendlyDamagedSurvives', description: 'When combat damage is dealt to this unit: Give an Experience token to this unit (if it survives the damage).', effect: (s, ctx) => // Phase-III Dark Trooper
-  (ctx.byCombat && survivedItself(ctx) ? expSelf(s, ctx) : s) }] })
+registerCard('SHD_084', { abilities: [{ trigger: 'whenDamageDealt', hears: (_s, ctx) => ctx.damageDealt?.byCombat === true && survivedItself(ctx), description: 'When combat damage is dealt to this unit: Give an Experience token to this unit (if it survives the damage).', effect: (s, ctx) => // Phase-III Dark Trooper
+  expSelf(s, ctx) }] })
+
+// ── "When this unit completes an attack (and survives)" ─────────────────────────────────────────
+// `onAttackEnd`. It fires for an attacker the combat defeated too (CR 7.6), so "(and survives)" is
+// the guard below rather than a trigger point of its own, as it is for Lama Su.
+const survivedAttack = (s: GameState, ctx: EventCtx): boolean => ctx.sourceInstanceId !== undefined && findUnit(s, ctx.sourceInstanceId) !== undefined
+/** "Attack with another <kind of> unit", after this one's attack, from the units `test` picks. */
+const attackWithAnother = (s: GameState, ctx: EventCtx, test: Pick): GameState =>
+  offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-next`, { attacker: { only: pickedIds(s, ctx, pickAll(pickFriendly, pickOther, test)) }, optional: true })
+
+/** The friendly Vehicles other than its host that `up` could be moved to. */
+const landerTargets = (s: GameState, ctx: EventCtx, up: UpgradeRef): string[] =>
+  moveTargets(s, up, ctx.owner).filter(id => s.players[ctx.owner].units.some(u => u.instanceId === id && unitHasTrait(s, u, 'Vehicle')))
+registerCard('JTL_070', { // U-Wing Lander
+  abilities: [
+    { trigger: 'whenPlayed', description: 'Give 3 Experience tokens to this unit.', effect: (s, ctx) => expSelf(s, ctx, 3) },
+    {
+      trigger: 'onAttackEnd',
+      description: 'If this unit survived, you may attach an upgrade on this unit to another eligible friendly Vehicle unit.',
+      effect: (s, ctx) => {
+        if (!survivedAttack(s, ctx)) return s
+        const candidates = upgradeCandidates(s).filter(up => up.unitId === ctx.sourceInstanceId && landerTargets(s, ctx, up).length > 0)
+        return candidates.length
+          ? pushChoice(s, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, text: 'move an upgrade on this unit to another friendly Vehicle unit', then: resume(ctx) })
+          : s
+      },
+    },
+  ],
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    if (!up) return s
+    if (!ctx.targetInstanceId) {
+      return pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets: landerTargets(s, ctx, up), text: `attach ${s.cards[up.cardId]?.name ?? 'the upgrade'} to another friendly Vehicle unit`, then: { ...resume(ctx), upgrade: up } })
+    }
+    return moveUpgrade(s, up, ctx.targetInstanceId)
+  },
+})
+
+// The step carries the hand size before the search, so the tail can tell a draw from a decline (both
+// run it) and knows the drawn card is the one on the end.
+const invisibleHand = (s: GameState, ctx: EffectContext): GameState => (survivedAttack(s, ctx)
+  ? searchDrawChoice(s, ctx, 8, c => printedUnit(c) && printedTrait(c, 'Droid'), 1, resume(ctx, String(s.players[ctx.owner].hand.length)))
+  : s)
+registerCard('JTL_089', { // The Invisible Hand
+  ...alsoAt(whenPlayed('You may search the top 8 cards of your deck for a Droid unit, reveal it, and draw it. If it costs 2 or less, you may play it for free.', invisibleHand), 'onAttackEnd'),
+  ifYouDo: (s, ctx) => {
+    const hand = s.players[ctx.owner].hand
+    if (hand.length <= Number(ctx.step)) return s
+    const drawn = hand[hand.length - 1]
+    return (s.cards[drawn]?.cost ?? Infinity) <= 2
+      ? playFromZoneChoice(s, ctx, { zone: 'hand', free: true, optional: true, test: c => c?.id === drawn })
+      : s
+  },
+})
+
+registerCard('LOF_038', { abilities: [{ trigger: 'onAttackEnd', description: "If this unit survived, you may defeat a unit with less remaining HP than this unit's power.", effect: (s, ctx) => { // Pong Krell
+  const self = selfOf(s, ctx)
+  if (!self) return s
+  const power = effectivePower(s, self)
+  return targetChoice(s, ctx, 'selectUnitToDefeat', allUnits(s).filter(u => effectiveHp(s, u) - u.damage < power).map(u => u.instanceId), true)
+} }] })
+
+registerCard('SEC_048', alsoAt(whenPlayed('Give this unit and an enemy unit Sentinel for this phase.', (s, ctx) => { // Captain Rex
+  const sentinel = [{ name: 'Sentinel' }]
+  const self = survivedAttack(s, ctx) ? addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: sentinel }) : s
+  return lastingBuffChoice(self, ctx, self.players[opponentOf(ctx.owner)].units.map(u => u.instanceId), { keywords: sentinel })
+}), 'onAttackEnd'))
+
+registerCard('SEC_174', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit survived, you may attack with another Aggression unit.', effect: (s, ctx) => // Saw Gerrera's U-Wing
+  (survivedAttack(s, ctx) ? attackWithAnother(s, ctx, pickAspect('Aggression')) : s) }] })
+
+registerCard('SHD_059', { abilities: [{ trigger: 'onAttackEnd', description: 'If the defender was defeated, heal up to 2 damage from a unit.', effect: (s, ctx) => // Embo
+  (ctx.defenderDefeated ? healChoice(s, ctx, 2, allUnits(s).filter(u => u.damage > 0).map(u => u.instanceId), []) : s) }] })
+
+registerCard('SOR_146', { abilities: [{ trigger: 'onAttackEnd', description: 'If the defender was defeated, you may deal 4 damage to a ground unit.', effect: (s, ctx) => // Zeb Orrelios
+  (ctx.defenderDefeated ? damageChoice(s, ctx, 4, allUnits(s).filter(u => u.arena === 'ground'), [], true) : s) }] })
+
+registerCard('SOR_192', { abilities: [{ trigger: 'onAttackEnd', description: 'Look at the top card of your deck. You may play it, discard it, or leave it on top of your deck.', effect: (s, ctx) => // Ezra Bridger
+  // Improvise's shape at no discount: the play, then the discard on the decline, then leaving it.
+  (s.players[ctx.owner].deck.length ? playFromZoneChoice(s, ctx, { zone: 'deckTop', optional: true, always: true, then: { elseMayDiscardTop: true } }) : s) }] })
+
+registerCard('TWI_053', { // Finn
+  abilities: [{ trigger: 'onAttackEnd', description: 'Choose a unique unit. For this phase, if damage would be dealt to that unit, prevent 1 of that damage.', effect: (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickUnique), 'prevent 1 of each damage dealt to it this phase', false) }],
+  ifYouDo: (s, ctx) => (ctx.targetInstanceId ? addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId, preventEach: 1 }) : s),
+})
+
+const GRANT_YULAREN_LEADER = 'GRANT_YULAREN_LEADER'
+registerCard(GRANT_YULAREN_LEADER, { sourceCardId: 'SEC_006', abilities: [{ trigger: 'onAttackEnd', description: 'Then, you may attack with another unit that costs less than it.', effect: (s, ctx) => {
+  // "Than it" is the first attacker, which the combat may have defeated: its card rides on the ctx.
+  const cost = s.cards[ctx.attackerCardId ?? '']?.cost ?? 0
+  return attackWithAnother(s, ctx, costsAtMost(cost - 1))
+} }] })
+registerCard('SEC_006', { // Colonel Yularen
+  ...leaderAttack('Attack with a unit. Then, you may attack with another unit that costs less than it.', () => ({ grantCardId: GRANT_YULAREN_LEADER })),
+  abilities: [{ trigger: 'onAttackEnd', description: 'If this unit survived, you may attack with another unit that costs 4 or less.', effect: (s, ctx) =>
+    (survivedAttack(s, ctx) ? attackWithAnother(s, ctx, costsAtMost(4)) : s) }],
+})
+
+// ── "When a friendly / another friendly / an enemy unit attacks" ─────────────────────────────────
+// `whenUnitAttacks` fires on both sides, so each registration states whose attack it hears.
+const friendlyAttack = (ctx: EffectContext): boolean => ctx.attackingPlayer === ctx.owner
+const attackerOf = (s: GameState, ctx: EffectContext): UnitState | undefined => findUnit(s, ctx.attackerInstanceId ?? '')?.unit
+
+registerCard('HMW_014', { // Wicket
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenUnitAttacks',
+      description: 'When a friendly unit attacks a unit that costs more than it: You may exhaust this leader. If you do, draw a card.',
+      effect: (s, ctx) => {
+        const attacker = attackerOf(s, ctx)
+        const defender = defenderOf(s, ctx)
+        if (!friendlyAttack(ctx) || !attacker || !defender || !leaderCanExhaust(s, ctx.owner)) return s
+        return printedCost(s, defender) > printedCost(s, attacker)
+          ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Wicket (leader) to draw a card', then: resume(ctx) })
+          : s
+      },
+    }],
+  },
+  ...onAttack(whenPlayed('If you control a unit that costs 3 or less, draw a card.', (s, ctx) =>
+    (s.players[ctx.owner].units.some(u => printedCost(s, u) <= 3) ? drawCards(s, ctx.owner, 1) : s))),
+  ifYouDo: (s, ctx) => drawCards(exhaustLeader(s, ctx.owner), ctx.owner, 1),
+})
+
+registerCard('SEC_081', { abilities: [{ trigger: 'whenUnitAttacks', description: 'When another friendly Official unit attacks: This unit gets +2/+2 for this phase.', effect: (s, ctx) => { // Major Partagaz
+  const attacker = attackerOf(s, ctx)
+  return friendlyAttack(ctx) && attacker && attacker.instanceId !== ctx.sourceInstanceId && unitHasTrait(s, attacker, 'Official')
+    ? addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, power: 2, hp: 2 })
+    : s
+} }] })
+
+registerCard('LAW_112', { abilities: [{ trigger: 'whenUnitAttacks', description: 'When a friendly unit attacks: If no other units have attacked this phase (including enemy units), heal 2 damage from your base.', effect: (s, ctx) => // Boonta Eve Flagbearer
+  // The attack is recorded as it is declared, before this fires, so the attacker leaves itself out.
+  (friendlyAttack(ctx) && attackedThisPhase(s).every(id => id === ctx.attackerInstanceId) ? healBase(s, ctx.owner, 2) : s) }] })
+
+// ── "When this unit attacks and defeats a unit" ────────────────────────────────────────────────
+// `onAttackEnd` with `ctx.defenderDefeated`; the unit itself is `ctx.defeatedDefender`.
+const defeatedAndSurvived = (s: GameState, ctx: EffectContext): boolean => ctx.defenderDefeated === true && survivedAttack(s, ctx)
+
+/** The friendly attacker a "when a friendly unit attacks and defeats a unit" card names, while it is still in play. */
+const friendlyVictor = (s: GameState, ctx: EffectContext): string | undefined =>
+  (ctx.defenderDefeated && s.players[ctx.owner].units.some(u => u.instanceId === ctx.attackerInstanceId) ? ctx.attackerInstanceId : undefined)
+registerCard('LOF_017', { // Darth Revan
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenFriendlyAttackEnds',
+      description: 'When a friendly unit attacks and defeats a unit: You may exhaust this leader. If you do, give an Experience token to that friendly unit.',
+      effect: (s, ctx) => {
+        const victor = friendlyVictor(s, ctx)
+        return victor && leaderCanExhaust(s, ctx.owner)
+          ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Darth Revan (leader) to give that unit an Experience token', then: resume(ctx, undefined, victor) })
+          : s
+      },
+    }],
+  },
+  abilities: [{ trigger: 'whenFriendlyAttackEnds', description: 'When a friendly unit attacks and defeats a unit: You may give an Experience token to that friendly unit.', effect: (s, ctx) => {
+    const victor = friendlyVictor(s, ctx)
+    return victor ? expChoice(s, ctx, [victor], 1, true) : s
+  } }],
+  ifYouDo: (s, ctx) => (ctx.unitChosen ? giveToken(exhaustLeader(s, ctx.owner), ctx.unitChosen, TOKEN_EXPERIENCE) : s),
+})
+
+registerCard('LOF_063', { // Oggdo Bogdo
+  cannotAttack: (_s, u) => u.damage === 0,
+  abilities: [{ trigger: 'onAttackEnd', description: 'When this unit attacks and defeats a unit: Heal 2 damage from this unit.', effect: (s, ctx) =>
+    (defeatedAndSurvived(s, ctx) ? healUnit(s, ctx.sourceInstanceId!, 2) : s) }],
+})
+
+registerCard('LOF_086', { abilities: [{ trigger: 'onAttackEnd', description: "When this unit attacks and defeats a unit: Give a number of Experience tokens to this unit equal to the defeated unit's cost.", effect: (s, ctx) => { // Drengir Spawn
+  const cost = ctx.defeatedDefender ? printedCost(s, ctx.defeatedDefender) : 0
+  return defeatedAndSurvived(s, ctx) && cost > 0 ? giveTokens(s, ctx.sourceInstanceId!, TOKEN_EXPERIENCE, cost) : s
+} }] })
+
+registerCard('SOR_088', { abilities: [{ trigger: 'onAttackEnd', description: 'When this unit attacks and defeats a unit: You may deal the excess damage from this attack to an enemy ground unit.', effect: (s, ctx) => // Blizzard Assault AT-AT
+  (ctx.defenderDefeated && (ctx.excessCombatDamage ?? 0) > 0
+    ? damageChoice(s, ctx, ctx.excessCombatDamage!, unitsIn(s, opponentOf(ctx.owner), 'ground'), [], true)
+    : s) }] })
+
+registerCard('SOR_149', { abilities: [{ trigger: 'onAttackEnd', description: 'When this unit attacks and defeats a unit: Ready him.', effect: (s, ctx) => // Mace Windu
+  (defeatedAndSurvived(s, ctx) ? readyUnit(s, ctx.sourceInstanceId!) : s) }] })
+
+// ── "When this unit is attacked" ───────────────────────────────────────────────────────────────
+// `onDefense`, on the defender before damage is dealt. A defender that leaves play here (Grievous)
+// fizzles the attack.
+registerCard('LOF_047', { abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked (before damage is dealt): You may give an Experience token to this unit.', effect: (s, ctx) => // T-6 Shuttle 1974
+  expChoice(s, ctx, [ctx.sourceInstanceId!], 1, true) }] })
+registerCard('SHD_035', { abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked: You may give an Experience token to a unit (before damage is dealt).', effect: (s, ctx) => // Clan Saxon Gauntlet
+  expChoice(s, ctx, allUnits(s).map(u => u.instanceId), 1, true) }] })
+registerCard('SEC_090', { abilities: [{ trigger: 'onDefense', description: "When this unit is attacked: Discard a card from your deck. If it's a unit, you may return it to your hand.", effect: (s, ctx) => { // Director Krennic
+  const top = s.players[ctx.owner].deck[0]
+  if (top === undefined) return s
+  const discarded = updatePlayer(s, ctx.owner, { deck: s.players[ctx.owner].deck.slice(1), discard: [...s.players[ctx.owner].discard, top] })
+  return printedUnit(s.cards[top])
+    ? pushChoice(discarded, { kind: 'selectFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: [top], optional: true })
+    : discarded
+} }] })
+registerCard('SEC_187', { abilities: [{ trigger: 'onDefense', description: "When this unit is attacked: Return him to his owner's hand (before damage is dealt).", effect: (s, ctx) => // General Grievous
+  returnUnitToHand(s, ctx.sourceInstanceId!) }] })
+registerCard('SOR_196', { abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked: Ready him.', effect: (s, ctx) => readyUnit(s, ctx.sourceInstanceId!) }] }) // Chewbacca
+registerCard('TWI_049', { abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked: Create a Clone Trooper token.', effect: (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_CLONE_TROOPER) }] }) // Knight of the Republic
+registerCard('TWI_083', { abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked: Create a Battle Droid token.', effect: (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_BATTLE_DROID) }] }) // General's Guardian
+
+// ── "When you play an upgrade (on this unit / on a unit)" ─────────────────────────────────────
+// "On this unit" is the host's `whenUpgradeAttached` for a played upgrade that its controller played;
+// "on a unit" is `whenPlayUpgrade`, with the host in `ctx.targetInstanceId`.
+const youPlayedUpgradeOnThis = (ctx: EffectContext): boolean => ctx.upgradePlayed === true && ctx.playingPlayer === ctx.owner
+
+const GRANT_BLACK_SQUADRON = 'GRANT_BLACK_SQUADRON'
+registerCard(GRANT_BLACK_SQUADRON, { sourceCardId: 'JTL_202', ...attackBonus(1) })
+registerCard('JTL_202', { abilities: [{ trigger: 'whenUpgradeAttached', description: 'When you play an upgrade on this unit: You may attack with this unit. It gets +1/+0 for this attack.', effect: (s, ctx) => // Black Squadron Scout Wing
+  (youPlayedUpgradeOnThis(ctx)
+    ? offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-attack`, { attacker: { only: [ctx.sourceInstanceId!] }, grantCardId: GRANT_BLACK_SQUADRON, optional: true })
+    : s) }] })
+
+registerCard('SHD_067', { // Fenn Rau
+  abilities: [
+    { trigger: 'whenPlayed', description: 'You may play an upgrade from your hand. It costs 2 less.', effect: (s, ctx) =>
+      playFromZoneChoice(s, ctx, { zone: 'hand', costDelta: -2, optional: true, test: isUpgradeCard }) },
+    { trigger: 'whenUpgradeAttached', description: 'When you play an upgrade on this unit: Give an enemy unit -2/-2 for this phase.', effect: (s, ctx) =>
+      (youPlayedUpgradeOnThis(ctx) ? lastingBuffChoice(s, ctx, s.players[opponentOf(ctx.owner)].units.map(u => u.instanceId), { power: -2, hp: -2 }) : s) },
+  ],
+})
+
+registerCard('SHD_133', { abilities: [{ trigger: 'whenPlayUpgrade', description: 'When you play an upgrade on a unit: You may deal 1 damage to that unit.', effect: (s, ctx) => { // Dengar
+  const host = findUnit(s, ctx.targetInstanceId ?? '')?.unit
+  return host ? damageChoice(s, ctx, 1, [host], [], true) : s
+} }] })
+
+/** An exhaust of an enemy unit with `hp` or less remaining HP, as the Mandalorian's two sides offer it. */
+const mandoExhaust = (s: GameState, ctx: EventCtx, hp: number, optional: boolean): GameState =>
+  targetChoice(s, ctx, 'mayExhaustUnit', s.players[opponentOf(ctx.owner)].units.filter(u => effectiveHp(s, u) - u.damage <= hp).map(u => u.instanceId), optional)
+registerCard('SHD_018', { // The Mandalorian
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenPlayUpgrade',
+      description: 'When you play an upgrade: You may exhaust this leader. If you do, exhaust an enemy unit with 4 or less remaining HP.',
+      effect: (s, ctx) => (leaderCanExhaust(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust The Mandalorian (leader) to exhaust an enemy unit with 4 or less remaining HP', then: resume(ctx) })
+        : s),
+    }],
+  },
+  abilities: [{ trigger: 'whenPlayUpgrade', description: 'When you play an upgrade: You may exhaust an enemy unit with 6 or less remaining HP.', effect: (s, ctx) => mandoExhaust(s, ctx, 6, true) }],
+  // The front has no unit in play, so its choice takes the leader's side id.
+  ifYouDo: (s, ctx) => mandoExhaust(exhaustLeader(s, ctx.owner), { owner: ctx.owner, sourceInstanceId: `${ctx.cardId}-front` }, 4, false),
+})
+
+// ── "When an enemy leader deploys" ─────────────────────────────────────────────────────────────
+// `whenUnitEntersPlay` reaches the far side's units; a leader unit arriving is a deploy.
+registerCard('HMW_214', { // Phee Genoa
+  abilities: [{ trigger: 'whenUnitEntersPlay', description: "When an enemy leader deploys: Its controller may pay 2. If they don't, exhaust that leader.", effect: (s, ctx) => {
+    const enemy = opponentOf(ctx.owner)
+    const leader = s.players[enemy].units.find(u => u.instanceId === ctx.targetInstanceId && isLeaderUnit(s, u))
+    if (!leader) return s
+    // The pay-or-not is theirs; one who cannot pay simply has the leader exhausted.
+    return canAfford(s.players[enemy], 2)
+      ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-deploy`, controller: enemy, cost: 2, text: 'pay 2 (otherwise your leader is exhausted)', then: resume(ctx, 'paid', leader.instanceId), declineStep: 'exhaust' })
+      : exhaustUnit(s, leader.instanceId)
+  } }],
+  ifYouDo: (s, ctx) => (ctx.step === 'exhaust' && ctx.unitChosen ? exhaustUnit(s, ctx.unitChosen) : s),
+})
+
+// ── "When 1 or more damage is healed from this unit" ───────────────────────────────────────────
+registerCard('JTL_062', { abilities: [{ trigger: 'whenHealed', description: 'When 1 or more damage is healed from this unit: You may deal 1 damage to a space unit.', effect: (s, ctx) => // Silver Angel
+  damageChoice(s, ctx, 1, allUnits(s).filter(u => u.arena === 'space'), [], true) }] })
+registerCard('LAW_047', { abilities: [{ trigger: 'whenHealed', description: 'When 1 or more damage is healed from this unit: You may deal that much damage to a unit.', effect: (s, ctx) => // Baze Malbus
+  ((ctx.amountHealed ?? 0) > 0 ? damageChoice(s, ctx, ctx.amountHealed!, allUnits(s), [], true) : s) }] })
+
+// ── "When attached unit readies" ───────────────────────────────────────────────────────────────
+// The host's `whenReadies` gathers its upgrades' abilities, so this is The Conflict Within at 2.
+registerCard('JTL_192', { abilities: [{ trigger: 'whenReadies', description: 'When attached unit readies: Exhaust it unless its controller pays 2.', effect: (s, ctx) => // In Debt to Crimson Dawn
+  pushChoice(s, { kind: 'payOrExhaust', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, cost: 2, resumeAtInitiative: true }) }] })
+
+// ── "Defeated while attacking" ─────────────────────────────────────────────────────────────────
+// The defeat points carry `ctx.defeatedWhileAttacking`; the phase records whose unit it was.
+registerCard('SEC_013', { // Luthen Rael
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenFriendlyUnitDefeated',
+      description: 'When a friendly unit is defeated while attacking: You may exhaust this leader. If you do, deal 1 damage to a unit or base.',
+      effect: (s, ctx) => (ctx.defeatedWhileAttacking && leaderCanExhaust(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Luthen Rael (leader) to deal 1 damage to a unit or base', then: resume(ctx) })
+        : s),
+    }],
+  },
+  // Deployed, "a friendly unit" includes himself: his own defeat is `whenDefeated`, the others' is
+  // `whenFriendlyUnitDefeated`, and the block is the same at both.
+  abilities: (['whenFriendlyUnitDefeated', 'whenDefeated'] as const).map(trigger => ({
+    trigger,
+    description: 'When a friendly unit is defeated while attacking: You may deal 2 damage to a unit or base.',
+    effect: (s: GameState, ctx: EffectContext) => (ctx.defeatedWhileAttacking ? damageChoice(s, { ...ctx, sourceInstanceId: ctx.sourceInstanceId ?? `${ctx.cardId}-back` }, 2, allUnits(s), BOTH_BASES, true) : s),
+  })),
+  ifYouDo: (s, ctx) => damageChoice(exhaustLeader(s, ctx.owner), { owner: ctx.owner, sourceInstanceId: `${ctx.cardId}-front` }, 1, allUnits(s), BOTH_BASES),
+})
+registerCard('SEC_158', whenPlayed('If a friendly unit was defeated while attacking this phase, draw 3 cards.', (s, ctx) => // Oppression Breeds Rebellion
+  ((s.phaseEvents?.defeatedWhileAttacking ?? []).includes(ctx.owner) ? drawCards(s, ctx.owner, 3) : s)))
+
+// ── Damage dealt ─────────────────────────────────────────────────────────────────────────────
+// `whenDamageDealt`, heard on both sides; each card's trigger condition is its `hears`.
+
+/** "A different unit or base" than the ones this event dealt 4 or more damage to (Darth Sidious). */
+const fourOrMore = (ctx: EffectContext): { units: string[]; base?: PlayerId } => {
+  const event = ctx.damageDealt
+  if (!event) return { units: [] }
+  return { units: event.units.filter(d => d.amount >= 4).map(d => d.instanceId), ...((event.base ?? 0) >= 4 ? { base: event.owner } : {}) }
+}
+const hearsFourOrMore = (_s: GameState, ctx: EffectContext): boolean => {
+  const hit = fourOrMore(ctx)
+  return dealtByYou(ctx) && (hit.units.length > 0 || hit.base !== undefined)
+}
+/** Deal 1 damage to a unit or base other than the ones in `step` (a `fourOrMore` as JSON). */
+const sidiousDamage = (s: GameState, ctx: EventCtx, step: string, optional: boolean): GameState => {
+  const hit = JSON.parse(step) as { units: string[]; base?: PlayerId }
+  return damageChoice(s, ctx, 1, allUnits(s).filter(u => !hit.units.includes(u.instanceId)), BOTH_BASES.filter(p => p !== hit.base), optional)
+}
+registerCard('HMW_011', { // Darth Sidious
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenDamageDealt',
+      hears: hearsFourOrMore,
+      description: 'When you deal 4 or more damage to a unit or base: You may exhaust this leader. If you do, deal 1 damage to a different unit or base.',
+      effect: (s, ctx) => (leaderCanExhaust(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Darth Sidious (leader) to deal 1 damage to a different unit or base', then: resume(ctx, JSON.stringify(fourOrMore(ctx))) })
+        : s),
+    }],
+  },
+  abilities: [{
+    trigger: 'whenDamageDealt',
+    hears: hearsFourOrMore,
+    description: 'When you deal 4 or more damage to a unit or base: You may deal 1 damage to a different unit or base.',
+    effect: (s, ctx) => sidiousDamage(s, ctx, JSON.stringify(fourOrMore(ctx)), true),
+  }],
+  ifYouDo: (s, ctx) => sidiousDamage(exhaustLeader(s, ctx.owner), { owner: ctx.owner, sourceInstanceId: `${ctx.cardId}-front` }, ctx.step!, false),
+})
+
+/** "When non-combat damage is dealt to a friendly unit or base" (Cham Syndulla). */
+const hearsNonCombatToFriendly = (_s: GameState, ctx: EffectContext): boolean =>
+  damageToFriendly(ctx) && !ctx.damageDealt!.byCombat
+const enemyUnitOrBase = (s: GameState, ctx: EventCtx, optional: boolean): GameState =>
+  damageChoice(s, ctx, 1, enemyUnitsOf(s, ctx.owner), [opponentOf(ctx.owner)], optional)
+registerCard('HMW_013', { // Cham Syndulla
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenDamageDealt',
+      hears: hearsNonCombatToFriendly,
+      description: 'When non-combat damage is dealt to a friendly unit or base: You may exhaust this leader. If you do, deal 1 damage to an enemy unit or base.',
+      effect: (s, ctx) => (leaderCanExhaust(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Cham Syndulla (leader) to deal 1 damage to an enemy unit or base', then: resume(ctx) })
+        : s),
+    }],
+  },
+  abilities: [{
+    trigger: 'whenDamageDealt',
+    hears: hearsNonCombatToFriendly,
+    description: 'When non-combat damage is dealt to a friendly unit or base: You may deal 1 damage to an enemy unit or base.',
+    effect: (s, ctx) => enemyUnitOrBase(s, ctx, true),
+  }],
+  ifYouDo: (s, ctx) => enemyUnitOrBase(exhaustLeader(s, ctx.owner), { owner: ctx.owner, sourceInstanceId: `${ctx.cardId}-front` }, false),
+})
+
+registerCard('HMW_045', { abilities: [{ // Logray
+  trigger: 'whenDamageDealt',
+  // A unit the damage defeated is still named by the event, and its card still has a cost.
+  hears: (s, ctx) => damageToFriendly(ctx) && ctx.damageDealt!.units.some(d => d.instanceId !== ctx.sourceInstanceId && (s.cards[d.cardId]?.cost ?? 0) <= 3),
+  description: 'When another friendly unit that costs 3 or less is dealt damage: You may deal 1 damage to an enemy unit.',
+  effect: (s, ctx) => damageChoice(s, ctx, 1, enemyUnitsOf(s, ctx.owner), [], true),
+}] })
+
+/**
+ * "When a friendly unit deals damage to an enemy unit" (Jango Fett): the event's dealer is a unit of
+ * this side, and the unit it damaged is still there to exhaust. Returns that unit.
+ */
+const jangoTarget = (s: GameState, ctx: EffectContext): string | undefined => {
+  const event = ctx.damageDealt
+  if (!event || event.owner === ctx.owner || event.dealer?.unitId === undefined || event.dealer.controller !== ctx.owner) return undefined
+  return event.units.find(d => findUnit(s, d.instanceId) !== undefined)?.instanceId
+}
+registerCard('TWI_016', { // Jango Fett
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenDamageDealt',
+      hears: (s, ctx) => jangoTarget(s, ctx) !== undefined,
+      description: 'When a friendly unit deals damage to an enemy unit: You may exhaust this leader. If you do, exhaust that enemy unit.',
+      effect: (s, ctx) => {
+        const target = jangoTarget(s, ctx)
+        return target && leaderCanExhaust(s, ctx.owner)
+          ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Jango Fett (leader) to exhaust that enemy unit', then: resume(ctx, 'front', target) })
+          : s
+      },
+    }],
+  },
+  abilities: [{
+    trigger: 'whenDamageDealt',
+    hears: (s, ctx) => jangoTarget(s, ctx) !== undefined,
+    description: 'When a friendly unit deals damage to an enemy unit: You may exhaust that unit.',
+    effect: (s, ctx) => {
+      const target = jangoTarget(s, ctx)
+      return target ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-exhaust`, controller: ctx.owner, cost: 0, text: 'exhaust that enemy unit', then: resume(ctx, 'back', target) }) : s
+    },
+  }],
+  ifYouDo: (s, ctx) => exhaustUnit(ctx.step === 'front' ? exhaustLeader(s, ctx.owner) : s, ctx.unitChosen!),
+})
+
+// ── "Choose two, in any order" ─────────────────────────────────────────────────────────────────
+// A `chooseMode` with `then` over the modes that can do something, keyed `1:<mode>`. The picked mode
+// runs, and the second choice (`2:<mode>`, over the rest) is owed through `thenAfterChoices`, so it
+// waits for every pick the first mode raised. A mode that needs a pick of its own chains it through
+// the card's other steps (`more`), never through a second `thenAfterChoices`.
+
+interface ChooseTwoMode {
+  key: string
+  /** The printed sentence, which is the button. */
+  label: string
+  can: (s: GameState, ctx: Resumable) => boolean
+  run: (s: GameState, ctx: Resumable) => GameState
+}
+const chooseTwoOffer = (s: GameState, ctx: Resumable, modes: ChooseTwoMode[], round: 1 | 2, taken?: string): GameState => {
+  const open = modes.filter(m => m.key !== taken && m.can(s, ctx))
+  return open.length
+    ? pushChoice(s, { kind: 'chooseMode', id: `${ctx.sourceInstanceId ?? ctx.cardId}-choose${round}`, controller: ctx.owner, modes: open.map(m => `${round}:${m.key}`), labels: open.map(m => m.label), then: resume(ctx) })
+    : s
+}
+const chooseTwoWp = (modes: ChooseTwoMode[], more: NonNullable<CardDefinition['ifYouDo']> = s => s): CardDefinition => ({
+  ...whenPlayed(`Choose two, in any order: ${modes.map(m => m.label).join(' ')}`, (s, ctx) => chooseTwoOffer(s, ctx, modes, 1)),
+  ifYouDo: (s, ctx) => {
+    const [round, key] = (ctx.step ?? '').split(':')
+    const mode = modes.find(m => m.key === key)
+    if (round === '1' && mode) return thenAfterChoices(mode.run(s, ctx), resume(ctx, `after:${key}`))
+    if (round === 'after') return chooseTwoOffer(s, ctx, modes, 2, key)
+    if (round === '2' && mode) return mode.run(s, ctx)
+    return more(s, ctx)
+  },
+})
+const idsOf = (units: UnitState[]): string[] => units.map(u => u.instanceId)
+const unitsWhere = (s: GameState, test: (u: UnitState) => boolean): string[] => idsOf(allUnits(s).filter(test))
+
+registerCard('SOR_058', chooseTwoWp([ // Vigilance
+  { key: 'mill', label: "Discard 6 cards from an opponent's deck.",
+    can: (s, ctx) => s.players[opponentOf(ctx.owner)].deck.length > 0,
+    run: (s, ctx) => millTop(s, opponentOf(ctx.owner), 6)[0] },
+  { key: 'heal', label: 'Heal 5 damage from a base.',
+    can: s => BOTH_BASES.some(p => s.players[p].base.damage > 0),
+    run: (s, ctx) => healChoice(s, ctx, 5, [], BOTH_BASES.filter(p => s.players[p].base.damage > 0)) },
+  { key: 'defeat', label: 'Defeat a unit with 3 or less remaining HP.',
+    can: s => unitsWhere(s, u => remainingHp(s, u) <= 3).length > 0,
+    run: (s, ctx) => targetChoice(s, ctx, 'selectUnitToDefeat', unitsWhere(s, u => remainingHp(s, u) <= 3)) },
+  { key: 'shield', label: 'Give a Shield token to a unit.',
+    can: s => allUnits(s).length > 0,
+    run: (s, ctx) => shieldChoice(s, ctx, idsOf(allUnits(s)), false) },
+]))
+
+const nonUniqueEnemies = (s: GameState, owner: PlayerId): string[] => idsOf(enemyUnitsOf(s, owner).filter(u => !s.cards[u.cardId]?.unique))
+registerCard('SOR_107', chooseTwoWp([ // Command
+  { key: 'experience', label: 'Give 2 Experience tokens to a unit.',
+    can: s => allUnits(s).length > 0,
+    run: (s, ctx) => expChoice(s, ctx, idsOf(allUnits(s)), 2) },
+  { key: 'deals', label: 'A friendly unit deals damage equal to its power to a non-unique enemy unit.',
+    can: (s, ctx) => s.players[ctx.owner].units.length > 0 && nonUniqueEnemies(s, ctx.owner).length > 0,
+    run: (s, ctx) => unitThen(s, ctx, idsOf(s.players[ctx.owner].units), 'choose the friendly unit that deals the damage', false, 'dealer') },
+  { key: 'resource', label: 'Put this event into play as a resource.',
+    can: (s, ctx) => s.players[ctx.owner].discard.includes(ctx.cardId),
+    run: (s, ctx) => resourceThisEvent(s, ctx) },
+  { key: 'return', label: 'Return a unit from your discard pile to your hand.',
+    can: (s, ctx) => s.players[ctx.owner].discard.some(id => printedUnit(s.cards[id])),
+    run: (s, ctx) => pushChoice(s, { kind: 'selectFromDiscard', id: `${ctx.sourceInstanceId}-return`, controller: ctx.owner, candidates: [...new Set(s.players[ctx.owner].discard.filter(id => printedUnit(s.cards[id])))], optional: false }) },
+], (s, ctx) => {
+  if (ctx.step === 'dealer') return unitThen(s, ctx, nonUniqueEnemies(s, ctx.owner), 'choose the non-unique enemy unit to damage', false, 'hit', ctx.targetInstanceId)
+  const from = ctx.step === 'hit' ? findUnit(s, ctx.unitChosen ?? '')?.unit : undefined
+  // The friendly unit deals it, so it is that unit's damage ("when a friendly unit deals damage").
+  return from ? dealDamageToUnit(s, ctx.targetInstanceId!, effectivePower(s, from), { cardId: from.cardId, controller: ctx.owner, instanceId: from.instanceId }) : s
+}))
+
+registerCard('SOR_155', chooseTwoWp([ // Aggression
+  { key: 'draw', label: 'Draw a card.', can: () => true, run: (s, ctx) => drawCards(s, ctx.owner, 1) },
+  { key: 'upgrades', label: 'Defeat up to 2 upgrades.',
+    can: s => upgradeCandidates(s).length > 0,
+    run: (s, ctx) => pushChoice(s, { kind: 'selectUpgradeThen', id: `${ctx.sourceInstanceId}-upgrade`, controller: ctx.owner, candidates: upgradeCandidates(s), optional: true, text: 'defeat an upgrade', then: resume(ctx, 'upgrade1') }) },
+  { key: 'ready', label: 'Ready a unit with 3 or less power.',
+    can: s => unitsWhere(s, u => u.exhausted && effectivePower(s, u) <= 3).length > 0,
+    run: (s, ctx) => targetChoice(s, ctx, 'selectUnitToReady', unitsWhere(s, u => u.exhausted && effectivePower(s, u) <= 3)) },
+  { key: 'damage', label: 'Deal 4 damage to a unit.',
+    can: s => allUnits(s).length > 0,
+    run: (s, ctx) => damageChoice(s, ctx, 4, allUnits(s)) },
+], (s, ctx) => {
+  const up = ctx.upgradeChosen
+  if (!up || (ctx.step !== 'upgrade1' && ctx.step !== 'upgrade2')) return s
+  const next = defeatUpgradeAt(s, up.unitId, up.upgradeIndex)
+  // "Up to 2": the second is picked from what is left, and may be declined.
+  const rest = upgradeCandidates(next)
+  return ctx.step === 'upgrade1' && rest.length
+    ? pushChoice(next, { kind: 'selectUpgradeThen', id: `${ctx.sourceInstanceId}-upgrade2`, controller: ctx.owner, candidates: rest, optional: true, text: 'defeat another upgrade', then: resume(ctx, 'upgrade2') })
+    : next
+}))
+
+registerCard('SOR_203', chooseTwoWp([ // Cunning
+  { key: 'bounce', label: "Return a non-leader unit with 4 or less power to its owner's hand.",
+    can: s => unitsWhere(s, u => !u.isLeader && effectivePower(s, u) <= 4).length > 0,
+    run: (s, ctx) => targetChoice(s, ctx, 'selectUnitToReturn', unitsWhere(s, u => !u.isLeader && effectivePower(s, u) <= 4)) },
+  { key: 'buff', label: 'Give a unit +4/+0 for this phase.',
+    can: s => allUnits(s).length > 0,
+    run: (s, ctx) => lastingBuffChoice(s, ctx, idsOf(allUnits(s)), { power: 4 }) },
+  { key: 'exhaust', label: 'Exhaust up to 2 units.',
+    can: s => unitsWhere(s, u => !u.exhausted).length > 0,
+    run: (s, ctx) => pushChoice(s, { kind: 'multiPick', id: `${ctx.sourceInstanceId}-exhaust`, controller: ctx.owner, targets: unitsWhere(s, u => !u.exhausted), spec: { mode: 'exhaust', remaining: 2 } }) },
+  { key: 'discard', label: 'An opponent discards a random card from their hand.',
+    can: (s, ctx) => s.players[opponentOf(ctx.owner)].hand.length > 0,
+    run: (s, ctx) => discardAtRandom(s, opponentOf(ctx.owner)) },
+]))
+
+// ── One-offs ─────────────────────────────────────────────────────────────────────────────────
+
+registerCard('SOR_193', { // Millennium Falcon
+  entersReady: () => true,
+  // The ready step, not this unit readying: it is usually ready already, having entered play ready.
+  abilities: [{ trigger: 'whenReadyStep', description: 'When you ready cards during the regroup phase: Either pay 1 or return this unit to her owner\'s hand.', effect: (s, ctx) =>
+    pushChoice(s, { kind: 'payOrExhaust', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, cost: 1, resumeAtInitiative: true, orReturn: true }) }],
+})
+
+/** "If you control an Aggression leader or base" (Rey): the leader's card, deployed or not, or the base's. */
+const controlsAspectLeaderOrBase = (s: GameState, owner: PlayerId, aspect: string): boolean =>
+  [s.players[owner].leader.cardId, s.players[owner].base.cardId].some(id => s.cards[id]?.aspects.includes(aspect) ?? false)
+registerCard('LOF_148', { // Rey
+  abilities: [{ trigger: 'whenDrawn', description: 'When you draw this card during the action phase: If you control an Aggression leader or base, you may reveal this card from your hand. If you do, deal 2 damage to a unit and 2 damage to a base.', effect: (s, ctx) =>
+    (s.phase === 'action' && controlsAspectLeaderOrBase(s, ctx.owner, 'Aggression') && s.players[ctx.owner].hand.includes(ctx.cardId)
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'reveal Rey to deal 2 damage to a unit and 2 damage to a base', then: resume(ctx) })
+      : s) }],
+  ifYouDo: (s, ctx) => damageChoice(damageChoice(s, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-unit` }, 2, allUnits(s)), { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-base` }, 2, [], BOTH_BASES),
+})
+
+registerCard('SEC_017', { // Sabé
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenFriendlyAttackEnds',
+      hears: (_s, ctx) => (ctx.combatDamageToBase ?? 0) > 0,
+      description: "When a friendly unit deals combat damage to a base: You may exhaust this leader. If you do, look at the top 2 cards of the defending player's deck. Discard 1 of those cards.",
+      effect: (s, ctx) => (leaderCanExhaust(s, ctx.owner) && s.players[opponentOf(ctx.owner)].deck.length > 0
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: "exhaust Sabé (leader) to look at the top 2 cards of the defending player's deck and discard 1", then: resume(ctx, 'look') })
+        : s),
+    }],
+  },
+  abilities: [{ trigger: 'onAttackEnd', description: "When this unit deals combat damage to a base: Look at the defending player's hand. You may discard a card from it. If you do, that player draws a card.", effect: (s, ctx) =>
+    ((ctx.combatDamageToBase ?? 0) > 0
+      ? pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, thenDraw: true })
+      : s) }],
+  ifYouDo: (s, ctx) => {
+    const defender = opponentOf(ctx.owner)
+    const deck = s.players[defender].deck
+    if (ctx.step === 'look') {
+      return pushChoice(exhaustLeader(s, ctx.owner), { kind: 'selectCardThen', id: `${ctx.cardId}-look`, controller: ctx.owner, candidates: deck.slice(0, 2), text: "discard 1 of the top 2 cards of the defending player's deck; the other goes back on top", then: resume(ctx, 'discard') })
+    }
+    // The picked position, since the two may be copies of one card.
+    const at = ctx.optionIndex ?? 0
+    return at < deck.length ? updatePlayer(s, defender, { deck: deck.filter((_, i) => i !== at), discard: [...s.players[defender].discard, deck[at]] }) : s
+  },
+})
+
+registerCard('SOR_015', { // Boba Fett
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenUnitLeavesPlay',
+      hears: (_s, ctx) => ctx.unitLeftPlay !== undefined && ctx.unitLeftPlay.controller !== ctx.owner,
+      description: 'When an enemy unit leaves play: You may exhaust this leader. If you do, ready a resource.',
+      effect: (s, ctx) => (leaderCanExhaust(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Boba Fett (leader) to ready a resource', then: resume(ctx) })
+        : s),
+    }],
+  },
+  abilities: [{ trigger: 'onAttackEnd', description: 'When this unit completes an attack: If an enemy unit left play this phase, ready up to 2 resources.', effect: (s, ctx) =>
+    (survivedAttack(s, ctx) && leftPlayThisPhase(s, opponentOf(ctx.owner)).length > 0 ? readyResource(readyResource(s, ctx.owner), ctx.owner) : s) }],
+  ifYouDo: (s, ctx) => readyResource(exhaustLeader(s, ctx.owner), ctx.owner),
+})
+
+// ── "When you play an event" ───────────────────────────────────────────────────────────────────
+// `whenPlayCard` covers every type on both sides, so the card states both.
+const playedOwnEvent = (s: GameState, ctx: EffectContext): boolean =>
+  ctx.playingPlayer === ctx.owner && s.cards[ctx.playedCardId ?? '']?.type === 'event'
+
+registerCard('SOR_182', { abilities: [{ trigger: 'whenPlayCard', description: 'When you play an event: You may deal 2 damage to a unit.', effect: (s, ctx) => // Bossk
+  (playedOwnEvent(s, ctx) ? damageChoice(s, ctx, 2, allUnits(s), [], true) : s) }] })
+
+registerCard('TWI_216', { // Fives
+  abilities: [{ trigger: 'whenPlayCard', description: 'When you play an event: You may put a Clone unit from your discard pile on the bottom of your deck. If you do, draw a card.', effect: (s, ctx) => {
+    const candidates = s.players[ctx.owner].discard.filter(id => printedUnit(s.cards[id]) && printedTrait(s.cards[id], 'Clone'))
+    return playedOwnEvent(s, ctx) && candidates.length
+      ? cardThen(s, ctx, candidates, 'put a Clone unit from your discard pile on the bottom of your deck', true, 'bottom')
+      : s
+  } }],
+  ifYouDo: (s, ctx) => (ctx.cardChosen ? drawCards(discardToDeckBottom(s, ctx.owner, [ctx.cardChosen]), ctx.owner, 1) : s),
+})
+
+/** "Look at the top card of your deck. You may play it, discard it, or leave it on top of your deck." */
+const lookAtTopThenPlay = (s: GameState, ctx: EffectContext, costDelta = 0): GameState =>
+  (s.players[ctx.owner].deck.length
+    ? playFromZoneChoice(s, ctx, { zone: 'deckTop', optional: true, always: true, ...(costDelta ? { costDelta } : {}), then: { elseMayDiscardTop: true } })
+    : s)
+registerCard('TS26_8', { // Ahsoka Tano
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenPlayCard',
+      description: 'When you play an event: You may exhaust this leader. If you do, look at the top card of your deck. You may play it (paying its cost), discard it, or leave it on top of your deck.',
+      effect: (s, ctx) => (playedOwnEvent(s, ctx) && leaderCanExhaust(s, ctx.owner) && s.players[ctx.owner].deck.length
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Ahsoka Tano (leader) to look at the top card of your deck', then: resume(ctx) })
+        : s),
+    }],
+  },
+  abilities: [{ trigger: 'onAttackEnd', description: 'Look at the top card of your deck. You may play it, discard it, or leave it on top of your deck. If you play it, it costs 1 less.', effect: (s, ctx) =>
+    lookAtTopThenPlay(s, ctx, -1) }],
+  ifYouDo: (s, ctx) => lookAtTopThenPlay(exhaustLeader(s, ctx.owner), ctx),
+})
+
+// ── "When you deploy a leader" ─────────────────────────────────────────────────────────────────
+// A deploy raises `whenFriendlyEntersPlay` on the controller's base and other units; a leader arriving
+// any other way is not entering play (taking control is not), so the guard is only that it is a leader.
+const leaderArrived = (s: GameState, ctx: EffectContext): boolean => {
+  const arrived = findUnit(s, ctx.targetInstanceId ?? '')?.unit
+  return arrived !== undefined && isLeaderUnit(s, arrived)
+}
+/** "A unique <trait> card" you control: a unit in play, or the leader, which is a card wherever it is. */
+const controlsUniqueTraitCard = (s: GameState, owner: PlayerId, trait: string): boolean => {
+  const leader = s.cards[s.players[owner].leader.cardId]
+  return s.players[owner].units.some(u => s.cards[u.cardId]?.unique === true && unitHasTrait(s, u, trait))
+    || (!s.players[owner].leader.deployed && printedTrait(leader, trait))
+}
+registerCard('JTL_191', { // Invincible
+  costModifier: (s, playerId) => (controlsUniqueTraitCard(s, playerId, 'Separatist') ? -1 : 0),
+  abilities: [{ trigger: 'whenFriendlyEntersPlay', description: "When you deploy a leader: You may return a non-leader unit that costs 3 or less to its owner's hand.", effect: (s, ctx) =>
+    (leaderArrived(s, ctx) ? targetChoice(s, ctx, 'selectUnitToReturn', allUnits(s).filter(u => nonLeader(s, u) && printedCost(s, u) <= 3).map(u => u.instanceId), true) : s) }],
+})
+registerCard('TWI_022', { abilities: [{ trigger: 'whenFriendlyEntersPlay', description: 'When you deploy a leader: Create 2 Battle Droid tokens.', effect: (s, ctx) => // Droid Manufactory
+  (leaderArrived(s, ctx) ? createTokenUnits(s, ctx.owner, TOKEN_BATTLE_DROID, 2) : s) }] })
+registerCard('TWI_025', { abilities: [{ trigger: 'whenFriendlyEntersPlay', description: 'When you deploy a leader: Draw a card.', effect: (s, ctx) => // Shadow Collective Camp
+  (leaderArrived(s, ctx) ? drawCards(s, ctx.owner, 1) : s) }] })
+
+registerCard('TS26_78', { abilities: [{ trigger: 'whenUnitAttacks', description: 'When an enemy unit attacks: You may give an Experience token to that unit.', effect: (s, ctx) => // Barriss Offee
+  (!friendlyAttack(ctx) && attackerOf(s, ctx) ? expChoice(s, ctx, [ctx.attackerInstanceId!], 1, true) : s) }] })

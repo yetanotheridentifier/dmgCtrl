@@ -66,6 +66,13 @@ the card instead: its `ifYouDo` runs with the picked mode as `step`, and `labels
 (Teeka, Mon Cal Cruiser). Hunter's "choose two" raises its second choice once the first has resolved:
 at once after a Shield, or from the attack's end after an attack, as an attack sequence does.
 
+"Choose two, in any order" (Vigilance, Command, Aggression, Cunning) is `chooseTwoWp`: a `chooseMode`
+over the modes that can do something, keyed `1:<mode>`; the picked mode runs, and the second choice
+(`2:<mode>`, over the rest) is owed through `thenAfterChoices`, so it is raised only once every pick the
+first mode made has been answered. The player therefore orders the two by choosing them one at a time.
+A mode that needs picks of its own (Command's friendly unit, then the enemy it damages; Aggression's
+second upgrade) chains them through the card's `ifYouDo` steps.
+
 `resumeAfterChoice` decides what happens as the queue drains: the active player finishes theirs
 first, then control passes; round-start choices (`resumeAtInitiative`) begin the action phase with
 the initiative holder, mid-turn choices `advanceTurn`.
@@ -113,6 +120,15 @@ them (Attack Pattern Delta, Bold Resistance, Unlimited Power, whose damage all l
 pick). `hookOnDecline` runs the hook once more on Done, on `selectUnitThen`, `selectUpgradeThen` and
 `selectCardThen`, for an ability that goes on after its picks stop (AAT Incinerator, Sweep the Area,
 Jump to Lightspeed).
+
+A hook resumed this way runs as its card's (`resumeAbility`): the choices it raises carry that card as
+their source, and damage it deals is dealt by that card.
+
+**"Then, ..." after a part that may raise any number of choices** is `thenAfterChoices`: it owes the
+card's `ifYouDo` at a step as an entry in the trigger queue (`PendingTrigger.resume`). The queue
+resolves nothing while a choice is open, so the step runs once the last pick the ability raised has
+been answered, whichever choice kind that was. Owe one at a time: a second owed while the first waits
+nests under it and resolves first, so a part's own follow-up picks chain through its steps instead.
 
 `selectUpgradeToReturn` offers a free replay only with `replayFree`, which is Jabba the Hutt's own
 text; other cards that return an upgrade print no such thing. The replay (`mayPlayUpgradeFree`) offers

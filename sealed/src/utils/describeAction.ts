@@ -171,7 +171,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
     case 'skipTrigger': {
       const choice = action.choiceId ? findChoice(state, action.choiceId) : activeChoice(state)
       if (!choice) return 'Skip'
-      if (choice.kind === 'payOrExhaust') return "Don't pay (exhaust)"
+      if (choice.kind === 'payOrExhaust') return choice.orReturn ? "Don't pay (return to hand)" : "Don't pay (exhaust)"
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack' || choice.kind === 'mayAttackAnyUnit') return "Don't attack"

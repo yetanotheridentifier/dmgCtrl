@@ -1,4 +1,4 @@
-import type { Arena, DelayedEffect, EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeRef } from './types'
+import type { Arena, DelayedEffect, EngineCard, GameState, IfYouDo, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeRef } from './types'
 import { abilityCardIds, baseAbilityCardIds } from './types'
 
 /**
@@ -18,12 +18,30 @@ import { abilityCardIds, baseAbilityCardIds } from './types'
 export type TriggerPoint =
   | 'whenPlayed'
   | 'onAttack'
+  // "When a friendly / another friendly / an enemy unit attacks" (Major Partagaz, Barriss Offee): the
+  // same event as the attacker's own `onAttack`, in the same batch, heard by BOTH players' undeployed
+  // leaders, bases and units, the attacker's own included. `ctx.attackingPlayer` says whose attack it
+  // is, and every registration compares it against `ctx.owner`, as at `whenDrawCards`.
+  | 'whenUnitAttacks'
   | 'onAttackEnd'
+  // "When 1 or more damage is healed from this unit" (Silver Angel): fires on the healed unit from
+  // `healUnit`, the one place a unit is healed, with what was removed in `ctx.amountHealed`.
+  | 'whenHealed'
   // "When a friendly unit's attack ends": fires for every unit the attacker's
   // controller has (and their undeployed leader), not just the attacker — distinct from
   // `onAttackEnd` ("when THIS unit's attack ends", the attacker only).
   | 'whenFriendlyAttackEnds'
   | 'whenReadies'
+  // "When you ready cards during the regroup phase" (Millennium Falcon): the player's ready step, on
+  // every unit they control whether or not it was exhausted, in the same batch as `whenReadies`.
+  | 'whenReadyStep'
+  // "When you draw this card" (Rey): a card in hand, raised by `drawCards` for each card it drew, as
+  // that card's own ability. `ctx.drawingPlayer` is who drew.
+  | 'whenDrawn'
+  // "When an enemy unit leaves play" (Boba Fett): defeated or returned to hand, the two ways a unit
+  // leaves play that the phase record (`leftPlay`) also counts. Heard by both players' undeployed
+  // leaders, bases and units, with the unit and its controller in `ctx.unitLeftPlay`.
+  | 'whenUnitLeavesPlay'
   | 'whenRegroupStarts'
   // "When you take the initiative" (Mandalorian) — fires for the taker's undeployed leader.
   | 'whenTakeInitiative'
@@ -43,19 +61,16 @@ export type TriggerPoint =
   // "When you draw 1 or more cards" (Axe Woves): fires once per draw EVENT (not per card)
   // on the drawing player's units, including the regroup-phase draw.
   | 'whenDrawCards'
-  // "When your base is dealt damage" (Blade Three): fires on the damaged base's owner's units.
-  // All base damage funnels through `dealDamageToBase`, so combat and ability damage both count.
-  | 'whenOwnBaseDamaged'
+  // Damage dealt, to units or a base, by combat or an ability (Rancor Keeper, Blade Three, Cassian
+  // Andor, Darth Sidious). One event per application of damage, heard by BOTH players' undeployed
+  // leaders, bases and units, the damaged side first. `ctx.damageDealt` names every unit dealt damage
+  // (the ones it defeated too), the base, and who dealt it; each registration states the side it reads.
+  | 'whenDamageDealt'
   // "When a friendly upgrade is defeated" (Zeb Orrelios): fires on the upgrade owner's units.
   // Deliberately narrow: raised by an effect defeating an upgrade, or by its host unit dying — NOT
   // by a Shield/Advantage token being spent as part of combat resolution, which happens inside
   // damage application, where raising a choice would interrupt a half-applied combat.
   | 'whenFriendlyUpgradeDefeated'
-  // "When a friendly unit is dealt damage and survives" (Rancor Keeper). `ctx.damagedSurvivors` names them.
-  | 'whenFriendlyDamagedSurvives'
-  // "When you deal damage to an enemy base" (Cassian Andor): fires on the units of the player whose
-  // opponent's base was dealt damage, unless that base's own controller's card dealt it.
-  | 'whenEnemyBaseDamaged'
   | 'onDefense'
   // "When you play a unit" (Maz Kanata, Poggle the Lesser): a unit arriving through a play. Fires on the
   // player's undeployed leader and their OTHER units, with `ctx.targetInstanceId` the played unit.
@@ -107,6 +122,19 @@ export interface AbilityDef {
   /** Human-readable rules text — used by the log and future UI. */
   description: string
   effect: EffectFn
+  /**
+   * The trigger condition, where it is a property of the event rather than of the board: whether this
+   * event triggers the ability at all ("when a FRIENDLY unit is dealt NON-COMBAT damage"). Settled
+   * when the event happens, as the rules settle it, so an ability the event does not concern is never
+   * collected. That matters at a point heard on both sides: a collected ability that then does nothing
+   * still puts its side in the batch, and a batch with both sides in it asks who goes first.
+   */
+  hears?: (state: GameState, ctx: EffectContext) => boolean
+}
+
+/** Whether `ability` is triggered by an event at its point, as collected for `owner`. */
+function hearsEvent(state: GameState, ability: AbilityDef, owner: PlayerId, cardId: string, sourceInstanceId: string | undefined, ctx?: TriggerContext): boolean {
+  return !ability.hears || ability.hears(state, { owner, cardId, sourceInstanceId, ...ctx })
 }
 
 /**
@@ -616,9 +644,44 @@ export function stampChoiceSource(before: GameState, after: GameState, source: D
   return changed ? { ...after, pendingChoices: stamped } : after
 }
 
-/** Run one ability effect, attributing whatever choices it raises to the card it belongs to. */
+/**
+ * Run an effect as `source`'s: the choices it raises are stamped with it, and damage it deals without
+ * naming a source is attributed to it for the damage event (`GameState.resolvingSource`).
+ *
+ * The marker is on the board only for the call. An effect that changed nothing returns the board it
+ * was given, and so does this, which `inertNow` relies on: it asks whether an ability would do
+ * anything by comparing references.
+ */
+export function runAttributed(state: GameState, source: DamageSource, run: (s: GameState) => GameState): GameState {
+  return stampChoiceSource(state, whileResolving(state, source, run), source)
+}
+
+/** The damage-event half of `runAttributed`: `GameState.resolvingSource` for the duration of `run`. */
+function whileResolving(state: GameState, source: DamageSource, run: (s: GameState) => GameState): GameState {
+  const outer = state.resolvingSource
+  const marked: GameState = { ...state, resolvingSource: source }
+  const after = run(marked)
+  if (after === marked) return state
+  const rest = { ...after }
+  delete rest.resolvingSource
+  return outer ? { ...rest, resolvingSource: outer } : rest
+}
+
+/**
+ * Run a card's `ifYouDo` hook at `then`, attributed to that card like the ability it continues.
+ * `settled` is what the answered choice decided, when a choice is what resumed it.
+ */
+export function resumeAbility(state: GameState, then: IfYouDo, settled: Partial<IfYouDoContext> = {}): GameState {
+  const hook = registry.get(then.cardId)?.ifYouDo
+  if (!hook) return state
+  const source: DamageSource = { cardId: then.cardId, controller: then.owner, ...(then.sourceInstanceId ? { instanceId: then.sourceInstanceId } : {}) }
+  return runAttributed(state, source, s => hook(s, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, unitChosen: then.unit, ...settled }))
+}
+
+/** Run one ability effect, attributing whatever choices it raises (and damage it deals) to its card. */
 function runEffect(state: GameState, effect: (s: GameState, ctx: EffectContext) => GameState, ctx: EffectContext): GameState {
-  return stampChoiceSource(state, effect(state, ctx), { cardId: ctx.cardId, controller: ctx.owner })
+  const source: DamageSource = { cardId: ctx.cardId, controller: ctx.owner, ...(ctx.sourceInstanceId ? { instanceId: ctx.sourceInstanceId } : {}) }
+  return runAttributed(state, source, s => effect(s, ctx))
 }
 
 /**
@@ -663,7 +726,7 @@ export function collectUnitTriggers(
   ]
   for (const cardId of cardIds) {
     getAbilities(cardId).forEach((ability, abilityIndex) => {
-      if (ability.trigger !== point) return
+      if (ability.trigger !== point || !hearsEvent(state, ability, owner, cardId, unit.instanceId, ctx)) return
       out.push({
         id: `t${out.length}-${unit.instanceId}-${cardId}-${abilityIndex}`,
         controller: owner, point, cardId, abilityIndex,
@@ -720,7 +783,7 @@ export function collectLeaderTriggers(
   if (leader.deployed) return []
   const out: PendingTrigger[] = []
   ;(registry.get(leader.cardId)?.leaderAbilities?.abilities ?? []).forEach((ability, abilityIndex) => {
-    if (ability.trigger !== point) return
+    if (ability.trigger !== point || !hearsEvent(state, ability, owner, leader.cardId, undefined, ctx)) return
     out.push({
       id: `t${out.length}-leader-${leader.cardId}-${abilityIndex}`,
       controller: owner, point, cardId: leader.cardId, abilityIndex, layer: 0,
@@ -747,7 +810,7 @@ export function collectBaseTriggers(
   const out: PendingTrigger[] = []
   for (const cardId of baseAbilityCardIds(state.players[owner].base)) {
     getAbilities(cardId).forEach((ability, abilityIndex) => {
-      if (ability.trigger !== point) return
+      if (ability.trigger !== point || !hearsEvent(state, ability, owner, cardId, baseSourceId(cardId), ctx)) return
       out.push({
         id: `t${out.length}-base-${cardId}-${abilityIndex}`,
         controller: owner, point, cardId, abilityIndex, layer: 0,
@@ -796,7 +859,12 @@ export function collectArrivalTriggers(
   return [
     ...(route ? friendly(route) : []),
     ...friendly('whenFriendlyEntersPlay'),
-    ...(['player', 'opponent'] as PlayerId[]).flatMap(p => collectBaseTriggers(state, 'whenUnitEntersPlay', p, ctx)),
+    // "When a unit enters play", from either side: both bases (Trap Field) and every unit but the one
+    // arriving (Phee Genoa hears an enemy leader deploy).
+    ...(['player', 'opponent'] as PlayerId[]).flatMap(p => [
+      ...collectBaseTriggers(state, 'whenUnitEntersPlay', p, ctx),
+      ...state.players[p].units.flatMap(u => (u.instanceId === arrivedId ? [] : collectUnitTriggers(state, 'whenUnitEntersPlay', u, p, ctx))),
+    ]),
   ]
 }
 
@@ -814,6 +882,7 @@ export function triggerAbility(trigger: PendingTrigger): AbilityDef | undefined 
 
 /** Resolve exactly one collected trigger. A no-op if its card's abilities are no longer registered. */
 export function runPendingTrigger(state: GameState, trigger: PendingTrigger): GameState {
+  if (trigger.resume) return resumeAbility(state, trigger.resume)
   const ability = triggerAbility(trigger)
   if (!ability || ability.trigger !== trigger.point) return state
   return runEffect(state, ability.effect, {

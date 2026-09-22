@@ -222,6 +222,32 @@ export interface PlayerState {
 export interface DamageSource {
   cardId: string
   controller: PlayerId
+  /**
+   * The in-play instance whose ability or combat it was, when there is one: the attacker or defender
+   * in combat, or the unit an ability belongs to. "When a friendly unit deals damage" (Jango Fett)
+   * reads it; a leader's front, a base or an event names none.
+   */
+  instanceId?: string
+}
+
+/**
+ * One damage event, as `whenDamageDealt` carries it: every unit of one player dealt damage by a single
+ * application (whether or not it survived), or that player's base, and who dealt it.
+ */
+export interface DamageDealt {
+  /** Whose units or base were dealt the damage. */
+  owner: PlayerId
+  /** Each unit dealt damage, after prevention and Shields, with whether it survived. */
+  units: { instanceId: string; cardId: string; amount: number; survived: boolean }[]
+  /** Damage dealt to `owner`'s base, after prevention. */
+  base?: number
+  byCombat: boolean
+  /**
+   * Who dealt it, where the engine knows: the attacking or defending unit in combat, the card an
+   * ability or a choice belongs to, or the effect that was resolving when the damage was dealt.
+   * `unitId` is set only when the dealer is a unit in play ("a friendly unit deals damage").
+   */
+  dealer?: { controller: PlayerId; cardId: string; unitId?: string }
 }
 
 /** A pending "your next unit …" grant. All fields are plain data (GameState is JSON). */
@@ -367,6 +393,12 @@ export interface GameState {
    * are two abilities the player orders (the reported case was exactly that).
    */
   pendingTriggers?: PendingTrigger[]
+  /**
+   * The card whose effect is resolving right now, set only for the duration of the effect call and
+   * never at rest. Damage the effect deals without naming a source is attributed to it for the damage
+   * event (`DamageDealt.dealer`) and for nothing else: prevention still reads only a named source.
+   */
+  resolvingSource?: DamageSource
   /**
    * Which side is currently entitled to resolve its triggers, once CR 7.6.10 has been answered.
    *
@@ -585,6 +617,8 @@ export interface LastingEffect {
   attackersPower?: number
   /** The next time the unit would be dealt damage, prevent this much of it; then the effect is spent (Shien Flurry). */
   preventNext?: number
+  /** Each time the unit would be dealt damage for the duration, prevent this much of it (Finn). Never spent. */
+  preventEach?: number
   /** The unit can't be defeated by having no remaining HP for the duration (The Tragedy of Plagueis). */
   survivesNoHp?: boolean
   /** The unit can't ready for the duration (No Good to Me Dead). Read by `unitCannotReady`. */
@@ -690,6 +724,8 @@ export interface PhaseEvents {
    * list while its own combat resolves: a card reading it means "no OTHER unit".
    */
   attackedUnits?: string[]
+  /** Players who had a unit defeated while attacking this phase (Oppression Breeds Rebellion). */
+  defeatedWhileAttacking?: PlayerId[]
   /** Instance ids of units healed this phase (Barriss Offee). */
   healedUnits?: string[]
   /**
@@ -742,33 +778,44 @@ export interface TriggerContext {
   attackTarget?: AttackTarget
   /** `onAttackEnd` / `whenEnemyAttacksBase`: the unit that made the attack. */
   attackerInstanceId?: string
+  /**
+   * `onAttackEnd`: the attacker's card, readable after the combat defeated it ("another unit that
+   * costs less than it", Colonel Yularen), when its instance is no longer there to look up.
+   */
+  attackerCardId?: string
   /** `onAttackEnd`: combat damage dealt to the opponent's base this attack (0 if none). */
   combatDamageToBase?: number
   /** `onAttackEnd`: the defending unit was defeated during this attack. */
   defenderDefeated?: boolean
+  /** `onAttackEnd`, when the combat defeated the defender: that unit as it was going into the damage step. */
+  defeatedDefender?: UnitState
+  /** `onAttackEnd`, when the combat defeated the defender: the attacker's damage past its remaining HP. */
+  excessCombatDamage?: number
   /** `onAttackEnd`: combat damage the attacker dealt to the defending unit (0 if a base attack). */
   combatDamageToDefender?: number
   /** `whenDefeated`: the unit as it was at the moment of defeat (it has left play). */
   defeatedUnit?: UnitState
   /** `whenDefeated`: the defeat was caused by combat damage. */
   defeatedByCombat?: boolean
+  /**
+   * `whenDefeated` / `whenFriendlyUnitDefeated` / `whenEnemyUnitDefeated`: the unit was the attacker,
+   * defeated by the combat damage of its own attack ("when a friendly unit is defeated while attacking").
+   */
+  defeatedWhileAttacking?: boolean
   /** A unit the event is *about*: the one just played, readied, or chosen. */
   targetInstanceId?: string
   /** `whenUpgradeAttached`: the upgrade was played (from any zone) rather than created or moved by an ability. */
   upgradePlayed?: boolean
   /** `whenPlayUpgrade`: the upgrade card just played. */
   playedCardId?: string
-  /** `whenFriendlyDamagedSurvives`: each unit that was dealt damage and survived, with how much (Jabba the Hutt). */
-  damagedSurvivors?: { instanceId: string; amount: number }[]
   /**
-   * `whenFriendlyDamagedSurvives` / `whenOwnBaseDamaged`: the damage was **combat** damage.
-   *
-   * Cards are printed both ways at both points and the two readings are not interchangeable:
-   * "dealt damage and survives" (Arena Acklay) fires on an ability's ping, "dealt combat damage and
-   * isn't defeated" (Tarfful) does not. The flag is the one already threaded through
-   * `applyUnitDamage`, surfaced rather than recomputed.
+   * `whenDamageDealt`: the damage event. The point fires on **both** players, so every registration
+   * states which side's units or base it reads (`damageDealt.owner`) and, where it cares, whose damage
+   * it was (`damageDealt.dealer`).
    */
-  byCombat?: boolean
+  damageDealt?: DamageDealt
+  /** `whenUnitLeavesPlay`: the unit as it last was in play, and who controlled it. */
+  unitLeftPlay?: { unit: UnitState; controller: PlayerId }
   /**
    * `whenDrawCards`: who drew. The point fires on **both** players' units, because a card reads it
    * either about itself ("when you draw", Axe Woves) or about the other side ("when an opponent
@@ -779,8 +826,16 @@ export interface TriggerContext {
   /**
    * `whenPlayCard`: who played the card. Like `drawingPlayer`, the point fires on both players, so
    * every registration compares this against `ctx.owner` ("when you play" or "when an opponent plays").
+   * Also on a played upgrade's `whenUpgradeAttached`, since an opponent can play one on your unit.
    */
   playingPlayer?: PlayerId
+  /**
+   * `whenUnitAttacks`: whose unit is attacking. The point fires on both players, so every
+   * registration compares this against `ctx.owner` ("a friendly unit attacks" or "an enemy unit attacks").
+   */
+  attackingPlayer?: PlayerId
+  /** `whenHealed`: how much damage the heal actually removed from the unit. */
+  amountHealed?: number
   /** `whenDrawCards`: how many cards that one draw event drew. Fires once per event, not per card. */
   cardsDrawn?: number
 }
@@ -808,6 +863,13 @@ export interface PendingTrigger {
   layer: number
   /** The in-play instance the ability fires from, when it still exists. */
   sourceInstanceId?: string
+  /**
+   * Not a triggered ability but **the rest of one** ("Then, ..."): the card's `ifYouDo` at this step,
+   * owed once everything the ability has raised so far has resolved (`thenAfterChoices`). The queue
+   * already waits for every open choice before it resolves the next entry, which is exactly that.
+   * `abilityIndex` is unused.
+   */
+  resume?: IfYouDo
   /**
    * The controller has already named this one as the next to resolve (CR 7.6.9), so the dispatcher
    * runs it instead of asking again. Without it, moving the pick to the front is invisible to a
@@ -846,7 +908,8 @@ type WithChoiceSource<T> = T extends unknown ? T & { source?: DamageSource } : n
 type ChoiceVariant =
   | { kind: 'ambush'; id: string; controller: PlayerId; unitId: string }
   | { kind: 'support'; id: string; controller: PlayerId; unitId: string }
-  | { kind: 'payOrExhaust'; id: string; controller: PlayerId; unitId: string; cost: number; resumeAtInitiative?: boolean }
+  // `orReturn`: declining returns the unit to its owner's hand instead of exhausting it (Millennium Falcon).
+  | { kind: 'payOrExhaust'; id: string; controller: PlayerId; unitId: string; cost: number; resumeAtInitiative?: boolean; orReturn?: boolean }
   | { kind: 'mayPlayTopFree'; id: string; controller: PlayerId; unitId: string; cardId: string }
   | { kind: 'mayDamageExhaust'; id: string; controller: PlayerId; unitId: string; arena: Arena }
   // Improvised Identity: search the revealed top cards for a ground unit to
@@ -1383,6 +1446,13 @@ export function cardsPlayedThisPhase(state: GameState, owner: PlayerId): string[
 }
 
 /** Note that a unit with card id `cardId` was defeated under `owner` this phase. */
+/** Note that one of `owner`'s units was defeated while attacking this phase. Idempotent. */
+export function recordDefeatedWhileAttacking(state: GameState, owner: PlayerId): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  const who = events.defeatedWhileAttacking ?? []
+  return who.includes(owner) ? state : { ...state, phaseEvents: { ...events, defeatedWhileAttacking: [...who, owner] } }
+}
+
 export function recordUnitDefeated(state: GameState, owner: PlayerId, cardId: string): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
   return { ...state, phaseEvents: { ...events, defeated: { ...events.defeated, [owner]: [...events.defeated[owner], cardId] } } }

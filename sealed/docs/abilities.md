@@ -93,6 +93,15 @@ whose condition is unmet *at that moment*, or one with no legal target). Inert i
 pass, since an ability resolving earlier in the batch can meet a later one's condition. `choices.md`
 owns both rules.
 
+The inert probe runs within one side only. Whether **both** sides have something in the batch is
+asked of the collected abilities as they stand, so an ability that triggers only to do nothing can put
+a "who goes first" question to the active player. An ability whose condition is a property of the
+event ("a **friendly** unit is dealt **non-combat** damage") states it as `hears` on its `AbilityDef`:
+every collector checks it when the event happens, and an event it does not describe never collects
+the ability. It is the trigger condition in the rules' sense, settled once, where inert is re-read on
+every pass. The points heard on both sides are where it earns its place (`whenDamageDealt` uses it for
+every registration).
+
 ### Ambush and Support are abilities, not keywords
 
 Both read as keywords but each is a When Played ability ("When you play this unit, you may attack …"),
@@ -117,23 +126,52 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 
 ### Trigger points
 
-`whenPlayed`, `onAttack`, `onAttackEnd`, `onDefense`, `whenDefeated`, `whenReadies`,
-`whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
+`whenPlayed`, `onAttack`, `whenUnitAttacks`, `onAttackEnd`, `onDefense`, `whenHealed`, `whenDefeated`, `whenReadies`,
+`whenReadyStep`, `whenDrawn`, `whenUnitLeavesPlay`, `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
 `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
-`whenFriendlyDamagedSurvives`, `whenEnemyAttacksBase`, `whenOwnBaseDamaged`, `whenEnemyBaseDamaged`,
+`whenDamageDealt`, `whenEnemyAttacksBase`,
 `whenFriendlyAttackEnds`, `whenDeployed`, `whenPlayUpgrade`, `whenPlayCard`, `whenUnitEntersPlay`,
 `whenActionPhaseStarts`.
 
 `whenPlayUpgrade` ("when you play an upgrade") fires on the player's undeployed leader, base and units,
-with the card in `ctx.playedCardId`. `whenPlayCard` ("when you play a Heroism card", Agent Kallus)
+with the card in `ctx.playedCardId` and, unless it went on a base, the unit it went on in
+`ctx.targetInstanceId` ("when you play an upgrade on a unit: deal 1 damage to that unit", Dengar).
+"When you play an upgrade on **this** unit" is not that point but the host's `whenUpgradeAttached`
+with `ctx.upgradePlayed`, which carries who played it in `ctx.playingPlayer`: an opponent can play an
+upgrade on your unit, and that is not "you". `whenPlayCard` ("when you play a Heroism card", Agent Kallus)
 covers a card of **any** type, so it fires from all three play doors; the card is in
 `ctx.playedCardId` and the condition on it belongs to the registering card. It fires on **both**
 players' leaders, bases and units, the playing player's first, with who played in
 `ctx.playingPlayer`, because the point is also printed from the far side ("when an opponent plays an
 event", Saw Gerrera). As with `whenDrawCards`, every registration at this point compares
 `ctx.playingPlayer` against `ctx.owner`. `whenUnitEntersPlay`
-is collected from both players' bases only, for any unit either player brings into play (Trap Field).
+is collected from both players' bases and from every unit in play but the one arriving, for any unit
+either player brings into play (Trap Field, and Phee Genoa hearing an enemy leader deploy).
+
+The three defeat points (`whenDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`) carry
+`ctx.defeatedWhileAttacking` for an attacker defeated by the combat damage of its own attack, and the
+phase records whose unit that was (`phaseEvents.defeatedWhileAttacking`, Oppression Breeds Rebellion).
+`whenFriendlyUnitDefeated` reaches the controller's undeployed leader as well as their base and
+surviving units (Luthen Rael).
+
+`whenHealed` ("when 1 or more damage is healed from this unit", Silver Angel) fires on the healed unit
+from `healUnit`, which is the one place a unit is healed, with what the heal actually removed in
+`ctx.amountHealed` (Baze Malbus deals that much). A heal that removes nothing raises nothing.
+
+`whenReadyStep` ("when you ready cards during the regroup phase", Millennium Falcon) is the player's
+ready step, raised on every unit they control whether or not it was exhausted, in the same batch as
+`whenReadies` (which fires only on a unit that actually readied). Its `payOrExhaust` with `orReturn`
+returns the unit to its owner's hand on a decline, and resumes with the initiative holder as every
+ready-step choice does.
+
+`whenDrawn` ("when you draw this card", Rey) is an ability of a card in **hand**: `drawCards` collects it
+from each card it drew, once the draw's `whenDrawCards` batch is done, with `ctx.drawingPlayer`. The
+source instance is a `drawn-<card>-<index>` id, since a hand card has none.
+
+`whenUnitLeavesPlay` ("when an enemy unit leaves play", Boba Fett) is raised wherever the phase
+record's `leftPlay` is written: a defeat (in the defeat batch) and a return to hand. It is heard by both
+players' undeployed leaders, bases and units, with the unit and its controller in `ctx.unitLeftPlay`.
 
 `whenActionPhaseStarts` ("when the action phase starts", Beast Lair) fires for every unit in play and
 each player's leader and base as the next round's action phase begins, on the same boundary as an
@@ -145,7 +183,9 @@ phase to be in play to read the next one.
 every route in goes through it: a play, a token being created, a leader deploying and a captured card
 released back into play. All four fire `whenFriendlyEntersPlay` ("when a friendly unit enters play",
 Outcast) on the controller's undeployed leader, base and **other** units, and `whenUnitEntersPlay` (Trap
-Field) on both players' bases, with the arriving unit in `ctx.targetInstanceId`.
+Field) on both players' bases and other units, with the arriving unit in `ctx.targetInstanceId`. "When
+you deploy a leader" is `whenFriendlyEntersPlay` with a guard that the arriving unit is a leader, and
+"when an enemy leader deploys" is `whenUnitEntersPlay` with the same guard on the far side.
 
 The route matters only where a card reads it. `whenPlayUnit` ("when you play a unit", Maz Kanata, Poggle
 the Lesser) fires for a play alone, and `whenCreateUnit` for a token being created, so a card that reads
@@ -157,24 +197,41 @@ The arriving unit is left out of its own arrival, so a card that also reads "inc
 (Outcast) covers that half with its own When Played, and one that does not (Boba Fett, Family Found)
 gets the printed behaviour for free. Taking control of a unit raises nothing: it is already in play.
 
-`whenFriendlyDamagedSurvives` fires once per damage event and names each unit that survived it, with
-how much it was dealt, in `ctx.damagedSurvivors`. A card printed "when **this** unit is dealt damage
-and survives" (Arena Acklay, Gungi, Tech, Crosshair) is that list filtered to `ctx.sourceInstanceId`,
-and one printed "a friendly unit" (Jabba the Hutt) is the same list with the source dropped: there is
-no second point for the singular reading. `ctx.byCombat` says whether the damage was combat damage,
-which is the only difference between Arena Acklay, who fires on an ability's ping, and Tarfful, whose
-head reads "dealt **combat** damage and isn't defeated".
+**Damage dealt is one point, `whenDamageDealt`**, for every card that reads damage from either end:
+the damaged unit or base ("when this unit is dealt damage and survives", "when your base is dealt
+damage", "when non-combat damage is dealt to a friendly unit or base") and the dealer ("when you deal
+damage to an enemy base", "when you deal 4 or more damage", "when a friendly unit deals damage to an
+enemy unit"). It fires once for each application of damage: one call of `applyUnitDamage` (so the
+defender's and the attacker's combat damage are two events) or of `dealDamageToBase`. It is heard by
+**both** players' undeployed leaders, bases and units, the damaged side first, and it joins the batch
+of the defeats the same damage caused. `ctx.damageDealt` carries:
 
-`whenEnemyBaseDamaged` ("when you deal damage to an enemy base") fires on the units of the base
-owner's opponent, unless the damage came from a card the base's own controller controls. It is
-**not** the point for "when this unit deals combat damage to a base" (Obi-Wan Kenobi, Chopper,
+- `owner`: whose units or base took it;
+- `units`: every unit dealt damage after prevention and Shields, with the amount and `survived`. A
+  unit the damage defeated is still named (Logray reads the cost of one);
+- `base`: the damage to `owner`'s base;
+- `byCombat`, the only difference between Arena Acklay, who fires on an ability's ping, and Tarfful,
+  whose head reads "dealt **combat** damage and isn't defeated";
+- `dealer`: the controller and card, plus `unitId` when a unit in play dealt it. Combat damage names
+  the attacker or the defender. Otherwise it is the source the damage was dealt with, or, when an
+  effect deals damage without naming one, the effect resolving at the time
+  (`GameState.resolvingSource`, set by `runAttributed` around every ability, action and resumed
+  ability, and never at rest). Damage with neither is dealt by nobody, which is correct for the
+  damage a player deals their own base as a cost. The fallback feeds the event only: prevention
+  still reads only a named source.
+
+**Every registration's condition is its `hears`**, not a guard in its effect. The point is heard on
+both sides, and an ability collected only to do nothing still puts its side in the batch; a batch
+with both sides in it asks the active player who goes first. `hears` is the trigger condition,
+settled when the event happens, so an event the card does not describe never collects it. The
+readers in `cardDefinitions.ts` (`damageToFriendly`, `friendlySurvivors`, `survivedItself`,
+`friendlyBaseDamaged`, `dealtByYou`) are the shared phrasings. A card printed "when **this** unit is
+dealt damage and survives" is the survivors filtered to `ctx.sourceInstanceId`, and "a friendly unit"
+(Jabba the Hutt) is the same list with the source dropped: there is no second point for either.
+
+It is **not** the point for "when this unit deals combat damage to a base" (Obi-Wan Kenobi, Chopper,
 Seventh Sister), which is `onAttackEnd` with `ctx.combatDamageToBase`: that is the attacking unit
-itself rather than every unit its controller has, and combat damage rather than any damage.
-
-`whenOwnBaseDamaged` ("when your base is dealt damage") carries `ctx.byCombat` and, when it was
-combat, `ctx.attackerInstanceId`, so the base owner's side can read the same attack the attacker's
-own `onAttackEnd` reads (Populist Advisor: "when an **enemy unit** deals **combat** damage to your
-base"). Both are absent for every ability that pings a base.
+itself rather than every unit that hears the event.
 
 `whenDrawCards` fires on **both** players' units, with who drew in `ctx.drawingPlayer` and the size
 of the draw in `ctx.cardsDrawn`. A card reads it either about itself ("when you draw", Axe Woves) or
@@ -197,7 +254,23 @@ unit fire on other units' attacks:
   leader**: "when a *friendly* unit's attack ends".
 
 `onAttackEnd` still fires if the attacker was defeated in the combat (CR 7.6), falling back to its
-last-known state with its upgrades.
+last-known state with its upgrades, and carries that attacker's card in `ctx.attackerCardId` so a
+card can still read it ("another unit that costs less than it", Colonel Yularen). A card printed
+"when this unit completes an attack (and survives)" is `onAttackEnd` with a guard that the unit is
+still in play: the bracket is reminder text, not a point of its own. "When this unit attacks and
+defeats a unit" is `onAttackEnd` with `ctx.defenderDefeated`; when the combat did the defeating, the
+unit itself is in `ctx.defeatedDefender` (its cost, Drengir Spawn) and the damage past its remaining
+HP in `ctx.excessCombatDamage` (Blizzard Assault AT-AT), as `whenDefeated` carries `defeatedUnit`.
+
+The declaration has the same pair. **`onAttack`** is the attacker's own "On Attack";
+**`whenUnitAttacks`** is the same event heard by **both** players' undeployed leaders, bases and
+units, the attacker's own included, in the same batch as the On Attack. It carries the attacker in
+`ctx.attackerInstanceId`, its target in `ctx.attackTarget` and whose attack it is in
+`ctx.attackingPlayer`, so a card reads "a friendly unit attacks" (Boonta Eve Flagbearer), "another
+friendly Official unit attacks" (Major Partagaz) or "an enemy unit attacks" (Barriss Offee) from one
+point. As at `whenDrawCards`, **every registration compares `ctx.attackingPlayer` against
+`ctx.owner`**. `whenEnemyAttacksBase` is narrower and older: the attacked player's units only, for
+base attacks only, raised as the damage lands.
 
 Two triggers fire **once per event, not once per item**, matching cards worded "1 or more":
 

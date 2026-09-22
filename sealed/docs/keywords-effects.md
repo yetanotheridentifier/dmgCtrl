@@ -91,7 +91,7 @@ same guard since a pair of Kelleran Beqs blew the stack.
 GameState.lastingEffects?: LastingEffect[]
 // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, untilRoundEnd?, abilityCardIds?,
 //   cannotAttack?, cannotAttackBases?, cannotBeAttacked?, unlessSentinel?, removeKeywords?,
-//   noCombatDamage?, attackersPower?, cannotReady?, preventNext?, survivesNoHp? }
+//   noCombatDamage?, attackersPower?, cannotReady?, preventNext?, preventEach?, survivesNoHp? }
 ```
 
 `addLastingEffect` appends one; `lastingEffectTotals(state, instanceId)` sums those aimed at a unit.
@@ -340,7 +340,9 @@ prevents is never dealt, so no shield is spent soaking it, and the unit is not "
 either. What a card stopped is recorded in `phaseEvents.damagePrevented`, which is what a prevention
 limited to once a phase reads, since `damagedUnits` by definition cannot hold it. A `preventNext`
 lasting effect on the unit (Shien Flurry) is applied in the same place, after the cards, and is spent by
-the first instance it meets.
+the first instance it meets. A `preventEach` lasting effect (Finn: "for this phase, if damage would be
+dealt to that unit, prevent 1 of that damage") is counted with the cards and never spent, so it
+applies to every instance for its duration.
 
 Unpreventable damage ignores both kinds, and ignores Shields entirely: the token is not even spent.
 

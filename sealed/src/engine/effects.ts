@@ -1,9 +1,9 @@
-import type { DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
+import type { DamageDealt, DamageSource, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
 import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint } from './abilities'
-import { getCardDefinition, collectArrivalTriggers, collectUnitTriggers } from './abilities'
+import { getCardDefinition, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers } from './abilities'
 import { enqueueTriggers, drainTriggers } from './triggerQueue'
 
 /**
@@ -19,6 +19,24 @@ import { enqueueTriggers, drainTriggers } from './triggerQueue'
  */
 export function fireBatch(state: GameState, owed: PendingTrigger[], sameEvent = false): GameState {
   return owed.length === 0 ? state : drainTriggers(enqueueTriggers(state, owed, sameEvent))
+}
+
+/**
+ * "Then, ...": owe the rest of an ability (its card's `ifYouDo` at `then`) until everything it has
+ * raised so far has resolved, however many choices deep that goes ("choose two, in any order": the
+ * second choice waits for the first mode's own picks). Queued as a trigger entry, because the queue
+ * already resolves nothing while a choice is open; it is drained by whatever answers the last one.
+ *
+ * Inside a choice's own continuation, chain the next choice directly instead. Two of these owed at
+ * once would nest the second under the first and resolve it first.
+ */
+export function thenAfterChoices(state: GameState, then: IfYouDo): GameState {
+  return enqueueTriggers(state, [{
+    id: `then-${then.cardId}-${then.step ?? ''}`,
+    controller: then.owner, point: 'whenPlayed', cardId: then.cardId, abilityIndex: -1, layer: 0,
+    ...(then.sourceInstanceId ? { sourceInstanceId: then.sourceInstanceId } : {}),
+    resume: then,
+  }])
 }
 
 /**
@@ -215,9 +233,10 @@ export function openSupportChoice(state: GameState, owner: PlayerId, sourceInsta
 }
 
 /** {@link fireUpgradeAttached} as data, for a caller folding it into a wider batch (a unit entering). */
-export function collectUpgradeAttached(state: GameState, instanceId: string, upgradePlayed = false): PendingTrigger[] {
+export function collectUpgradeAttached(state: GameState, instanceId: string, upgradePlayed = false, playingPlayer?: PlayerId): PendingTrigger[] {
   const found = findUnit(state, instanceId)
-  return found ? collectUnitTriggers(state, 'whenUpgradeAttached', found.unit, found.owner, { upgradePlayed }) : []
+  // Who played it, since an opponent can play an upgrade on your unit ("when YOU play an upgrade on this unit").
+  return found ? collectUnitTriggers(state, 'whenUpgradeAttached', found.unit, found.owner, { upgradePlayed, ...(playingPlayer ? { playingPlayer } : {}) }) : []
 }
 
 /**
@@ -258,12 +277,36 @@ export function dealDamageToBase(state: GameState, player: PlayerId, amount: num
   // Only combat damage that actually LANDED counts, which is why this sits below the prevention
   // above rather than beside `recordBaseAttacked` at the declaration (Moff Gideon).
   if (combat) next = recordBaseCombatDamage(next, combat.attackerInstanceId)
-  // "When your base is dealt damage" (Blade Three) — the base owner's units react.
-  next = fireUnitsTrigger(next, 'whenOwnBaseDamaged', player, combat ? { byCombat: true, attackerInstanceId: combat.attackerInstanceId } : {})
-  // "When you deal damage to an enemy base" (Cassian Andor): the other side's units, unless the base's
-  // own controller's card dealt it.
-  const dealer = player === 'player' ? 'opponent' : 'player'
-  return source?.controller === player ? next : fireUnitsTrigger(next, 'whenEnemyBaseDamaged', dealer)
+  // One damage event, heard by both sides: "when your base is dealt damage" (Blade Three) and "when
+  // you deal damage to an enemy base" (Cassian Andor) are its two readings.
+  const dealer = damageDealer(state, source, combat !== undefined)
+  return fireBatch(next, collectDamageDealt(next, { owner: player, units: [], base: dealt, byCombat: combat !== undefined, ...(dealer ? { dealer } : {}) }))
+}
+
+/**
+ * Who dealt damage from `source`: the card and controller, and the unit when a unit in play dealt it.
+ * With no source named, the effect resolving at the time dealt it (`GameState.resolvingSource`); with
+ * neither, nobody is named, and a card that reads "you deal" does not hear it.
+ *
+ * Combat damage is always a unit's, including a defender that the same damage step defeats, so its
+ * instance is taken as given rather than looked up.
+ */
+export function damageDealer(state: GameState, source: DamageSource | undefined, byCombat: boolean): DamageDealt['dealer'] {
+  const from = source ?? state.resolvingSource
+  if (!from) return undefined
+  // A choice's stamped source names the card; the resolving effect may also know its instance.
+  const instanceId = from.instanceId ?? (state.resolvingSource?.cardId === from.cardId ? state.resolvingSource.instanceId : undefined)
+  const isUnit = instanceId !== undefined && (byCombat || findUnit(state, instanceId) !== undefined)
+  return { controller: from.controller, cardId: from.cardId, ...(isUnit ? { unitId: instanceId } : {}) }
+}
+
+/** Everything one damage event triggers: both players' undeployed leaders, bases and units, the damaged side first. */
+export function collectDamageDealt(state: GameState, event: DamageDealt): PendingTrigger[] {
+  const ctx = { damageDealt: event }
+  return [event.owner, opponentOf(event.owner)].flatMap(p => [
+    ...collectPlayerTriggers(state, 'whenDamageDealt', p, ctx),
+    ...collectUnitsTrigger(state, 'whenDamageDealt', p, ctx),
+  ])
 }
 
 /**
@@ -327,7 +370,11 @@ export function healUnit(state: GameState, instanceId: string, amount: number): 
   if (!found || found.unit.damage === 0 || amount <= 0) return state
   // "Each friendly unit that was healed this phase" (Barriss Offee) — recorded here, which is the
   // one place a unit is healed, so every source of healing counts.
-  return recordUnitHealed(patchUnit(state, found.owner, instanceId, u => ({ ...u, damage: Math.max(0, u.damage - amount) })), instanceId)
+  const amountHealed = Math.min(amount, found.unit.damage)
+  const healed = recordUnitHealed(patchUnit(state, found.owner, instanceId, u => ({ ...u, damage: u.damage - amountHealed })), instanceId)
+  // "When 1 or more damage is healed from this unit" (Silver Angel), with what the heal removed.
+  const unit = findUnit(healed, instanceId)!.unit
+  return fireBatch(healed, collectUnitTriggers(healed, 'whenHealed', unit, found.owner, { amountHealed }))
 }
 
 /**
@@ -486,7 +533,9 @@ export function drawCards(state: GameState, owner: PlayerId, n: number): GameSta
   // controller's draws could not express that. Who drew is in `ctx.drawingPlayer`, and every
   // registration compares it against `ctx.owner` rather than assuming one side.
   const ctx = { drawingPlayer: owner, cardsDrawn: drawn.length }
-  return fireUnitsTrigger(fireUnitsTrigger(next, 'whenDrawCards', owner, ctx), 'whenDrawCards', opponentOf(owner), ctx)
+  const heard = fireUnitsTrigger(fireUnitsTrigger(next, 'whenDrawCards', owner, ctx), 'whenDrawCards', opponentOf(owner), ctx)
+  // "When you draw this card" (Rey): each drawn card's own ability, from the hand it has just reached.
+  return fireBatch(heard, drawn.flatMap((cardId, i) => collectCardTriggers('whenDrawn', cardId, owner, `drawn-${cardId}-${i}`, { drawingPlayer: owner })))
 }
 
 /** Every ability `owner`'s units have at `point`: one event, so one batch. */
@@ -520,9 +569,19 @@ export function returnUnitToHand(state: GameState, instanceId: string): GameStat
     }
     next = recordUnitLeftPlay(next, owner, u.cardId, u.isLeader)
     // Leaving play releases whatever it had captured.
-    return releaseCaptured(next, owner, u.captured ?? [])
+    next = releaseCaptured(next, owner, u.captured ?? [])
+    return fireBatch(next, collectLeavesPlay(next, u, owner))
   }
   return state
+}
+
+/** "When a unit leaves play" (Boba Fett), heard on both sides: `unit` has just left `controller`'s control. */
+export function collectLeavesPlay(state: GameState, unit: UnitState, controller: PlayerId): PendingTrigger[] {
+  const ctx = { unitLeftPlay: { unit, controller } }
+  return [controller, opponentOf(controller)].flatMap(p => [
+    ...collectPlayerTriggers(state, 'whenUnitLeavesPlay', p, ctx),
+    ...collectUnitsTrigger(state, 'whenUnitLeavesPlay', p, ctx),
+  ])
 }
 
 /**

@@ -4,7 +4,7 @@ import { legalMoves } from '../engine/legalMoves'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword } from '../engine/keywords'
 import { getCardDefinition, registerCard } from '../engine/abilities'
-import { defeatUnit } from '../engine/combat'
+import { dealDamageToUnit, defeatUnit } from '../engine/combat'
 import { dealDamageToBase } from '../engine/effects'
 import { opponentOf } from '../engine/types'
 import { reprintCanonicalId } from '../data/reprints'
@@ -246,13 +246,13 @@ describe('TS26_73 Moralo Eval: when your base is dealt combat damage, you may de
   const s = board([unit('m', 'TS26_73')], [unit('e', 'CHEAP')])
 
   it('offers an optional ping for combat damage', () => {
-    const fired = fireAt(s, 'TS26_73', 'whenOwnBaseDamaged', 'm', { byCombat: true, attackerInstanceId: 'e' })
+    const fired = resolve({ ...s, activePlayer: 'opponent' }, { type: 'attack', attackerId: 'e', target: { kind: 'base' } })
     expect(choice(fired).kind).toBe('selectDamageTarget')
     expect(declinable(fired)).toBe(true)
   })
 
   it('does nothing for ability damage', () => {
-    noChoice(fireAt(s, 'TS26_73', 'whenOwnBaseDamaged', 'm', {}))
+    noChoice(dealDamageToBase(s, 'player', 1, { cardId: 'CHEAP', controller: 'opponent' }))
   })
 })
 
@@ -336,16 +336,16 @@ describe('JTL_111 Seasoned Fleet Admiral: when an opponent draws during the acti
 })
 
 describe('SHD_084 Phase-III Dark Trooper: when combat damage is dealt to this unit, it gains Experience if it survives', () => {
-  const s = board([unit('p3', 'SHD_084', { damage: 1 })])
-  const survivors = [{ instanceId: 'p3', amount: 1 }]
+  const s = board([unit('p3', 'SHD_084'), unit('o', 'DEAR')], [unit('e', 'CHEAP')])
+  const attacks = (defenderId: string) => resolve({ ...s, activePlayer: 'opponent' }, { type: 'attack', attackerId: 'e', target: { kind: 'unit', instanceId: defenderId } })
 
   it('gains an Experience token for combat damage it survives', () => {
-    expect(hasToken(fireAt(s, 'SHD_084', 'whenFriendlyDamagedSurvives', 'p3', { damagedSurvivors: survivors, byCombat: true }), 'p3', TOKEN_EXPERIENCE)).toBe(true)
+    expect(hasToken(attacks('p3'), 'p3', TOKEN_EXPERIENCE)).toBe(true)
   })
 
   it('does not gain one for ability damage, or for another unit\'s damage', () => {
-    expect(hasToken(fireAt(s, 'SHD_084', 'whenFriendlyDamagedSurvives', 'p3', { damagedSurvivors: survivors }), 'p3', TOKEN_EXPERIENCE)).toBe(false)
-    expect(hasToken(fireAt(s, 'SHD_084', 'whenFriendlyDamagedSurvives', 'p3', { damagedSurvivors: [{ instanceId: 'x', amount: 1 }], byCombat: true }), 'p3', TOKEN_EXPERIENCE)).toBe(false)
+    expect(hasToken(dealDamageToUnit(s, 'p3', 1, { cardId: 'CHEAP', controller: 'opponent' }), 'p3', TOKEN_EXPERIENCE)).toBe(false)
+    expect(hasToken(attacks('o'), 'p3', TOKEN_EXPERIENCE)).toBe(false)
   })
 })
 

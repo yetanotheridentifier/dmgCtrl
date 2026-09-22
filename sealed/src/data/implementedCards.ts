@@ -274,6 +274,27 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'HMW_016', name: 'Maul', front: false, back: true },
   { id: 'LOF_001', name: 'Kylo Ren', front: true, back: true },
   { id: 'SEC_003', name: 'Lama Su', front: true, back: true },
+  // "When this unit completes an attack (and survives)".
+  { id: 'SEC_006', name: 'Colonel Yularen', front: true, back: true },
+  // "When a friendly unit attacks".
+  { id: 'HMW_014', name: 'Wicket', front: true, back: true },
+  // "When you play an event".
+  { id: 'TS26_8', name: 'Ahsoka Tano', front: true, back: true },
+  // "When a friendly unit attacks and defeats a unit".
+  { id: 'LOF_017', name: 'Darth Revan', front: true, back: true },
+  // "When you play an upgrade".
+  { id: 'SHD_018', name: 'The Mandalorian', front: true, back: true },
+  // "When a friendly unit is defeated while attacking".
+  { id: 'SEC_013', name: 'Luthen Rael', front: true, back: true },
+  // The damage event: "when you deal 4 or more", "when non-combat damage is dealt to a friendly unit
+  // or base", "when a friendly unit deals damage to an enemy unit".
+  { id: 'HMW_011', name: 'Darth Sidious', front: true, back: true },
+  { id: 'HMW_013', name: 'Cham Syndulla', front: true, back: true },
+  { id: 'TWI_016', name: 'Jango Fett', front: true, back: true },
+  // "When an enemy unit leaves play".
+  { id: 'SOR_015', name: 'Boba Fett', front: true, back: true },
+  // "When a friendly unit deals combat damage to a base"; "when this unit deals combat damage to a base".
+  { id: 'SEC_017', name: 'Sabé', front: true, back: true },
 ]
 
 /**
@@ -305,6 +326,9 @@ export const IMPLEMENTED_BASES: UpgradeStatus[] = [
   { id: 'LAW_027', name: 'Stygeon Spire' },
   { id: 'LAW_028', name: 'Canto Bight' },
   { id: 'LAW_030', name: 'Partisan Hideout' },
+  // "When you deploy a leader".
+  { id: 'TWI_022', name: 'Droid Manufactory' },
+  { id: 'TWI_025', name: 'Shadow Collective Camp' },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
@@ -407,6 +431,8 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'HMW_206', name: 'The Tarkin Doctrine' },
   { id: 'HMW_216', name: 'Insurgent Camp' },
   { id: 'HMW_271', name: 'Landing Pad' },
+  // "When attached unit readies".
+  { id: 'JTL_192', name: 'In Debt to Crimson Dawn' },
   // HMW When Played: A
   { id: 'HMW_236', name: 'Booma Ball' },
   { id: 'HMW_252', name: 'Villainous Ambition' },
@@ -818,6 +844,13 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'TWI_040', name: 'A Fine Addition' },
   { id: 'TWI_189', name: 'Unnatural Life' },
   { id: 'TWI_201', name: 'Aid from the Innocent' },
+  // "A friendly unit was defeated while attacking this phase".
+  { id: 'SEC_158', name: 'Oppression Breeds Rebellion' },
+  // "Choose two, in any order".
+  { id: 'SOR_058', name: 'Vigilance' },
+  { id: 'SOR_107', name: 'Command' },
+  { id: 'SOR_155', name: 'Aggression' },
+  { id: 'SOR_203', name: 'Cunning' },
 ]
 
 /**
@@ -1711,7 +1744,7 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'HMW_122', name: 'Boga' },
   { id: 'JTL_221', name: 'Stolen AT-Hauler' },
   { id: 'SHD_115', name: 'Cobb Vanth' },
-  // "When this unit is dealt damage and survives": the existing `whenFriendlyDamagedSurvives`
+  // "When this unit is dealt damage and survives": `whenDamageDealt` with the survivors
   // filtered to the registering unit. Tarfful reads combat damage only.
   { id: 'HMW_156', name: 'Arena Acklay' },
   { id: 'HMW_166', name: 'Gungi' },
@@ -1757,6 +1790,53 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SOR_101', name: 'Rogue Squadron Skirmisher' },
   { id: 'TS26_13', name: 'Darth Sidious' },
   { id: 'SHD_255', name: 'Lady Proxima' },
+  // "When this unit completes an attack (and survives)".
+  { id: 'JTL_070', name: 'U-Wing Lander' },
+  { id: 'JTL_089', name: 'The Invisible Hand' },
+  { id: 'LOF_038', name: 'Pong Krell' },
+  { id: 'SEC_048', name: 'Captain Rex' },
+  { id: 'SEC_174', name: "Saw Gerrera's U-Wing" },
+  { id: 'SHD_059', name: 'Embo' },
+  { id: 'SOR_146', name: 'Zeb Orrelios' },
+  { id: 'SOR_192', name: 'Ezra Bridger' },
+  { id: 'TWI_053', name: 'Finn' },
+  // "When a friendly / another friendly / an enemy unit attacks".
+  { id: 'SEC_081', name: 'Major Partagaz' },
+  { id: 'LAW_112', name: 'Boonta Eve Flagbearer' },
+  { id: 'TS26_78', name: 'Barriss Offee' },
+  // "When you play an event".
+  { id: 'SOR_182', name: 'Bossk' },
+  { id: 'TWI_216', name: 'Fives' },
+  // "When you deploy a leader".
+  { id: 'JTL_191', name: 'Invincible' },
+  // "When this unit attacks and defeats a unit", and Rukh on The Great Mothers' block.
+  { id: 'LOF_063', name: 'Oggdo Bogdo' },
+  { id: 'LOF_086', name: 'Drengir Spawn' },
+  { id: 'SOR_088', name: 'Blizzard Assault AT-AT' },
+  { id: 'SOR_149', name: 'Mace Windu' },
+  { id: 'SOR_085', name: 'Rukh' },
+  // "When this unit is attacked".
+  { id: 'LOF_047', name: 'T-6 Shuttle 1974' },
+  { id: 'SEC_090', name: 'Director Krennic' },
+  { id: 'SEC_187', name: 'General Grievous' },
+  { id: 'SHD_035', name: 'Clan Saxon Gauntlet' },
+  { id: 'SOR_196', name: 'Chewbacca' },
+  { id: 'TWI_049', name: 'Knight of the Republic' },
+  { id: 'TWI_083', name: "General's Guardian" },
+  // "When you play an upgrade on this unit / on a unit".
+  { id: 'JTL_202', name: 'Black Squadron Scout Wing' },
+  { id: 'SHD_067', name: 'Fenn Rau' },
+  { id: 'SHD_133', name: 'Dengar' },
+  // "When an enemy leader deploys".
+  { id: 'HMW_214', name: 'Phee Genoa' },
+  // "When 1 or more damage is healed from this unit".
+  { id: 'JTL_062', name: 'Silver Angel' },
+  { id: 'LAW_047', name: 'Baze Malbus' },
+  // "When another friendly unit that costs 3 or less is dealt damage".
+  { id: 'HMW_045', name: 'Logray' },
+  // "When you ready cards during the regroup phase"; "when you draw this card".
+  { id: 'SOR_193', name: 'Millennium Falcon' },
+  { id: 'LOF_148', name: 'Rey' },
 ]
 
 /**

@@ -5,7 +5,7 @@ import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPe
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, grantZoneRef, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
-import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, type TriggerPoint } from './abilities'
+import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
@@ -924,7 +924,9 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   const choice = choiceId ? findChoice(state, choiceId) : activeChoice(state)
   if (!choice) throw new Error('skipTrigger: no pending choice')
   let next = removeChoice(state, choice.id)
-  if (choice.kind === 'ambush' || choice.kind === 'payOrExhaust') {
+  if (choice.kind === 'payOrExhaust' && choice.orReturn) {
+    next = returnUnitToHand(next, choice.unitId)
+  } else if (choice.kind === 'ambush' || choice.kind === 'payOrExhaust') {
     next = updatePlayer(next, choice.controller, {
       units: next.players[choice.controller].units.map(u => (u.instanceId === choice.unitId ? { ...u, exhausted: true } : u)),
     })
@@ -2224,9 +2226,9 @@ function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: strin
   // upgrade's own "When Played" (CR 6.2.0f) are simultaneous, so they are one batch. A base upgrade's
   // source is `<cardId>-base`, so a choice its When Played raises has a stable id.
   next = fireBatch(next, [
-    ...(onBase ? [] : collectUpgradeAttached(next, targetInstanceId!, true)),
+    ...(onBase ? [] : collectUpgradeAttached(next, targetInstanceId!, true, playerId)),
     ...collectCardTriggers('whenPlayed', card.id, playerId, onBase ? baseSourceId(card.id) : targetInstanceId),
-    ...collectPlayUpgrade(next, playerId, card.id),
+    ...collectPlayUpgrade(next, playerId, card.id, onBase ? undefined : targetInstanceId),
     ...collectPlayCard(next, playerId, card.id),
   ])
   // Two upgrades with the same unique title → defeat one, on a base as on a unit.
@@ -2246,9 +2248,12 @@ function baseUniqueCheck(state: GameState, playerId: PlayerId, cardId: string): 
   return state.cards[cardId]?.unique && copies > 1 ? defeatBaseUpgrade(state, playerId, cardId) : state
 }
 
-/** "When you play an upgrade": the player's leader, base and units, told which card it was. */
-function collectPlayUpgrade(state: GameState, playerId: PlayerId, cardId: string): PendingTrigger[] {
-  const ctx = { playedCardId: cardId }
+/**
+ * "When you play an upgrade": the player's leader, base and units, told which card it was and, unless
+ * it went on a base, which unit it went on ("on a unit: deal 1 damage to that unit", Dengar).
+ */
+function collectPlayUpgrade(state: GameState, playerId: PlayerId, cardId: string, hostId?: string): PendingTrigger[] {
+  const ctx = { playedCardId: cardId, ...(hostId ? { targetInstanceId: hostId } : {}) }
   return [...collectPlayerTriggers(state, 'whenPlayUpgrade', playerId, ctx), ...collectUnitsTrigger(state, 'whenPlayUpgrade', playerId, ctx)]
 }
 
@@ -2276,7 +2281,7 @@ function useBaseUpgradeAction(state: GameState, cardId: string, index: number): 
   if (offered.ability.defeatsSelf) next = defeatBaseUpgrade(next, owner, cardId)
   if (offered.ability.oncePerPhase) next = recordBaseActionUsed(next, owner, baseActionKey(cardId, index))
   const ctx = { owner, cardId, sourceInstanceId: baseSourceId(cardId) }
-  next = stampChoiceSource(next, offered.ability.effect(next, ctx), { cardId, controller: owner })
+  next = runAttributed(next, { cardId, controller: owner }, s => offered.ability.effect(s, ctx))
   next = checkWin(next)
   if (next.winner !== null) return next
   next = handOffOpponentChoice(next, owner)
@@ -2309,7 +2314,7 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
       ),
     })
   }
-  next = stampChoiceSource(next, ability.effect(next, { owner, cardId, sourceInstanceId: instanceId }), { cardId, controller: owner })
+  next = runAttributed(next, { cardId, controller: owner, instanceId }, s => ability.effect(s, { owner, cardId, sourceInstanceId: instanceId }))
   next = checkWin(next)
   if (next.winner !== null) return next
   return hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
@@ -2329,7 +2334,7 @@ function useLeaderAbility(state: GameState, index: number, targetInstanceId?: st
 
   const paid = ability.cost ? payCost(p, ability.cost) : p
   let next = updatePlayer(state, owner, { ...paid, leader: { ...p.leader, exhausted: true } })
-  next = stampChoiceSource(next, ability.effect(next, { owner, cardId: p.leader.cardId, targetInstanceId }), { cardId: p.leader.cardId, controller: owner })
+  next = runAttributed(next, { cardId: p.leader.cardId, controller: owner }, s => ability.effect(s, { owner, cardId: p.leader.cardId, targetInstanceId }))
   next = checkWin(next)
   if (next.winner !== null) return next
   next = handOffOpponentChoice(next, owner)
@@ -2349,7 +2354,7 @@ function useBaseAbility(state: GameState): GameState {
   if (p.base.epicActionUsed) throw new Error('useBaseAbility: already used this game')
 
   let next = updatePlayer(state, owner, { base: { ...p.base, epicActionUsed: true } })
-  next = stampChoiceSource(next, ability.effect(next, { owner, cardId: p.base.cardId }), { cardId: p.base.cardId, controller: owner })
+  next = runAttributed(next, { cardId: p.base.cardId, controller: owner }, s => ability.effect(s, { owner, cardId: p.base.cardId }))
   next = checkWin(next)
   if (next.winner !== null) return next
   next = handOffOpponentChoice(next, owner)
@@ -2537,11 +2542,11 @@ function consumeAdvantage(state: GameState, owner: PlayerId, instanceId: string)
  *  survived the combat. `ctx` carries what the attack did (target, whether
  *  it damaged the base) for abilities like Whistling Birds. */
 function fireAttackEnd(state: GameState, owner: PlayerId, attackerId: string, ctx: TriggerContext, captured?: UnitState): GameState {
-  const fullCtx = { ...ctx, attackerInstanceId: attackerId }
   // "When THIS unit's attack ends" — the attacker only (Camtono, Whistling Birds). Still
   // triggers if the attacker was defeated by combat damage (CR 7.6 / 1258) — fall back to
   // its last-known state (with its upgrades).
   const attacker = state.players[owner].units.find(u => u.instanceId === attackerId) ?? captured
+  const fullCtx = { ...ctx, attackerInstanceId: attackerId, ...(attacker ? { attackerCardId: attacker.cardId } : {}) }
   const owed = attacker ? collectUnitTriggers(state, 'onAttackEnd', attacker, owner, fullCtx) : []
   // "When a friendly unit's attack ends": every unit the attacker's controller has, plus their
   // undeployed leader. One event, so all of it is one batch.
@@ -2604,7 +2609,14 @@ function attack(state: GameState, attackerId: string, target: AttackTarget, viaA
   // the attack with the attacker keeping control, resuming at the On Defense stage.
   const before = next
   const attackerNow = next.players[playerId].units.find(u => u.instanceId === attackerId)!
-  next = fireBatch(next, collectUnitTriggers(next, 'onAttack', attackerNow, playerId, { attackTarget: target }))
+  // "When a friendly / an enemy unit attacks" is the same event, so it joins the same batch, heard
+  // on both sides with the attacker's side first.
+  const heard = { attackTarget: target, attackerInstanceId: attackerId, attackingPlayer: playerId }
+  next = fireBatch(next, [
+    ...collectUnitTriggers(next, 'onAttack', attackerNow, playerId, { attackTarget: target }),
+    ...[playerId, opponentOf(playerId)].flatMap(p =>
+      [...collectPlayerTriggers(next, 'whenUnitAttacks', p, heard), ...collectUnitsTrigger(next, 'whenUnitAttacks', p, heard)]),
+  ])
   if (batchOutstanding(before, next)) {
     return { ...next, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'onDefense', viaAmbush } }
   }
@@ -2675,7 +2687,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   if (target.kind === 'base') {
     // Through `dealDamageToBase` so base-damage prevention applies (At Attin Safety Droid);
     // the attack-end ctx reports what actually landed, not the raw power.
-    const baseSource = { cardId: attacker.cardId, controller: playerId }
+    const baseSource = { cardId: attacker.cardId, controller: playerId, instanceId: attackerId }
     const dealtToBase = baseDamageAfterPrevention(state, enemyId, attackerPower, baseSource)
     let next = dealDamageToBase(state, enemyId, attackerPower, baseSource, { attackerInstanceId: attackerId })
     next = recordBaseAttacked(next, enemyId, attackerId) // "your base was attacked this phase" (Greef Karga, Qui-Gon Jinn)
@@ -2723,8 +2735,8 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // stat context goes through so combat-only debuffs count in the defeat check (Scion Shuttle).
   // Combat damage is attributed to the unit dealing it, so "damage dealt by friendly Underworld
   // cards is unpreventable" can see where it came from (Gorian Shard's Corsair).
-  const attackerSource = { cardId: attacker.cardId, controller: playerId }
-  const counterSource = { cardId: defender.cardId, controller: enemyId }
+  const attackerSource = { cardId: attacker.cardId, controller: playerId, instanceId: attackerId }
+  const counterSource = { cardId: defender.cardId, controller: enemyId, instanceId: defender.instanceId }
 
   // Damage prevention (The Mandalorian) is settled HERE — after the powers are known but
   // before anything is committed — so the logic below (first strike, Overwhelm, attack-end) still
@@ -2796,7 +2808,10 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   next = consumeAdvantage(next, enemyId, defender.instanceId)
   // Pass the pre-combat attacker so its "When Attack Ends" fires even if it was defeated.
   const defenderDefeated = !next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
-  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmDealt, defenderDefeated, combatDamageToDefender: dealtToDefender }, attacker)
+  // "Attacks and defeats a unit" cards read the unit itself (its cost, Drengir Spawn) and what the
+  // hit had left over past its remaining HP (Blizzard Assault AT-AT).
+  const defeatedCtx = defenderDefeated ? { defeatedDefender: defender, excessCombatDamage: spillExcess } : {}
+  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmDealt, defenderDefeated, combatDamageToDefender: dealtToDefender, ...defeatedCtx }, attacker)
   return clearAttackGrants(checkWin(next))
 }
 
@@ -2813,10 +2828,8 @@ function finishHealing(state: GameState, damageUnit: string | undefined, healed:
 
 /** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */
 function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef; playerChosen?: PlayerId; arenaChosen?: Arena; optionIndex?: number; nameChosen?: string } = {}): GameState {
-  const hook = getCardDefinition(then.cardId)?.ifYouDo
-  if (!hook) return state
-  const next = hook(state, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, unitChosen: then.unit, ...settled })
-  return checkWin(next)
+  // Attributed like the ability it resumes, so "if you do, deal 2 damage" is dealt by that card.
+  return checkWin(resumeAbility(state, then, settled))
 }
 
 function inPlayUnits(state: GameState): UnitState[] {
@@ -3046,11 +3059,15 @@ function readyEverything(state: GameState, id: PlayerId): GameState {
       : u)),
     leader: p.leader.exhausted ? { ...p.leader, exhausted: false } : p.leader,
   })
-  // "When this unit readies" abilities: everything readies at once, so one batch.
-  return fireBatch(next, justReadied.flatMap(instanceId => {
-    const unit = next.players[id].units.find(u => u.instanceId === instanceId)
-    return unit ? collectUnitTriggers(next, 'whenReadies', unit, id) : []
-  }))
+  // "When this unit readies" abilities: everything readies at once, so one batch, which "when you
+  // ready cards during the regroup phase" joins on every unit, readied or not (Millennium Falcon).
+  return fireBatch(next, [
+    ...justReadied.flatMap(instanceId => {
+      const unit = next.players[id].units.find(u => u.instanceId === instanceId)
+      return unit ? collectUnitTriggers(next, 'whenReadies', unit, id) : []
+    }),
+    ...collectUnitsTrigger(next, 'whenReadyStep', id),
+  ])
 }
 
 /** Whoever decides the first pending choice — the initiative holder if they have one
