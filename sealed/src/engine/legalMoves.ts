@@ -1,8 +1,8 @@
 import type { Action } from './actions'
-import type { AspectWaiver, AttackerFilter, DiscardPlayGrant, EngineCard, GameState, HandCardRef, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
+import type { AspectWaiver, AttackerFilter, DiscardPlayGrant, EngineCard, GameState, HandCardRef, PendingChoice, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
 import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds, pushChoice, isFortify } from './types'
 import { canAfford, readyResourceCount } from './resources'
-import { unitHasKeyword, unitCannotAttack, unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
+import { keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
 import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, baseEpicAction, usableBaseActions } from './abilities'
 import './cardDefinitions' // side effect: registers all real card behaviours
 
@@ -218,6 +218,64 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   // it halves what is actually owed rather than the printed cost.
   const halved = p.units.some(u => abilityCardIds(u).some(cid => getCardDefinition(cid)?.halvesCosts?.(state, u, playerId) ?? false))
   return halved ? Math.ceil(total / 2) : total
+}
+
+/** The terms of an `exploit` step: how many units may be chosen, what each saves, and what befalls them. */
+export interface ExploitTerms { limit: number; discount: number; damage?: number }
+
+/**
+ * Whether playing `card` from hand asks for units to exploit first, and on what terms, or `undefined`
+ * when it does not.
+ *
+ * Exploit X (CR 7.5.16) is the printed numeral plus any Exploit the card gains as it is played
+ * (instances stack, 7.5.16.b): a "next card you play" grant, or `extra` from the ability doing the
+ * playing (Count Dooku). The Marauder's `whilePlaying` is the same step on its own terms. Either way
+ * the limit is capped at the friendly units there are, so a step is never offered with nothing to pick.
+ */
+export function exploitTerms(state: GameState, playerId: PlayerId, card: EngineCard, extra = 0): ExploitTerms | undefined {
+  const units = state.players[playerId].units.length
+  if (units === 0) return undefined
+  const own = getCardDefinition(card.id)?.whilePlaying
+  if (own) return { limit: units, discount: own.discount, damage: own.damage }
+  const granted = (state.players[playerId].nextUnitGrants ?? [])
+    .reduce((sum, g) => sum + (nextUnitGrantMatches(card, g, state, playerId) ? g.exploit ?? 0 : 0), 0)
+  const x = keywordValue(state, card.id, 'Exploit') + granted + extra
+  return x > 0 ? { limit: Math.min(x, units), discount: 2 } : undefined
+}
+
+/**
+ * Exploit (CR 7.5.16), and The Marauder's step of the same shape: before anything is paid, ask for
+ * the friendly units, one at a time. The card stays in hand until the step finishes, since nothing
+ * else happens in between. The choice is the card's own, so its prompt can name it. `resolve` answers
+ * it; an ability doing the playing (Count Dooku) raises it here too.
+ */
+export function raiseExploit(state: GameState, owner: PlayerId, cardId: string, handIndex: number, terms: ExploitTerms): GameState {
+  return pushChoice(state, {
+    kind: 'exploit', id: `exploit-${cardId}`, controller: owner, cardId, handIndex, picks: [],
+    limit: terms.limit, discount: terms.discount, ...(terms.damage !== undefined ? { damage: terms.damage } : {}),
+    source: { cardId, controller: owner },
+  })
+}
+
+/**
+ * The least `card` can cost from hand: its effective cost less the most its exploit step could save
+ * (CR 6.2.3.e, decreases after increases, floored at 0). A play is legal when THIS is affordable,
+ * since the units are chosen as part of paying.
+ */
+export function lowestCost(state: GameState, playerId: PlayerId, card: EngineCard, extra = 0): number {
+  const terms = exploitTerms(state, playerId, card, extra)
+  const cost = effectiveCost(state, playerId, card)
+  return terms ? Math.max(0, cost - terms.limit * terms.discount) : cost
+}
+
+/**
+ * What an `exploit` step leaves to pay with its picks so far. The cost is read before the chosen units
+ * go, so a unit that was discounting the card (or providing an aspect) still counts: it is determined
+ * at step 3 of Play a Card, which is where Exploit is used.
+ */
+export function exploitCost(state: GameState, choice: Extract<PendingChoice, { kind: 'exploit' }>): number {
+  const card = state.cards[choice.cardId]
+  return card ? Math.max(0, effectiveCost(state, choice.controller, card) - choice.picks.length * choice.discount) : 0
 }
 
 /**
@@ -451,7 +509,7 @@ function actionPhaseMoves(state: GameState): Action[] {
     const card = state.cards[cardId]
     if (!card || (card.type !== 'unit' && card.type !== 'event')) return
     if (forbiddenNames.has(card.name)) return
-    if (!canAfford(p, effectiveCost(state, playerId, card))) return
+    if (!canAfford(p, lowestCost(state, playerId, card))) return
     moves.push(card.type === 'unit' ? { type: 'playUnit', handIndex } : { type: 'playEvent', handIndex })
   })
 
@@ -711,6 +769,15 @@ function choiceMoves(state: GameState): Action[] {
       case 'selectUnitToExhaust': {
         // Fennec's "exhaust a friendly unit" additional cost — pick one. Mandatory.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        break
+      }
+      case 'exploit': {
+        // Done first, then each friendly unit not yet chosen. Done only once the rest is affordable, so
+        // a play that needs its discount cannot be stranded half paid.
+        if (canAfford(state.players[choice.controller], exploitCost(state, choice))) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        for (const u of state.players[choice.controller].units) {
+          if (!choice.picks.includes(u.instanceId)) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: u.instanceId })
+        }
         break
       }
       case 'playCardFrom': {

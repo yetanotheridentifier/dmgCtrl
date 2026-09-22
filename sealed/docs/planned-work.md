@@ -172,6 +172,10 @@ Two phases:
   discard pile, a site the engine does not have, and are on #678; L3-37 shipped with #477 and
   Obi-Wan Kenobi with #474; Second Chance, Stolen Landspeeder,
   Sifo-Dyas and Mother Talzin are on the ticket of their own other blocker.
+  **Exploit is finished** (#473): the keyword is a step inside the hand play (see `choices.md`), 22 of
+  TWI's 23 Exploit cards shipped (seven play as printed, Count Dooku's leader gives it) with HMW's The
+  Marauder on the same step, and Osi Sobeck waits on capture (#466). Exploit is not offered on a play
+  an ability makes (`playCardFrom`, `playUnitFromHand`), which no sealed Exploit card needs yet.
   **The trigger-head batch is finished** (#474, #680). Most heads needed only context on points that
   already fired; the damage points became one both-sides event (`whenDamageDealt`), and the heads no
   point raised got their own (a unit attacking, healing, the ready step, a card being drawn, a unit
@@ -192,14 +196,13 @@ Two phases:
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
 (with the token units, #605), the Weakness-token cards (#649), the Fortify cards (#650), the When Played
-units and upgrades (#651, all 50), the constant abilities (#652, 36 of 39) and the events, leaders and
+units and upgrades (#651, all 50), the constant abilities (#652 and #473, 37 of 39) and the events, leaders and
 remaining trigger points (#653, 36 of 40) are built. 58 play
 as printed (all 16 bases are vanilla). Of the 214 with ability text, **128 were blocked by nothing** once
 four the triage passed are lifted to their mechanic's ticket, cut like Phase 1 by trigger point, and
 **all three batches have now shipped**. Of the constants, Vernestra Rwoh (an additional cost from the
 discard pile, and borrowed When Played abilities) is on #683, Zam Wesell (a leader's traits while she
-is out of play) on #686, and The Marauder (units chosen and damaged while playing it, each reducing its
-cost) on #473, as it is Exploit's shape. Of the events and leaders, The First Legion (enemy cards out
+is out of play) on #686, and The Marauder shipped with Exploit (#473), whose step it shares. Of the events and leaders, The First Legion (enemy cards out
 of play lose a Trait) and Jar Jar Binks (reading who gave a token upgrade, which the phase record does
 not distinguish from who received one) are on #686, Ty Yorrick (a replacement on every friendly
 ability's damage) on #684, and Asajj Ventress (Raid swapped for Restore on an attack) on #476.
@@ -216,7 +219,7 @@ registration (six HMW among them, and "when an opponent plays" now read from the
 mechanic tickets above by comment, #680 for trigger heads no point raises, #678 for the discard
 record, and five new ones, #682 losing abilities (8), #683 re-using abilities (7), #684 replacement
 effects (5), #685 cards that need only writing (22) and #686 the one-offs no other ticket owns (23).
-**HMW has 11 cards outstanding**: Asajj Ventress (#476), Giant Gorax and Greater Sarlacc (#475), The Marauder (#473), Vernestra Rwoh
+**HMW has 10 cards outstanding**: Asajj Ventress (#476), Giant Gorax and Greater Sarlacc (#475), Vernestra Rwoh
 (#683), Ty Yorrick and Vice Admiral Rampart (#684), and Jar Jar Binks, The First Legion, Zam Wesell and
 Maul's front (#686).
 

@@ -187,6 +187,13 @@ export interface CardDefinition {
   /** Cost delta when playing this card (upgrades: `target` is the attach target). */
   costModifier?: (state: GameState, playerId: PlayerId, target?: UnitState) => number
   /**
+   * "While playing this unit, you may choose any number of friendly units. Deal 1 damage to each of
+   * them. For each unit chosen this way, this unit costs 1 less" (The Marauder): Exploit's step with
+   * its own terms. `damage` is dealt to each chosen unit and each saves `discount`; the number is
+   * any. Exploit itself needs no hook, it is read off the keyword (`exploitTerms`).
+   */
+  whilePlaying?: { damage: number; discount: number }
+  /**
    * Extra keywords this card grants a unit (e.g. an upgrade granting a conditional keyword). `ctx`
    * carries the combat situation where there is one, so a keyword gained only while attacking a
    * particular defender can read it; it is absent for a resting read.

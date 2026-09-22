@@ -310,6 +310,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | Hook | Effect |
 | --- | --- |
 | `costModifier` | cost delta, applied in `effectiveCost` |
+| `whilePlaying` | Exploit's step on the card's own terms: any number of friendly units, each dealt `damage` and saving `discount` (The Marauder); see `choices.md` |
 | `costDiscount` | a unit in play discounting cards its controller plays |
 | `waivesAspectPenalty` | a unit in play zeroing the aspect penalty |
 | `ignoresOwnAspectPenalty` | the aspect icons whose penalty a card ignores while it is played (Rey with Kylo Ren) |

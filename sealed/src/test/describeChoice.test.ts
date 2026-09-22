@@ -35,6 +35,7 @@ describe('describeChoiceParts', () => {
     returnFriendlyUnit: { kind: 'returnFriendlyUnit', id: 'c', controller: 'player', targets: ['u1'] },
     healForAdvantage: { kind: 'healForAdvantage', id: 'c', controller: 'player', targets: ['u1'], maxHeal: 2 },
     selectPair: { kind: 'selectPair', id: 'c', controller: 'player', friendlyTargets: ['u1'], enemyTargets: ['u2'], mode: 'exhaust' },
+    exploit: { kind: 'exploit', id: 'c', controller: 'player', cardId: 'TST_U1', handIndex: 0, picks: [], limit: 2, discount: 2 },
   }
 
   it('gives every board-target kind a prompt — never blank, never the raw kind name', () => {

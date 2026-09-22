@@ -295,6 +295,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SOR_015', name: 'Boba Fett', front: true, back: true },
   // "When a friendly unit deals combat damage to a base"; "when this unit deals combat damage to a base".
   { id: 'SEC_017', name: 'Sabé', front: true, back: true },
+  // Exploit: gives it to a Separatist card as it is played, from either side.
+  { id: 'TWI_005', name: 'Count Dooku', front: true, back: true },
 ]
 
 /**
@@ -851,6 +853,9 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SOR_107', name: 'Command' },
   { id: 'SOR_155', name: 'Aggression' },
   { id: 'SOR_203', name: 'Cunning' },
+  // Exploit.
+  { id: 'TWI_078', name: 'The Invasion of Christophsis' },
+  { id: 'TWI_178', name: 'Planetary Invasion' },
 ]
 
 /**
@@ -1837,6 +1842,21 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // "When you ready cards during the regroup phase"; "when you draw this card".
   { id: 'SOR_193', name: 'Millennium Falcon' },
   { id: 'LOF_148', name: 'Rey' },
+  // Exploit: the Exploit units' other abilities, and The Marauder's step of the same shape.
+  { id: 'TWI_037', name: 'Droideka Security' },
+  { id: 'TWI_038', name: 'Providence Destroyer' },
+  { id: 'TWI_039', name: 'Malevolence' },
+  { id: 'TWI_066', name: 'Multi-Troop Transport' },
+  { id: 'TWI_086', name: 'Admiral Trench' },
+  { id: 'TWI_134', name: 'Asajj Ventress' },
+  { id: 'TWI_138', name: 'Count Dooku' },
+  { id: 'TWI_167', name: 'Heavy Persuader Tank' },
+  { id: 'TWI_184', name: 'Tactical Droid Commander' },
+  { id: 'TWI_186', name: 'San Hill' },
+  { id: 'TWI_215', name: 'Geonosis Patrol Fighter' },
+  { id: 'TWI_217', name: 'Tri-Droid Suppressor' },
+  { id: 'TWI_235', name: 'Battle Droid Legion' },
+  { id: 'HMW_125', name: 'The Marauder' },
 ]
 
 /**
@@ -1969,7 +1989,7 @@ export const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
   SEC: { bases: 8, units: 32 },
   LOF: { units: 46 },
   JTL: { bases: 9, units: 22 },
-  TWI: { bases: 8, units: 22 },
+  TWI: { bases: 8, units: 28 },
   SHD: { bases: 8, units: 23, upgrades: 1 },
   SOR: { bases: 8, units: 29, upgrades: 2 },
   TS26: { units: 5, upgrades: 1 },
