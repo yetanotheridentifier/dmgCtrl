@@ -119,5 +119,10 @@ Start at [sealed/docs/README.md](sealed/docs/README.md), which maps one file per
 
 ---
 
+## Contributing
+Pull requests aren't being accepted yet. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to help today.
+
+---
+
 ## Licence
 MIT
