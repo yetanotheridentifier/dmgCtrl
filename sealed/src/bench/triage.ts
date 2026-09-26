@@ -31,6 +31,7 @@ export const TRIAGE_API_BASE = 'https://worker.dmgctrl.app'
 /** Keywords the engine dispatches today. */
 export const IMPLEMENTED_KEYWORDS: ReadonlySet<string> = new Set([
   'Ambush', 'Grit', 'Overwhelm', 'Raid', 'Restore', 'Saboteur', 'Sentinel', 'Shielded', 'Hidden', 'Support', 'Fortify', 'Exploit',
+  'Bounty',
 ])
 
 /** Trigger points the ability framework dispatches today (see `docs/abilities.md`). */
