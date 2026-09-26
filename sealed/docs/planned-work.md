@@ -151,8 +151,9 @@ Two phases:
   (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 17 not built are on the ticket of what
   blocks them, #465 pilots (7),
   #467 Bounty (Bossk's front is built; his back needs a new "react to a Bounty collection" primitive
-  and is its own ticket; Jabba the Hutt's back also reads capture, and needs a chosen guardian AND a
-  chosen target in one action — #707 — not the single-guardian shape #466 built, so it waits on both),
+  and is its own ticket, #710; Jabba the Hutt's back reads capture too, but #707 already built its
+  chosen-guardian-and-target shape — what's left blocking the whole leader is an unbuilt "grant a
+  chosen unit a temporary keyword ability" primitive his Action needs, on #715),
   #470 Plot, #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #686 (defeat by an enemy card ability, and Chancellor Palpatine,
   the one leader that flips between two faces rather than deploying).
@@ -171,9 +172,11 @@ Two phases:
   Lesser and Nameless Valor lifted onto it). **Bounty is finished** (#467): a `bounty` trigger point
   collected under the unit's own opponent at both a defeat and a capture, always optional, dispatched
   through a `mayCollectBounty` choice (`keywords-effects.md` "Bounty"). 24 cards, Trandoshan Hunters
-  among them (its own Experience token is conditional on reading one). TS26_27 Fortune and Glory and
-  Jabba the Hutt's leader back are chosen-guardian-and-target captures and are on #707; Bossk's back
-  ("collect that Bounty again, once each round") needs its own new primitive and has its own ticket.
+  among them (its own Experience token is conditional on reading one). TS26_27 Fortune and Glory was a
+  chosen-guardian-and-target capture and shipped with #707; Jabba the Hutt's leader waits on #715 for
+  an unbuilt keyword-grant primitive his Action needs, beyond the capture shape #707 already built for
+  his back. Bossk's back ("collect that Bounty again, once each round") needs its own new primitive
+  and is on #710.
   **Playing a card out of a discard pile is finished**
   (#471): the discard piles became zones on the existing `playCardFrom` door, the unit-only
   `mayPlayUnitFromDiscard` it duplicated was retired onto it, and "for this phase you may play that
@@ -195,15 +198,20 @@ Two phases:
   Disclose #603 (Chancellor Valorum) and Plot #470 (When Has Become Now). Outlaw Corona and Price on
   Your Head shipped with Bounty (#467).
   **Capture's primitive is finished** (#466): `captureUnit`/`baseCapturesUnit`/`rescueCaptured`/
-  `discardCaptured` plus the `cannotBeCaptured`/`captureReplacement` hooks are built and documented in
-  `keywords-effects.md`. Of the 29 cards it unlocks on its own, the 10 with a single guardian and one
-  immediate chosen target shipped alongside it; the 12 needing a chosen guardian AND target in one
-  action, a budgeted or "each" multi-target capture, a base guardian with a scheduled rescue, or
-  playing a captured card outright, are on #707. 17 more that only needed Bounty's "When Captured"
-  half shipped once Bounty landed (#467); Jabba the Hutt's leader back needs #707's own
-  chosen-guardian-and-target shape as well and is on that ticket, not this one. Three (L3-37, Charged
-  with Corruption, Sanctioner's Shuttle) are sole-blocked by Smuggle (#469), Disclose (#603) and
-  Coordinate (#472) respectively. Two (Lurking TIE Phantom,
+  `discardCaptured`/`appendCaptured` plus the `cannotBeCaptured`/`captureReplacement` hooks are built
+  and documented in `keywords-effects.md`. Of the 29 cards it unlocks on its own, the 10 with a single
+  guardian and one immediate chosen target shipped alongside it. **Wave 2 is finished** (#707): a
+  chosen guardian AND/OR a chosen target in one action (either order) is `captureGuardianTargetWp`/
+  `captureTargetGuardianWp`, two ordinary `selectUnitThen` picks chained the way `unitDealsWp` already
+  chains dealer-then-target — no new choice kind. 13 cards shipped (Lando Calrissian, Libertine,
+  Relentless Pursuit, Take Captive plus its reprint, Encircle, Prisoner of War, Grand Admiral Thrawn,
+  Ephant Mon, Fortune and Glory, Rule with Respect, Unexpected Escape and Altering the Deal). A
+  budgeted or "each-guardian" multi-target capture, a capture ordered before an embedded play's own
+  When Played, a base guardian with a scheduled rescue, playing a captured card outright, and Jabba the
+  Hutt's leader (which needs an unbuilt "grant a chosen unit a temporary keyword ability" primitive as
+  well as capture) are on #715. 17 more that only needed Bounty's "When Captured" half shipped once
+  Bounty landed (#467). Three (L3-37, Charged with Corruption, Sanctioner's Shuttle) are sole-blocked
+  by Smuggle (#469), Disclose (#603) and Coordinate (#472) respectively. Two (Lurking TIE Phantom,
   Shadowed Intentions) turned out to need a different, broader mechanic entirely — "can't be
   X by enemy card abilities" for X beyond capture — and are on #708, unblocked by nothing #466 built.
   **The trigger-head batch is finished** (#474, #680). Most heads needed only context on points that

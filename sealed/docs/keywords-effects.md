@@ -490,12 +490,17 @@ listeners stay silent too.
   abilities**", so a unit may still capture its own. `captureReplacement` is unconditional (IG-11: "if
   this unit would be captured, defeat him ... instead") and is checked first; when it fires, the
   capture itself never happens.
-- **What's built and what isn't.** The primitive above is complete and CR-correct. Cards registered
-  against it so far are the ones with a single guardian and one immediate chosen target (`captureWp`,
-  mirroring `damageWp`/`targetWp`). Cards needing a chosen guardian AND a chosen target in the same
-  action, a budgeted multi-target capture ("up to 3 units with 8 or less combined remaining HP"), a
-  base guardian, or a scheduled rescue at the regroup phase, are on the follow-up ticket named in
-  `planned-work.md`.
+- **What's built and what isn't.** The primitive above is complete and CR-correct. `captureWp`
+  (mirroring `damageWp`/`targetWp`) covers a single fixed guardian and one immediate chosen target.
+  A chosen guardian AND a chosen target in the same action (either order) is `captureGuardianTargetWp`/
+  `captureTargetGuardianWp`: two ordinary `selectUnitThen` picks chained through `IfYouDo`/`step`/`unit`,
+  the same way `unitDealsWp` chains its dealer-then-target — no new choice kind, and no new primitive.
+  `appendCaptured` is the one door that writes a card under a guardian (`captureUnit`, `baseCapturesUnit`,
+  and Bothan-5's own discard-pile capture all go through it). Still on the follow-up ticket named in
+  `planned-work.md`: a budgeted multi-target capture ("up to 3 units with 8 or less combined remaining
+  HP", or "any number of guardians, each capturing its own target"), a capture that must land before an
+  embedded play's own When Played, a base guardian with a scheduled rescue, and playing a captured card
+  outright.
 
 ## Bounty
 
