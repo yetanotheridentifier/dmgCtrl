@@ -395,20 +395,9 @@ export interface CardDefinition {
    */
   protectsAttachedUpgrade?: (state: GameState, host: UnitState, upgrade: UpgradeAttachment, action: 'defeat' | 'return') => boolean
   /**
-   * "This unit can't be captured ... by enemy card abilities" (Lurking TIE Phantom, and Shadowed
-   * Intentions granting it to its host). Read from the target's own ability card ids, and only
-   * consulted for a capture attempted from the OTHER side — the text says nothing about a unit
-   * capturing its own.
-   *
-   * TEMPORARY (test-first commit): kept alongside `cannotBeTargetedByEnemyAbility` above only so
-   * `effects.ts`'s still-unmigrated `attemptCapture` keeps compiling; the very next commit removes
-   * this field once that call site is rewired onto the general primitive.
-   */
-  cannotBeCaptured?: (state: GameState, self: UnitState) => boolean
-  /**
    * A unit captured resolves as something else instead (IG-11: "If this unit would be captured,
-   * defeat him and deal 3 damage to each enemy ground unit instead"). Unlike `cannotBeCaptured` this
-   * is asked regardless of which side is capturing. Returning a state means the replacement ran and
+   * defeat him and deal 3 damage to each enemy ground unit instead"). Unlike `cannotBeTargetedByEnemyAbility`
+   * this is asked regardless of which side is capturing. Returning a state means the replacement ran and
    * the capture itself does not happen; returning nothing lets the capture proceed as normal.
    */
   captureReplacement?: (state: GameState, self: UnitState) => GameState | undefined

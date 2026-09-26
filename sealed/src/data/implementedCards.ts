@@ -309,6 +309,10 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   // Bounty: front only. His back ("When you collect a Bounty, you may collect it again") needs a
   // separate new primitive that nothing else built for Bounty needs.
   { id: 'SHD_010', name: 'Bossk', front: true, back: false },
+  // Back only ("can't be defeated by enemy card abilities" while you have the initiative). Front
+  // ("friendly units that damaged a base this phase can't be attacked") needs ability damage folded
+  // into `dealtBaseCombatDamageThisPhase`, which records combat damage only (#690, open).
+  { id: 'SEC_012', name: 'Cassian Andor', front: false, back: true },
 ]
 
 /**
@@ -476,6 +480,8 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'SHD_071', name: 'Top Target' },
   { id: 'SHD_173', name: 'Guild Target' },
   { id: 'SHD_125', name: 'Price on Your Head' },
+  // Enemy-ability immunity (#708): grants its host "can't be captured/defeated/returned by enemy card abilities".
+  { id: 'TWI_220', name: 'Shadowed Intentions' },
 ]
 
 /**
@@ -1959,6 +1965,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SEC_193', name: 'Grand Admiral Thrawn' },
   { id: 'SHD_088', name: 'Ephant Mon' },
   { id: 'TS26_27', name: 'Fortune and Glory' },
+  // Enemy-ability immunity (#708): "can't be captured/damaged/defeated/exhausted/returned/taken
+  // control of by enemy card abilities", and the cards from #701's matching group it also lands.
+  { id: 'SHD_187', name: 'Lurking TIE Phantom' },
+  { id: 'LAW_149', name: 'Rey' },
+  { id: 'SEC_061', name: 'Willrow Hood' },
+  { id: 'LOF_073', name: 'Mythosaur' },
 ]
 
 /**

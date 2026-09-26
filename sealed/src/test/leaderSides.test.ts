@@ -57,10 +57,15 @@ const SHIPPED = [
  * collect that BOUNTY again") needs a new primitive nothing else here needs, so this file's
  * both-sides check below does not apply to him — he is neither SHIPPED (not both sides) nor LIFTED
  * (his front IS registered).
+ *
+ * SEC_012 Cassian Andor is the same shape in reverse: his BACK ("can't be defeated by enemy card
+ * abilities" while you have the initiative) is built and covered in `enemyAbilityCards.test.ts`
+ * (#708), but his front needs ability damage folded into `dealtBaseCombatDamageThisPhase` (#690,
+ * open), so he too is neither SHIPPED nor LIFTED.
  */
 const LIFTED = [
   'JTL_001', 'JTL_003', 'JTL_011', 'JTL_012', 'JTL_015', 'JTL_017', 'JTL_018', 'TWI_017',
-  'SHD_006', 'SEC_001', 'LAW_017', 'SEC_012',
+  'SHD_006', 'SEC_001', 'LAW_017',
 ]
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])

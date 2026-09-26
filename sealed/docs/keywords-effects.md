@@ -485,11 +485,11 @@ listeners stay silent too.
   one door for this: exhausted, in its own arena, entering play but not *played* — no When Played, no
   cost, no Shielded shield token, no Ambush. `discardCaptured` sends one named card to its own owner's
   discard instead (Altering the Deal).
-- **Protection.** `CardDefinition.cannotBeCaptured` is read only when the capturing side differs from
-  the target's own controller — the printed text is always "can't be captured **by enemy card
-  abilities**", so a unit may still capture its own. `captureReplacement` is unconditional (IG-11: "if
-  this unit would be captured, defeat him ... instead") and is checked first; when it fires, the
-  capture itself never happens.
+- **Protection.** `protectedFromEnemyAbility` ("Enemy ability protection" below) is read for the
+  `'capture'` action, only when the capturing side differs from the target's own controller — the
+  printed text is always "can't be captured **by enemy card abilities**", so a unit may still capture
+  its own. `captureReplacement` is unconditional (IG-11: "if this unit would be captured, defeat him
+  ... instead") and is checked first; when it fires, the capture itself never happens.
 - **What's built and what isn't.** The primitive above is complete and CR-correct. `captureWp`
   (mirroring `damageWp`/`targetWp`) covers a single fixed guardian and one immediate chosen target.
   A chosen guardian AND a chosen target in the same action (either order) is `captureGuardianTargetWp`/
@@ -501,6 +501,38 @@ listeners stay silent too.
   HP", or "any number of guardians, each capturing its own target"), a capture that must land before an
   embedded play's own When Played, a base guardian with a scheduled rescue, and playing a captured card
   outright.
+
+## Enemy ability protection
+
+"This unit can't be \<captured/damaged/defeated/exhausted/returned to hand/taken control of\> by
+enemy card abilities" (Lurking TIE Phantom, Shadowed Intentions, Rey, Willrow Hood, Mythosaur, Cassian
+Andor): one primitive, `protectedFromEnemyAbility` (`effects.ts`), asked at every site that can do one
+of those six things to a unit, plus `upgradeProtectedFromEnemyAbility` for the one printed case that
+lands on an attached upgrade rather than a unit.
+
+- **`ProtectedAction`** (`abilities.ts`) names the six: `'capture' | 'damage' | 'defeat' | 'exhaust' |
+  'return' | 'takeControl'`.
+- **Three shapes contribute**, all on `CardDefinition`:
+  - `cannotBeTargetedByEnemyAbility(state, self, action)` — a unit protecting itself, read off its own
+    `abilityCardIds` (so an upgrade that grants the text to its host, Shadowed Intentions, reaches it
+    with no separate wiring).
+  - `grantsEnemyAbilityProtection(state, source, target, sameController, action)` — the aura form,
+    another card in play granting the protection to a DIFFERENT unit (Mythosaur: friendly upgraded
+    units). Scanned the same way `auraContributions` scans `aura`.
+  - `protectsAttachedUpgrade(state, host, upgrade, action)` — Willrow Hood's shape: the host's own card
+    protects one attached upgrade (`'defeat' | 'return'` only), asked at the position-addressed
+    `defeatUpgradeAt`/`returnUpgradeToHand` rather than at a unit site.
+- **Guarded sites**: `defeatUnit`/`defeatUnits` (`'defeat'`), `applyUnitDamage` for ability damage only
+  — combat damage never asks, since no printed instance of this text reaches it (`'damage'`),
+  `exhaustUnit` (`'exhaust'`), `returnUnitToHand` (`'return'`), `takeControlOfUnit` (`'takeControl'`),
+  `attemptCapture` (`'capture'`), and `defeatUpgradeAt`/`returnUpgradeToHand` for the upgrade shape.
+- **Who is "enemy"** is read off `state.resolvingSource` (set for the duration of every ability effect
+  by `runAttributed`/`whileResolving`, #684) or an explicit `DamageSource` where a site already carries
+  one (`applyUnitDamage`'s `source` parameter) — the same `source ?? state.resolvingSource` fallback
+  `abilityDamageBonus`/`damageDealer` already use to name who dealt damage. No traceable source (a
+  state-based sweep, a delayed effect, `payPreventionCost`) reads as the unit's own side would: not
+  blocked. `takeControlOfUnit` is the one exception: since only two players exist, `to` gaining control
+  is always an opponent of `from` losing it, so it asks with no source needed.
 
 ## Bounty
 

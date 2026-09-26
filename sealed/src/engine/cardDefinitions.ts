@@ -11405,3 +11405,33 @@ registerCard('SHD_010', { // Bossk — Hunting His Prey
   }),
   ifYouDo: (s, ctx) => lastingBuffChoice(dealDamageToUnit(s, ctx.targetInstanceId!, 1), ctx, [ctx.targetInstanceId!], { power: 1 }, true),
 })
+
+// "Can't be <capture/damage/defeat/exhaust/return-to-hand/take-control> by enemy card abilities":
+// `cannotBeTargetedByEnemyAbility`, `grantsEnemyAbilityProtection` and `protectsAttachedUpgrade`
+// (abilities.ts), read by `protectedFromEnemyAbility` at every guarded site.
+registerCard('SHD_187', { // Lurking TIE Phantom — Raid 2 is printed, needs no registration here.
+  cannotBeTargetedByEnemyAbility: (_s, _u, action) => action === 'capture' || action === 'damage' || action === 'defeat',
+})
+registerCard('TWI_220', { // Shadowed Intentions — "attached unit gains" reaches the host via abilityCardIds.
+  cannotBeTargetedByEnemyAbility: (_s, _u, action) => action === 'capture' || action === 'defeat' || action === 'return',
+})
+registerCard('LAW_149', { // Rey — Skywalker
+  cannotBeTargetedByEnemyAbility: (_s, _u, action) => action === 'defeat' || action === 'takeControl',
+})
+registerCard('SEC_061', { // Willrow Hood — On the Run
+  protectsAttachedUpgrade: (s, host, upgrade, action) =>
+    (action === 'defeat' || action === 'return') && host.upgrades.length === 1 && upgrade.owner === unitOwner(s, host),
+})
+registerCard('LOF_073', { // Mythosaur — Folklore Awakened. Shielded is printed. The trait grant ("friendly
+  // leaders gain Mandalorian, including in the base zone") is the same shape as Malakili's still-open
+  // "grants traits to other cards" gap (planned-work.md) and is not solved here.
+  grantsEnemyAbilityProtection: (_s, _source, target, sameController, action) =>
+    sameController && isUpgraded(target) && (action === 'exhaust' || action === 'return'),
+})
+registerCard('SEC_012', { // Cassian Andor — Climb! Front ("friendly units that damaged a base this phase
+  // can't be attacked") needs ability damage folded into `dealtBaseCombatDamageThisPhase`, which
+  // records combat damage only (#690, open) — left unregistered rather than duplicating that fix.
+  // Back: Overwhelm is printed; the rest is gated on holding the initiative.
+  survivesNoHp: (s, u) => s.initiative === unitOwner(s, u),
+  cannotBeTargetedByEnemyAbility: (s, u, action) => action === 'defeat' && s.initiative === unitOwner(s, u),
+})

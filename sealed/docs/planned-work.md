@@ -211,9 +211,16 @@ Two phases:
   Hutt's leader (which needs an unbuilt "grant a chosen unit a temporary keyword ability" primitive as
   well as capture) are on #715. 17 more that only needed Bounty's "When Captured" half shipped once
   Bounty landed (#467). Three (L3-37, Charged with Corruption, Sanctioner's Shuttle) are sole-blocked
-  by Smuggle (#469), Disclose (#603) and Coordinate (#472) respectively. Two (Lurking TIE Phantom,
-  Shadowed Intentions) turned out to need a different, broader mechanic entirely — "can't be
-  X by enemy card abilities" for X beyond capture — and are on #708, unblocked by nothing #466 built.
+  by Smuggle (#469), Disclose (#603) and Coordinate (#472) respectively.
+  **The enemy-ability protection primitive is finished** (#708): `cannotBeTargetedByEnemyAbility`
+  (a unit or a granting upgrade protecting itself), `grantsEnemyAbilityProtection` (an aura granting it
+  to another unit) and `protectsAttachedUpgrade` (the one printed case landing on an attached upgrade,
+  Willrow Hood), read by `protectedFromEnemyAbility` at the capture, damage, defeat, exhaust,
+  return-to-hand and take-control sites, and documented in `keywords-effects.md`. Lurking TIE Phantom
+  and Shadowed Intentions shipped with it, plus LAW_149 Rey and LOF_073 Mythosaur's prohibition clause
+  from #701's matching group. SEC_061 Willrow Hood shipped for the upgrade-protection case, and
+  SEC_012 Cassian Andor's back only (his front still needs #690, ability damage to a base named to the
+  dealing unit). #701 keeps the rest of that group and its unrelated one-offs.
   **The trigger-head batch is finished** (#474, #680). Most heads needed only context on points that
   already fired; the damage points became one both-sides event (`whenDamageDealt`), and the heads no
   point raised got their own (a unit attacking, healing, the ready step, a card being drawn, a unit
