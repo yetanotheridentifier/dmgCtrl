@@ -272,8 +272,14 @@ export function triage(pool: SwuCard[]): TriageReport {
 
     if (bucket !== 'ability' && bucket !== 'new-keyword-only') continue
 
+    // A keyword's own printed reminder, in parens, restates what the keyword does rather than what
+    // this card does: Bounty's reminder ("When this unit is defeated or captured, your opponent
+    // collects its bounty") names capture as a trigger point without the card performing one, and used
+    // to flag every Bounty card as blocked on the capture mechanic. `residualAbility` already treats a
+    // parenthetical as reminder rather than a real ability for the same reason.
+    const withoutReminders = text.replace(/\([^)]*\)/g, '')
     const blockers = new Set<string>()
-    for (const [name, re] of NEW_MECHANICS) if (re.test(text)) blockers.add(name)
+    for (const [name, re] of NEW_MECHANICS) if (re.test(withoutReminders)) blockers.add(name)
     for (const k of newKeywords) blockers.add(`kw:${k}`)
     for (const h of triggerHeads(text)) {
       // A base upgrade handing its base an ability is how Fortify upgrades work, which the engine does,

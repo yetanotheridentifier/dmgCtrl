@@ -1019,6 +1019,12 @@ The tool's model of the engine lives in three lists in `bench/triage.ts`: implem
 dispatched trigger points, and unexpressible mechanics. **They shrink as mechanics land.** When
 Experience tokens ship, delete that entry and every card it was blocking reclassifies itself.
 
+An unexpressible-mechanics pattern is checked against the card's text with every parenthetical
+stripped, the same reminder text `residualAbility` already treats as not-a-real-ability. A keyword's
+own reminder can name another mechanic as the trigger point it fires at without the card performing
+it: Bounty prints "(When this unit is defeated or captured, your opponent collects its bounty.)" on
+every copy, and reading that literally flagged every Bounty card as blocked on capture.
+
 A colon-led head that is not a trigger point but a lead-in handing a quoted ability to a unit ("Attached
 unit gains:", "For this attack, it gets +2/+0 and gains:", "it gains Sentinel and:") is read by its
 ending, not its spelling, and blocks the card on `granted-ability-block` rather than on a trigger head.
