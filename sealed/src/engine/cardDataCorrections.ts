@@ -122,6 +122,7 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   // The other sealed sets, conditional keywords (continued).
   SOR_130: { keywords: [] }, // First Legion Snowtrooper: Overwhelm while attacking a damaged unit
   SHD_212: { keywords: [] }, // Privateer Scyk: Shielded while you control another Cunning unit
+  SHD_186: { keywords: [] }, // Hunter of the Haxion Brood: Shielded while an enemy unit has a Bounty
   LOF_085: { keywords: [] }, // Praetorian Guard: Sentinel while you control a unit with 4 or more power
   JTL_137: { keywords: [] }, // Vonreg's TIE Interceptor: Overwhelm at 4 power, Raid 1 at 6
   SOR_188: { keywords: [] }, // Chopper: Raid 1 while you control another Spectre unit

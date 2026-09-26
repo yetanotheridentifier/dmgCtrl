@@ -39,6 +39,9 @@ const SHIPPED = [
   // E: a token alongside something else
   'LAW_165', 'LOF_054', 'LAW_168', 'LOF_239', 'LOF_263', 'LOF_042', 'SOR_055', 'LAW_144', 'LOF_125', 'LOF_225',
   'JTL_055', 'JTL_091', 'TS26_58', 'LAW_257', 'LAW_069', 'SHD_099',
+  // SHD_140 Trandoshan Hunters: Overwhelm plus a conditional token, shipped with Bounty (#467) —
+  // its own condition ("if an enemy unit has a Bounty") is covered in bountyCards.test.ts.
+  'SHD_140',
   // F: attacks, reactions and activated Actions
   'JTL_200', 'JTL_250', 'LAW_039', 'LAW_073', 'LAW_115', 'SHD_057', 'LAW_152', 'LOF_046', 'LOF_065', 'LOF_258',
   'SEC_051', 'SHD_045', 'SHD_141', 'SOR_036', 'SOR_094',
@@ -48,7 +51,7 @@ const SHIPPED = [
 /** Registered elsewhere; used here to play a unit for free, so "no resources were paid" can be reached. */
 const GALACTIC_AMBITION = 'SOR_235'
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
-const LIFTED = ['SHD_075', 'SHD_140']
+const LIFTED = ['SHD_075']
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
 const real = (id: string): EngineCard => {

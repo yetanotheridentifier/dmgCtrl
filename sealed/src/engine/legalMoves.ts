@@ -1068,6 +1068,12 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'mayCollectBounty': {
+        // "Collect this Bounty?" (CR 13): a bare yes/no, no target — the reward picks its own.
+        moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'selectUnitThen':
       case 'selectUnitToReady':
       case 'selectFriendlyUnit':

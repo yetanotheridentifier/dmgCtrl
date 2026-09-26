@@ -892,6 +892,14 @@ export interface TriggerContext {
   /** `whenUnitLeavesPlay`: the unit as it last was in play, and who controlled it. */
   unitLeftPlay?: { unit: UnitState; controller: PlayerId }
   /**
+   * `bounty` (CR 13): the unit whose Bounty is being collected, as it was at the moment of defeat or
+   * capture. Reads like `defeatedUnit`/`unitLeftPlay`'s snapshot, but named for its own trigger point
+   * since a unit can be defeated OR captured and this fires either way. `ctx.owner` for a `bounty`
+   * ability is the unit's OWN opponent (the collector), not its controller — CR 13 considers Bounty
+   * controlled by an opponent of the unit's controller.
+   */
+  bountyUnit?: UnitState
+  /**
    * `whenDrawCards`: who drew. The point fires on **both** players' units, because a card reads it
    * either about itself ("when you draw", Axe Woves) or about the other side ("when an opponent
    * draws", Crosshair), and a listener that only ever saw its own controller could not express the
@@ -1191,6 +1199,12 @@ type ChoiceVariant =
   // `declineStep` runs the hook on a decline too, at that step, for an ability that goes on either way
   // ("you may deal 5 instead", "unless its controller says no").
   | { kind: 'mayPayThen'; id: string; controller: PlayerId; cost: number; damageSelf?: number; revealEvent?: boolean; text: string; then: IfYouDo; declineStep?: string }
+  // "Collect this Bounty?" (CR 13): every Bounty ability is optional whether or not its printed text
+  // says "may", so the gate lives here at dispatch rather than on each card — which also sidesteps a
+  // card-level `ifYouDo` collision for a Bounty reward that needs its own (Rich Reward's `expUpTo`).
+  // Accepting runs `cardId`'s ability at `abilityIndex` (`runBountyCollection` in abilities.ts), same
+  // as any other triggered ability; declining does nothing. No target: the reward picks its own.
+  | { kind: 'mayCollectBounty'; id: string; controller: PlayerId; cardId: string; abilityIndex: number; sourceInstanceId?: string; ctx?: TriggerContext }
   // Choose one of `targets` and hand it to the card's `ifYouDo` hook, for an ability that does more
   // than one thing to the unit it picks, or whose effect depends on it. Mandatory unless `optional`.
   // `text` names what the pick is for, for the prompt.

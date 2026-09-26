@@ -45,9 +45,12 @@ const SHIPPED = [
   'TS26_66', 'TS26_29', 'SEC_218', 'LAW_216', 'SHD_246',
   // F: engine additions
   'LAW_051', 'LAW_197', 'LOF_204', 'SOR_185',
+  // G: SHD_216 Chain Code Collector and SHD_139 Krrsantan — both read "has a Bounty", shipped with
+  // Bounty (#467) and covered in bountyCards.test.ts.
+  'SHD_216', 'SHD_139',
 ]
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
-const LIFTED = ['SHD_216', 'SHD_139', 'LOF_197', 'SHD_153', 'SOR_056']
+const LIFTED = ['LOF_197', 'SHD_153', 'SOR_056']
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
 const real = (id: string): EngineCard => {

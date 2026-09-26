@@ -223,6 +223,9 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
     const attacking = whileAttacking ? { defeatedWhileAttacking: true } : {}
     const ctx = { defeatedUnit: dead, defeatedByCombat: byCombat, ...attacking }
     owed.push(...collectUnitTriggers(result, 'whenDefeated', dead, owner, ctx))
+    // Bounty (CR 13): collected under the OPPONENT, not `owner` — CR 13 treats it as controlled by
+    // an opponent of the unit's own controller, the reverse of every other trigger point here.
+    owed.push(...collectUnitTriggers(result, 'bounty', dead, opponentOf(owner), { bountyUnit: dead }))
     // "When another friendly unit is defeated" (The Twins) — the controller's surviving units react.
     for (const u of result.players[owner].units) {
       owed.push(...collectUnitTriggers(result, 'whenFriendlyUnitDefeated', u, owner, { defeatedUnit: dead, ...attacking }))
