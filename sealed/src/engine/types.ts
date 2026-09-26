@@ -250,6 +250,14 @@ export interface PlayerState {
    * `playUnitCard`. Cleared at the start of the regroup phase.
    */
   nextUnitGrants?: NextUnitGrant[]
+  /**
+   * Credit tokens this player holds (LAW's set mechanic, #602). Unlike Experience/Shield/Weakness,
+   * a Credit token has no board identity: it belongs to the player rather than to a unit, is
+   * fungible, and "take control of an enemy Credit token" is just the count moving between two
+   * players. Created and defeated via `createCreditTokens`/`defeatCreditTokens` (effects.ts).
+   * `undefined` reads the same as 0.
+   */
+  creditTokens?: number
 }
 
 /**
@@ -1030,10 +1038,15 @@ type ChoiceVariant =
   // Return a chosen card from your discard to your hand (Moff Gideon). `candidates` are the
   // eligible discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. Optional.
   // `then: 'discardFate'` chains the bottom-and-heal / return-to-hand modal (Trask Walker)
-  // instead of the default return-to-hand.
+  // instead of the default return-to-hand. An `IfYouDo` instead names the card's own `ifYouDo` hook
+  // to run once the card has moved ("put a card from your discard pile on the bottom of your deck.
+  // If you do, create a Credit token.", Scavenging Sandcrawler, #602), told the card as `cardChosen`.
   // `owners`, index for index with `candidates`, names whose discard pile each card is in when the
   // choice reaches both (Bounty Hunter Crew); absent, every candidate is the controller's own.
-  | { kind: 'selectFromDiscard'; id: string; controller: PlayerId; candidates: string[]; optional: boolean; then?: 'discardFate'; owners?: PlayerId[] }
+  // `toDeckBottom` moves the chosen card to the bottom of its owner's deck instead of the default
+  // return-to-hand (#602's own step; not combined with `then: 'discardFate'`, which already picks
+  // between the two itself).
+  | { kind: 'selectFromDiscard'; id: string; controller: PlayerId; candidates: string[]; optional: boolean; then?: 'discardFate' | IfYouDo; owners?: PlayerId[]; toDeckBottom?: boolean }
   // Trask Walker: optionIndex 0 = bottom the card and heal `heal` from your base,
   // 1 = return it to your hand. Mandatory once a card is chosen.
   | { kind: 'chooseDiscardFate'; id: string; controller: PlayerId; cardId: string; heal: number }
@@ -1165,7 +1178,11 @@ type ChoiceVariant =
   // most `maxCost`, again by index and answered with `optionIndex`: each goes on the bottom of the deck
   // and lends the played card its "When Played" abilities. That is an additional cost rather than a
   // discount, so `discount` is 0 and Done is offered from the start ("up to 2").
-  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number }
+  // `credit` is a fourth mode (#602): Credit's own standing rule ("while paying resources, you may
+  // defeat this token. If you do, pay 1 less"), offered on top of whichever mode a card itself
+  // declares (or with none at all) whenever the payer holds any. Picks are read by ordinal position
+  // (there is nothing else to distinguish one Credit token from another), the same as `resources`.
+  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean }
   // The one door for playing a card out of somewhere other than the Play a Card action: any card
   // type, out of `zone`, answered by `optionIndex` into `candidates`. `free` bypasses the cost and
   // the aspect penalty (CR 8.5); `costDelta` adjusts it; `waive` forgives aspect penalties. An
@@ -1211,9 +1228,12 @@ type ChoiceVariant =
   // `hookOnDecline` runs the hook with no unit when the choice is declined, for an ability that goes on
   // after its picks stop ("If no friendly units were damaged by this ability", AAT Incinerator).
   | { kind: 'selectUnitThen'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; text: string; then: IfYouDo; hookOnDecline?: boolean }
-  // "Choose a player": option 0 is the controller's opponent, option 1 the controller. Never optional.
-  // The chosen player reaches the card's `ifYouDo` hook as `playerChosen`. `text` is the effect.
-  | { kind: 'choosePlayerThen'; id: string; controller: PlayerId; text: string; then: IfYouDo }
+  // "Choose a player": option 0 is the controller's opponent, option 1 the controller. Mandatory
+  // unless `optional`. The chosen player reaches the card's `ifYouDo` hook as `playerChosen`. `text`
+  // is the effect. `candidates` restricts which of the two may be picked (defaults both) — "defeat a
+  // Credit token belonging to any player" (#602) only offers a player who holds one, and is declinable
+  // even when both do, so it needs both fields; nothing before it did.
+  | { kind: 'choosePlayerThen'; id: string; controller: PlayerId; text: string; then: IfYouDo; optional?: boolean; candidates?: PlayerId[] }
   // Pick one of `candidates` (card ids: cards in a discard pile, or revealed from a deck) for the card's
   // `ifYouDo` hook, which is told the card and its option index and decides what happens to it. A deck
   // holds duplicates, so a hook that needs a position reads the index. `hookOnDecline` runs the hook with
