@@ -7,7 +7,7 @@ import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { collectPlayerTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
-import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay, abilityDamageBonus } from './effects'
+import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay, abilityDamageBonus, protectedFromEnemyAbility } from './effects'
 
 /**
  * How much of an instance of damage the cards in play stop before it lands (Cassian Andor, Boba
@@ -95,8 +95,14 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   // Units whose "prevent the next N" lasting effect this damage used up.
   const preventNextSpent: string[] = []
 
+  // "Can't be damaged by enemy card abilities" (Lurking TIE Phantom) is a hard block, asked only for
+  // ability damage (never combat, which no printed instance of this text reaches) and only when the
+  // damage is attributed — the same `source ?? state.resolvingSource` fallback `abilityDamageBonus`
+  // and `damageDealer` already use to name who dealt it.
+  const attacker = byCombat ? undefined : (source ?? state.resolvingSource)?.controller
   for (const u of p.units) {
     let extra = damaged.get(u.instanceId) ?? 0
+    if (extra > 0 && protectedFromEnemyAbility(state, u, owner, attacker, 'damage')) extra = 0
     // Damage-taken multipliers (e.g. Deadly Vulnerability ×2) scale the instance.
     if (extra > 0) {
       extra *= damageMultiplier(state, u)
@@ -294,13 +300,20 @@ export function sweepStateBasedDefeats(state: GameState): GameState {
  */
 export function defeatUnits(state: GameState, instanceIds: string[]): GameState {
   const doomed = new Set(instanceIds)
+  // "Can't be defeated by enemy card abilities" (Rey, Cassian Andor) reads the ability doing the
+  // defeating off `state.resolvingSource`, the same source `abilityDamageBonus`/`damageDealer` already
+  // read — set for the whole duration of the effect that called here, however deep the call chain.
+  const attacker = state.resolvingSource?.controller
   let next = state
   let hit = false
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
     const units = next.players[owner].units
-    const dead = units.filter(u => doomed.has(u.instanceId))
+    const targeted = units.filter(u => doomed.has(u.instanceId))
+    if (targeted.length === 0) continue
+    const dead = targeted.filter(u => !protectedFromEnemyAbility(next, u, owner, attacker, 'defeat'))
     if (dead.length === 0) continue
-    next = finishDefeats(next, owner, units.filter(u => !doomed.has(u.instanceId)), dead, false, [], true)
+    const deadIds = new Set(dead.map(u => u.instanceId))
+    next = finishDefeats(next, owner, units.filter(u => !deadIds.has(u.instanceId)), dead, false, [], true)
     hit = true
   }
   return hit ? drainTriggers(next) : state
@@ -330,7 +343,9 @@ export function defeatForCost(state: GameState, instanceIds: string[]): { state:
 export function defeatUnit(state: GameState, instanceId: string): GameState {
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
     const target = state.players[owner].units.find(u => u.instanceId === instanceId)
-    if (target) return drainTriggers(finishDefeats(state, owner, state.players[owner].units.filter(u => u.instanceId !== instanceId), [target]))
+    if (!target) continue
+    if (protectedFromEnemyAbility(state, target, owner, state.resolvingSource?.controller, 'defeat')) return state
+    return drainTriggers(finishDefeats(state, owner, state.players[owner].units.filter(u => u.instanceId !== instanceId), [target]))
   }
   return state
 }

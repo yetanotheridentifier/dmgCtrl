@@ -123,11 +123,11 @@ describe('captureUnit — CR 33', () => {
   })
 })
 
-describe('cannotBeCaptured — "can\'t be captured ... by enemy card abilities"', () => {
+describe('cannotBeTargetedByEnemyAbility(\'capture\') — "can\'t be captured ... by enemy card abilities"', () => {
   const G = { ...F, TST_P: card({ id: 'TST_P', type: 'unit', cost: 2, power: 1, hp: 1 }) }
   // Registered directly as the target's own card id, so `abilityCardIds(target)` picks it up with no
   // separate upgrade or grant needed.
-  registerCard('TST_P', { cannotBeCaptured: () => true })
+  registerCard('TST_P', { cannotBeTargetedByEnemyAbility: (_s, _u, action) => action === 'capture' })
 
   it('blocks a capture attempted by an enemy unit', () => {
     const s = state({ cards: G, players: {

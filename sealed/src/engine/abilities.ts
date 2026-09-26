@@ -1,4 +1,4 @@
-import type { Arena, DelayedEffect, EngineCard, GameState, IfYouDo, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeRef } from './types'
+import type { Arena, DelayedEffect, EngineCard, GameState, IfYouDo, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeAttachment, UpgradeRef } from './types'
 import { abilityCardIds, baseAbilityCardIds, pushChoice } from './types'
 
 /**
@@ -108,6 +108,15 @@ export type TriggerPoint =
   // Bounty ability is optional regardless of its printed wording, so `runPendingTrigger` raises a
   // `mayCollectBounty` choice instead of the effect, and `runBountyCollection` below answers it.
   | 'bounty'
+
+/**
+ * What an enemy card ability may be prevented from doing to a unit or an attached upgrade, per the
+ * printed phrasing "can't be \<capture/damage/defeat/exhaust/return to hand/take control of\> by
+ * enemy card abilities" (Lurking TIE Phantom, Shadowed Intentions, Rey, Willrow Hood, Mythosaur,
+ * Cassian Andor). One vocabulary for every site that phrase can name, read by
+ * `protectedFromEnemyAbility` in `effects.ts` — see `CardDefinition.cannotBeTargetedByEnemyAbility`.
+ */
+export type ProtectedAction = 'capture' | 'damage' | 'defeat' | 'exhaust' | 'return' | 'takeControl'
 
 /**
  * What one ability's effect is handed when it resolves: who owns it and which card it is on, plus the
@@ -361,16 +370,34 @@ export interface CardDefinition {
    */
   makesDamageUnpreventable?: (state: GameState, self: UnitState, source: DamageSource) => boolean
   /**
-   * "This unit can't be captured ... by enemy card abilities" (Lurking TIE Phantom, and Shadowed
-   * Intentions granting it to its host). Read from the target's own ability card ids, and only
-   * consulted for a capture attempted from the OTHER side — the text says nothing about a unit
-   * capturing its own.
+   * "This unit can't be captured/damaged/defeated/exhausted/returned to hand/taken control of by
+   * enemy card abilities" (Lurking TIE Phantom, Rey, Cassian Andor; Shadowed Intentions grants it to
+   * its host). Generalises the single-purpose `cannotBeCaptured` built for #466 (capture only) across
+   * every prohibition this printed phrasing names, since the shape — "read the target's own card,
+   * only against the OTHER side" — is identical for each. Read from the target's own ability card ids
+   * (`abilityCardIds`) by `protectedFromEnemyAbility` (`effects.ts`), the one function every
+   * defeat/damage/exhaust/return/take-control/capture site asks; never consulted for a unit's own side.
    */
-  cannotBeCaptured?: (state: GameState, self: UnitState) => boolean
+  cannotBeTargetedByEnemyAbility?: (state: GameState, self: UnitState, action: ProtectedAction) => boolean
+  /**
+   * The aura form of the same protection: another card in play grants it to a unit that is not itself
+   * (Mythosaur: "friendly upgraded units can't be exhausted or returned to hand by enemy card
+   * abilities"). Asked of every unit in play the way `aura` is, with `sameController` telling a source
+   * whether `target` is its own side's.
+   */
+  grantsEnemyAbilityProtection?: (state: GameState, source: UnitState, target: UnitState, sameController: boolean, action: ProtectedAction) => boolean
+  /**
+   * "While this unit has exactly 1 friendly upgrade on it, that upgrade can't be defeated or returned
+   * to hand by enemy card abilities" (Willrow Hood): the one printed case of this protection landing
+   * on an ATTACHED UPGRADE rather than on a unit. Asked of the host's own card only, at the
+   * position-addressed defeat/return sites (`defeatUpgradeAt`, `returnUpgradeToHand`) where an
+   * ability naming a chosen upgrade reaches it.
+   */
+  protectsAttachedUpgrade?: (state: GameState, host: UnitState, upgrade: UpgradeAttachment, action: 'defeat' | 'return') => boolean
   /**
    * A unit captured resolves as something else instead (IG-11: "If this unit would be captured,
-   * defeat him and deal 3 damage to each enemy ground unit instead"). Unlike `cannotBeCaptured` this
-   * is asked regardless of which side is capturing. Returning a state means the replacement ran and
+   * defeat him and deal 3 damage to each enemy ground unit instead"). Unlike `cannotBeTargetedByEnemyAbility`
+   * this is asked regardless of which side is capturing. Returning a state means the replacement ran and
    * the capture itself does not happen; returning nothing lets the capture proceed as normal.
    */
   captureReplacement?: (state: GameState, self: UnitState) => GameState | undefined

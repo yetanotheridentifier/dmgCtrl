@@ -2,7 +2,7 @@ import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, GameState,
 import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
-import type { TriggerPoint } from './abilities'
+import type { TriggerPoint, ProtectedAction } from './abilities'
 import { getCardDefinition, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers } from './abilities'
 import { enqueueTriggers, drainTriggers } from './triggerQueue'
 
@@ -82,6 +82,57 @@ export function findUnit(state: GameState, instanceId: string): { owner: PlayerI
 }
 
 /**
+ * Whether ANY card in play currently protects `target` from an enemy ability's `action` — capture,
+ * damage, defeat, exhaust, return-to-hand or take-control (Lurking TIE Phantom, Shadowed Intentions,
+ * Rey, Mythosaur, Cassian Andor). The one function every guarded site asks. Two shapes contribute:
+ * the target's own card or an attached upgrade declaring it (`cannotBeTargetedByEnemyAbility`, read
+ * off `abilityCardIds` exactly as `unitKeywords`/`unitTraits` read their own per-card hooks), or
+ * another card in play granting it as an aura (`grantsEnemyAbilityProtection`, scanned the same way
+ * `auraContributions` scans `aura`).
+ *
+ * Never true when `attacker` is the target's own controller or is unknown: every printed instance of
+ * this text is "by ENEMY card abilities", so a unit's own side is always free to act on it, and an
+ * effect with no traceable source (no explicit `DamageSource`, no `state.resolvingSource`) reads the
+ * same way unattributed damage already does elsewhere in this file — treated as the unit's own side
+ * would be, not as an enemy ability.
+ */
+export function protectedFromEnemyAbility(
+  state: GameState,
+  target: UnitState,
+  targetController: PlayerId,
+  attacker: PlayerId | undefined,
+  action: ProtectedAction,
+): boolean {
+  if (!attacker || attacker === targetController) return false
+  for (const id of abilityCardIds(target)) {
+    if (getCardDefinition(id)?.cannotBeTargetedByEnemyAbility?.(state, target, action)) return true
+  }
+  for (const side of ['player', 'opponent'] as PlayerId[]) {
+    for (const source of state.players[side].units) {
+      for (const id of abilityCardIds(source)) {
+        if (getCardDefinition(id)?.grantsEnemyAbilityProtection?.(state, source, target, side === targetController, action)) return true
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * The one printed case of the protection landing on an attached upgrade rather than on a unit
+ * (Willrow Hood). Asked at the position-addressed defeat/return sites, which is where an ability
+ * naming a chosen upgrade reaches it — `defeatUpgrade`'s by-card-id form is always a card acting on
+ * its own upgrade (a cost, a self-sacrifice), never an enemy ability reaching in, so it asks nothing.
+ */
+function upgradeProtectedFromEnemyAbility(
+  state: GameState, hostId: string, index: number, attacker: PlayerId | undefined, action: 'defeat' | 'return',
+): boolean {
+  const found = findUnit(state, hostId)
+  const upgrade = found?.unit.upgrades[index]
+  if (!found || !upgrade || !attacker || attacker === found.owner) return false
+  return abilityCardIds(found.unit).some(id => getCardDefinition(id)?.protectsAttachedUpgrade?.(state, found.unit, upgrade, action))
+}
+
+/**
  * Move a unit from `from` to `to`, unchanged in every other respect. `owner` records where the card
  * came from so it can go home: to that player's discard if it's defeated, or back under their
  * control when the change ends. Moving a unit that was already stolen keeps the ORIGINAL owner, and a
@@ -93,6 +144,10 @@ export function findUnit(state: GameState, instanceId: string): { owner: PlayerI
 export function takeControlOfUnit(state: GameState, from: PlayerId, to: PlayerId, instanceId: string, until?: UnitState['controlUntil']): GameState {
   const unit = state.players[from].units.find(u => u.instanceId === instanceId)
   if (!unit || from === to) return state
+  // Only two players exist, so `to` gaining control is always "an opponent" of `from` losing it
+  // (Rey: "opponents can't take control of this unit") — no source-tracing needed, unlike the other
+  // actions below, which a unit's own side can just as easily aim at an enemy.
+  if (protectedFromEnemyAbility(state, unit, from, to, 'takeControl')) return state
   const cardOwner = unit.owner ?? from
   const moved: UnitState = cardOwner === to
     ? { ...unit, owner: undefined, controlUntil: undefined }
@@ -505,10 +560,11 @@ function baseHealingSuppressed(state: GameState): boolean {
   return false
 }
 
-/** Exhaust a unit (no-op if already exhausted or absent). */
+/** Exhaust a unit (no-op if already exhausted or absent, or protected against an enemy ability doing it). */
 export function exhaustUnit(state: GameState, instanceId: string): GameState {
   const found = findUnit(state, instanceId)
   if (!found || found.unit.exhausted) return state
+  if (protectedFromEnemyAbility(state, found.unit, found.owner, state.resolvingSource?.controller, 'exhaust')) return state
   return patchUnit(state, found.owner, instanceId, u => ({ ...u, exhausted: true }))
 }
 
@@ -642,6 +698,7 @@ export function returnUnitToHand(state: GameState, instanceId: string): GameStat
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
     const u = state.players[owner].units.find(x => x.instanceId === instanceId)
     if (!u) continue
+    if (protectedFromEnemyAbility(state, u, owner, state.resolvingSource?.controller, 'return')) return state
     // The card returns to its OWNER's hand, which may not be its controller (a stolen unit).
     const cardOwner = u.owner ?? owner
     let next = updatePlayer(state, owner, { units: state.players[owner].units.filter(x => x.instanceId !== instanceId) })
@@ -781,8 +838,7 @@ function attemptCapture(state: GameState, targetInstanceId: string, guardianOwne
   if (!found) return { state } // CR 33.1.a's mirror: nothing to capture
   const { owner: controller, unit: target } = found
   const cardOwner = target.owner ?? controller
-  const isEnemy = cardOwner !== guardianOwner
-  if (isEnemy && abilityCardIds(target).some(id => getCardDefinition(id)?.cannotBeCaptured?.(state, target))) return { state }
+  if (protectedFromEnemyAbility(state, target, cardOwner, guardianOwner, 'capture')) return { state }
   for (const id of abilityCardIds(target)) {
     const replaced = getCardDefinition(id)?.captureReplacement?.(state, target)
     if (replaced) return { state: replaced }
@@ -980,6 +1036,7 @@ export function defeatUpgradeAt(state: GameState, instanceId: string, index: num
   const found = findUnit(state, instanceId)
   const removed = found?.unit.upgrades[index]
   if (!found || !removed) return state
+  if (upgradeProtectedFromEnemyAbility(state, instanceId, index, state.resolvingSource?.controller, 'defeat')) return state
   let next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: u.upgrades.filter((_, i) => i !== index) }))
   if (state.cards[removed.cardId]?.type !== 'token') {
     const op = next.players[removed.owner]
@@ -1009,6 +1066,7 @@ export function returnUpgradeToHand(state: GameState, instanceId: string, index:
   const removed = found?.unit.upgrades[index]
   if (!found || !removed) return state
   if (state.cards[removed.cardId]?.type === 'token') return defeatUpgradeAt(state, instanceId, index)
+  if (upgradeProtectedFromEnemyAbility(state, instanceId, index, state.resolvingSource?.controller, 'return')) return state
   const next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: u.upgrades.filter((_, i) => i !== index) }))
   const op = next.players[removed.owner]
   return { ...next, players: { ...next.players, [removed.owner]: { ...op, hand: [...op.hand, removed.cardId] } } }
