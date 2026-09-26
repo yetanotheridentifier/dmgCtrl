@@ -141,7 +141,7 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenDamageDealt`, `whenEnemyAttacksBase`,
 `whenFriendlyAttackEnds`, `whenDeployed`, `whenPlayUpgrade`, `whenPlayCard`, `whenUnitEntersPlay`,
-`whenActionPhaseStarts`.
+`whenActionPhaseStarts`, `bounty`.
 
 `whenPlayUpgrade` ("when you play an upgrade") fires on the player's undeployed leader, base and units,
 with the card in `ctx.playedCardId` and, unless it went on a base, the unit it went on in
@@ -188,6 +188,15 @@ each player's leader and base as the next round's action phase begins, on the sa
 `actionPhaseStart` delayed effect and before play resumes. The game's **first** action phase raises
 nothing, which is right for every card that can read it: a card has to be played during an action
 phase to be in play to read the next one.
+
+`bounty` ("Bounty - \<reward\>. (When this unit is defeated or captured, your opponent collects its
+bounty.)", CR 13) is collected under the unit's own **opponent**, the reverse of every point above,
+at both a defeat (`finishDefeats`) and a capture (`attemptCapture`), with the unit's own snapshot in
+`ctx.bountyUnit`. It is never run directly: collecting a Bounty is always optional however its
+printed text reads, so `runPendingTrigger` raises a `mayCollectBounty` choice instead of the effect
+(see `choices.md`), and `runBountyCollection` answers it. See `keywords-effects.md` "Bounty" for the
+full shape, including how a card conditionally granted its own Bounty reads `ctx.bountyUnit` rather
+than an aura (the unit is already out of play by the time anything hears the trigger).
 
 **A unit entering play raises its arrival triggers through one function, `collectArrivalTriggers`**, and
 every route in goes through it: a play, a token being created, a leader deploying and a captured card

@@ -11,12 +11,9 @@ import type { GameState } from '../engine/types'
  * opponent collects its bounty.)" Collected under the unit's own OPPONENT, at both points a Bountied
  * unit can leave play that way, always optional, each Bounty source independent.
  */
-let calls = 0
 registerCard('TST_BOUNTY', {
-  abilities: [{ trigger: 'bounty', description: 'Draw a card (test).', effect: (s, ctx) => {
-    calls++
-    return { ...s, players: { ...s.players, [ctx.owner]: { ...s.players[ctx.owner], hand: [...s.players[ctx.owner].hand, 'DRAWN'] } } }
-  } }],
+  abilities: [{ trigger: 'bounty', description: 'Draw a card (test).', effect: (s, ctx) =>
+    ({ ...s, players: { ...s.players, [ctx.owner]: { ...s.players[ctx.owner], hand: [...s.players[ctx.owner].hand, 'DRAWN'] } } }) }],
 })
 registerCard('TST_BOUNTY2', {
   abilities: [{ trigger: 'bounty', description: 'Draw a card (test 2).', effect: (s, ctx) =>

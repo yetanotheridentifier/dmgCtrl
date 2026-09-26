@@ -110,6 +110,12 @@ unit, upgrade or hand card, or the discarded card.
   also runs on a decline, at that step, for an ability that goes on either way: "you may deal 5 instead"
   (Attack From All Sides), or a yes-or-no the opponent answers (I Am Your Father, whose "no" is the
   accept).
+- **`mayCollectBounty`** is a bare "you may collect this Bounty?", no target and no `IfYouDo`: every
+  Bounty ability is optional whatever its printed text says (CR 13), so the gate lives at dispatch
+  rather than on each card, sidestepping a card-level `ifYouDo` collision for a reward that needs its
+  own (Rich Reward's `expUpTo`). Accepting runs the named ability directly (`cardId`, `abilityIndex`,
+  `sourceInstanceId`, `ctx`) via `runBountyCollection`, the same effect a normal trigger would have
+  run, just gated; declining does nothing.
 - **`selectUnitThen`**, **`selectUpgradeThen`** and **`selectHandCardThen`** pick one thing and hand
   it on, for an ability that does several things to one pick or depends on it.
 - **`selectCardThen`** picks a card id, from a discard pile or from cards revealed off a deck, and hands
