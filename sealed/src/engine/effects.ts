@@ -252,6 +252,40 @@ export function giveMixedTokens(state: GameState, instanceId: string, tokenIds: 
   return fireUpgradeAttached(attachUpgrades(recorded, instanceId, tokens), instanceId)
 }
 
+// ── Credit tokens (LAW's set mechanic, #602) ──────────────────────────────────────────────────────
+// Unlike Experience/Shield/Weakness, a Credit token is not attached to a unit as an upgrade: it has
+// no board identity, belongs to a PLAYER, and is fungible, so `PlayerState.creditTokens` is a plain
+// count. Its printed rule ("While paying resources, you may defeat this token. If you do, pay 1
+// less.") is a standing payment step read by `exploitTerms` (legalMoves.ts) as a fourth mode of the
+// same `exploit`/`whilePlaying` step #473 and #683 built, not a parallel mechanism.
+
+/** How many Credit tokens `owner` currently holds. */
+export function friendlyCreditTokens(state: GameState, owner: PlayerId): number {
+  return state.players[owner].creditTokens ?? 0
+}
+
+/** `owner` creates `count` Credit tokens. Records `tokensCreated` the same as `giveTokens` and
+ *  `createTokenUnits` (The Client, #602's own routing comment on #458). */
+export function createCreditTokens(state: GameState, owner: PlayerId, count = 1): GameState {
+  if (count <= 0) return state
+  return recordTokenCreated(updatePlayer(state, owner, { creditTokens: friendlyCreditTokens(state, owner) + count }), owner)
+}
+
+/** Defeat up to `count` of `owner`'s Credit tokens, clamped to what they hold. A defeated Credit
+ *  triggers nothing (it carries no such ability), the same as a defeated resource. */
+export function defeatCreditTokens(state: GameState, owner: PlayerId, count = 1): GameState {
+  const held = friendlyCreditTokens(state, owner)
+  if (count <= 0 || held === 0) return state
+  return updatePlayer(state, owner, { creditTokens: Math.max(0, held - count) })
+}
+
+/** "Take control of an enemy Credit token": the count moves from `from` to `to`, clamped to what
+ *  `from` holds. A no-op when `from` holds none. */
+export function takeControlOfCreditTokens(state: GameState, from: PlayerId, to: PlayerId, count = 1): GameState {
+  const moved = Math.min(count, friendlyCreditTokens(state, from))
+  return moved > 0 ? createCreditTokens(defeatCreditTokens(state, from, moved), to, moved) : state
+}
+
 /**
  * Move a unit to the other arena (Blue Leader: "move this unit to the ground arena"). The unit keeps
  * its damage, upgrades and ready state: only where it fights changes, and every arena test in the
@@ -1085,6 +1119,15 @@ export function returnCardFromDiscardToHand(state: GameState, owner: PlayerId, c
     ...state,
     players: { ...state.players, [owner]: { ...p, discard: p.discard.filter((_, i) => i !== idx), hand: [...p.hand, cardId] } },
   }
+}
+
+/** Move one copy of `cardId` from a player's discard pile to the bottom of their deck (Scavenging
+ *  Sandcrawler, #602). A no-op if it isn't there. */
+export function moveCardFromDiscardToDeckBottom(state: GameState, owner: PlayerId, cardId: string): GameState {
+  const p = state.players[owner]
+  const idx = p.discard.indexOf(cardId)
+  if (idx === -1) return state
+  return updatePlayer(state, owner, { discard: p.discard.filter((_, i) => i !== idx), deck: [...p.deck, cardId] })
 }
 
 /**

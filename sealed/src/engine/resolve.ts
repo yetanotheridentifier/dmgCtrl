@@ -9,7 +9,7 @@ import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, col
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, cardHasTrait, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
@@ -655,7 +655,9 @@ function pickExploit(state: GameState, choice: Extract<PendingChoice, { kind: 'e
     ? discardUnitPicks(state, choice.controller, choice.maxCost ?? 0).includes(Number(instanceId))
     : choice.resources
       ? Number(instanceId) < state.players[choice.controller].resources.length
-      : state.players[choice.controller].units.some(u => u.instanceId === instanceId)
+      : choice.credit
+        ? Number(instanceId) < friendlyCreditTokens(state, choice.controller)
+        : state.players[choice.controller].units.some(u => u.instanceId === instanceId)
   if (choice.picks.includes(instanceId) || !there) return pushChoice(state, choice)
   const next = { ...choice, picks: [...choice.picks, instanceId] }
   return next.picks.length >= next.limit ? finishExploit(state, next) : pushChoice(state, next)
@@ -693,6 +695,10 @@ function finishExploit(state: GameState, choice: Extract<PendingChoice, { kind: 
   } else if (choice.resources) {
     // Greater Sarlacc: the chosen cards are defeated as ready resources, which triggers nothing.
     next = defeatResources(next, owner, choice.picks.map(Number), { ready: true })
+  } else if (choice.credit) {
+    // Credit's own rule: defeating it triggers nothing, and it does not reduce ready resources
+    // (unlike `resources`, above), since it is a separate currency.
+    next = defeatCreditTokens(next, owner, choice.picks.length)
   } else if (choice.damage === undefined) {
     powers = chosen.map(u => effectivePower(state, u))
     ;({ state: next, owed } = defeatForCost(next, chosen.map(u => u.instanceId)))
@@ -1153,7 +1159,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'exploit': {
       // A unit by instance id, or a resource (Greater Sarlacc) / a discard-pile card (Vernestra Rwoh)
       // by its index in that pile.
-      const byIndex = choice.resources || choice.fromDiscard
+      const byIndex = choice.resources || choice.fromDiscard || choice.credit
       const pickedId = byIndex ? (optionIndex === undefined ? undefined : String(optionIndex)) : targetInstanceId
       if (pickedId !== undefined) next = pickExploit(next, choice, pickedId)
       if (next.winner !== null) return next
@@ -1928,7 +1934,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = pushChoice(next, { kind: 'chooseDiscardFate', id: `${choice.id}-fate`, controller: choice.controller, cardId, heal: 3 })
         break
       }
-      next = returnCardFromDiscardToHand(next, choice.owners?.[optionIndex ?? 0] ?? choice.controller, cardId)
+      const owner = choice.owners?.[optionIndex ?? 0] ?? choice.controller
+      next = choice.toDeckBottom ? moveCardFromDiscardToDeckBottom(next, owner, cardId) : returnCardFromDiscardToHand(next, owner, cardId)
+      if (choice.then && choice.then !== 'discardFate') next = runIfYouDo(next, choice.then, { cardChosen: cardId })
       break
     }
     case 'searchDraw': {
