@@ -6911,6 +6911,18 @@ const defeated = (def: CardDefinition): CardDefinition => ({
   ...def,
   abilities: def.abilities?.map(a => (a.trigger === 'whenPlayed' ? { ...a, trigger: 'whenDefeated' as const } : a)),
 })
+/**
+ * A definition built with the When Played helpers, fired as a Bounty reward instead (CR 13): "Bounty -
+ * <reward>. (When this unit is defeated or captured, your opponent collects its bounty.)" `ctx.owner`
+ * for a `bounty` ability is already the collecting OPPONENT (the dispatcher passes it flipped), so a
+ * reward written as `bounty(whenPlayed('Draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1)))` has
+ * the opponent draw, exactly as printed. Collecting is optional regardless of wording — see
+ * `runPendingTrigger`'s `mayCollectBounty` gate — so no reward here needs its own "you may".
+ */
+const bounty = (def: CardDefinition): CardDefinition => ({
+  ...def,
+  abilities: def.abilities?.map(a => (a.trigger === 'whenPlayed' ? { ...a, trigger: 'bounty' as const } : a)),
+})
 const costsAtMost = (n: number): Pick => (s, u) => printedCost(s, u) <= n
 
 // A: targets, draws and base damage
@@ -11065,4 +11077,143 @@ registerCard('JTL_047', { // Admiral Yularen
     (friendly && source.namedKeyword !== undefined && unitHasTrait(s, target, 'Vehicle')
       ? { keywords: [source.namedKeyword === 'Restore' ? KW.restore(1) : { name: source.namedKeyword }] }
       : undefined),
+})
+
+// ── Bounty (#467) ────────────────────────────────────────────────────────────────────────────────
+// "Bounty - <reward>. (When this unit is defeated or captured, your opponent collects its bounty.)"
+// The keyword itself needs no code (`Bounty` is parsed like any other printed keyword, and reading
+// "has a Bounty" is plain `unitHasKeyword`); the whole ticket is the REWARD's dispatch, built in
+// abilities.ts/combat.ts/effects.ts (a new `bounty` trigger point, opponent-controlled, collected at
+// both defeat and capture, always optional via a `mayCollectBounty` choice). Every reward below is
+// written with the existing When Played helpers and wrapped in `bounty()`, which remaps the trigger
+// exactly as `defeated()` does for When Defeated.
+//
+// TS26_27 Fortune and Glory and SHD_006 Jabba the Hutt's back both need a CHOSEN guardian AND a
+// chosen target in one capture action, which #707 owns, not this ticket — commented there rather
+// than half-registered. SHD_010 Bossk's back ("When you collect a BOUNTY: you may collect that
+// BOUNTY again") needs a genuinely new primitive (react to a collection, re-run it, once a round)
+// that nothing else here needs; only his front is built, and a new ticket owns it.
+
+/** "If an enemy unit has a Bounty" (Krrsantan, Reputable Hunter, Trandoshan Hunters). */
+const enemyHasBounty = (s: GameState, owner: PlayerId): boolean => s.players[opponentOf(owner)].units.some(u => unitHasKeyword(s, u, 'Bounty'))
+const hasBounty: Pick = (s, u) => unitHasKeyword(s, u, 'Bounty')
+
+// Own printed Bounty, a simple reward with nothing else to pick.
+const bountyDrawACard = bounty(whenPlayed('Draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1)))
+registerCard('SHD_027', bountyDrawACard) // Hylobon Enforcer
+registerCard('SHD_095', bountyDrawACard) // Clone Deserter
+registerCard('SHD_134', bountyDrawACard) // Guavian Antagonizer
+// SHD_195 Cartel Turncoat: routed here from #477 with the same "Bounty - Draw a card." text, but
+// dropped from the ticket's own "18 sole-blocked" recount — verified against the SHD fixture (same
+// text, unregistered, no other blocker) and folded in rather than left out on a stale count.
+registerCard('SHD_195', bountyDrawACard) // Cartel Turncoat
+
+const bountyResourceTopOfDeck = bounty(whenPlayed('Put the top card of your deck into play as a resource.', (s, ctx) => resourceTopOfDeck(s, ctx.owner)))
+registerCard('SHD_116', bountyResourceTopOfDeck) // Outlaw Corona
+registerCard('SHD_125', bountyResourceTopOfDeck) // Price on Your Head (upgrade)
+
+registerCard('SHD_167', bounty(whenPlayed('Deal 2 damage to a unit.', (s, ctx) => damageChoice(s, ctx, 2, allUnits(s))))) // Wanted Insurgents
+registerCard('SHD_211', bounty(whenPlayed('Exhaust a unit.', (s, ctx) => targetChoice(s, ctx, 'mayExhaustUnit', allUnits(s).map(u => u.instanceId))))) // Fugitive Wookiee
+registerCard('SHD_185', bounty(whenPlayed('Ready up to 12 resources.', (s, ctx) => { // Doctor Evazan
+  let next = s
+  for (let i = 0; i < 12; i++) next = readyResource(next, ctx.owner)
+  return next
+})))
+
+// Upgrade-granted Bounty: the upgrade's own card carries the `bounty` ability, collected for its
+// host automatically (`abilityCardIds` already includes attached upgrades), no extra plumbing.
+registerCard('SHD_221', bounty(whenPlayed('Ready 2 friendly resources.', (s, ctx) => readyResource(readyResource(s, ctx.owner), ctx.owner)))) // Wanted
+registerCard('SHD_068', bounty(whenPlayed('Give a Shield token to a unit.', (s, ctx) => shieldChoice(s, ctx, allUnits(s).map(u => u.instanceId), false)))) // Public Enemy
+registerCard('SHD_176', bounty(whenPlayed('Draw 2 cards.', (s, ctx) => drawCards(s, ctx.owner, 2)))) // Death Mark
+registerCard('SHD_261', bounty(expUpTo('Give an Experience token to each of up to 2 units.', 2, 'give an Experience token to a unit (up to 2)', pickAny))) // Rich Reward
+/** Bounty upgrades whose reward doubles for a unique host: read from `ctx.bountyUnit`, the card as it
+ *  stood at the moment of defeat/capture, since the host itself is already out of play by then. */
+const bountyUnique = (s: GameState, ctx: EffectContext): boolean => s.cards[ctx.bountyUnit?.cardId ?? '']?.unique === true
+registerCard('SHD_071', bounty(whenPlayed('Heal 4 damage from a unit or base. If this unit is unique, heal 6 damage instead.', (s, ctx) => // Top Target
+  healChoice(s, ctx, bountyUnique(s, ctx) ? 6 : 4, allUnits(s).map(u => u.instanceId), BOTH_BASES))))
+registerCard('SHD_173', bounty(whenPlayed('Deal 2 damage to a base. If this unit is unique, deal 3 damage instead.', (s, ctx) => // Guild Target
+  damageChoice(s, ctx, bountyUnique(s, ctx) ? 3 : 2, [], BOTH_BASES))))
+
+// Conditional Bounty ("while this unit is exhausted, it gains Bounty"): read `ctx.bountyUnit`'s own
+// snapshot directly via `hears`, rather than a `grantsAbilities` self-aura — the granting unit is
+// ALREADY OUT OF PLAY by the time a `bounty` trigger collects (that's what defeated/captured means),
+// so a self-referential aura lookup over `state.players[...].units` could never find itself there.
+registerCard('SHD_033', { // Synara San — Loyal to Kragan
+  abilities: [{
+    trigger: 'bounty', description: 'While this unit is exhausted, she gains, "Bounty - Deal 5 damage to a base."',
+    hears: (_s, ctx) => ctx.bountyUnit?.exhausted === true,
+    effect: (s, ctx) => damageChoice(s, ctx, 5, [], BOTH_BASES),
+  }],
+})
+registerCard('SHD_165', { // Unlicensed Headhunter
+  abilities: [{
+    trigger: 'bounty', description: 'While this unit is exhausted, it gains: "Bounty - Heal 5 damage from your base."',
+    hears: (_s, ctx) => ctx.bountyUnit?.exhausted === true,
+    effect: (s, ctx) => healBase(s, ctx.owner, 5),
+  }],
+})
+
+// Cards that only READ "has a Bounty" (printed or granted) — no new trigger point needed, since
+// `unitHasKeyword` already reads any keyword name generically, Bounty included.
+registerCard('SHD_117', { // Reputable Hunter
+  costModifier: (s, playerId) => (enemyHasBounty(s, playerId) ? -1 : 0),
+})
+registerCard('SHD_186', { // Hunter of the Haxion Brood
+  // Live, not printed: like Privateer Scyk's own conditional Shielded, `applyEntryKeywords` reads it
+  // off the board as the unit enters play, so the entry Shield token still lands whenever the
+  // condition already holds by then.
+  conditionalKeywords: (s, u) => (enemyHasBounty(s, controllerOf(s, u)) ? [{ name: 'Shielded' }] : []),
+})
+registerCard('SHD_140', whenPlayed('If an enemy unit has a Bounty, give an Experience token to this unit.', (s, ctx) => // Trandoshan Hunters
+  (enemyHasBounty(s, ctx.owner) ? giveToken(s, ctx.sourceInstanceId!, TOKEN_EXPERIENCE, ctx.owner) : s)))
+registerCard('SHD_216', attacks('If the defender has a Bounty, it gets -4/-0 for this attack.', (s, ctx) => { // Chain Code Collector
+  const d = defenderOf(s, ctx)
+  return d && unitHasKeyword(s, d, 'Bounty') ? forThisAttack(s, d.instanceId, -4) : s
+}))
+registerCard('SHD_138', { // Jango Fett — Renowned Bounty Hunter
+  statModifier: (s, _u, ctx) => {
+    const defenderId = ctx.attacking ? ctx.combat?.defenderInstanceId : undefined
+    const defender = defenderId ? findUnit(s, defenderId)?.unit : undefined
+    return defender && unitHasKeyword(s, defender, 'Bounty') ? { power: 3 } : {}
+  },
+  conditionalKeywords: (s, _u, ctx) => {
+    const defenderId = ctx?.attacking ? ctx.combat?.defenderInstanceId : undefined
+    const defender = defenderId ? findUnit(s, defenderId)?.unit : undefined
+    return defender && unitHasKeyword(s, defender, 'Bounty') ? [KW.overwhelm] : []
+  },
+  abilities: [{
+    trigger: 'onAttackEnd', description: 'When this unit attacks and defeats a unit: Draw a card.',
+    effect: (s, ctx) => (ctx.defenderDefeated ? drawCards(s, ctx.owner, 1) : s),
+  }],
+})
+registerCard('SHD_139', { // Krrsantan — Muscle for Hire
+  abilities: [
+    {
+      trigger: 'whenPlayed', description: 'If an enemy unit has a Bounty, you may ready this unit.',
+      effect: (s, ctx) => (enemyHasBounty(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'ready this unit', then: resume(ctx) })
+        : s),
+    },
+    {
+      trigger: 'onAttack', description: 'Choose a ground unit. You may deal 1 damage to it for each damage on this unit.',
+      effect: (s, ctx) => {
+        const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+        const amount = self?.damage ?? 0
+        const targets = allUnits(s).filter(u => u.arena === 'ground').map(u => u.instanceId)
+        return amount > 0 && targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount, optional: true }) : s
+      },
+    },
+  ],
+  ifYouDo: (s, ctx) => readyUnit(s, ctx.sourceInstanceId!),
+})
+
+// Bossk's leader front only — his back ("When you collect a BOUNTY: you may collect that BOUNTY
+// again. Use this ability only once each round.") is the new-primitive gap noted above.
+registerCard('SHD_010', { // Bossk — Hunting His Prey
+  ...leaderFront('Deal 1 damage to a unit with a Bounty. You may give it +1/+0 for this phase.', {
+    cost: 1,
+    usable: anyUnitPasses(hasBounty),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, hasBounty), 'deal 1 damage to it', false),
+  }),
+  ifYouDo: (s, ctx) => lastingBuffChoice(dealDamageToUnit(s, ctx.targetInstanceId!, 1), ctx, [ctx.targetInstanceId!], { power: 1 }, true),
 })

@@ -1,5 +1,5 @@
 import type { Arena, DelayedEffect, EngineCard, GameState, IfYouDo, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeRef } from './types'
-import { abilityCardIds, baseAbilityCardIds } from './types'
+import { abilityCardIds, baseAbilityCardIds, pushChoice } from './types'
 
 /**
  * Card ability framework. Card-type-agnostic: units, leaders, events and upgrades
@@ -100,6 +100,14 @@ export type TriggerPoint =
   // effects. The game's FIRST action phase raises nothing, which is right for every card that can
   // read it: each has to be played during an action phase to be in play at all.
   | 'whenActionPhaseStarts'
+  // Bounty (CR 13): "Bounty - <reward>. (When this unit is defeated or captured, your opponent
+  // collects its bounty.)" Collected at BOTH points a Bounty unit can leave play that way — combat's
+  // `finishDefeats` and capture's `attemptCapture` — with `owner` passed as the unit's own OPPONENT,
+  // not its controller: CR 13 treats Bounty as controlled by the collector, the reverse of every other
+  // trigger point above. `ctx.bountyUnit` carries the unit's snapshot. Never run directly: every
+  // Bounty ability is optional regardless of its printed wording, so `runPendingTrigger` raises a
+  // `mayCollectBounty` choice instead of the effect, and `runBountyCollection` below answers it.
+  | 'bounty'
 
 /**
  * What one ability's effect is handed when it resolves: who owns it and which card it is on, plus the
@@ -964,11 +972,35 @@ export function runPendingTrigger(state: GameState, trigger: PendingTrigger): Ga
   if (trigger.resume) return resumeAbility(state, trigger.resume)
   const ability = triggerAbility(trigger)
   if (!ability || ability.trigger !== trigger.point) return state
+  // Bounty (CR 13) is always optional, whatever its printed text says, so collecting it is a choice
+  // rather than an immediate effect — see `runBountyCollection`, which answers it.
+  if (trigger.point === 'bounty') {
+    return pushChoice(state, {
+      kind: 'mayCollectBounty', id: trigger.id, controller: trigger.controller,
+      cardId: trigger.cardId, abilityIndex: trigger.abilityIndex,
+      ...(trigger.sourceInstanceId ? { sourceInstanceId: trigger.sourceInstanceId } : {}),
+      ...(trigger.ctx ? { ctx: trigger.ctx } : {}),
+    })
+  }
   return runEffect(state, ability.effect, {
     owner: trigger.controller,
     cardId: trigger.cardId,
     sourceInstanceId: trigger.sourceInstanceId,
     ...trigger.ctx,
   })
+}
+
+/**
+ * Run one Bounty ability's effect once its `mayCollectBounty` choice is accepted. Kept apart from
+ * `runPendingTrigger`'s normal path (which uses the trigger's own `abilityIndex`/`cardId` the same
+ * way) so resolve.ts's `acceptChoice` can call it directly without reaching into the registry itself.
+ */
+export function runBountyCollection(
+  state: GameState, cardId: string, abilityIndex: number, owner: PlayerId,
+  sourceInstanceId: string | undefined, ctx: TriggerContext | undefined,
+): GameState {
+  const ability = getAbilities(cardId)[abilityIndex]
+  if (!ability) return state
+  return runEffect(state, ability.effect, { owner, cardId, sourceInstanceId, ...ctx })
 }
 

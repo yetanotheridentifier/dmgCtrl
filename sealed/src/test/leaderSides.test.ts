@@ -51,10 +51,16 @@ const SHIPPED = [
  * lifted to Experience tokens and SEC_011 to token units, and SEC_003 (Lama Su) and LOF_001 (Kylo
  * Ren) to playing a card out of a discard pile. All of those have since shipped, so those leaders
  * are built and covered with the group that unblocked them.
+ *
+ * SHD_010 Bossk is neither: his front (Action: deal 1 damage to a unit with a Bounty, may buff it)
+ * is built and covered in `bountyCards.test.ts`, but his back ("When you collect a BOUNTY: you may
+ * collect that BOUNTY again") needs a new primitive nothing else here needs, so this file's
+ * both-sides check below does not apply to him — he is neither SHIPPED (not both sides) nor LIFTED
+ * (his front IS registered).
  */
 const LIFTED = [
   'JTL_001', 'JTL_003', 'JTL_011', 'JTL_012', 'JTL_015', 'JTL_017', 'JTL_018', 'TWI_017',
-  'SHD_006', 'SHD_010', 'SEC_001', 'LAW_017', 'SEC_012',
+  'SHD_006', 'SEC_001', 'LAW_017', 'SEC_012',
 ]
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])

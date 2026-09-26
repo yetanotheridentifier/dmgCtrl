@@ -150,8 +150,10 @@ Two phases:
 (#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
   (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 17 not built are on the ticket of what
   blocks them, #465 pilots (7),
-  #467 Bounty (Jabba the Hutt's back side also reads capture, but that half is built — #466 — so
-  Bounty is his only remaining blocker), #470 Plot, #468 playing any card type, #602 Credit
+  #467 Bounty (Bossk's front is built; his back needs a new "react to a Bounty collection" primitive
+  and is its own ticket; Jabba the Hutt's back also reads capture, and needs a chosen guardian AND a
+  chosen target in one action — #707 — not the single-guardian shape #466 built, so it waits on both),
+  #470 Plot, #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #686 (defeat by an enemy card ability, and Chancellor Palpatine,
   the one leader that flips between two faces rather than deploying).
   **Bases are finished** (#460), which completes Phase 1: the engine gained base abilities (an Epic
@@ -166,7 +168,13 @@ Two phases:
   (it reads a Bounty), and the two leaders #458 had lifted out built alongside them. **Token units are
   finished** (#605), the second largest: Spy, X-Wing, TIE Fighter, Clone Trooper, Battle Droid and
   HMW's Beast, with 76 cards (73 the triage blocked on them alone, and Governor Pryce, HMW's Poggle the
-  Lesser and Nameless Valor lifted onto it). **Playing a card out of a discard pile is finished**
+  Lesser and Nameless Valor lifted onto it). **Bounty is finished** (#467): a `bounty` trigger point
+  collected under the unit's own opponent at both a defeat and a capture, always optional, dispatched
+  through a `mayCollectBounty` choice (`keywords-effects.md` "Bounty"). 24 cards, Trandoshan Hunters
+  among them (its own Experience token is conditional on reading one). TS26_27 Fortune and Glory and
+  Jabba the Hutt's leader back are chosen-guardian-and-target captures and are on #707; Bossk's back
+  ("collect that Bounty again, once each round") needs its own new primitive and has its own ticket.
+  **Playing a card out of a discard pile is finished**
   (#471): the discard piles became zones on the existing `playCardFrom` door, the unit-only
   `mayPlayUnitFromDiscard` it duplicated was retired onto it, and "for this phase you may play that
   card from a discard pile" became a standing permission on the Play a Card action. 20 cards, the
@@ -184,17 +192,18 @@ Two phases:
   them). Each card left touching the zone waits on another mechanic's ticket: Smuggle #469 (Lando
   Calrissian's leader, Enterprising Lackeys, and DJ, which also needs taking control of a resource, the
   one piece of the zone not built), Credit #602 (Chewbacca, Intimidator), the Force #462 (Eeth Koth),
-  Disclose #603 (Chancellor Valorum), Plot #470 (When Has Become Now) and Bounty #467 (Outlaw Corona,
-  Price on Your Head).
+  Disclose #603 (Chancellor Valorum) and Plot #470 (When Has Become Now). Outlaw Corona and Price on
+  Your Head shipped with Bounty (#467).
   **Capture's primitive is finished** (#466): `captureUnit`/`baseCapturesUnit`/`rescueCaptured`/
   `discardCaptured` plus the `cannotBeCaptured`/`captureReplacement` hooks are built and documented in
   `keywords-effects.md`. Of the 29 cards it unlocks on its own, the 10 with a single guardian and one
   immediate chosen target shipped alongside it; the 12 needing a chosen guardian AND target in one
   action, a budgeted or "each" multi-target capture, a base guardian with a scheduled rescue, or
-  playing a captured card outright, are on #707. 18 more (17 that only need Bounty's "When Captured"
-  half, plus Jabba the Hutt's leader back) are sole-blocked by Bounty (#467) now that capture's own
-  blocker is gone; three (L3-37, Charged with Corruption, Sanctioner's Shuttle) are sole-blocked by
-  Smuggle (#469), Disclose (#603) and Coordinate (#472) respectively. Two (Lurking TIE Phantom,
+  playing a captured card outright, are on #707. 17 more that only needed Bounty's "When Captured"
+  half shipped once Bounty landed (#467); Jabba the Hutt's leader back needs #707's own
+  chosen-guardian-and-target shape as well and is on that ticket, not this one. Three (L3-37, Charged
+  with Corruption, Sanctioner's Shuttle) are sole-blocked by Smuggle (#469), Disclose (#603) and
+  Coordinate (#472) respectively. Two (Lurking TIE Phantom,
   Shadowed Intentions) turned out to need a different, broader mechanic entirely — "can't be
   X by enemy card abilities" for X beyond capture — and are on #708, unblocked by nothing #466 built.
   **The trigger-head batch is finished** (#474, #680). Most heads needed only context on points that
@@ -202,7 +211,8 @@ Two phases:
   point raised got their own (a unit attacking, healing, the ready step, a card being drawn, a unit
   leaving play). "Choose two, in any order" is `chooseMode` with a queued continuation. The cards
   whose other blocker is a keyword are on that keyword's ticket (Disclose #603, the Force #462,
-  Pilot #465, Plot #470, Bounty #467, capture #466), Arquitens Assault Cruiser (an opponent-owned
+  Pilot #465, Plot #470, capture #466; Jango Fett, Krrsantan and Chain Code Collector shipped with
+  Bounty, #467), Arquitens Assault Cruiser (an opponent-owned
   resource) shipped with #475, and
   Traitorous, Nabat Village and Lux Bonteri are on #686.
   Darth Vader, Victor Squadron Leader waits on #465 (his

@@ -5,7 +5,7 @@ import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPe
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
-import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, whileResolving, type TriggerPoint } from './abilities'
+import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
@@ -1737,6 +1737,11 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
       if (choice.damageSelf && choice.then.sourceInstanceId) next = dealDamageToUnit(next, choice.then.sourceInstanceId, choice.damageSelf)
       next = runIfYouDo(next, choice.then)
+      break
+    case 'mayCollectBounty':
+      next = runBountyCollection(next, choice.cardId, choice.abilityIndex, choice.controller, choice.sourceInstanceId, choice.ctx)
+      next = checkWin(next)
+      if (next.winner !== null) return next
       break
     case 'selectUnitThen':
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) next = runIfYouDo(next, choice.then, { targetInstanceId })

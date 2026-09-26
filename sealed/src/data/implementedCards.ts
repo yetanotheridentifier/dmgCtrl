@@ -306,6 +306,9 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   // different ones a unit has.
   { id: 'HMW_001', name: 'Asajj Ventress', front: true, back: true },
   { id: 'TS26_3', name: 'Maul', front: true, back: true },
+  // Bounty: front only. His back ("When you collect a Bounty, you may collect it again") needs a
+  // separate new primitive that nothing else built for Bounty needs.
+  { id: 'SHD_010', name: 'Bossk', front: true, back: false },
 ]
 
 /**
@@ -465,6 +468,14 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'SHD_251', name: "The Mandalorian's Rifle" },
   { id: 'SHD_124', name: 'Legal Authority' },
   { id: 'SEC_256', name: 'Moral Authority' },
+  // Bounty (#467): attached unit gains a Bounty of its own.
+  { id: 'SHD_221', name: 'Wanted' },
+  { id: 'SHD_068', name: 'Public Enemy' },
+  { id: 'SHD_176', name: 'Death Mark' },
+  { id: 'SHD_261', name: 'Rich Reward' },
+  { id: 'SHD_071', name: 'Top Target' },
+  { id: 'SHD_173', name: 'Guild Target' },
+  { id: 'SHD_125', name: 'Price on Your Head' },
 ]
 
 /**
@@ -1915,6 +1926,24 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SEC_056', name: 'Escape Pod' },
   { id: 'SHD_170', name: 'IG-11' },
   { id: 'SEC_209', name: 'The Mandalorian' },
+  // Bounty (#467): the reward a unit's opponent collects when it is defeated or captured, plus the
+  // cards that only read whether a unit has one.
+  { id: 'SHD_027', name: 'Hylobon Enforcer' },
+  { id: 'SHD_095', name: 'Clone Deserter' },
+  { id: 'SHD_134', name: 'Guavian Antagonizer' },
+  { id: 'SHD_195', name: 'Cartel Turncoat' },
+  { id: 'SHD_116', name: 'Outlaw Corona' },
+  { id: 'SHD_167', name: 'Wanted Insurgents' },
+  { id: 'SHD_211', name: 'Fugitive Wookiee' },
+  { id: 'SHD_185', name: 'Doctor Evazan' },
+  { id: 'SHD_033', name: 'Synara San' },
+  { id: 'SHD_165', name: 'Unlicensed Headhunter' },
+  { id: 'SHD_117', name: 'Reputable Hunter' },
+  { id: 'SHD_140', name: 'Trandoshan Hunters' },
+  { id: 'SHD_216', name: 'Chain Code Collector' },
+  { id: 'SHD_138', name: 'Jango Fett' },
+  { id: 'SHD_139', name: 'Krrsantan' },
+  { id: 'SHD_186', name: 'Hunter of the Haxion Brood' },
 ]
 
 /**

@@ -790,6 +790,11 @@ function attemptCapture(state: GameState, targetInstanceId: string, guardianOwne
   next = recordUnitLeftPlay(next, controller, target.cardId, target.isLeader)
   next = releaseCaptured(next, target.captured ?? [])
   next = fireBatch(next, collectLeavesPlay(next, target, controller))
+  // Bounty (CR 13): capture is the other half of "defeated or captured", collected under the
+  // captured card's own OPPONENT (its owner's opponent, not necessarily the guardian's controller —
+  // an enemy unit can capture a friendly one). #466 built no capture trigger point; this is it, added
+  // for #467 rather than speculatively, since nothing else needs "when this unit is captured" yet.
+  next = fireBatch(next, collectUnitTriggers(next, 'bounty', target, opponentOf(cardOwner), { bountyUnit: target }))
   if (isTokenCard(target.cardId)) return { state: next } // CR 33.5: set aside, nothing to guard
   return { state: next, captured: { cardId: target.cardId, owner: cardOwner } }
 }

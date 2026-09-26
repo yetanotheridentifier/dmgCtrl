@@ -376,6 +376,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     }
     case 'damageAnyBases':
       return [choice.heal ? `heal ${choice.amount} damage from a base, or stop` : `deal ${choice.amount} damage to a base, or stop`]
+    case 'mayCollectBounty':
+      return ['you may collect this Bounty']
 
     default: {
       // EXHAUSTIVE. Every choice kind above names what it is asking, so this is unreachable and TS

@@ -490,11 +490,45 @@ listeners stay silent too.
   abilities**", so a unit may still capture its own. `captureReplacement` is unconditional (IG-11: "if
   this unit would be captured, defeat him ... instead") and is checked first; when it fires, the
   capture itself never happens.
-- **What #466 shipped and what didn't.** The primitive above is complete and CR-correct. The first
-  wave of cards registered against it are the ones with a single guardian and one immediate chosen
-  target (`captureWp`, mirroring `damageWp`/`targetWp`). Cards needing a chosen guardian AND a chosen
-  target in the same action, a budgeted multi-target capture ("up to 3 units with 8 or less combined
-  remaining HP"), a base guardian, or a scheduled rescue at the regroup phase, are on the follow-up
-  ticket named in `planned-work.md`. Bounty's own "when this unit is captured" half is #467's, not
-  built here: nothing in this ticket fires a dedicated capture trigger point, since nothing shipped
-  needs one yet.
+- **What's built and what isn't.** The primitive above is complete and CR-correct. Cards registered
+  against it so far are the ones with a single guardian and one immediate chosen target (`captureWp`,
+  mirroring `damageWp`/`targetWp`). Cards needing a chosen guardian AND a chosen target in the same
+  action, a budgeted multi-target capture ("up to 3 units with 8 or less combined remaining HP"), a
+  base guardian, or a scheduled rescue at the regroup phase, are on the follow-up ticket named in
+  `planned-work.md`.
+
+## Bounty
+
+"Bounty - \<reward\>. (When this unit is defeated or captured, your opponent collects its bounty.)"
+(CR 13). A Bounty ability resolves like a triggered ability considered controlled by an **opponent**
+of the unit's own controller, the reverse of every other trigger point in this file, and collecting
+one is always optional whatever its printed wording says.
+
+- **Trigger point.** `'bounty'` fires at both places a Bountied unit can leave play that way:
+  combat's defeat (`finishDefeats`) and `attemptCapture`. Both collect it with `owner` passed as
+  `opponentOf(<the unit's own controller>)`, and `ctx.bountyUnit` carries the unit's own snapshot
+  (its stats, exhausted state and card id), since the unit is already out of play by the time an
+  ability reads it — a card whose Bounty is conditional on the unit itself (Synara San, Unlicensed
+  Headhunter: "while this unit is exhausted") reads `ctx.bountyUnit` directly rather than a
+  self-referential aura, which could never find a unit no longer on the board.
+- **Always a choice.** `runPendingTrigger` never runs a `bounty` ability's effect directly: it raises
+  a `mayCollectBounty` choice (accept/skip, no target) instead, answered by `runBountyCollection` in
+  `abilities.ts`. This is the dispatcher's job rather than each card's own `ifYouDo`, because a
+  reward may need its own internal continuation (Rich Reward's `expUpTo`) that a card-level optional
+  gate would collide with.
+- **Independent per source.** An upgrade carrying its own Bounty (Wanted, Public Enemy, Rich Reward,
+  Top Target, Guild Target, Price on Your Head, Death Mark) is collected through the same
+  `abilityCardIds` sweep that reads any other attached-card ability, so it fires alongside the host's
+  own printed Bounty as a separate source: two Bounty sources on one unit raise the ordinary
+  `chooseNextTrigger` pick between two abilities owed to the same controller (CR 7.6.9), not a single
+  merged effect.
+- **Reading "has a Bounty".** No new primitive: Bounty is parsed like any other printed keyword, so
+  `unitHasKeyword(s, u, 'Bounty')` already answers it, live, for cards that only read the condition
+  (Reputable Hunter's cost, Chain Code Collector's On Attack debuff, Jango Fett's conditional power
+  and Overwhelm, Krrsantan's When Played, Bossk's leader front) or grant it conditionally
+  (Hunter of the Haxion Brood's Shielded, granted the same way Privateer Scyk's is: a live
+  `conditionalKeywords` read at entry, not the printed keyword).
+- **Rewards reuse the When Played helpers.** Every reward is written with the same builders a When
+  Played ability uses (`damageChoice`, `healChoice`, `shieldChoice`, `targetChoice`, `expUpTo`,
+  `readyResource`) and wrapped in `bounty()`, which remaps a `whenPlayed`-shaped definition's trigger
+  to `'bounty'`, mirroring the existing `defeated()` idiom for When Defeated.
