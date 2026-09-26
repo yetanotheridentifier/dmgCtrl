@@ -461,6 +461,10 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'HMW_191', name: "Hunter's Instinct" },
   { id: 'HMW_235', name: 'Gaderffii Stick' },
   { id: 'HMW_147', name: 'Beast Lair' },
+  // Capture (#466): attached unit captures another
+  { id: 'SHD_251', name: "The Mandalorian's Rifle" },
+  { id: 'SHD_124', name: 'Legal Authority' },
+  { id: 'SEC_256', name: 'Moral Authority' },
 ]
 
 /**
@@ -871,6 +875,8 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   // The resource zone.
   { id: 'SHD_105', name: 'Spark of Hope' },
   { id: 'TWI_177', name: 'Guerilla Insurgency' },
+  // Capture (#466).
+  { id: 'SHD_180', name: 'Detention Block Rescue' },
 ]
 
 /**
@@ -1902,6 +1908,13 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'JTL_047', name: 'Admiral Yularen' },
   { id: 'JTL_053', name: 'The Ghost' },
   { id: 'LOF_105', name: 'Oppo Rancisis' },
+  // Capture (#466): a unit captures another.
+  { id: 'SHD_120', name: 'Discerning Veteran' },
+  { id: 'TWI_115', name: 'Osi Sobeck' },
+  { id: 'SEC_253', name: 'Covert Operative' },
+  { id: 'SEC_056', name: 'Escape Pod' },
+  { id: 'SHD_170', name: 'IG-11' },
+  { id: 'SEC_209', name: 'The Mandalorian' },
 ]
 
 /**

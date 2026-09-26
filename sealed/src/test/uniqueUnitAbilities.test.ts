@@ -62,7 +62,7 @@ describe('Outcast (041) — +1/+0 to friendly units entering play, including its
   // Rescuing a captured card puts it back into play (Bothan-5), which is an entry like any other.
   it('buffs a friendly unit rescued from capture, and counts it as having entered play', () => {
     const s = state({ cards: F, players: { player: rich({ units: [unit('o', 'ASH_041', { arena: 'ground' })] }), opponent: player() } })
-    const freed = releaseCaptured(s, 'player', ['GRD'])
+    const freed = releaseCaptured(s, [{ cardId: 'GRD', owner: 'player' }])
     const g = freed.players.player.units.find(u => u.cardId === 'GRD')!
     expect(effectivePower(freed, g)).toBe(2 + 1)
     expect(enteredPlayThisPhase(freed, 'player')).toContain(g.instanceId)
@@ -86,7 +86,7 @@ describe('A deploy is not a play', () => {
       cards: F,
       players: { player: rich({ units: [unit('r', 'ASH_102', { arena: 'space' })] }), opponent: player({ units: [unit('e', 'SPC', { arena: 'space' })] }) },
     })
-    expect(releaseCaptured(s, 'player', ['SPC']).pendingChoices ?? []).toHaveLength(0)
+    expect(releaseCaptured(s, [{ cardId: 'SPC', owner: 'player' }]).pendingChoices ?? []).toHaveLength(0)
   })
 })
 

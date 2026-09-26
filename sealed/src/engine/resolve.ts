@@ -1327,14 +1327,15 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         : defeatBaseUpgrade(next, choice.baseOwner, choice.upgradeCardId, false)
       break
     case 'mayCapture': {
-      // Bothan-5: move the card out of the discard and under the capturing unit.
+      // Bothan-5: move the card out of the discard and under the capturing unit. It's the unit's
+      // own owner's discard it came from, so the captured card's owner is the same `owner`.
       const owner = choice.controller
       const p = next.players[owner]
       const idx = p.discard.indexOf(choice.cardId)
       if (idx === -1) break
       next = updatePlayer(next, owner, {
         discard: p.discard.filter((_, i) => i !== idx),
-        units: p.units.map(u => (u.instanceId === choice.unitId ? { ...u, captured: [...(u.captured ?? []), choice.cardId] } : u)),
+        units: p.units.map(u => (u.instanceId === choice.unitId ? { ...u, captured: [...(u.captured ?? []), { cardId: choice.cardId, owner }] } : u)),
       })
       if (choice.markUsed) next = markAbilityUsed(next, owner, choice.markUsed.instanceId, choice.markUsed.key)
       break

@@ -371,7 +371,7 @@ describe('Fortify: triggered abilities on the base', () => {
     expect(choice(play(board(fortified('HMW_171')), 'GRD')).controller).toBe('player')
     expect(choice(createTokenUnit(board(fortified('HMW_171')), 'opponent', TOKEN_BATTLE_DROID)).controller).toBe('player')
     // Entering play covers every route in, not just a play or a create: a rescued captured unit too.
-    expect(choice(releaseCaptured(board(fortified('HMW_171')), 'opponent', ['GRD'])).controller).toBe('player')
+    expect(choice(releaseCaptured(board(fortified('HMW_171')), [{ cardId: 'GRD', owner: 'opponent' }])).controller).toBe('player')
     noChoice(play(board({}, theirFortified('HMW_171')), 'SPC'))
   })
 })

@@ -1,4 +1,4 @@
-import type { DamageDealt, DamageSource, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
+import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
 import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
@@ -654,7 +654,7 @@ export function returnUnitToHand(state: GameState, instanceId: string): GameStat
     }
     next = recordUnitLeftPlay(next, owner, u.cardId, u.isLeader)
     // Leaving play releases whatever it had captured.
-    next = releaseCaptured(next, owner, u.captured ?? [])
+    next = releaseCaptured(next, u.captured ?? [])
     return fireBatch(next, collectLeavesPlay(next, u, owner))
   }
   return state
@@ -670,44 +670,146 @@ export function collectLeavesPlay(state: GameState, unit: UnitState, controller:
 }
 
 /**
- * Release the cards a unit had captured (Bothan-5): each returns to PLAY under its owner's
- * control, exhausted, in its own arena. It is not being *played*, so nothing that keys off playing
- * happens: no "When Played" (or play/create) trigger, no Shielded shield token, no Ambush attack,
- * and no cost. It IS entering play, though (CR 7.1: a card enters play when it moves from an
- * out-of-play zone to an in-play zone), so it counts as having entered play this phase and raises
- * the arrival triggers that read an entry rather than a play. Token cards can't come back: they
- * ceased to exist when captured.
+ * Bring one captured card back into play (CR 33.3), under its OWN owner's control — not necessarily
+ * the guardian's controller, since an enemy unit can be captured. Exhausted, in its own arena. It is
+ * not being *played*, so nothing that keys off playing happens: no "When Played" (or play/create)
+ * trigger, no Shielded shield token, no Ambush attack, and no cost. It IS entering play, though
+ * (CR 7.1: a card enters play when it moves from an out-of-play zone to an in-play zone), so it
+ * counts as having entered play this phase and raises the arrival triggers that read an entry rather
+ * than a play.
  */
-export function releaseCaptured(state: GameState, owner: PlayerId, cardIds: string[]): GameState {
-  let next = state
-  for (const cardId of cardIds) {
-    if (isTokenCard(cardId)) continue
-    const card = next.cards[cardId]
-    const instanceId = `u${next.instanceCounter}`
-    next = {
-      ...next,
-      instanceCounter: next.instanceCounter + 1,
-      players: {
-        ...next.players,
-        [owner]: {
-          ...next.players[owner],
-          units: [...next.players[owner].units, {
-            instanceId,
-            cardId,
-            arena: card?.arena ?? 'ground',
-            damage: 0,
-            exhausted: true, // rescued units arrive exhausted
-            isLeader: false,
-            upgrades: [],
-          }],
-        },
+function enterCapturedCard(state: GameState, captured: CapturedCard): GameState {
+  const { cardId, owner } = captured
+  const card = state.cards[cardId]
+  const instanceId = `u${state.instanceCounter}`
+  let next: GameState = {
+    ...state,
+    instanceCounter: state.instanceCounter + 1,
+    players: {
+      ...state.players,
+      [owner]: {
+        ...state.players[owner],
+        units: [...state.players[owner].units, {
+          instanceId,
+          cardId,
+          arena: card?.arena ?? 'ground',
+          damage: 0,
+          exhausted: true, // rescued units arrive exhausted
+          isLeader: false,
+          upgrades: [],
+        }],
       },
-    }
-    // Each rescued card is its own arrival, so each gets its own batch, as a created token does.
-    next = recordUnitEntered(next, owner, instanceId)
-    next = fireBatch(next, collectArrivalTriggers(next, undefined, owner, instanceId))
+    },
   }
+  // Each rescued card is its own arrival, so each gets its own batch, as a created token does.
+  next = recordUnitEntered(next, owner, instanceId)
+  return fireBatch(next, collectArrivalTriggers(next, undefined, owner, instanceId))
+}
+
+/**
+ * Release every card a guardian had captured (CR 33.4 — the guardian left play), each back into play
+ * under its own owner. Token cards can't come back: they were set aside when captured (CR 33.5) and
+ * never made it into this list, so there is nothing here to skip.
+ */
+export function releaseCaptured(state: GameState, captured: CapturedCard[]): GameState {
+  let next = state
+  for (const c of captured) next = enterCapturedCard(next, c)
   return next
+}
+
+/** The guardian's captured list, wherever it lives. Empty if the guardian isn't in play (a unit) or
+ *  doesn't exist (an unrecognised base owner never happens in a 2-player game). */
+function capturedListAt(state: GameState, holder: CaptureHolder): CapturedCard[] {
+  if (holder.kind === 'base') return state.players[holder.owner].base.captured ?? []
+  return findUnit(state, holder.instanceId)?.unit.captured ?? []
+}
+
+/** Overwrite a guardian's captured list in place. No-op if the guardian (a unit) has left play. */
+function setCapturedListAt(state: GameState, holder: CaptureHolder, list: CapturedCard[]): GameState {
+  if (holder.kind === 'base') {
+    const base = state.players[holder.owner].base
+    return updatePlayer(state, holder.owner, { base: { ...base, captured: list } })
+  }
+  const found = findUnit(state, holder.instanceId)
+  if (!found) return state
+  return patchUnit(state, found.owner, holder.instanceId, u => ({ ...u, captured: list }))
+}
+
+/**
+ * Rescue one specific captured card from under `holder` (CR 33.3 — Unexpected Escape, Cad Bane's
+ * On Attack, and any other targeted rescue). No-op if `holder` isn't guarding that card. Matches the
+ * first entry with this `cardId`: two captured copies of the same non-unique card under one guardian
+ * are otherwise indistinguishable, which is the same "first match" the discard pile already lives with.
+ */
+export function rescueCaptured(state: GameState, holder: CaptureHolder, cardId: string): GameState {
+  const list = capturedListAt(state, holder)
+  const idx = list.findIndex(c => c.cardId === cardId)
+  if (idx === -1) return state
+  const next = setCapturedListAt(state, holder, [...list.slice(0, idx), ...list.slice(idx + 1)])
+  return enterCapturedCard(next, list[idx])
+}
+
+/** Discard one specific captured card from under `holder` (Altering the Deal), straight to its own
+ *  owner's discard pile rather than back into play. No-op if `holder` isn't guarding that card. */
+export function discardCaptured(state: GameState, holder: CaptureHolder, cardId: string): GameState {
+  const list = capturedListAt(state, holder)
+  const idx = list.findIndex(c => c.cardId === cardId)
+  if (idx === -1) return state
+  const { owner } = list[idx]
+  const next = setCapturedListAt(state, holder, [...list.slice(0, idx), ...list.slice(idx + 1)])
+  return updatePlayer(next, owner, { discard: [...next.players[owner].discard, cardId] })
+}
+
+/**
+ * Resolve a capture attempt against `targetInstanceId` for a guardian controlled by `guardianOwner`
+ * (CR 33.1): protection and replacement effects first, then the target's consequences — its upgrades
+ * defeated, its own damage moot (it isn't stored once out of play), whatever IT was guarding released
+ * (CR 33.4 — capturing is also the target leaving play), and the "leaves play" trigger, but NOT
+ * `whenDefeated`: a captured unit was never defeated. Returns the `CapturedCard` to place under the
+ * guardian, or nothing when the attempt fizzles: the target isn't in play, is protected, was replaced
+ * by something else, or was a token (CR 33.5 — set aside instead of guarded).
+ */
+function attemptCapture(state: GameState, targetInstanceId: string, guardianOwner: PlayerId): { state: GameState; captured?: CapturedCard } {
+  const found = findUnit(state, targetInstanceId)
+  if (!found) return { state } // CR 33.1.a's mirror: nothing to capture
+  const { owner: controller, unit: target } = found
+  const cardOwner = target.owner ?? controller
+  const isEnemy = cardOwner !== guardianOwner
+  if (isEnemy && abilityCardIds(target).some(id => getCardDefinition(id)?.cannotBeCaptured?.(state, target))) return { state }
+  for (const id of abilityCardIds(target)) {
+    const replaced = getCardDefinition(id)?.captureReplacement?.(state, target)
+    if (replaced) return { state: replaced }
+  }
+  let next = updatePlayer(state, controller, { units: state.players[controller].units.filter(u => u.instanceId !== targetInstanceId) })
+  for (const up of target.upgrades) {
+    if (state.cards[up.cardId]?.type === 'token') continue // token upgrades cease to exist
+    next = updatePlayer(next, up.owner, { discard: [...next.players[up.owner].discard, up.cardId] })
+  }
+  const upgradeOwners = target.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token').map(u => u.owner)
+  if (upgradeOwners.length > 0) next = fireUpgradesDefeated(next, upgradeOwners)
+  next = recordUnitLeftPlay(next, controller, target.cardId, target.isLeader)
+  next = releaseCaptured(next, target.captured ?? [])
+  next = fireBatch(next, collectLeavesPlay(next, target, controller))
+  if (isTokenCard(target.cardId)) return { state: next } // CR 33.5: set aside, nothing to guard
+  return { state: next, captured: { cardId: target.cardId, owner: cardOwner } }
+}
+
+/** `capturerInstanceId`'s unit captures `targetInstanceId` (CR 33). No-op if the capturer itself has
+ *  left play (CR 33.1.a) — checked here, since `attemptCapture` may otherwise still remove the target. */
+export function captureUnit(state: GameState, capturerInstanceId: string, targetInstanceId: string): GameState {
+  const capturer = findUnit(state, capturerInstanceId)
+  if (!capturer) return state
+  const { state: next, captured } = attemptCapture(state, targetInstanceId, capturer.owner)
+  if (!captured) return next
+  return patchUnit(next, capturer.owner, capturerInstanceId, u => ({ ...u, captured: [...(u.captured ?? []), captured] }))
+}
+
+/** `baseOwner`'s base captures `targetInstanceId` (Arrest is the only printed card that does this). */
+export function baseCapturesUnit(state: GameState, baseOwner: PlayerId, targetInstanceId: string): GameState {
+  const { state: next, captured } = attemptCapture(state, targetInstanceId, baseOwner)
+  if (!captured) return next
+  const base = next.players[baseOwner].base
+  return updatePlayer(next, baseOwner, { base: { ...base, captured: [...(base.captured ?? []), captured] } })
 }
 
 /** Exhaust one ready resource of `owner` (Mandalorian Scout). No-op if none is ready. */

@@ -123,10 +123,12 @@ export interface UnitState {
    */
   exploitedPowers?: number[]
   /**
-   * Cards this unit has captured (Bothan-5) — card ids held face-down under it, out of every
-   * other zone. Released to their owner's discard when the captor leaves play.
+   * Cards this unit has captured (CR 33): held face-down under it, out of every other zone, but
+   * still open information. This unit is "guarding" them. Released back to play under each card's
+   * OWN owner (not necessarily this unit's controller — an enemy unit can be captured) when rescued,
+   * or all at once when this unit leaves play (CR 33.4).
    */
-  captured?: string[]
+  captured?: CapturedCard[]
   /**
    * A card name this unit forbids the opponent from playing while it's in play (Ryder
    * Azadi). Set by its When Played "name a card"; the restriction ends naturally
@@ -199,7 +201,24 @@ export interface BaseState {
    * A card upgrade goes to its owner's discard pile when defeated, as one on a unit does.
    */
   upgrades?: UpgradeAttachment[]
+  /** Cards this base has captured (CR 33 — Arrest: "Your base captures an enemy non-leader unit").
+   *  See `UnitState.captured`; a base is never "in play" for CR 33.4's purposes, so nothing auto-rescues
+   *  these except the capturing card's own text. */
+  captured?: CapturedCard[]
 }
+
+/** A card held face-down under a "guardian" (a unit or a base) that captured it (CR 33). Out of
+ *  play while captured, but still open information: `owner` is whose control it returns to when
+ *  rescued or released, which is not always the guardian's controller — an enemy unit can be
+ *  captured, and a captured unit keeps its own owner the whole time it's held. */
+export interface CapturedCard {
+  cardId: string
+  owner: PlayerId
+}
+
+/** A guardian addressed generically, for rescuing or discarding a specific captured card without
+ *  caring whether it's held under a unit or a base (SEC_195 Arrest is the only base guardian). */
+export type CaptureHolder = { kind: 'unit'; instanceId: string } | { kind: 'base'; owner: PlayerId }
 
 /** True if a card is played onto its player's base rather than onto a unit (the Fortify keyword). */
 export function isFortify(card: EngineCard | undefined): boolean {

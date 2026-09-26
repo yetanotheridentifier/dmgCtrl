@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers, collectCardTriggers } from './abilities'
-import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand } from './effects'
+import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -2696,6 +2696,15 @@ const hostPasses = (s: GameState, ctx: EventCtx, test: (s: GameState, host: Unit
   return host && test(s, host) ? host : undefined
 }
 const namedAs = (name: string) => (s: GameState, u: UnitState): boolean => cardOf(s, u)?.name === name
+/**
+ * "(If ...,) (you may) have [this unit, or an upgrade's attached unit] capture a unit that ...": the
+ * pick, then the source captures it (CR 33). `ctx.sourceInstanceId` is the unit itself, or for an
+ * upgrade the unit it's attached to (CR 6.2.0f) — the guardian either way.
+ */
+const captureWp = (description: string, test: Pick, optional: boolean, when: When = always): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) => (when(s, ctx) ? unitThen(s, ctx, pickedIds(s, ctx, test), 'choose a unit to capture', optional) : s)),
+  ifYouDo: (s, ctx) => captureUnit(s, ctx.sourceInstanceId!, ctx.targetInstanceId!),
+})
 
 // Damage to a chosen unit
 registerCard('LAW_213', damageWp('You may deal 2 damage to an exhausted ground unit.', pickAll(pickGround, (_s, u) => u.exhausted), 2, true)) // Cutthroat Podracer
@@ -5596,6 +5605,59 @@ const sharesAspectWithBase = (s: GameState, owner: PlayerId, cardId: string): bo
 }
 const damaged: Pick = (_s, u) => u.damage > 0
 const enemyGroundUnit = pickAll(pickEnemy, pickGround)
+
+// ── Capture (CR 33): a unit (or, for an upgrade, its host) holds another unit out of play,
+// face-down, until it's rescued or the guardian leaves play. #466 — see keywords-effects.md.
+const hostPower = (s: GameState, ctx: EventCtx): number => { const h = selfOf(s, ctx); return h ? effectivePower(s, h) : 0 }
+const hostRemainingHp = (s: GameState, ctx: EventCtx): number => { const h = selfOf(s, ctx); return h ? remainingHp(s, h) : 0 }
+/** "... with cost equal to or less than the number of resources paid to play this unit" (Osi Sobeck). */
+const costAtMostPaid: Pick = (s, u, ctx) => {
+  const paid = selfOf(s, ctx)?.resourcesPaidToPlay ?? 0
+  return (s.cards[u.cardId]?.cost ?? 0) <= paid
+}
+const costAtMost = (n: number): Pick => (s, u) => (s.cards[u.cardId]?.cost ?? 0) <= n
+const exhausted: Pick = (_s, u) => u.exhausted
+
+registerCard('SHD_120', captureWp('This unit captures an enemy non-leader ground unit.', pickAll(enemyGroundUnit, nonLeader), false)) // Discerning Veteran
+registerCard('TWI_115', captureWp('Exploit 3 / When Played: This unit captures an enemy non-leader ground unit with cost equal to or less than the number of resources paid to play this unit.', pickAll(enemyGroundUnit, nonLeader, costAtMostPaid), false)) // Osi Sobeck
+registerCard('SEC_253', captureWp('This unit captures an enemy non-leader unit that costs 2 or less.', pickAll(pickEnemy, nonLeader, costAtMost(2)), false)) // Covert Operative
+registerCard('SEC_056', captureWp('You may have this unit capture a friendly non-Vehicle, non-leader unit.', pickAll(pickFriendly, pickOther, nonVehicle, nonLeader), true)) // Escape Pod
+registerCard('SHD_251', { // The Mandalorian's Rifle
+  attachRestriction: nonVehicle,
+  ...captureWp('Attach to a friendly non-Vehicle unit. When Played: If attached unit is The Mandalorian, he captures an exhausted enemy non-leader unit.', pickAll(pickEnemy, nonLeader, exhausted), false, hostIs('The Mandalorian')),
+})
+registerCard('SHD_124', captureWp('Attach to a friendly unit. When Played: Attached unit captures an enemy non-leader unit with less power than it.', // Legal Authority
+  (s, u, ctx) => pickEnemy(s, u, ctx) && nonLeader(s, u) && effectivePower(s, u) < hostPower(s, ctx), false))
+registerCard('SEC_256', { // Moral Authority
+  attachRestriction: (s, u) => Boolean(cardOf(s, u)?.unique),
+  ...captureWp('Attach to a friendly Unique unit. When Played: Attached unit captures an enemy non-leader unit with less remaining HP than it.',
+    (s, u, ctx) => pickEnemy(s, u, ctx) && nonLeader(s, u) && remainingHp(s, u) < hostRemainingHp(s, ctx), false),
+})
+registerCard('SHD_170', allOf( // IG-11
+  { captureReplacement: (s, self) => {
+    const owner = findUnit(s, self.instanceId)?.owner
+    if (!owner) return undefined
+    const enemyGround = s.players[opponentOf(owner)].units.filter(u => u.arena === 'ground').map(u => u.instanceId)
+    return enemyGround.reduce((acc, id) => dealDamageToUnit(acc, id, 3), defeatUnit(s, self.instanceId))
+  } },
+  onAttack(damageWp('You may deal 3 damage to a damaged ground unit.', pickAll(pickGround, damaged), 3, true)),
+))
+registerCard('SEC_209', { abilities: [{ trigger: 'onAttackEnd', description: 'Ambush / When this unit attacks and defeats a unit: You may choose an enemy non-leader unit. This unit captures it.', effect: (s, ctx) => { // The Mandalorian, Cleaning Up Nevarro
+  if (!ctx.defenderDefeated) return s
+  const targets = s.players[opponentOf(ctx.owner)].units.filter(u => !u.isLeader).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, hookOnDecline: true, text: 'choose an enemy unit to capture', then: resume(ctx) }) : s
+} }],
+  ifYouDo: (s, ctx) => captureUnit(s, ctx.sourceInstanceId!, ctx.targetInstanceId!),
+})
+registerCard('SHD_180', { // Detention Block Rescue
+  ...whenPlayed('Deal 3 damage to a unit. If that unit is guarding any captured cards, deal 6 damage instead.',
+    (s, ctx) => unitThen(s, ctx, allUnits(s).map(u => u.instanceId), 'choose a unit', false)),
+  ifYouDo: (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    const amount = target && (target.captured?.length ?? 0) > 0 ? 6 : 3
+    return dealDamageToUnit(s, ctx.targetInstanceId!, amount)
+  },
+})
 
 // A: targets, draws and base damage
 registerCard('LAW_057', allOf( // Benthic "Two Tubes"
