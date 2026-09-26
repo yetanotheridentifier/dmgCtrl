@@ -171,7 +171,7 @@ describe('UnitLine — attached upgrades', () => {
 
   it('stacks captured cards behind the unit, turned and dimmed', () => {
     const s = state({ cards: { ...CARDS, TST_U: card({ id: 'TST_U', type: 'unit', power: 3, hp: 4 }), TST_C: card({ id: 'TST_C', type: 'unit', power: 1, hp: 1 }) } })
-    render(<UnitLine state={s} unit={unit('u1', 'TST_U', { captured: ['TST_C'] })} interact={noInteract} />)
+    render(<UnitLine state={s} unit={unit('u1', 'TST_U', { captured: [{ cardId: 'TST_C', owner: 'player' }] })} interact={noInteract} />)
     const stack = screen.getByTestId('board-unit-captured-u1')
     const face = within(stack).getByTestId('card-face')
     // Turned (as if exhausted) and dimmed beyond the normal exhausted brightness — it's out of play.
@@ -186,7 +186,7 @@ describe('UnitLine — attached upgrades', () => {
 
   it('keeps captured cards visible below an exhausted capturing unit', () => {
     const s = state({ cards: { ...CARDS, TST_U: card({ id: 'TST_U', type: 'unit', power: 3, hp: 4 }), TST_C: card({ id: 'TST_C', type: 'unit', power: 1, hp: 1 }) } })
-    render(<UnitLine state={s} unit={unit('u1', 'TST_U', { exhausted: true, captured: ['TST_C'] })} interact={noInteract} />)
+    render(<UnitLine state={s} unit={unit('u1', 'TST_U', { exhausted: true, captured: [{ cardId: 'TST_C', owner: 'player' }] })} interact={noInteract} />)
     const captured = screen.getByTestId('captured-card')
     // Offset clear of the unit card so the exhausted (rotated) captor doesn't hide it.
     expect(Number.parseInt(captured.style.top, 10)).toBeGreaterThan(0)

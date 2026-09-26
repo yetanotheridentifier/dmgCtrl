@@ -78,7 +78,7 @@ describe('Bothan-5 (128) — captures a defeated friendly unit from the discard'
 
     const captured = resolve(dead, { type: 'acceptChoice', choiceId: choice(dead).id })
     expect(captured.players.player.discard).not.toContain('FODDER')
-    expect(U(captured, 'b').captured).toEqual(['FODDER'])
+    expect(U(captured, 'b').captured).toEqual([{ cardId: 'FODDER', owner: 'player' }])
   })
 
   it('only once each round, and not for a Vehicle', () => {
@@ -93,7 +93,7 @@ describe('Bothan-5 (128) — captures a defeated friendly unit from the discard'
   // The captor alone, so the only FODDER that can appear is the rescued one.
   const captorOnly = (over: Parameters<typeof unit>[2] = {}) => state({
     cards: F,
-    players: { player: rich({ units: [unit('b', 'ASH_128', { captured: ['FODDER'], ...over })] }), opponent: player() },
+    players: { player: rich({ units: [unit('b', 'ASH_128', { captured: [{ cardId: 'FODDER', owner: 'player' }], ...over })] }), opponent: player() },
   })
 
   it('springs captured units back into play, exhausted, when the captor leaves play', () => {
@@ -111,7 +111,7 @@ describe('Bothan-5 (128) — captures a defeated friendly unit from the discard'
     // ASH_161 (Zeb) would push a mayGiveTokens choice if its When Played fired.
     const s = state({
       cards: { ...F, ASH_161: card({ id: 'ASH_161', type: 'unit', arena: 'ground', cost: 7, power: 5, hp: 7 }) },
-      players: { player: rich({ units: [unit('b', 'ASH_128', { captured: ['ASH_161'], damage: 4 }), unit('o', 'GRD')] }), opponent: player() },
+      players: { player: rich({ units: [unit('b', 'ASH_128', { captured: [{ cardId: 'ASH_161', owner: 'player' }], damage: 4 }), unit('o', 'GRD')] }), opponent: player() },
     })
     const dead = dealDamageToUnit(s, 'b', 1)
     expect(dead.players.player.units.some(u => u.cardId === 'ASH_161')).toBe(true)

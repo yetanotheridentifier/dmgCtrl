@@ -150,7 +150,8 @@ Two phases:
 (#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
   (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 17 not built are on the ticket of what
   blocks them, #465 pilots (7),
-  #466 capture, #467 Bounty, #470 Plot, #468 playing any card type, #602 Credit
+  #467 Bounty (Jabba the Hutt's back side also reads capture, but that half is built — #466 — so
+  Bounty is his only remaining blocker), #470 Plot, #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #686 (defeat by an enemy card ability, and Chancellor Palpatine,
   the one leader that flips between two faces rather than deploying).
   **Bases are finished** (#460), which completes Phase 1: the engine gained base abilities (an Epic
@@ -173,9 +174,9 @@ Two phases:
   discard pile, a site the engine does not have, and are on #678; L3-37 shipped with #477 and
   Obi-Wan Kenobi with #474; Second Chance, Stolen Landspeeder,
   Sifo-Dyas and Mother Talzin are on the ticket of their own other blocker.
-  **Exploit is finished** (#473): the keyword is a step inside the hand play (see `choices.md`), 22 of
-  TWI's 23 Exploit cards shipped (seven play as printed, Count Dooku's leader gives it) with HMW's The
-  Marauder on the same step, and Osi Sobeck waits on capture (#466). Exploit is not offered on a play
+  **Exploit is finished** (#473), and now so is every TWI Exploit card: 22 of TWI's 23 shipped with it
+  (seven play as printed, Count Dooku's leader gives it) with HMW's The Marauder on the same step, and
+  Osi Sobeck shipped with #466 once capture existed for it to read. Exploit is not offered on a play
   an ability makes (`playCardFrom`, `playUnitFromHand`), which no sealed Exploit card needs yet.
   **The resource zone is finished** (#475): resources are defeated, returned to hand and put into play
   from any zone, a resource records its owner where that is not its controller, and Greater Sarlacc is
@@ -185,6 +186,17 @@ Two phases:
   one piece of the zone not built), Credit #602 (Chewbacca, Intimidator), the Force #462 (Eeth Koth),
   Disclose #603 (Chancellor Valorum), Plot #470 (When Has Become Now) and Bounty #467 (Outlaw Corona,
   Price on Your Head).
+  **Capture's primitive is finished** (#466): `captureUnit`/`baseCapturesUnit`/`rescueCaptured`/
+  `discardCaptured` plus the `cannotBeCaptured`/`captureReplacement` hooks are built and documented in
+  `keywords-effects.md`. Of the 29 cards it unlocks on its own, the 10 with a single guardian and one
+  immediate chosen target shipped alongside it; the 12 needing a chosen guardian AND target in one
+  action, a budgeted or "each" multi-target capture, a base guardian with a scheduled rescue, or
+  playing a captured card outright, are on #707. 18 more (17 that only need Bounty's "When Captured"
+  half, plus Jabba the Hutt's leader back) are sole-blocked by Bounty (#467) now that capture's own
+  blocker is gone; three (L3-37, Charged with Corruption, Sanctioner's Shuttle) are sole-blocked by
+  Smuggle (#469), Disclose (#603) and Coordinate (#472) respectively. Two (Lurking TIE Phantom,
+  Shadowed Intentions) turned out to need a different, broader mechanic entirely — "can't be
+  X by enemy card abilities" for X beyond capture — and are on #708, unblocked by nothing #466 built.
   **The trigger-head batch is finished** (#474, #680). Most heads needed only context on points that
   already fired; the damage points became one both-sides event (`whenDamageDealt`), and the heads no
   point raised got their own (a unit attacking, healing, the ready step, a card being drawn, a unit

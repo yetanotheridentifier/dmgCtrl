@@ -458,3 +458,43 @@ to a unit this phase", Jar Jar Binks). The two differ for a Weakness token and f
 the other side, so `giveToken`/`giveTokens`/`giveMixedTokens` take a `givenBy` that defaults to the
 host's controller, and every caller that can land a token on an enemy unit passes it: a choice passes
 whoever answered it, which is exact.
+
+## Capture
+
+A unit — or, once, a base (Arrest) — can capture another unit (CR 33): the captured card leaves
+play, held face-down under the "guardian" that captured it, until it is rescued or the guardian
+itself leaves play. It is not the same event as a defeat: `whenDefeated` never sees a captured unit,
+only `whenUnitLeavesPlay` does, and its own `whenFriendlyUnitDefeated`/`whenEnemyUnitDefeated`
+listeners stay silent too.
+
+- **Where it lives.** `UnitState.captured` and `BaseState.captured` hold `CapturedCard[]`
+  (`{cardId, owner}`), not bare card ids: a captured card keeps its own owner throughout, which
+  matters the moment the guardian is on the OTHER side from the card it captured (Lando Calrissian:
+  "the enemy unit captures the friendly unit"). Releasing or rescuing it returns it to play under
+  that owner, never under the guardian's controller.
+- **What happens to it.** `captureUnit` (a unit guardian) and `baseCapturesUnit` (a base guardian)
+  share one path in `effects.ts`: the target's card-upgrades are defeated (token upgrades vanish, as
+  when a unit is defeated), its damage is moot once it's out of play, whatever it was itself guarding
+  is released (CR 33.4 — capturing is also the target leaving play), and `whenUnitLeavesPlay` fires.
+  A token unit is set aside instead of guarded (CR 33.5): nothing to rescue later, but it still
+  counts as having left play. Capturing a unit no longer in play (the guardian left first) is a no-op,
+  as is capturing a target no longer in play.
+- **Coming back.** `releaseCaptured` frees everything a guardian held at once, when the guardian
+  leaves play (CR 33.4); `rescueCaptured` frees one named card from a specific guardian (Unexpected
+  Escape, Cad Bane's On Attack). Both funnel through `enterCapturedCard`, which is `unitPlaySites.test.ts`'s
+  one door for this: exhausted, in its own arena, entering play but not *played* — no When Played, no
+  cost, no Shielded shield token, no Ambush. `discardCaptured` sends one named card to its own owner's
+  discard instead (Altering the Deal).
+- **Protection.** `CardDefinition.cannotBeCaptured` is read only when the capturing side differs from
+  the target's own controller — the printed text is always "can't be captured **by enemy card
+  abilities**", so a unit may still capture its own. `captureReplacement` is unconditional (IG-11: "if
+  this unit would be captured, defeat him ... instead") and is checked first; when it fires, the
+  capture itself never happens.
+- **What #466 shipped and what didn't.** The primitive above is complete and CR-correct. The first
+  wave of cards registered against it are the ones with a single guardian and one immediate chosen
+  target (`captureWp`, mirroring `damageWp`/`targetWp`). Cards needing a chosen guardian AND a chosen
+  target in the same action, a budgeted multi-target capture ("up to 3 units with 8 or less combined
+  remaining HP"), a base guardian, or a scheduled rescue at the regroup phase, are on the follow-up
+  ticket named in `planned-work.md`. Bounty's own "when this unit is captured" half is #467's, not
+  built here: nothing in this ticket fires a dedicated capture trigger point, since nothing shipped
+  needs one yet.

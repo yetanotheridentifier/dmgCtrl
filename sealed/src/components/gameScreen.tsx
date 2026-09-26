@@ -4,7 +4,7 @@ import { nameableCardNames, nameableTraits, zoneCards } from '../engine/legalMov
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
-import type { EngineCard, GameState, PendingChoice, PendingTrigger, PlayerId, UnitState, UpgradeAttachment } from '../engine/types'
+import type { CapturedCard, EngineCard, GameState, PendingChoice, PendingTrigger, PlayerId, UnitState, UpgradeAttachment } from '../engine/types'
 import { triggerAbility } from '../engine/abilities'
 import type { Action } from '../engine/actions'
 import { describeAction, handCardRef } from '../utils/describeAction'
@@ -124,7 +124,7 @@ function UpgradeStack({ state, upgrades, instanceId, exhausted }: {
  */
 function CapturedStack({ state, captured, instanceId, topStart }: {
   state: GameState
-  captured: string[]
+  captured: CapturedCard[]
   instanceId: string
   topStart: number
 }) {
@@ -132,16 +132,16 @@ function CapturedStack({ state, captured, instanceId, topStart }: {
   return (
     <div data-testid={`board-unit-captured-${instanceId}`} className="pointer-events-none absolute inset-0">
       {captured
-        .map((cardId, i) => ({ cardId, i }))
+        .map(({ cardId }, i) => ({ cardId, i }))
         .reverse()
         .map(({ cardId, i }) => (
-          <CapturedCard key={i} card={state.cards[cardId]} fallbackName={cardId} top={topStart + i * CAPTURED_STEP_PX} />
+          <CapturedCardTile key={i} card={state.cards[cardId]} fallbackName={cardId} top={topStart + i * CAPTURED_STEP_PX} />
         ))}
     </div>
   )
 }
 
-function CapturedCard({ card, fallbackName, top }: { card: EngineCard | undefined; fallbackName: string; top: number }) {
+function CapturedCardTile({ card, fallbackName, top }: { card: EngineCard | undefined; fallbackName: string; top: number }) {
   const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   return (
     <div ref={setAnchor} data-testid="captured-card" className="pointer-events-auto absolute left-1/2 -translate-x-1/2" style={{ top }} {...bind}>

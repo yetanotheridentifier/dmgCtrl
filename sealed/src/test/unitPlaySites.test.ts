@@ -27,7 +27,7 @@ const RECORD = /(?<!function )\brecordCardPlayed\(/g
 
 /** Every unit append, named, so a change of count names what to look at. */
 const EXPECTED_APPENDS: Record<string, number> = {
-  'effects.ts': 3, // takeControlOfUnit, createTokenUnit, releaseCaptured: none of them a play
+  'effects.ts': 3, // takeControlOfUnit, createTokenUnit, enterCapturedCard: none of them a play
   'resolve.ts': 2, // playUnitCard (the door, the one "played"), and deploying a leader
 }
 
@@ -70,13 +70,14 @@ describe('unit play sites', () => {
   /**
    * Entering play is not the same event as being played, so every arrival collects the arrival
    * triggers, which is where `whenFriendlyEntersPlay` ("when a friendly unit enters play", Outcast)
-   * and `whenUnitEntersPlay` (Trap Field) come from. A deployed leader and a released captured card
-   * are entries as much as a play or a create is, and each raised nothing until it collected here.
-   * Taking control is the exception, and the reason this is a list rather than a count: that unit is
-   * already in play, so it enters nothing.
+   * and `whenUnitEntersPlay` (Trap Field) come from. A deployed leader and a released or rescued
+   * captured card are entries as much as a play or a create is, and each raised nothing until it
+   * collected here. `enterCapturedCard` is the one entry point both `releaseCaptured` (a guardian
+   * leaving play, CR 33.4) and `rescueCaptured` (CR 33.3) share. Taking control is the exception, and
+   * the reason this is a list rather than a count: that unit is already in play, so it enters nothing.
    */
   it('raises the arrival triggers at every site a unit enters play, and nowhere else', () => {
-    for (const [file, fn] of [['effects.ts', 'createTokenUnit'], ['effects.ts', 'releaseCaptured'], ['resolve.ts', 'deployLeader'], ['resolve.ts', 'collectEntersPlay']] as const) {
+    for (const [file, fn] of [['effects.ts', 'createTokenUnit'], ['effects.ts', 'enterCapturedCard'], ['resolve.ts', 'deployLeader'], ['resolve.ts', 'collectEntersPlay']] as const) {
       expect(body(file, fn), `${fn} collects the arrival triggers`).toContain('collectArrivalTriggers(')
     }
     expect(body('effects.ts', 'takeControlOfUnit')).not.toContain('collectArrivalTriggers(')

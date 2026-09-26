@@ -205,7 +205,7 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
 
   // A captor leaving play frees what it held, back into play rather than to the discard.
   const released = defeated.flatMap(u => u.captured ?? [])
-  if (released.length > 0) result = releaseCaptured(result, owner, released)
+  if (released.length > 0) result = releaseCaptured(result, released)
 
   // Upgrades go down with their host, and a shield is defeated by soaking the hit:
   // "when a friendly upgrade is defeated" (Zeb Orrelios) covers both.
