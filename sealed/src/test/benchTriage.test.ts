@@ -135,18 +135,29 @@ describe('triage blockers', () => {
     expect(r.triaged[0].blockers).toEqual([])
   })
 
-  it('credits neither blocker with a sole unlock when a card needs two', () => {
-    // Bounty is gated behind capture: "when this unit is defeated OR CAPTURED".
+  it('does not credit capture for a Bounty card\'s own printed reminder text', () => {
+    // Every Bounty card prints "(When this unit is defeated or captured, your opponent collects its
+    // bounty.)" verbatim (CR 13). That reminder names the trigger points bounty fires at; it is not
+    // the card performing a capture, so it must not count as the capture blocker. SHD_195 Cartel
+    // Turncoat is one of 18 real cards this pattern used to mis-flag.
     const r = triage([card({
       Keywords: ['Bounty'],
       FrontText: 'Bounty - Draw a card. (When this unit is defeated or captured, your opponent collects its bounty.)',
     })])
+    expect(r.triaged[0].blockers).toEqual(['kw:Bounty'])
     const bounty = r.blockers.find(b => b.name === 'kw:Bounty')!
-    const capture = r.blockers.find(b => b.name === 'capture')!
     expect(bounty.touched).toBe(1)
-    expect(bounty.sole).toBe(0)
-    expect(capture.touched).toBe(1)
-    expect(capture.sole).toBe(0)
+    expect(bounty.sole).toBe(1)
+    expect(r.blockers.find(b => b.name === 'capture')).toBeUndefined()
+  })
+
+  it('still flags a card performing its own capture, active voice, alongside the same reminder shape', () => {
+    // SEC's Take Captive et al: "captures" appears outside the parenthetical, in the card's own
+    // ability body, and must still be caught even though the reminder text repeats "captured".
+    const r = triage([card({
+      FrontText: 'A friendly unit captures an enemy non-leader unit in the same arena. (Put the captured card facedown under that unit until that unit leaves play.)',
+    })])
+    expect(r.triaged[0].blockers).toEqual(['capture'])
   })
 
   /**
