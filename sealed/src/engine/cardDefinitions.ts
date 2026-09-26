@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers, collectCardTriggers } from './abilities'
-import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit } from './effects'
+import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -6924,6 +6924,194 @@ const bounty = (def: CardDefinition): CardDefinition => ({
   abilities: def.abilities?.map(a => (a.trigger === 'whenPlayed' ? { ...a, trigger: 'bounty' as const } : a)),
 })
 const costsAtMost = (n: number): Pick => (s, u) => printedCost(s, u) <= n
+
+// ── Capture, wave 2 (#707): a chosen guardian AND/OR a chosen target in one action, and the
+// rescue/discard actions built on #466's `rescueCaptured`/`discardCaptured`. Everything here reuses
+// the existing `selectUnitThen`/`selectCardThen` choice kinds through the `IfYouDo`/`step`/`unit`
+// chaining `unitDealsWp` and SEC_030 Death Trooper already use for "pick one thing, then another" —
+// no new choice kind, so nothing new is owed in legalMoves.ts. Cards needing a genuinely new
+// primitive (a budgeted "any number/up to N" pick, capture ordered before an embedded play's own When
+// Played, a scheduled rescue off a base, or playing a captured card outright) are on the follow-up
+// ticket named in planned-work.md, along with SHD_006 Jabba the Hutt's back (its capture half is this
+// wave's shape, but the card as a whole also needs an unbuilt "grant a chosen unit a temporary
+// Bounty" primitive that capture doesn't touch).
+
+/**
+ * "Choose a friendly unit. It captures a[n] ... unit ...": the guardian chosen first, then its
+ * target, chained the way `unitDealsWp` chains dealer-then-target. `targetTest` may read the
+ * guardian's own state (cost, arena, traits), built once the guardian is known. `after` sees the
+ * PRE-capture guardian/target snapshots, since the target's card leaves `s.players[..].units` once
+ * captured (Prisoner of War's cost comparison, Relentless Pursuit's Bounty Hunter check).
+ */
+const captureGuardianTargetWp = (
+  description: string,
+  guardianTest: Pick,
+  targetTest: (s: GameState, guardianId: string) => Pick,
+  optional: boolean,
+  after?: (s: GameState, ctx: EventCtx, guardian: UnitState, target: UnitState) => GameState,
+): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, guardianTest), 'choose a unit to capture with', optional, 'guardian')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'guardian') {
+      const guardianId = ctx.targetInstanceId!
+      return unitThen(s, ctx, pickedIds(s, ctx, targetTest(s, guardianId)), 'choose a unit to capture', false, 'target', guardianId)
+    }
+    const guardian = findUnit(s, ctx.unitChosen ?? '')?.unit
+    const target = findUnit(s, ctx.targetInstanceId ?? '')?.unit
+    if (!guardian || !target) return s
+    const captured = captureUnit(s, guardian.instanceId, target.instanceId)
+    return after ? after(captured, ctx, guardian, target) : captured
+  },
+})
+/** As above, but the target is chosen first and the guardian second (Ephant Mon). */
+const captureTargetGuardianWp = (
+  description: string,
+  targetTest: Pick,
+  guardianTest: (s: GameState, targetId: string) => Pick,
+): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, targetTest), 'choose a unit to capture', false, 'target')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'target') {
+      const targetId = ctx.targetInstanceId!
+      return unitThen(s, ctx, pickedIds(s, ctx, guardianTest(s, targetId)), 'choose a unit to capture with', false, 'guardian', targetId)
+    }
+    return captureUnit(s, ctx.targetInstanceId!, ctx.unitChosen!)
+  },
+})
+
+registerCard('SEC_068', captureGuardianTargetWp(
+  'You may choose an enemy unit and another friendly non-leader unit. If you do, heal 6 damage from your base and the enemy unit captures the friendly unit.',
+  pickEnemy,
+  () => pickAll(pickFriendly, pickOther, nonLeader),
+  true,
+  (s, ctx) => healBase(s, ctx.owner, 6),
+)) // Lando Calrissian
+registerCard('SEC_212', {
+  statModifier: (_s, u) => ({ power: u.captured?.length ?? 0 }),
+  ...captureGuardianTargetWp(
+    "This unit gets +1/+0 for each captured card it's guarding.\nWhen Played: Choose an enemy unit and a non-leader friendly unit. The enemy unit captures the friendly unit.",
+    pickEnemy,
+    () => pickAll(pickFriendly, nonLeader),
+    false,
+  ),
+}) // Libertine
+registerCard('SHD_232', captureGuardianTargetWp(
+  'Choose a friendly unit. It captures an enemy non-leader unit that costs the same as or less than it. If the friendly unit is a Bounty Hunter, give a Shield token to it.',
+  pickFriendly,
+  (s, gid) => {
+    const guardian = findUnit(s, gid)?.unit
+    const cap = guardian ? printedCost(s, guardian) : -1
+    return (s2, u, ctx) => pickEnemy(s2, u, ctx) && nonLeader(s2, u) && printedCost(s2, u) <= cap
+  },
+  false,
+  (s, ctx, guardian) => (unitHasTrait(s, guardian, 'Bounty Hunter') ? giveToken(s, guardian.instanceId, TOKEN_SHIELD, ctx.owner) : s),
+)) // Relentless Pursuit
+const takeCaptive = captureGuardianTargetWp(
+  'A friendly unit captures an enemy non-leader unit in the same arena.',
+  pickFriendly,
+  (s, gid) => pickAll(pickEnemy, nonLeader, sameArenaAs(s, gid)),
+  false,
+)
+registerCard('SHD_131', takeCaptive) // Take Captive
+registerCard('TWI_128', takeCaptive) // Take Captive (reprint)
+registerCard('TS26_61', {
+  costModifier: (s, p) => -s.players[p].units.length,
+  ...captureGuardianTargetWp(
+    'This event costs 1 less to play for each friendly unit.\nA friendly unit captures an enemy non-leader unit in the same arena.',
+    pickFriendly,
+    (s, gid) => pickAll(pickEnemy, nonLeader, sameArenaAs(s, gid)),
+    false,
+  ),
+}) // Encircle
+registerCard('TWI_227', captureGuardianTargetWp(
+  'A friendly unit captures an enemy non-leader, non-Vehicle unit. If the enemy unit costs less than the friendly unit, create 2 Battle Droid tokens.',
+  pickFriendly,
+  () => pickAll(pickEnemy, nonLeader, nonVehicle),
+  false,
+  (s, ctx, guardian, target) => (printedCost(s, target) < printedCost(s, guardian) ? createTokenUnits(s, ctx.owner, TOKEN_BATTLE_DROID, 2) : s),
+)) // Prisoner of War
+
+const grandAdmiralThrawnDefeated = captureGuardianTargetWp(
+  'A friendly unit captures an enemy non-leader unit in the same arena.',
+  pickFriendly,
+  (s, gid) => pickAll(pickEnemy, nonLeader, sameArenaAs(s, gid)),
+  false,
+)
+registerCard('SEC_193', { // Grand Admiral Thrawn, Grand Schemer
+  abilities: [
+    ...whenPlayed("An opponent may choose a non-leader unit they control. If they do, this unit captures that unit. If they don't, ready this unit.", (s, ctx) => {
+      const opp = opponentOf(ctx.owner)
+      const targets = s.players[opp].units.filter(u => !u.isLeader).map(u => u.instanceId)
+      return targets.length
+        ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: opp, targets, optional: true, hookOnDecline: true, text: 'choose a unit for Grand Admiral Thrawn to capture', then: resume(ctx, 'wp') })
+        : readyUnit(s, ctx.sourceInstanceId!)
+    }).abilities,
+    ...defeated(grandAdmiralThrawnDefeated).abilities!,
+  ],
+  ifYouDo: (s, ctx) => (ctx.step === 'wp'
+    ? (ctx.targetInstanceId ? captureUnit(s, ctx.sourceInstanceId!, ctx.targetInstanceId) : readyUnit(s, ctx.sourceInstanceId!))
+    : grandAdmiralThrawnDefeated.ifYouDo!(s, ctx)),
+})
+
+registerCard('SHD_088', onAttack(captureTargetGuardianWp(
+  'Choose an enemy non-leader unit that attacked your base this phase. A friendly unit in the same arena captures that unit.',
+  (s, u, ctx) => pickEnemy(s, u, ctx) && nonLeader(s, u) && baseAttackersThisPhase(s, ctx.owner).includes(u.instanceId),
+  (s, targetId) => pickAll(pickFriendly, sameArenaAs(s, targetId)),
+))) // Ephant Mon
+
+const fortuneAndGloryBounty = captureGuardianTargetWp(
+  'Bounty — A friendly unit captures a non-leader unit. (When this unit is defeated or captured, your opponent collects its bounty.)',
+  pickFriendly,
+  (_s, gid) => (s2, u) => nonLeader(s2, u) && u.instanceId !== gid,
+  false,
+)
+registerCard('TS26_27', { // Fortune and Glory, Hondo's Luxury Yacht
+  abilities: [
+    ...whenPlayed('This unit captures a non-leader unit.', (s, ctx) =>
+      unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickOther, nonLeader)), 'choose a unit to capture', false, 'wp')).abilities,
+    ...bounty(fortuneAndGloryBounty).abilities!,
+  ],
+  ifYouDo: (s, ctx) => (ctx.step === 'wp' ? captureUnit(s, ctx.sourceInstanceId!, ctx.targetInstanceId!) : fortuneAndGloryBounty.ifYouDo!(s, ctx)),
+})
+
+registerCard('SHD_106', { // Rule with Respect
+  ...whenPlayed('A friendly unit captures each enemy non-leader unit that attacked your base this phase.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'choose a unit to capture with', false)),
+  ifYouDo: (s, ctx) => {
+    const guardianId = ctx.targetInstanceId!
+    const targets = pickedIds(s, ctx, pickAll(pickEnemy, nonLeader, (s2, u) => baseAttackersThisPhase(s2, ctx.owner).includes(u.instanceId)))
+    return targets.reduce((acc, id) => captureUnit(acc, guardianId, id), s)
+  },
+})
+
+registerCard('SHD_076', { // Unexpected Escape
+  ...whenPlayed('Exhaust a unit. You may rescue a captured card guarded by that unit.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'choose a unit to exhaust', false, 'target')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'rescue') return ctx.cardChosen ? rescueCaptured(s, { kind: 'unit', instanceId: ctx.unitChosen! }, ctx.cardChosen) : s
+    const targetId = ctx.targetInstanceId!
+    const target = findUnit(s, targetId)?.unit
+    if (!target) return s
+    const exhausted = exhaustUnit(s, targetId)
+    const captured = target.captured ?? []
+    return captured.length
+      ? pushChoice(exhausted, { kind: 'selectCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: captured.map(c => c.cardId), optional: true, text: 'rescue a captured card', then: resume(ctx, 'rescue', targetId) })
+      : exhausted
+  },
+})
+
+registerCard('SHD_243', { // Altering the Deal
+  ...whenPlayed('Discard a captured card guarded by a friendly unit.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, (_s, u) => (u.captured?.length ?? 0) > 0)), 'choose a friendly unit guarding a captured card', false, 'guardian')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'guardian') {
+      const holderId = ctx.targetInstanceId!
+      const captured = findUnit(s, holderId)?.unit?.captured ?? []
+      return pushChoice(s, { kind: 'selectCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: captured.map(c => c.cardId), text: 'discard a captured card', then: resume(ctx, 'discard', holderId) })
+    }
+    return discardCaptured(s, { kind: 'unit', instanceId: ctx.unitChosen! }, ctx.cardChosen!)
+  },
+})
 
 // A: targets, draws and base damage
 const twoToABase = defeated(whenPlayed('Deal 2 damage to a base.', (s, ctx) => damageChoice(s, ctx, 2, [], BOTH_BASES)))

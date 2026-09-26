@@ -888,6 +888,15 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'TWI_177', name: 'Guerilla Insurgency' },
   // Capture (#466).
   { id: 'SHD_180', name: 'Detention Block Rescue' },
+  // Capture, wave 2 (#707): a chosen guardian AND/OR a chosen target, and rescue/discard actions.
+  { id: 'SHD_232', name: 'Relentless Pursuit' },
+  { id: 'SHD_131', name: 'Take Captive' },
+  { id: 'TWI_128', name: 'Take Captive' },
+  { id: 'TS26_61', name: 'Encircle' },
+  { id: 'TWI_227', name: 'Prisoner of War' },
+  { id: 'SHD_106', name: 'Rule with Respect' },
+  { id: 'SHD_076', name: 'Unexpected Escape' },
+  { id: 'SHD_243', name: 'Altering the Deal' },
 ]
 
 /**
@@ -1944,6 +1953,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SHD_138', name: 'Jango Fett' },
   { id: 'SHD_139', name: 'Krrsantan' },
   { id: 'SHD_186', name: 'Hunter of the Haxion Brood' },
+  // Capture, wave 2 (#707): a chosen guardian AND/OR a chosen target in one action.
+  { id: 'SEC_068', name: 'Lando Calrissian' },
+  { id: 'SEC_212', name: 'Libertine' },
+  { id: 'SEC_193', name: 'Grand Admiral Thrawn' },
+  { id: 'SHD_088', name: 'Ephant Mon' },
+  { id: 'TS26_27', name: 'Fortune and Glory' },
 ]
 
 /**

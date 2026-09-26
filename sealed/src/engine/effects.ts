@@ -735,6 +735,13 @@ function setCapturedListAt(state: GameState, holder: CaptureHolder, list: Captur
   return patchUnit(state, found.owner, holder.instanceId, u => ({ ...u, captured: list }))
 }
 
+/** Add one card to whatever `holder` already guards (a unit or a base alike), appended after it.
+ *  Shared by `captureUnit`/`baseCapturesUnit` and Bothan-5's own `mayCapture` choice (#707), which
+ *  captures a card straight out of a discard pile rather than out of play. */
+export function appendCaptured(state: GameState, holder: CaptureHolder, captured: CapturedCard): GameState {
+  return setCapturedListAt(state, holder, [...capturedListAt(state, holder), captured])
+}
+
 /**
  * Rescue one specific captured card from under `holder` (CR 33.3 — Unexpected Escape, Cad Bane's
  * On Attack, and any other targeted rescue). No-op if `holder` isn't guarding that card. Matches the
@@ -805,16 +812,13 @@ export function captureUnit(state: GameState, capturerInstanceId: string, target
   const capturer = findUnit(state, capturerInstanceId)
   if (!capturer) return state
   const { state: next, captured } = attemptCapture(state, targetInstanceId, capturer.owner)
-  if (!captured) return next
-  return patchUnit(next, capturer.owner, capturerInstanceId, u => ({ ...u, captured: [...(u.captured ?? []), captured] }))
+  return captured ? appendCaptured(next, { kind: 'unit', instanceId: capturerInstanceId }, captured) : next
 }
 
 /** `baseOwner`'s base captures `targetInstanceId` (Arrest is the only printed card that does this). */
 export function baseCapturesUnit(state: GameState, baseOwner: PlayerId, targetInstanceId: string): GameState {
   const { state: next, captured } = attemptCapture(state, targetInstanceId, baseOwner)
-  if (!captured) return next
-  const base = next.players[baseOwner].base
-  return updatePlayer(next, baseOwner, { base: { ...base, captured: [...(base.captured ?? []), captured] } })
+  return captured ? appendCaptured(next, { kind: 'base', owner: baseOwner }, captured) : next
 }
 
 /** Exhaust one ready resource of `owner` (Mandalorian Scout). No-op if none is ready. */

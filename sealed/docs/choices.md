@@ -131,7 +131,8 @@ unit, upgrade or hand card, or the discarded card.
 Ahsoka Tano's discard are the opponent's to answer and still the player's ability to finish. `step`
 tells stages apart and carries what a later stage needs (Death Trooper's friendly then enemy pick; the
 units already picked by an "each of up to N"). `IfYouDo.unit` carries a unit an earlier stage chose to
-the next (Strike True's friendly unit, then the enemy it damages). A card that picks several things in
+the next (Strike True's friendly unit, then the enemy it damages; a capture's chosen guardian, then its
+target, or the reverse — Ephant Mon picks its target first). A card that picks several things in
 turn keeps the picks so far in its step, so "another" and "sharing a Trait" can be checked against
 them (Attack Pattern Delta, Bold Resistance, Unlimited Power, whose damage all lands after the last
 pick). `hookOnDecline` runs the hook once more on Done, on `selectUnitThen`, `selectUpgradeThen` and
