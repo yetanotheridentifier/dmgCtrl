@@ -139,15 +139,14 @@ describe('triage blockers', () => {
     // Every Bounty card prints "(When this unit is defeated or captured, your opponent collects its
     // bounty.)" verbatim (CR 13). That reminder names the trigger points bounty fires at; it is not
     // the card performing a capture, so it must not count as the capture blocker. SHD_195 Cartel
-    // Turncoat is one of 18 real cards this pattern used to mis-flag.
+    // Turncoat is one of 18 real cards this pattern used to mis-flag. Bounty is implemented (#467,
+    // #713), so a card needing nothing else is blocked by neither keyword nor mechanic.
     const r = triage([card({
       Keywords: ['Bounty'],
       FrontText: 'Bounty - Draw a card. (When this unit is defeated or captured, your opponent collects its bounty.)',
     })])
-    expect(r.triaged[0].blockers).toEqual(['kw:Bounty'])
-    const bounty = r.blockers.find(b => b.name === 'kw:Bounty')!
-    expect(bounty.touched).toBe(1)
-    expect(bounty.sole).toBe(1)
+    expect(r.triaged[0].blockers).toEqual([])
+    expect(r.blockers.find(b => b.name === 'kw:Bounty')).toBeUndefined()
     expect(r.blockers.find(b => b.name === 'capture')).toBeUndefined()
   })
 
