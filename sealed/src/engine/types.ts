@@ -1242,6 +1242,21 @@ type ChoiceVariant =
   // "Choose an arena": option 0 is ground, option 1 space. Never optional. The arena reaches the card's
   // `ifYouDo` hook as `arenaChosen`.
   | { kind: 'chooseArenaThen'; id: string; controller: PlayerId; text: string; then: IfYouDo }
+  /**
+   * Disclose (SEC's set mechanic, CR "reveal cards from your hand with these aspect icons among
+   * them"): `need` is a flat multiset of aspect names still to be covered — `['Command', 'Command',
+   * 'Villainy']` for "disclose Command Command Villainy" — matched against each hand card's own
+   * `aspects` array, which can itself repeat an entry (Chancellor Valorum is printed with two Command
+   * icons). Nothing leaves hand: `picks` are hand indices already revealed, offered one at a time like
+   * `exploit`'s picks, filtered in `legalMoves` to keep the remainder always completable from what's
+   * left so a bad early pick can never deadlock the choice. `acceptChoice` with no `handIndex` finishes
+   * it (offered once `need` is fully covered) and runs `then`, told the revealed card ids as
+   * `disclosed`. `skipTrigger` (offered only while `picks` is empty, when `optional`) declines instead,
+   * running `onDecline` for the rare card whose only branch is "if you don't" (Warrior of Clan Ordo).
+   * `hookOnDecline` runs `then` on a decline too, told `disclosed: []`, for a card whose ability goes
+   * on regardless (Ebon Hawk's Villainy half is still offered after Heroism is declined).
+   */
+  | { kind: 'disclose'; id: string; controller: PlayerId; need: string[]; picks: number[]; optional: boolean; then?: IfYouDo; onDecline?: { damageOwnBase: number }; hookOnDecline?: boolean }
   // Heal 1 at a time from `unitTargets` / `baseTargets` until `remaining` is spent or Done, then deal
   // what was healed to `damageUnit`, when there is one (Redemption). `oneUnit` keeps every point on the first unit picked
   // (Kashyyyk Defender's "from another unit").
@@ -1322,11 +1337,12 @@ type ChoiceVariant =
   // `mustDiscard` removes the Done, for a card that says "discards a card" rather than "may discard"
   // (Reveal Intentions). The view-only and "may" forms keep it.
   // `discardFilter` narrows what may be taken — Bodhi Rook discards "a non-unit card", so only
-  // those hand indices are offered; Jam Communications takes only an event. `discardAspects` keeps
-  // the cards sharing one of those aspects (Hold For Questioning). A hand with nothing eligible keeps
-  // its Done even under `mustDiscard`, or the choice would have no legal move.
+  // those hand indices are offered; Jam Communications takes only an event; Charged with Espionage
+  // (disclose, #603) takes only a unit. `discardAspects` keeps the cards sharing one of those aspects
+  // (Hold For Questioning). A hand with nothing eligible keeps its Done even under `mustDiscard`, or
+  // the choice would have no legal move.
   // `thenNameCard` raises a `nameCard` once the look is done (Qi'ra looks, then names).
-  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean; discardFilter?: 'nonUnit' | 'event'; discardAspects?: string[]; thenNameCard?: { unitId: string; surcharge: number } }
+  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean; discardFilter?: 'nonUnit' | 'event' | 'unit'; discardAspects?: string[]; thenNameCard?: { unitId: string; surcharge: number } }
   // Search the revealed top cards (Clan Wren Loyalist): pick one of the `eligibleIndices`
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.

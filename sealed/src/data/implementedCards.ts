@@ -313,6 +313,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   // ("friendly units that damaged a base this phase can't be attacked") needs ability damage folded
   // into `dealtBaseCombatDamageThisPhase`, which records combat damage only (#690, open).
   { id: 'SEC_012', name: 'Cassian Andor', front: false, back: true },
+  // Disclose (#603): both sides ask the same question (which aspect to disclose) and share one hook.
+  { id: 'SEC_004', name: 'Leia Organa', front: true, back: true },
 ]
 
 /**
@@ -907,6 +909,16 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LAW_244', name: 'Unmarked Credits' },
   { id: 'LAW_248', name: 'Windfall' },
   { id: 'LAW_247', name: 'Backed by the Hutts' },
+  // Disclose (#603): SEC's set mechanic, the 9 events among the 28 cards that need nothing else.
+  { id: 'SEC_074', name: 'Relief Request' },
+  { id: 'SEC_076', name: 'Charged with Murder' },
+  { id: 'SEC_127', name: 'Charged with Corruption' },
+  { id: 'SEC_129', name: 'With Thunderous Applause' },
+  { id: 'SEC_181', name: 'Unauthorized Investigation' },
+  { id: 'SEC_182', name: 'Charged with Treason' },
+  { id: 'SEC_211', name: 'Faith in Your Friends' },
+  { id: 'SEC_230', name: 'Charged with Espionage' },
+  { id: 'SEC_234', name: 'Bog Down in Procedure' },
 ]
 
 /**
@@ -1993,6 +2005,25 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LAW_161', name: 'Partisan U-Wing' },
   { id: 'LAW_252', name: "Fett's Firespray" },
   { id: 'LAW_238', name: 'Scavenging Sandcrawler' },
+  // Disclose (#603): SEC's set mechanic, the 18 units among the 28 cards that need nothing else.
+  { id: 'SEC_059', name: 'Senate Warden' },
+  { id: 'SEC_062', name: 'Bardottan Ornithopter' },
+  { id: 'SEC_065', name: 'Nala Se' },
+  { id: 'SEC_085', name: 'Vice Admiral Rampart' },
+  { id: 'SEC_094', name: 'Mina Bonteri' },
+  { id: 'SEC_096', name: 'Ahsoka Tano' },
+  { id: 'SEC_098', name: 'Captain Typho' },
+  { id: 'SEC_107', name: 'Chancellor Valorum' },
+  { id: 'SEC_109', name: 'Diplomatic Envoy' },
+  { id: 'SEC_120', name: 'Naboo Security Force' },
+  { id: 'SEC_141', name: 'The Galleon' },
+  { id: 'SEC_148', name: 'Karis Nemik' },
+  { id: 'SEC_153', name: "Luthen's Haulcraft" },
+  { id: 'SEC_164', name: 'Warrior of Clan Ordo' },
+  { id: 'SEC_190', name: 'Soulless One' },
+  { id: 'SEC_219', name: 'Ebon Hawk' },
+  { id: 'SEC_223', name: "Duchess's Investigators" },
+  { id: 'SEC_248', name: 'B2EM0' },
 ]
 
 /**

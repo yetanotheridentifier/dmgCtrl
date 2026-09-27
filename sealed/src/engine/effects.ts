@@ -1150,3 +1150,19 @@ export function returnOtherUpgradesToHand(state: GameState, instanceId: string, 
   }
   return next
 }
+
+/**
+ * What's left of a Disclose requirement after some cards' aspect icons are counted against it
+ * (#603). `need` and `contributed` are both flat multisets — a repeated aspect name is a repeated
+ * entry, matching how a double-icon card (Chancellor Valorum is printed with two Command icons)
+ * counts twice. Each entry in `contributed` cancels at most one matching entry in `need`; order
+ * doesn't matter to the result. An empty return means the requirement is fully covered.
+ */
+export function discloseRemaining(need: readonly string[], contributed: readonly string[]): string[] {
+  const left = [...need]
+  for (const a of contributed) {
+    const i = left.indexOf(a)
+    if (i !== -1) left.splice(i, 1)
+  }
+  return left
+}
