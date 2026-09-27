@@ -69,7 +69,7 @@ const choice = (s: GameState): PendingChoice => {
   expect(s.pendingChoices?.length ?? 0, 'a choice is raised').toBeGreaterThan(0)
   return s.pendingChoices![0]
 }
-type Extra = { targetInstanceId?: string; optionIndex?: number; handIndex?: number; baseTarget?: PlayerId }
+type Extra = { targetInstanceId?: string; optionIndex?: number; handIndex?: number; baseTarget?: PlayerId; deckIndex?: number }
 const accept = (s: GameState, extra: Extra = {}) => resolve(s, { type: 'acceptChoice', choiceId: choice(s).id, ...extra })
 const skip = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: choice(s).id })
 const done = (s: GameState) => resolve(s, { type: 'acceptChoice', choiceId: choice(s).id })
@@ -316,7 +316,7 @@ describe('On Attack: disclose', () => {
   })
 
   it('SEC_219 Ebon Hawk: disclosing Heroism buffs itself, disclosing Villainy debuffs the defender, independently', () => {
-    const s = board({ hand: ['HER', 'VIL'], units: [unit('a', 'SEC_219', { power: 3 })] }, { units: [unit('e', 'GRD')] })
+    const s = board({ hand: ['HER', 'VIL'], units: [unit('a', 'SEC_219')] }, { units: [unit('e', 'GRD')] })
     const attacked = attackUnit(s, 'a', 'e')
     let next = disclose(attacked, attacked.players.player.hand.indexOf('HER'))
     // Villainy stage now pending
@@ -325,7 +325,7 @@ describe('On Attack: disclose', () => {
   })
 
   it('SEC_219 declining both disclosures buffs nothing', () => {
-    const s = board({ hand: ['HER', 'VIL'], units: [unit('a', 'SEC_219', { power: 3 })] }, { units: [unit('e', 'GRD')] })
+    const s = board({ hand: ['HER', 'VIL'], units: [unit('a', 'SEC_219')] }, { units: [unit('e', 'GRD')] })
     const attacked = attackUnit(s, 'a', 'e')
     let next = declineDisclose(attacked)
     next = declineDisclose(next)
