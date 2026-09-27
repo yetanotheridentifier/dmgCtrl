@@ -180,6 +180,8 @@ export interface IfYouDoContext extends EffectContext {
   unitChosen?: string
   /** The card name a `nameCard` with `then` settled. */
   nameChosen?: string
+  /** The card ids a finished `disclose` (#603) revealed. */
+  disclosed?: string[]
 }
 
 export interface CardDefinition {
