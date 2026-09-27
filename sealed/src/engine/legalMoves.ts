@@ -148,8 +148,13 @@ function attackMoves(
  * +2 resources per aspect icon on the card beyond those provided by the
  * player's leader and base. Icons match as a multiset — a doubled icon on a
  * card needs two provided copies to avoid the penalty.
+ *
+ * `altCost` swaps in an alternate printed cost and aspect list (Smuggle: `card.smuggle`), so a play
+ * priced against a bracket other than the card's own reads its cost and checks its aspects there
+ * instead — every other modifier below (cost modifiers, discounts, grants, surcharges, halving)
+ * still applies on top, since none of them are specific to which printed cost started the sum.
  */
-export function effectiveCost(state: GameState, playerId: PlayerId, card: EngineCard, target?: UnitState, waive?: AspectWaiver): number {
+export function effectiveCost(state: GameState, playerId: PlayerId, card: EngineCard, target?: UnitState, waive?: AspectWaiver, altCost?: { cost: number; aspects: string[] }): number {
   const p = state.players[playerId]
   const provided: string[] = [
     ...(state.cards[p.leader.cardId]?.aspects ?? []),
@@ -176,7 +181,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
     oneLeft = false
     return true
   }
-  for (const icon of card.aspects) {
+  for (const icon of altCost?.aspects ?? card.aspects) {
     const i = provided.indexOf(icon)
     if (i === -1) {
       if (!ignored.includes(icon) && !waived(icon)) penalty += 2
@@ -214,7 +219,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   // A card an OPPONENT's unit has named for a surcharge costs that much more to play (Qi'ra).
   const surcharge = state.players[opponentOf(playerId)].units.reduce(
     (sum, u) => sum + (u.namedCard === card.name ? u.namedCardSurcharge ?? 0 : 0), 0)
-  const total = Math.max(0, card.cost + penalty + modifier + grantDelta + discount + surcharge)
+  const total = Math.max(0, (altCost?.cost ?? card.cost) + penalty + modifier + grantDelta + discount + surcharge)
   // "While paying costs, you pay half as many resources, rounded up" (The Starhawk) — last, because
   // it halves what is actually owed rather than the printed cost.
   const halved = p.units.some(u => abilityCardIds(u).some(cid => getCardDefinition(cid)?.halvesCosts?.(state, u, playerId) ?? false))
@@ -458,6 +463,31 @@ function discardGrantMoves(state: GameState, playerId: PlayerId, forbiddenNames:
 }
 
 /**
+ * Smuggle (CR 14): the plays `playerId`'s own resource zone offers right now, one per card carrying
+ * the keyword whose smuggle cost the zone can afford, or one per legal host where it is an upgrade.
+ * Unlike a `DiscardPlayGrant`, there is nothing standing to look up: each card's `smuggle` bracket
+ * (parsed in cardDb.ts) is its own terms, read fresh here exactly the way a grant's terms are.
+ */
+function smuggleMoves(state: GameState, playerId: PlayerId, forbiddenNames: Set<string>): Action[] {
+  const moves: Action[] = []
+  state.players[playerId].resources.forEach((resource, resourceIndex) => {
+    const card = state.cards[resource.cardId]
+    if (!card?.smuggle || forbiddenNames.has(card.name)) return
+    const terms: PlayFromTerms = { altCost: card.smuggle }
+    if (card.type === 'upgrade' && !isFortify(card)) {
+      for (const id of validPlayTargets(state, playerId, 'resources', resourceIndex, card.id, terms)) {
+        moves.push({ type: 'smuggle', resourceIndex, targetInstanceId: id })
+      }
+      return
+    }
+    if (canPlayFrom(state, playerId, 'resources', { index: resourceIndex, cardId: card.id }, terms)) {
+      moves.push({ type: 'smuggle', resourceIndex })
+    }
+  })
+  return moves
+}
+
+/**
  * The payer's own resource this play will vacate, if any. That resource is still in the zone while
  * the cost is paid (CR 6.2.f), and exhausting it is free for its controller because it is leaving,
  * so it is what `payCost` should take first.
@@ -474,6 +504,8 @@ export interface PlayFromTerms {
   free?: boolean
   costDelta?: number
   waive?: AspectWaiver
+  /** Smuggle: `card.smuggle`, the card's own alternate cost and aspect list, in place of its printed ones. */
+  altCost?: { cost: number; aspects: string[] }
 }
 
 /**
@@ -483,7 +515,7 @@ export interface PlayFromTerms {
  */
 export function playFromCost(state: GameState, controller: PlayerId, card: EngineCard, terms: PlayFromTerms, target?: UnitState): number {
   if (terms.free) return 0
-  return Math.max(0, effectiveCost(state, controller, card, target, terms.waive) + (terms.costDelta ?? 0))
+  return Math.max(0, effectiveCost(state, controller, card, target, terms.waive, terms.altCost) + (terms.costDelta ?? 0))
 }
 
 /**
@@ -593,6 +625,9 @@ function actionPhaseMoves(state: GameState): Action[] {
   // "For this phase, you may play that card from <a> discard pile": a standing permission, taken
   // here among the normal plays rather than answered as a choice. See `DiscardPlayGrant`.
   moves.push(...discardGrantMoves(state, playerId, forbiddenNames))
+
+  // Smuggle: a resource carrying the keyword may be played for its own smuggle cost.
+  moves.push(...smuggleMoves(state, playerId, forbiddenNames))
 
   // Play an Upgrade — attach to any unit in play (either player's) by default; a
   // card's attachRestriction narrows that, and its cost may depend on the target

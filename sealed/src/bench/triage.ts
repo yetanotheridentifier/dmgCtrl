@@ -31,7 +31,7 @@ export const TRIAGE_API_BASE = 'https://worker.dmgctrl.app'
 /** Keywords the engine dispatches today. */
 export const IMPLEMENTED_KEYWORDS: ReadonlySet<string> = new Set([
   'Ambush', 'Grit', 'Overwhelm', 'Raid', 'Restore', 'Saboteur', 'Sentinel', 'Shielded', 'Hidden', 'Support', 'Fortify', 'Exploit',
-  'Bounty',
+  'Bounty', 'Smuggle',
 ])
 
 /** Trigger points the ability framework dispatches today (see `docs/abilities.md`). */
@@ -55,6 +55,11 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
   'when you take the initiative', "when a friendly unit's attack ends", 'when the action phase starts',
   'when you play an event', 'when an opponent plays an event', 'when an opponent plays a card',
   'action', 'epic action',
+  // "When played using Smuggle" (#469) is an ordinary `whenPlayed` reading a flag the card records
+  // about its own play (`UnitState.playedUsingSmuggle`/`UpgradeAttachment.usingSmuggle`), not a
+  // trigger point of its own — unlike "When you play A CARD using SMUGGLE" (Hondo Ohnaka, Lando
+  // Calrissian), which watches every play and still has nowhere to dispatch from (`kw:Smuggle` above).
+  'when played using smuggle',
 ])
 
 /**
@@ -85,9 +90,15 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
   // Resources are defeated, returned to hand, and put into play from any zone, including another
   // player's card (`ResourceState.owner`). Taking control of a resource already in play is not.
   ['resource-zone', /\btake control of (?:an? )?(?:enemy )?resource\b/i],
-  // "Play a card using Smuggle" printed on a card without the keyword (Lando Calrissian's leader)
-  // waits on the keyword itself. Delete this line when Smuggle joins IMPLEMENTED_KEYWORDS.
-  ['kw:Smuggle', /\busing Smuggle\b/i],
+  // "(You may) play a card using SMUGGLE" printed on a card WITHOUT the keyword itself (Lando
+  // Calrissian's leader, Hondo Ohnaka): the printed keyword (#469) is an alternate cost read off the
+  // card, with no notion of a global "using Smuggle" watch or an ability that INITIATES a smuggle
+  // play at a further discount, which is what these two still need. "A card" distinguishes them from
+  // a card's own "When played using Smuggle" (Cassian Andor, Hotshot DL-44 Blaster, Privateer Crew,
+  // now registered), which prints the keyword itself and needs no watch. Not deleted now that Smuggle
+  // has joined IMPLEMENTED_KEYWORDS below: that covers only the printed bracket. Delete this line once
+  // the watch/initiate piece lands.
+  ['kw:Smuggle', /\bplay(?:ed)? a card using Smuggle\b/i],
   ['sideboard', /\bsideboard\b/i],
   // Keyword identity as a runtime value rather than a static property.
   ['dynamic-keywords', /\bthe chosen Keyword\b|\bthis unit's Keywords\b|different Keywords\b/i],
@@ -112,7 +123,6 @@ const CANONICAL_BLOCKERS: ReadonlyMap<string, string> = new Map([
   ['trigger:When played as an upgrade', 'pilot'],
   ['trigger:When played as a unit', 'pilot'],
   ['trigger:When a friendly Force unit attacks', 'force-token'],
-  ['trigger:When played using Smuggle', 'kw:Smuggle'],
   ['trigger:Coordinate - When Played', 'kw:Coordinate'],
 ])
 
@@ -193,10 +203,14 @@ export function identityKey(card: Pick<SwuCard, 'Type' | 'Name' | 'Subtitle'>): 
   return [card.Type ?? '', card.Name ?? '', card.Subtitle ?? ''].join('|').toLowerCase()
 }
 
-/** Ability text left after removing keyword names and their parenthetical reminders. */
+/**
+ * Ability text left after removing keyword names and their parenthetical reminders. A keyword's own
+ * numeral ("Raid 2") or bracketed cost ("Smuggle [C=4 Cunning]") is part of its printed name, not
+ * separate ability text, so both are stripped alongside it.
+ */
 export function residualAbility(card: SwuCard): string {
   let t = (card.FrontText ?? '').trim().replace(/\([^)]*\)/g, '')
-  for (const k of card.Keywords ?? []) t = t.replace(new RegExp(`\\b${k.trim()}\\b(\\s+\\d+)?`, 'gi'), '')
+  for (const k of card.Keywords ?? []) t = t.replace(new RegExp(`\\b${k.trim()}\\b(\\s+\\d+)?(\\s*\\[[^\\]]*\\])?`, 'gi'), '')
   return t.replace(/[\s.,]+/g, ' ').trim()
 }
 

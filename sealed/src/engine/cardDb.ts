@@ -27,12 +27,17 @@ function toArena(arenas: string[] | undefined): Arena | undefined {
   return first === 'ground' || first === 'space' ? first : undefined
 }
 
+/** FrontText and BackText joined, the one place both are read from for a card's printed text. */
+function cardText(card: SwuCard): string {
+  return `${card.FrontText ?? ''}\n${card.BackText ?? ''}`
+}
+
 /**
  * SWUDB `Keywords[]` gives names only; numerals (Raid 2, Restore 1…) live in
  * the rules text in the standardised "Keyword N" form — extract them from there.
  */
 function toKeywords(card: SwuCard): KeywordInstance[] {
-  const text = `${card.FrontText ?? ''}\n${card.BackText ?? ''}`
+  const text = cardText(card)
   return (card.Keywords ?? []).map(raw => {
     // Trim: the source data ships some keywords with stray whitespace (e.g. two
     // "Shielded" variants), which would otherwise miss `hasKeyword` matches.
@@ -40,6 +45,20 @@ function toKeywords(card: SwuCard): KeywordInstance[] {
     const match = text.match(new RegExp(`${name}\\s+(\\d+)`, 'i'))
     return match ? { name, value: parseInt(match[1], 10) } : { name }
   })
+}
+
+/**
+ * Smuggle's own bracket does not fit the "Keyword N" shape `toKeywords` reads: it is a cost plus an
+ * aspect list, either or both wrapped in the source's own icon-markup braces ("Smuggle [C=4
+ * Cunning]", "Smuggle [{C=7} {Cunning} {Cunning}]"), and once (First Light) a trailing comma-led
+ * additional cost this parser does not resolve, kept as `extra` so a reader can see the card was not
+ * silently dropped rather than silently miss it.
+ */
+function parseSmuggle(card: SwuCard): { cost: number; aspects: string[]; extra?: string } | undefined {
+  const match = cardText(card).match(/Smuggle\s*\[\{?C=(\d+)\}?\s*((?:\{?[A-Za-z]+\}?\s*)*)(?:,\s*([^\]]+))?\]/)
+  if (!match) return undefined
+  const aspects = match[2].match(/[A-Za-z]+/g) ?? []
+  return { cost: parseInt(match[1], 10), aspects, ...(match[3] !== undefined ? { extra: match[3].trim() } : {}) }
 }
 
 /** Normalise a SWUDB card payload into engine static data. */
@@ -50,6 +69,7 @@ export function normaliseCard(card: SwuCard): EngineCard {
   // in the printed modifier from a lookup. Applied only when the source omits
   // both fields, so it auto-drops once the data is fixed.
   const override = card.Power === undefined && card.HP === undefined ? UPGRADE_STAT_OVERRIDES[id] : undefined
+  const smuggle = parseSmuggle(card)
   const normalised: EngineCard = {
     id,
     name: card.Name,
@@ -69,6 +89,7 @@ export function normaliseCard(card: SwuCard): EngineCard {
     // No rules meaning; read by the AI's card valuation (#393). The card cache stores the raw
     // SWUDB payload and normalises on read, so already-cached sets pick this up with no migration.
     ...(card.Rarity !== undefined && { rarity: card.Rarity }),
+    ...(smuggle !== undefined && { smuggle }),
   }
   // Last: override any values the source data gets wrong (read off the printed card).
   return { ...normalised, ...CARD_DATA_CORRECTIONS[id] }

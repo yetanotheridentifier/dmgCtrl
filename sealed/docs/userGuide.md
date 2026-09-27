@@ -78,6 +78,8 @@ A card put into your resource zone **by a card ability** (Long Live the Empire, 
 
 Some cards **play a card back out of a resource zone** (The Armorer, Osha), or out of the top of your deck or an opponent's resources. When one does, you get a picker showing that whole zone, with the cards you can play highlighted and the rest dimmed. **A resource you play helps pay for itself**: it is still a resource while you pay, so a 5-cost card is playable out of a zone holding exactly 5 ready resources, one of which is that card. It leaves the zone as it enters play, and a card that says so replaces it with the top card of your deck.
 
+A card with **Smuggle** offers this same play on its own, with no picker needed: whenever one sits in your resource zone and you can afford its printed smuggle cost, "Smuggle" shows up as an ordinary move alongside Play a Card, for as long as it stays there.
+
 ### Winning
 
 Deal damage to the opponent's base until it reaches its health before they do the same to you. Each base shows a **large number over the card**: by default the **damage it has taken**, counting up to its printed health (which varies from base to base), or the **health remaining** counting down if you've switched **Base health** in **Settings**. If a single action defeats **both** bases at once, the game is a **draw**. If your deck runs out, drawing deals 3 damage to your own base per missed card, so don't dawdle.

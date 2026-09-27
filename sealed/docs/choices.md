@@ -595,6 +595,19 @@ directly, with `discardIt` putting its find in the pile instead of the hand and 
 the terms ("search the top 10, discard it, and for this phase you may play that card from your
 discard pile").
 
+### Smuggle: a standing action, not a choice
+
+"If this card is a resource, you may play it for its smuggle cost" (CR 14, #469) is the other shape a
+permission to play from another zone takes: read straight off the card itself, every time legal moves
+are generated, rather than granted by another card's effect. `smuggleMoves` (`legalMoves.ts`) offers a
+`{ type: 'smuggle', resourceIndex, targetInstanceId? }` `Action` for each resource whose
+`EngineCard.smuggle` bracket the player can afford — one per legal host when the card is an upgrade —
+the same way `discardGrantMoves` turns each live `DiscardPlayGrant` into a `playFromDiscard` move.
+`takeSmuggle` resolves it through the same `playFromZone` door a `playCardFrom` uses, with the card's
+own bracket as an `altCost` term (an alternate cost AND aspect list, not a discount) and a
+`resourceTop` tail. See `keywords-effects.md` "Smuggle" for the cost mechanics and which cards read
+the play back off themselves afterwards.
+
 **Every play of an upgrade goes through one door**, `playUpgradeCardOnto`, whatever zone the card came
 from and whether or not it was paid for: from hand (`playUpgradeOnto`, including Cin Drallig's and
 Jabba's free plays), from a deck search (Reforge), from another zone (`attachPlayedCard`) and from the

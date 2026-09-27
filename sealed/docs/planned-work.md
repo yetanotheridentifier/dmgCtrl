@@ -165,8 +165,9 @@ Two phases:
   tokens, Disclose and indirect damage were blockers, so most are smaller than they say (bases barely); the corrected counts are commented on each.
 - **Phase 2 (#461 to #476, #602 to #605), 585 cards blocked by exactly one thing each**, ordered by how
   many cards each unlocks on its own. **Experience tokens are finished** (#461), the largest single
-  unlock: 78 of the 80 shipped, with Covert Strength on #469 (Smuggle) and Trandoshan Hunters on #467
-  (it reads a Bounty), and the two leaders #458 had lifted out built alongside them. **Token units are
+  unlock: all 80 shipped, the last two (Covert Strength, needing Smuggle's alternate cost, and
+  Trandoshan Hunters, reading a Bounty) landing with those mechanics' own tickets, and the two leaders
+  #458 had lifted out built alongside them. **Token units are
   finished** (#605), the second largest: Spy, X-Wing, TIE Fighter, Clone Trooper, Battle Droid and
   HMW's Beast, with 76 cards (73 the triage blocked on them alone, and Governor Pryce, HMW's Poggle the
   Lesser and Nameless Valor lifted onto it). **Bounty is finished** (#467): a `bounty` trigger point
@@ -192,11 +193,24 @@ Two phases:
   **The resource zone is finished** (#475): resources are defeated, returned to hand and put into play
   from any zone, a resource records its owner where that is not its controller, and Greater Sarlacc is
   Exploit's step on ready resources. 19 cards shipped (HMW's Greater Sarlacc and Giant Gorax among
-  them). Each card left touching the zone waits on another mechanic's ticket: Smuggle #469 (Lando
-  Calrissian's leader, Enterprising Lackeys, and DJ, which also needs taking control of a resource, the
-  one piece of the zone not built), Credit #719 (Chewbacca, Intimidator), the Force #462 (Eeth Koth)
-  and Plot #470 (When Has Become Now). Outlaw Corona and Price on
+  them). Each card left touching the zone waits on another mechanic's ticket: Smuggle #723 (Lando
+  Calrissian's leader and DJ, which also needs taking control of a resource, the one piece of the zone
+  not built — Enterprising Lackeys shipped with #469), Credit #719 (Chewbacca, Intimidator), the Force
+  #462 (Eeth Koth) and Plot #470 (When Has Become Now). Outlaw Corona and Price on
   Your Head shipped with Bounty (#467); Chancellor Valorum shipped with Disclose (#603).
+  **Smuggle is finished** (#469): a full alternate cost (CR 14) read off the printed bracket
+  (`EngineCard.smuggle`), not a discount — its own aspect list can differ from the card's printed
+  aspects (Hotshot DL-44 Blaster is Aggression but smuggles as Cunning). A standing action read
+  straight off the resource zone (`smuggleMoves`/`takeSmuggle`), reusing `playFromZone` (#468) with an
+  `altCost` term, exactly the way a `DiscardPlayGrant` reuses it. 27 of the 34 SHD cards that print the
+  keyword shipped (Scanning Officer was already built, reading the keyword on revealed enemy
+  resources without playing through it). Six split to **#723**: DJ (taking control of a resource, the
+  zone's one unbuilt piece), Tech (granting Smuggle to other resources at a computed cost — a keyword
+  grant, not a play), First Light (its own bracket carries an additional cost beyond resources),
+  Hondo Ohnaka and Lando Calrissian (both leaders read/use "using SMUGGLE" globally rather than
+  printing the keyword, needing a watch flag and, for Lando, an ability that initiates a smuggle play),
+  and Millennium Falcon ("if you play this unit from your hand" needs a zone-specific read the engine
+  does not have — every non-resource door already collapses to one `fromResources`-shaped boolean).
   **Capture's primitive is finished** (#466): `captureUnit`/`baseCapturesUnit`/`rescueCaptured`/
   `discardCaptured`/`appendCaptured` plus the `cannotBeCaptured`/`captureReplacement` hooks are built
   and documented in `keywords-effects.md`. Of the 29 cards it unlocks on its own, the 10 with a single
@@ -210,8 +224,8 @@ Two phases:
   When Played, a base guardian with a scheduled rescue, playing a captured card outright, and Jabba the
   Hutt's leader (which needs an unbuilt "grant a chosen unit a temporary keyword ability" primitive as
   well as capture) are on #715. 17 more that only needed Bounty's "When Captured" half shipped once
-  Bounty landed (#467). L3-37 and Sanctioner's Shuttle are sole-blocked by Smuggle (#469) and
-  Coordinate (#472) respectively; Charged with Corruption shipped with Disclose (#603).
+  Bounty landed (#467). L3-37 shipped with Smuggle (#469); Sanctioner's Shuttle is sole-blocked by
+  Coordinate (#472); Charged with Corruption shipped with Disclose (#603).
   **The enemy-ability protection primitive is finished** (#708): `cannotBeTargetedByEnemyAbility`
   (a unit or a granting upgrade protecting itself), `grantsEnemyAbilityProtection` (an aura granting it
   to another unit) and `protectsAttachedUpgrade` (the one printed case landing on an attached upgrade,
@@ -311,8 +325,8 @@ Three findings that contradict the assumptions the programme started from:
   programme: the token was already a card in the db and the token machinery already attached it, so the
   work was registrations plus a handful of helpers.
 - **Resource manipulation was near the bottom at 15 cards, not the top.** What matters is *playing a
-  card out of the resource zone*, which gates Smuggle (#469) and Plot (#470), roughly 50 cards. That
-  door is built: see `playCardFrom` in `choices.md`.
+  card out of the resource zone*, which gated Smuggle (shipped, #469) and gates Plot (#470), roughly 50
+  cards between them. That door is built: see `playCardFrom` in `choices.md`.
 - **Bounty is gated behind capture**, not resources.
 
 The 292 vanilla and keyword-only cards need no ticket: `PLAYABLE_AS_PRINTED` in

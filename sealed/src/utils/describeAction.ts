@@ -138,6 +138,13 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const target = anyUnitName(state, action.targetInstanceId)
       return `Play ${card.name} (${effectiveCost(state, by, card, targetUnit)})${target ? ` on ${target}` : ''}`
     }
+    case 'smuggle': {
+      const cardId = state.players[by].resources[action.resourceIndex]?.cardId
+      const card = cardId ? state.cards[cardId] : undefined
+      if (!card?.smuggle) return 'Smuggle a card'
+      const onto = action.targetInstanceId ? ` onto ${anyUnitName(state, action.targetInstanceId) ?? 'a unit'}` : ''
+      return `Smuggle ${card.name}${onto} (${playFromCost(state, by, card, { altCost: card.smuggle })})`
+    }
     case 'playBaseUpgrade': {
       const card = state.cards[state.players[by].hand[action.handIndex]]
       if (!card) return 'Play an upgrade'

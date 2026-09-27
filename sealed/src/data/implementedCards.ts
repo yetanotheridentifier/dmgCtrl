@@ -484,6 +484,10 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'SHD_125', name: 'Price on Your Head' },
   // Enemy-ability immunity (#708): grants its host "can't be captured/defeated/returned by enemy card abilities".
   { id: 'TWI_220', name: 'Shadowed Intentions' },
+  // Smuggle (#469): the alternate cost itself needs nothing here, only what each card's own text adds.
+  { id: 'SHD_175', name: 'Armed to the Teeth' },
+  { id: 'SHD_174', name: 'Hotshot DL-44 Blaster' },
+  { id: 'SHD_225', name: 'Jetpack' },
 ]
 
 /**
@@ -919,6 +923,11 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SEC_211', name: 'Faith in Your Friends' },
   { id: 'SEC_230', name: 'Charged with Espionage' },
   { id: 'SEC_234', name: 'Bog Down in Procedure' },
+  // Smuggle (#469): SHD's set mechanic, the events among the cards that need nothing else.
+  { id: 'SHD_127', name: 'Commission' },
+  { id: 'SHD_075', name: 'Covert Strength' },
+  { id: 'SHD_129', name: 'Timely Intervention' },
+  { id: 'SHD_252', name: "Smuggler's Aid" },
 ]
 
 /**
@@ -2024,6 +2033,22 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SEC_219', name: 'Ebon Hawk' },
   { id: 'SEC_223', name: "Duchess's Investigators" },
   { id: 'SEC_248', name: 'B2EM0' },
+  // Smuggle (#469): SHD's set mechanic, the units among the cards that need nothing else.
+  { id: 'SHD_184', name: 'Bazine Netal' },
+  { id: 'SHD_148', name: 'Cassian Andor' },
+  { id: 'SHD_050', name: 'Chewbacca' },
+  { id: 'SHD_107', name: 'Enterprising Lackeys' },
+  { id: 'SHD_097', name: 'Freetown Backup' },
+  { id: 'SHD_197', name: 'L3-37' },
+  { id: 'SHD_032', name: 'Lom Pyke' },
+  { id: 'SHD_201', name: 'Principled Outlaw' },
+  { id: 'SHD_113', name: 'Privateer Crew' },
+  { id: 'SHD_160', name: 'Reckless Gunslinger' },
+  { id: 'SHD_215', name: "Smuggler's Starfighter" },
+  { id: 'SHD_052', name: 'Sugi' },
+  { id: 'SHD_217', name: 'Tobias Beckett' },
+  { id: 'SHD_086', name: 'Warbird Stowaway' },
+  { id: 'SHD_203', name: 'Zorii Bliss' },
 ]
 
 /**
@@ -2157,7 +2182,7 @@ export const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
   LOF: { units: 46 },
   JTL: { bases: 9, units: 22 },
   TWI: { bases: 8, units: 28 },
-  SHD: { bases: 8, units: 23, upgrades: 1 },
+  SHD: { bases: 8, units: 28, upgrades: 1 },
   SOR: { bases: 8, units: 29, upgrades: 2 },
   TS26: { units: 5, upgrades: 1 },
   IBH: { bases: 2, units: 19 },

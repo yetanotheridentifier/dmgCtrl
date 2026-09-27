@@ -134,6 +134,15 @@ function resolveAction(state: GameState, action: Action): GameState {
         if (activeChoice(played)) return resetPasses(handOffOpponentChoice(played, played.activePlayer))
         return advanceTurn(resetPasses(played))
       })
+    case 'smuggle':
+      return requirePhase(state, 'action', () => {
+        const played = takeSmuggle(state, state.activePlayer, action.resourceIndex, action.targetInstanceId)
+        if (played.winner !== null) return played
+        // Like every other play: a choice the card raises keeps the turn, and an opponent-controlled
+        // one hands over first.
+        if (activeChoice(played)) return resetPasses(handOffOpponentChoice(played, played.activePlayer))
+        return advanceTurn(resetPasses(played))
+      })
     case 'playUpgrade':
       return requirePhase(state, 'action', () => {
         const played = playUpgrade(state, action.handIndex, action.targetInstanceId)
@@ -398,7 +407,7 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
  * it and the board no longer does, since payment happens before the unit exists. It defaults to 0, which
  * is what every free-play door pays.
  */
-function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0, cardOwner?: PlayerId, exploited?: Exploited, fromResources = false, defeatOnEntry = false): GameState {
+function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0, cardOwner?: PlayerId, exploited?: Exploited, fromResources = false, defeatOnEntry = false, usingSmuggle = false): GameState {
   // First, after the cost, so "first X each phase" sees this one as the first and nothing below reads
   // a record that is missing it.
   state = recordCardPlayed(state, owner, cardId)
@@ -430,6 +439,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
     upgrades: [],
     ...(resourcesPaid > 0 ? { resourcesPaidToPlay: resourcesPaid } : {}),
     ...(exploited && exploited.powers.length > 0 ? { exploitedPowers: exploited.powers } : {}),
+    ...(usingSmuggle ? { playedUsingSmuggle: true } : {}),
     // A unit played out of somebody else's discard pile or resource zone is still their card
     // (CR 1.5.2), so it is defeated into THEIR discard pile. `owner` here is the controller: the
     // array a unit sits in. `UnitState.owner` is only set where the two differ, as it is for a unit
@@ -806,12 +816,12 @@ function playFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone
     // `playUnitCard` names the new unit from the counter it is about to consume, so this is its id,
     // and the tail's "it" (damage, tokens, the delayed defeat) needs no target pick.
     const playedId = `u${next.instanceCounter}`
-    next = checkWin(playUnitCard(next, controller, card.id, tail?.entersReady === true, cost, cardOwner, undefined, fromResources))
+    next = checkWin(playUnitCard(next, controller, card.id, tail?.entersReady === true, cost, cardOwner, undefined, fromResources, false, tail?.usingSmuggle === true))
     if (next.winner !== null) return next
     return applyPlayedUnitTail(next, controller, playedId, tail)
   }
   if (card.type === 'upgrade') {
-    next = playUpgradeCardOnto(next, controller, card.id, targetInstanceId, cardOwner, fromResources)
+    next = playUpgradeCardOnto(next, controller, card.id, targetInstanceId, cardOwner, fromResources, tail?.usingSmuggle === true)
     // "At the start of the next regroup phase, defeat it" where "it" is the UPGRADE (Salvaged
     // Materials): the effect names the card and the host it went onto, since a pile can hold two
     // copies and only the one just played is doomed.
@@ -860,6 +870,20 @@ function takeDiscardPlayGrant(state: GameState, grantIndex: number, targetInstan
   if (!found) return dropDiscardPlayGrant(state, grantIndex)
   const played = playFromZone(state, grant.player, found.zone, found.ref, grant, targetInstanceId, { tokens: grant.tokens })
   return dropDiscardPlayGrant(played, grantIndex)
+}
+
+/**
+ * Take Smuggle (CR 14): play the resource at `resourceIndex` for its own printed smuggle cost,
+ * replaced with the top card of the deck. Unlike a `DiscardPlayGrant` there is no standing record to
+ * spend: the card's own `smuggle` bracket is read fresh, exactly as `smuggleMoves` (legalMoves.ts)
+ * just re-read it to offer this move.
+ */
+function takeSmuggle(state: GameState, playerId: PlayerId, resourceIndex: number, targetInstanceId?: string): GameState {
+  const cardId = state.players[playerId].resources[resourceIndex]?.cardId
+  const card = cardId ? state.cards[cardId] : undefined
+  if (!card?.smuggle) return state
+  const terms: PlayFromTerms = { altCost: card.smuggle }
+  return playFromZone(state, playerId, 'resources', { index: resourceIndex, cardId }, terms, targetInstanceId, { resourceTop: playerId, usingSmuggle: true })
 }
 
 /** What a `playCardFrom` does once its card is in play, or its event has resolved. */
@@ -2412,7 +2436,7 @@ export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex:
  * from the resource zone and Camtono from the top of the deck. `upgradeAttachSites.test.ts` fails on a new
  * hand-built attach, so a further zone comes through here too.
  */
-function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: string, targetInstanceId?: string, cardOwner?: PlayerId, fromResources = false): GameState {
+function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: string, targetInstanceId?: string, cardOwner?: PlayerId, fromResources = false, usingSmuggle = false): GameState {
   const card = state.cards[cardId]
   if (!card || card.type !== 'upgrade') return state
   // Fortify: "Attach this to your base, not a unit", whatever unit the play named.
@@ -2421,7 +2445,7 @@ function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: strin
   // An upgrade played out of another player's discard pile stays theirs (CR 1.5.2), so the
   // attachment records them and the card goes back to their pile when it is defeated.
   const owner = cardOwner ?? playerId
-  let next = onBase ? attachToBase(state, playerId, card.id) : attachUpgrades(state, targetInstanceId!, [{ cardId: card.id, owner }], true)
+  let next = onBase ? attachToBase(state, playerId, card.id) : attachUpgrades(state, targetInstanceId!, [{ cardId: card.id, owner, ...(usingSmuggle ? { usingSmuggle: true } : {}) }], true)
   next = recordCardPlayed(next, playerId, card.id) // after the cost ("the first upgrade you play each phase")
 
   // One upgrade arriving is one event: the host reacting to it attaching (Sabine Wren, and since this
