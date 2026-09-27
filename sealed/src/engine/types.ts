@@ -299,6 +299,34 @@ export interface DamageSource {
    * reads it; a leader's front, a base or an event names none.
    */
   instanceId?: string
+  /**
+   * This instance ignores Shields and base-damage prevention outright, the way `damageIsUnpreventable`
+   * already asks a card hook (Gorian Shard's Corsair): indirect damage's own printed reminder
+   * ("unpreventable damage") sets it directly on the source instead, since every printing means the
+   * same thing and none needs a hook of its own.
+   */
+  unpreventable?: boolean
+  /**
+   * This instance is indirect damage (JTL): the `DamageDealt` event it produces carries the same flag,
+   * which is how a reader that means specifically indirect damage (Allegiant General Pryde's "when
+   * indirect damage is dealt to a unit") tells it apart from an ordinary ability ping.
+   */
+  indirect?: boolean
+}
+
+/**
+ * The tail of an indirect-damage effect, read off what the distribution actually hit once the whole
+ * amount is spent ("if a base is damaged this way", "exhaust each unit damaged this way"). Plain data,
+ * carried on the `distributeIndirectDamage` choice itself rather than a closure, for the same reason
+ * every other pending choice is.
+ */
+export interface IndirectDamageFollowUp {
+  /** "If a base is damaged this way, ready this unit" (Guerilla Soldier). */
+  readyIfBaseDamaged?: string
+  /** "If a base is damaged this way, draw a card" (Tactical Heavy Bomber) — who draws. */
+  drawIfBaseDamaged?: PlayerId
+  /** "Exhaust each unit damaged this way" (Kimoglia Heavy Fighter). */
+  exhaustUnitsDamaged?: boolean
 }
 
 /**
@@ -319,6 +347,8 @@ export interface DamageDealt {
    * `unitId` is set only when the dealer is a unit in play ("a friendly unit deals damage").
    */
   dealer?: { controller: PlayerId; cardId: string; unitId?: string }
+  /** This instance was indirect damage (`DamageSource.indirect`) — Allegiant General Pryde's reader. */
+  indirect?: boolean
 }
 
 /** A pending "your next unit …" grant. All fields are plain data (GameState is JSON). */
@@ -870,6 +900,8 @@ export interface PhaseEvents {
    * Ion Cannon: "Use this ability only once each phase"). Counted against the copies on the base.
    */
   baseActionsUsed?: Partial<Record<PlayerId, string[]>>
+  /** Players who dealt indirect damage this phase (Decimator of Dissidents). */
+  indirectDamageDealers?: PlayerId[]
 }
 
 /**
@@ -1306,6 +1338,14 @@ type ChoiceVariant =
   // `boosted` are the units already dealt a point: the division is one instance of damage to each unit,
   // so a "that much damage plus 1" replacement (Ty Yorrick) adds to a unit's first point only.
   | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[]; enemiesOf?: PlayerId; boosted?: string[] }
+  // Indirect damage (JTL): unpreventable damage the RECEIVING player assigns among their own base
+  // and units, one point at a time until `remaining` reaches 0 — mandatory, unlike `distributeDamage`,
+  // because nobody may decline to absorb it. `controller` is normally `targetPlayer`, but a card that
+  // makes the DEALER assign it instead (Devastator) flips it. `unitTargets` are `targetPlayer`'s
+  // currently-eligible units, recomputed as they're defeated; the base is always eligible, so the
+  // choice never strands even if every unit dies mid-distribution. `unitsDamaged`/`baseDamaged` track
+  // what actually got hit, for a follow-up read off it once the pool is spent (`then`).
+  | { kind: 'distributeIndirectDamage'; id: string; controller: PlayerId; targetPlayer: PlayerId; remaining: number; total: number; unitTargets: string[]; source: DamageSource; boosted?: boolean; unitsDamaged?: string[]; baseDamaged?: boolean; then?: IndirectDamageFollowUp }
   // Distribute `total` tokens among `targets`, one per pick until `remaining` reaches 0. Unlike
   // `multiPick`'s give-advantage, targets stay eligible so tokens can stack. Every token is placed
   // (Fateful Goodbye) unless `upTo`, which may stop at any point (Elzar Mann), or `optional`, which may
@@ -1736,6 +1776,18 @@ export function recordBaseActionUsed(state: GameState, owner: PlayerId, key: str
 /** Whether `owner` created a token this phase (The Client). */
 export function tokenCreatedThisPhase(state: GameState, owner: PlayerId): boolean {
   return state.phaseEvents?.tokensCreated?.includes(owner) ?? false
+}
+
+/** Record that `owner` dealt indirect damage this phase. Idempotent. */
+export function recordIndirectDamageDealt(state: GameState, owner: PlayerId): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  const dealers = events.indirectDamageDealers ?? []
+  return dealers.includes(owner) ? state : { ...state, phaseEvents: { ...events, indirectDamageDealers: [...dealers, owner] } }
+}
+
+/** Whether `owner` dealt indirect damage this phase (Decimator of Dissidents). */
+export function indirectDamageDealtThisPhase(state: GameState, owner: PlayerId): boolean {
+  return state.phaseEvents?.indirectDamageDealers?.includes(owner) ?? false
 }
 
 /** Whether `owner`'s base was dealt damage this phase (Baylan Skoll). */

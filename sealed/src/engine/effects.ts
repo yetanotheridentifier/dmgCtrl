@@ -370,9 +370,11 @@ export function abilityDamageBonus(state: GameState, from: DamageSource | undefi
  * side tell an attack from an ability's ping (Populist Advisor gains Sentinel only against an enemy
  * unit's combat damage). It is absent for every ability that damages a base.
  */
-export function dealDamageToBase(state: GameState, player: PlayerId, rawAmount: number, source?: DamageSource, combat?: { attackerInstanceId: string }): GameState {
+export function dealDamageToBase(state: GameState, player: PlayerId, rawAmount: number, source?: DamageSource, combat?: { attackerInstanceId: string }, boost = true): GameState {
   // "That much damage plus 1" (Ty Yorrick) replaces an ability's damage before anything prevents it.
-  const amount = rawAmount > 0 && !combat ? rawAmount + abilityDamageBonus(state, source ?? state.resolvingSource, player) : rawAmount
+  // `boost` is false for a follow-up point of an already-boosted instance (indirect damage assigned
+  // one point at a time), so the bonus isn't added again for every point the pool is split across.
+  const amount = rawAmount > 0 && !combat && boost ? rawAmount + abilityDamageBonus(state, source ?? state.resolvingSource, player) : rawAmount
   // The base's own prevention (Alliance Shield Generator), which settles the damage entirely when it acts.
   if (amount > 0 && !damageIsUnpreventable(state, source)) {
     for (const cardId of baseAbilityCardIds(state.players[player].base)) {
@@ -396,7 +398,8 @@ export function dealDamageToBase(state: GameState, player: PlayerId, rawAmount: 
   // One damage event, heard by both sides: "when your base is dealt damage" (Blade Three) and "when
   // you deal damage to an enemy base" (Cassian Andor) are its two readings.
   const dealer = damageDealer(state, source, combat !== undefined)
-  return fireBatch(next, collectDamageDealt(next, { owner: player, units: [], base: dealt, byCombat: combat !== undefined, ...(dealer ? { dealer } : {}) }))
+  const indirect = (source ?? state.resolvingSource)?.indirect === true
+  return fireBatch(next, collectDamageDealt(next, { owner: player, units: [], base: dealt, byCombat: combat !== undefined, ...(dealer ? { dealer } : {}), ...(indirect ? { indirect } : {}) }))
 }
 
 /**
@@ -471,12 +474,42 @@ export function baseDamageAfterPrevention(state: GameState, player: PlayerId, am
 
 /**
  * True if this instance of damage ignores Shields and base-damage prevention (Gorian Shard's
- * Corsair). Asked of every unit in play belonging to the damage's controller.
+ * Corsair, or indirect damage's own printed "unpreventable damage", set directly on the source
+ * rather than read from a card hook). Asked of every unit in play belonging to the damage's controller.
  */
 export function damageIsUnpreventable(state: GameState, source?: DamageSource): boolean {
   if (!source) return false
+  if (source.unpreventable) return true
   return state.players[source.controller].units.some(u =>
     abilityCardIds(u).some(id => getCardDefinition(id)?.makesDamageUnpreventable?.(state, u, source) ?? false),
+  )
+}
+
+/**
+ * What indirect damage `source` deals gains before the receiving player assigns it ("indirect damage
+ * you deal to opponents is increased by 1", Hunting Aggressor). Asked only of units the DEALER
+ * controls — the target's side never adds to damage headed for itself.
+ */
+export function indirectDamageBonus(state: GameState, source: DamageSource, targetController: PlayerId): number {
+  if (source.controller === targetController) return 0
+  let bonus = 0
+  for (const self of state.players[source.controller].units) {
+    for (const cardId of abilityCardIds(self)) {
+      bonus += getCardDefinition(cardId)?.indirectDamageBonus?.(state, self, source, targetController) ?? 0
+    }
+  }
+  return bonus
+}
+
+/**
+ * True when a card in play makes `source`'s controller assign their own indirect damage instead of
+ * the player it targets ("you assign all indirect damage you deal to opponents", Devastator). Asked
+ * only of units the DEALER controls.
+ */
+export function indirectDamageAssignedByDealer(state: GameState, source: DamageSource, targetController: PlayerId): boolean {
+  if (source.controller === targetController) return false
+  return state.players[source.controller].units.some(self =>
+    abilityCardIds(self).some(cardId => getCardDefinition(cardId)?.assignsIndirectDamage?.(state, self, source, targetController) ?? false),
   )
 }
 

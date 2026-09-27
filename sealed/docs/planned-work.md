@@ -300,7 +300,16 @@ Two phases:
   Arrestor Cruiser), a "deal damage unless the controller discards a card" prevention (Syril Karn),
   and a wholly new "when a player draws cards" trigger point (Chairman Papanoida). Condemn and
   Diplomatic Immunity stay blocked on the unbuilt granted-ability-block (#464) regardless.
-  Next is indirect damage (#604, 15).
+  **Indirect damage is finished** (#604): unlike every other instance of damage, the RECEIVING
+  player assigns it, as unpreventable damage, among their own base and units — `dealIndirectDamage`
+  raises a mandatory `distributeIndirectDamage` choice, folding in Hunting Aggressor's +1 and
+  Devastator's "you assign it instead" as two new hooks asked only of the dealer's own board.
+  Allegiant General Pryde's "when indirect damage is dealt to a unit" reuses the existing
+  `whenDamageDealt` point, filtered on a new flag, rather than a trigger point of its own. 18 of the
+  22 candidate cards shipped (recounted; the ticket's stale "unlocks 15" undercounted). Left out: Boba
+  Fett's leader (a further, unrelated trigger point, noted on #680), Targeting Computer and Superheavy
+  Ion Cannon (both need the granted-ability block, #464), and Dengar (needs Piloting, #465). Next is
+  Coordinate (#472).
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
 (with the token units, #605), the Weakness-token cards (#649), the Fortify cards (#650), the When Played

@@ -1,5 +1,5 @@
-import type { DamageDealt, DamageSource, GameState, PendingChoice, PendingTrigger, PlayerId, UnitState } from './types'
-import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordDamagePrevented, recordUnitLeftPlay, recordDefeatedWhileAttacking, pushChoice, abilityCardIds } from './types'
+import type { DamageDealt, DamageSource, GameState, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayerId, UnitState } from './types'
+import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordDamagePrevented, recordUnitLeftPlay, recordDefeatedWhileAttacking, pushChoice, abilityCardIds, recordIndirectDamageDealt } from './types'
 import type { DamagePreventionContext } from './abilities'
 import { enqueueTriggers, drainTriggers } from './triggerQueue'
 import { effectiveHp } from './stats'
@@ -7,7 +7,7 @@ import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { collectPlayerTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
-import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay, abilityDamageBonus, protectedFromEnemyAbility } from './effects'
+import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay, abilityDamageBonus, protectedFromEnemyAbility, indirectDamageBonus, indirectDamageAssignedByDealer } from './effects'
 
 /**
  * How much of an instance of damage the cards in play stop before it lands (Cassian Andor, Boba
@@ -160,7 +160,8 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   // The dealer is read off the board before the damage, while a unit it defeats is still there to name.
   if (dealt.length > 0) {
     const dealer = damageDealer(state, source, byCombat)
-    const event: DamageDealt = { owner, units: dealt, byCombat, ...(dealer ? { dealer } : {}) }
+    const indirect = (source ?? state.resolvingSource)?.indirect === true
+    const event: DamageDealt = { owner, units: dealt, byCombat, ...(dealer ? { dealer } : {}), ...(indirect ? { indirect } : {}) }
     result = enqueueTriggers(result, collectDamageDealt(result, event), defer || joinsDefeats)
   }
   // Resolve the batch here, which is where it used to resolve. `drainTriggers` stops of its own accord
@@ -423,4 +424,33 @@ export function dealDamageToUnit(state: GameState, instanceId: string, amount: n
     return applyUnitDamage(state, owner, new Map([[recipient, dealt]]), false, {}, source)
   }
   return state
+}
+
+/**
+ * Deal `rawAmount` indirect damage to `targetPlayer` (JTL): unpreventable damage THEY assign among
+ * their own base and units, one point at a time, unless a card in play flips the assignment to the
+ * dealer instead (Devastator). `source` is required — every printed instance of indirect damage
+ * belongs to an identifiable card — and is what lets `indirectDamageBonus` (Hunting Aggressor) and
+ * `indirectDamageAssignedByDealer` (Devastator) ask the dealer's own board.
+ *
+ * `then` is a follow-up read off what the distribution actually hit once the whole amount is spent
+ * ("if a base is damaged this way", "exhaust each unit damaged this way") — see `IndirectDamageFollowUp`.
+ */
+export function dealIndirectDamage(state: GameState, targetPlayer: PlayerId, rawAmount: number, source: DamageSource, then?: IndirectDamageFollowUp): GameState {
+  const amount = rawAmount + indirectDamageBonus(state, source, targetPlayer)
+  if (amount <= 0) return state
+  const assignedByDealer = indirectDamageAssignedByDealer(state, source, targetPlayer)
+  const controller = assignedByDealer ? source.controller : targetPlayer
+  const recorded = recordIndirectDamageDealt(state, source.controller)
+  return pushChoice(recorded, {
+    kind: 'distributeIndirectDamage',
+    id: `indirect-${targetPlayer}-${state.instanceCounter}`,
+    controller,
+    targetPlayer,
+    remaining: amount,
+    total: amount,
+    unitTargets: recorded.players[targetPlayer].units.map(u => u.instanceId),
+    source: { ...source, unpreventable: true, indirect: true },
+    ...(then ? { then } : {}),
+  })
 }

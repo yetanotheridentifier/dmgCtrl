@@ -1522,13 +1522,13 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     const upgradeDefeatDecline = selectUpgradeActions.find(a => a.type === 'skipTrigger')
     const declineButton = declineChoice ?? discardDecline ?? handPlayDecline ?? upgradeDefeatDecline
     // Distribute HUD (Ninth Sister damage / Helgait tokens): how much of the pool is allocated.
-    const distribute = targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens' ? targetChoice : undefined
-    const repeatable = targetChoice?.kind === 'multiPick' || targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens' || targetChoice?.kind === 'exploit'
+    const distribute = targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens' || targetChoice?.kind === 'distributeIndirectDamage' ? targetChoice : undefined
+    const repeatable = targetChoice?.kind === 'multiPick' || targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens' || targetChoice?.kind === 'distributeIndirectDamage' || targetChoice?.kind === 'exploit'
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
         {distribute && (
           <div data-testid="distribute-hud" className="rounded-xl border-2 border-accent/60 px-3 py-1.5 text-center text-xs text-ink-dim">
-            {distribute.kind === 'distributeTokens' ? 'Tokens' : 'Damage'} allocated <span className="font-semibold text-ink">{distribute.total - distribute.remaining} / {distribute.total}</span>
+            {distribute.kind === 'distributeTokens' ? 'Tokens' : distribute.kind === 'distributeIndirectDamage' ? 'Indirect damage' : 'Damage'} allocated <span className="font-semibold text-ink">{distribute.total - distribute.remaining} / {distribute.total}</span>
           </div>
         )}
         {declineButton && (

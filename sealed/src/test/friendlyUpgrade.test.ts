@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { replay, loadReport, REPORT_CARDS } from './helpers/replayReport'
+import { replayWith, loadReport, REPORT_CARDS, type ReplayInserts } from './helpers/replayReport'
 import { resolve } from '../engine/resolve'
 import '../engine/cardDefinitions'
 import { state, player, card, CARDS, unit, ready } from './helpers/engineFixtures'
@@ -15,10 +15,27 @@ describe('friendly upgrades are the ones you own', () => {
   const upgradeChoice = (s: GameState) =>
     s.pendingChoices?.find((c): c is Extract<PendingChoice, { kind: 'selectUpgradeToDefeat' }> => c.kind === 'selectUpgradeToDefeat')
 
+  /**
+   * This report's deck includes JTL_132 (First Order Stormtrooper), which was vanilla when it was
+   * recorded and now deals indirect damage on attack (#604): the base's own attack (moves 18 and 29)
+   * raises a `choosePlayerThen` the reporter never saw. Answered the way a player naturally would (to
+   * the opponent, then onto their base) so the rest of the recorded script — about Vane, not this
+   * card — still replays; see `replayWith`'s own doc for why this is the fix working, not the fixture
+   * rotting.
+   */
+  const answerIndirectDamage: ReplayInserts = Object.fromEntries([19, 30].map(i => [i, (s: GameState) => {
+    const choice = s.pendingChoices?.find(c => c.kind === 'choosePlayerThen')
+    if (!choice) return []
+    return [
+      { type: 'acceptChoice' as const, choiceId: choice.id, optionIndex: 0 }, // to the opponent
+      { type: 'acceptChoice' as const, choiceId: `indirect-opponent-${s.instanceCounter}`, baseTarget: 'opponent' as const },
+    ]
+  }]))
+
   /** The reported game, replayed: Vane's ability with an enemy-owned upgrade on a friendly unit. */
   it('Vane does not offer an enemy-owned upgrade attached to your unit', () => {
     const report = loadReport('vaneFriendlyUpgrade')
-    const final = replay(report, REPORT_CARDS.vaneFriendlyUpgrade)
+    const final = replayWith(report, answerIndirectDamage, report.moves.length, REPORT_CARDS.vaneFriendlyUpgrade)
 
     const choice = upgradeChoice(final)
     expect(choice, 'the report ends on Vane’s upgrade choice').toBeTruthy()
