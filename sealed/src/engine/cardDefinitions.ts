@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers, collectCardTriggers } from './abilities'
-import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens } from './effects'
+import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -11074,6 +11074,140 @@ registerCard('SHD_154', { // Wrecker
     return damageChoice(next, ctx, 5, allUnits(next).filter(u => u.arena === 'ground'))
   },
 })
+
+// ── Smuggle (#469): CR 14, an alternate cost that plays a resource for its own printed cost,
+// replaced with the top card of the deck. The mechanism (the alternate cost, the `smuggle` Action,
+// the replacement) is generic, built in cardDb.ts/legalMoves.ts/resolve.ts off `EngineCard.smuggle`
+// (parsed from the printed bracket) — nothing here declares the keyword itself. Collections
+// Starhopper, Nite Owl Skirmisher, Pirate Battle Tank, Vigilant Pursuit Craft and Weequay Pirate
+// Gang print nothing else (Sentinel/Ambush are already implemented keywords) and need no entry.
+
+registerCard('SHD_175', onAttack(buffWp('Attached unit gains: On Attack: Give another friendly unit +2/+0 for this phase.',
+  pickAll(pickFriendly, pickOther), () => ({ power: 2 }), false))) // Armed to the Teeth
+
+registerCard('SHD_184', whenPlayed("Look at an opponent's hand. You may discard 1 of those cards. If you do, that player draws a card.", (s, ctx) =>
+  pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, thenDraw: true }))) // Bazine Netal
+
+// "When played using Smuggle" reads `playedUsingSmuggle`/`usingSmuggle` off the unit/upgrade itself
+// (set at construction by `playFromZone`/`takeSmuggle`), the same way Weequay Pirate already reads
+// `resourcesPaidToPlay`: `whenPlayed`'s ctx carries no notion of the zone a play came from.
+registerCard('SHD_148', whenPlayed('When played using Smuggle: Ready this unit.', (s, ctx) =>
+  (selfOf(s, ctx)?.playedUsingSmuggle ? readyUnit(s, ctx.sourceInstanceId!) : s))) // Cassian Andor
+
+registerCard('SHD_050', targetWp('You may defeat a unit with 5 or less remaining HP.', 'selectUnitToDefeat', (s, u) => remainingHp(s, u) <= 5, true)) // Chewbacca
+
+registerCard('SHD_127', searchDrawWp('Search the top 10 cards of your deck for a Bounty Hunter, Item, or Transport card, reveal it, and draw it.', 10,
+  (c, s) => c !== undefined && ['Bounty Hunter', 'Item', 'Transport'].some(t => cardHasTrait(s, c.id, t)))) // Commission
+
+registerCard('SHD_075', unitThenWp('Heal 2 damage from a unit and give an Experience token to it.', pickAny, 'choose a unit', false,
+  (s, ctx) => giveToken(healUnit(s, ctx.targetInstanceId!, 2), ctx.targetInstanceId!, TOKEN_EXPERIENCE))) // Covert Strength
+
+registerCard('SHD_107', {
+  ...defeated(whenPlayed('You may defeat a friendly resource. If you do, put this unit into play as a resource.', (s, ctx) =>
+    resourceThen(s, ctx, { holder: ctx.owner, optional: true, step: 'lackeys', text: 'defeat a friendly resource' }))),
+  ifYouDo: (s, ctx) => {
+    const pick = resourcePicked(s, ctx)
+    return pick ? resourceDefeated(false)(defeatResource(s, pick.holder, pick.index), ctx) : s
+  },
+}) // Enterprising Lackeys
+
+registerCard('SHD_097', onAttack(buffWp('Give another friendly unit +2/+2 for this phase.', pickAll(pickFriendly, pickOther), () => ({ power: 2, hp: 2 }), false))) // Freetown Backup
+
+registerCard('SHD_174', {
+  attachRestriction: nonVehicle,
+  ...whenPlayed('When played using Smuggle: Attack with attached unit.', (s, ctx) => {
+    const found = findUnit(s, ctx.sourceInstanceId!)
+    const usingSmuggle = found?.unit.upgrades.find(u => u.cardId === ctx.cardId)?.usingSmuggle
+    return found && usingSmuggle && found.owner === ctx.owner && eligibleAttacker(s, found.unit) && canAttackSomething(s, found.unit)
+      ? pushChoice(s, { kind: 'mayAttack', id: `${ctx.sourceInstanceId}-hotshot`, controller: ctx.owner, unitId: found.unit.instanceId })
+      : s
+  }),
+}) // Hotshot DL-44 Blaster
+
+registerCard('SHD_225', {
+  attachRestriction: nonVehicle,
+  ...whenPlayed('Give a Shield token to attached unit. At the start of the regroup phase, defeat that token.', (s, ctx) => {
+    const found = findUnit(s, ctx.sourceInstanceId!)
+    if (!found) return s
+    const given = giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD, ctx.owner)
+    return addDelayedEffect(given, { cardId: ctx.cardId, owner: found.owner, when: 'regroupStart', unitId: ctx.sourceInstanceId! })
+  }),
+  delayed: (s, e) => (e.unitId ? defeatTokensOn(s, e.owner, e.unitId, TOKEN_SHIELD) : s),
+}) // Jetpack
+
+/** Every captured card in the game, wherever it is guarded (CR 33): both players' units and bases. */
+const capturedCards = (s: GameState) => BOTH_BASES.flatMap(pid => [
+  ...s.players[pid].units.flatMap(u => (u.captured ?? []).map(c => ({ holder: { kind: 'unit' as const, instanceId: u.instanceId }, cardId: c.cardId }))),
+  ...(s.players[pid].base.captured ?? []).map(c => ({ holder: { kind: 'base' as const, owner: pid }, cardId: c.cardId })),
+])
+
+registerCard('SHD_197', {
+  ...whenPlayed("You may rescue a captured card. If you don't, give a Shield token to this unit.", (s, ctx) => {
+    const all = capturedCards(s)
+    return all.length
+      ? pushChoice(s, { kind: 'selectCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: all.map(c => c.cardId), optional: true, text: 'rescue a captured card', then: resume(ctx), hookOnDecline: true })
+      : giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD, ctx.owner)
+  }),
+  ifYouDo: (s, ctx) => {
+    if (ctx.optionIndex === undefined) return giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD, ctx.owner)
+    const picked = capturedCards(s)[ctx.optionIndex]
+    return picked ? rescueCaptured(s, picked.holder, picked.cardId) : s
+  },
+}) // L3-37
+
+registerCard('SHD_032', onAttack(unitThenWp('You may give a Shield token to an enemy unit. If you do, give a Shield token to a friendly unit.', pickEnemy, 'choose an enemy unit', true,
+  (s, ctx) => shieldChoice(giveToken(s, ctx.targetInstanceId!, TOKEN_SHIELD, ctx.owner), ctx, pickedIds(s, ctx, pickFriendly), false)))) // Lom Pyke
+
+registerCard('SHD_201', onAttack(whenPlayed('You may exhaust a ground unit.', (s, ctx) => targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, pickGround), true)))) // Principled Outlaw
+
+registerCard('SHD_113', whenPlayed('When played using Smuggle: Give 3 Experience tokens to this unit.', (s, ctx) =>
+  (selfOf(s, ctx)?.playedUsingSmuggle ? giveTokens(s, ctx.sourceInstanceId!, TOKEN_EXPERIENCE, 3, ctx.owner) : s))) // Privateer Crew
+
+registerCard('SHD_160', whenPlayed('Deal 1 damage to each base.', s => BOTH_BASES.reduce((acc, p) => dealDamageToBase(acc, p, 1), s))) // Reckless Gunslinger
+
+registerCard('SHD_252', whenPlayed('Heal 3 damage from your base.', (s, ctx) => healBase(s, ctx.owner, 3))) // Smuggler's Aid
+
+registerCard('SHD_215', buffWp('If you control another Underworld unit, give an enemy unit -3/-0 for this phase.', pickEnemy, () => ({ power: -3 }), false,
+  (s, ctx) => youControl(s, ctx, pickOther, pickTrait('Underworld')))) // Smuggler's Starfighter
+
+registerCard('SHD_052', { conditionalKeywords: (s, u) => (enemyControlsUpgradedUnit(s, u) ? [{ name: 'Sentinel' }] : []) }) // Sugi
+
+registerCard('SHD_129', whenPlayed('Play a unit from your hand. Give it Ambush for this phase.', (s, ctx) => {
+  const candidates = affordableHandUnits(s, ctx.owner, 0, 0)
+  return candidates.length
+    ? pushChoice(grantNextUnit(s, ctx.owner, { keywords: [KW.ambush] }), { kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta: 0, entersReady: false })
+    : s
+})) // Timely Intervention
+
+const TOBIAS_ROUND_KEY = 'SHD_217#round'
+registerCard('SHD_217', {
+  abilities: [{
+    trigger: 'whenPlayCard',
+    description: "When you play a non-unit card: You may exhaust a unit that costs the same as or less than the card you played. Use this ability only once each round.",
+    effect: (s, ctx) => {
+      const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+      const played = ctx.playedCardId ? s.cards[ctx.playedCardId] : undefined
+      if (ctx.playingPlayer !== ctx.owner || !self || self.usedAbilities?.includes(TOBIAS_ROUND_KEY) || !played || played.type === 'unit') return s
+      const targets = allUnits(s).filter(u => printedCost(s, u) <= played.cost).map(u => u.instanceId)
+      return targets.length
+        ? pushChoice(s, { kind: 'mayExhaustUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, markUsed: { instanceId: ctx.sourceInstanceId!, key: TOBIAS_ROUND_KEY } })
+        : s
+    },
+  }],
+}) // Tobias Beckett
+
+registerCard('SHD_086', { statModifier: (s, u) => (unitOwner(s, u) === s.initiative ? { power: 2 } : {}) }) // Warbird Stowaway
+
+registerCard('SHD_203', {
+  abilities: [
+    { trigger: 'onAttack', description: 'Draw a card.', effect: (s, ctx) => drawCards(s, ctx.owner, 1) },
+    {
+      trigger: 'whenRegroupStarts',
+      description: 'At the start of the regroup phase, discard a card from your hand.',
+      effect: (s, ctx) => (s.players[ctx.owner].hand.length > 0 ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1 }) : s),
+    },
+  ],
+}) // Zorii Bliss
 
 registerCard('SHD_214', { // Frontier Trader
   ...whenPlayed("You may return a resource you control to its owner's hand. If you do, you may put the top card of your deck into play as a resource.", (s, ctx) =>

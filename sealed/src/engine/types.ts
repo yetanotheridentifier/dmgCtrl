@@ -70,6 +70,8 @@ export type CardDb = Readonly<Record<string, EngineCard>>
 export interface UpgradeAttachment {
   cardId: string
   owner: PlayerId
+  /** This upgrade was played for its Smuggle cost, read by its own "When played using Smuggle" (Hotshot DL-44 Blaster). */
+  usingSmuggle?: boolean
 }
 
 /** A unit in play. instanceId keeps duplicate copies of a card distinct. */
@@ -130,6 +132,12 @@ export interface UnitState {
    * `resourcesPaidToPlay`: the units are gone by the time the ability resolves.
    */
   exploitedPowers?: number[]
+  /**
+   * This unit was played for its Smuggle cost, recorded the same way `resourcesPaidToPlay` is: a
+   * card's own "When played using Smuggle" (Cassian Andor, Privateer Crew) reads it off itself
+   * (`selfOf`), since `whenPlayed`'s ctx carries no notion of the zone the play came from.
+   */
+  playedUsingSmuggle?: boolean
   /**
    * Cards this unit has captured (CR 33): held face-down under it, out of every other zone, but
    * still open information. This unit is "guarding" them. Released back to play under each card's
@@ -639,6 +647,12 @@ export interface PlayFromTail {
   damageIt?: number
   /** "And give an Experience token to it" (Mechanize): token card ids for the unit just played. */
   tokens?: string[]
+  /**
+   * This play is a Smuggle: recorded on the unit/upgrade itself (`UnitState.playedUsingSmuggle`,
+   * `UpgradeAttachment.usingSmuggle`) so its own "When played using Smuggle" can read it, since
+   * `whenPlayed`'s ctx carries no notion of the zone a play came from.
+   */
+  usingSmuggle?: boolean
 }
 
 /** A follow-up "deal N damage to a unit or a base" selection. */

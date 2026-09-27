@@ -130,9 +130,6 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const onto = action.targetInstanceId ? ` onto ${anyUnitName(state, action.targetInstanceId) ?? 'a unit'}` : ''
       return `Play ${card.name} from ${where}${onto} (${price})`
     }
-    case 'smuggle':
-      // Stub: the real description lands in the implementation commit.
-      return 'Smuggle a card'
     case 'playUpgrade': {
       const cardId = state.players[by].hand[action.handIndex]
       const card = cardId ? state.cards[cardId] : undefined
@@ -140,6 +137,13 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const targetUnit = [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === action.targetInstanceId)
       const target = anyUnitName(state, action.targetInstanceId)
       return `Play ${card.name} (${effectiveCost(state, by, card, targetUnit)})${target ? ` on ${target}` : ''}`
+    }
+    case 'smuggle': {
+      const cardId = state.players[by].resources[action.resourceIndex]?.cardId
+      const card = cardId ? state.cards[cardId] : undefined
+      if (!card?.smuggle) return 'Smuggle a card'
+      const onto = action.targetInstanceId ? ` onto ${anyUnitName(state, action.targetInstanceId) ?? 'a unit'}` : ''
+      return `Smuggle ${card.name}${onto} (${playFromCost(state, by, card, { altCost: card.smuggle })})`
     }
     case 'playBaseUpgrade': {
       const card = state.cards[state.players[by].hand[action.handIndex]]

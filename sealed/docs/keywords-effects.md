@@ -628,3 +628,56 @@ Command icons) counts twice toward that aspect's requirement on its own.
   controller discards a card" prevention distinct from `mayPreventDamage`'s exhaust-a-unit cost
   (Syril Karn), and a wholly new "when a player draws cards during the action phase" trigger point,
   unrelated to Disclose itself (Chairman Papanoida).
+
+## Smuggle
+
+"Smuggle \<cost\> \<aspects\>. (If this card is a resource, you may play it for its smuggle cost.
+Replace it with the top card of your deck.)" is SHD's set mechanic (CR 14): an **alternate cost**, not
+a discount, that plays a resource straight out of the resource zone. The printed bracket ("Smuggle
+[C=4 Cunning]") replaces both the numeral **and** the aspect list checked for the aspect penalty,
+which can differ from the card's own printed aspects — Hotshot DL-44 Blaster is Aggression but
+smuggles as Cunning.
+
+- **Parsed off the card, not declared per card.** `EngineCard.smuggle?: { cost, aspects, extra? }`
+  (`cardDb.ts`) is read out of `FrontText`/`BackText` by a dedicated regex, because the bracket's
+  shape (`\[\{?C=N\}?\s+aspects...\]`, sometimes every token wrapped in the source's own icon-markup
+  braces, e.g. DJ's `[{C=7} {Cunning} {Cunning}]`) does not fit the simple "Keyword N" numeral
+  `toKeywords` already reads. `extra` catches a trailing comma-led additional cost this parser does
+  not resolve (First Light: "deal 4 damage to a friendly unit"), kept only so the card is not silently
+  miscounted as plain. No card needs a hand-declared `smuggle` field: the bracket is the one source of
+  truth, so a wrong number here is a data bug, not two places to keep in sync.
+- **A standing action, not a raised choice.** Unlike `playCardFrom` (#468), which something else has
+  to raise, Smuggle is read straight off the resource zone every time legal moves are generated
+  (`smuggleMoves`, `legalMoves.ts`), exactly the way a `DiscardPlayGrant`'s `playFromDiscard` is: a new
+  `{ type: 'smuggle', resourceIndex, targetInstanceId? }` `Action`, one per card that carries the
+  keyword and can afford it (one per legal host, for an upgrade). `takeSmuggle` (`resolve.ts`) reads
+  the card's `smuggle` bracket fresh and hands it to the existing `playFromZone` door with an
+  `altCost` term and a `resourceTop` tail — the cost rules, the ownership rule and the three type
+  doors (unit/upgrade/event) are the same ones `playCardFrom` uses, not a parallel mechanism.
+- **`effectiveCost` grew one optional parameter**, `altCost?: { cost, aspects }`: when given, it swaps
+  in for `card.cost` and `card.aspects` in the sum, but every other modifier (a card's own
+  `costModifier`, board discounts, "your next unit" grants, a named-card surcharge, halving) still
+  applies on top, because none of them are specific to which printed cost started the sum.
+  `PlayFromTerms.altCost` carries it through `playFromCost` the same way `costDelta`/`waive` already do.
+- **"When played using Smuggle"** (Cassian Andor, Hotshot DL-44 Blaster, Privateer Crew) reads a flag
+  the play recorded on the unit/upgrade itself — `UnitState.playedUsingSmuggle` /
+  `UpgradeAttachment.usingSmuggle`, set at construction from `PlayFromTail.usingSmuggle` — the same way
+  Weequay Pirate already reads `resourcesPaidToPlay`. `whenPlayed`'s `ctx` carries no notion of which
+  zone a play came from (that is what `ctx.playedFromResources` on the *global* `whenPlayCard` watch is
+  for, Bail Organa), so a card's own ability has to read it off itself instead. An upgrade reads its
+  own attachment entry the same way Blade of Talzin already finds itself among a host's upgrades:
+  `host.upgrades.find(u => u.cardId === ctx.cardId)`.
+- **27 of the SHD cards Smuggle unlocked need nothing else** (of a set-wide 34 that print the keyword;
+  Scanning Officer only detects it on revealed enemy resources and was already built). Five print
+  nothing beyond the keyword and Ambush/Sentinel, already implemented, and need no registration at
+  all. Not shipped, each needing a genuinely separate piece: **DJ** (taking control of an enemy
+  resource, and handing it back when DJ leaves play — the one piece of the resource zone `#475` did not
+  build); **Tech** (grants Smuggle to OTHER resources at a computed cost — a keyword *grant*, not a
+  play); **First Light** (its own bracket carries the additional cost the `extra` field above catches);
+  **Hondo Ohnaka and Lando Calrissian** (both leaders read/use "play a card using SMUGGLE" globally
+  rather than printing the keyword themselves — a watch flag on `whenPlayCard` plus, for Lando, an
+  ability that *initiates* a smuggle play at a further discount, neither exercised by any shipped card);
+  and **Millennium Falcon** ("if you play this unit from your hand" needs a zone-specific read the
+  engine does not yet have: every non-resource-zone play door already collapses to the same
+  `fromResources`-shaped boolean, which is not precise enough to tell "from hand" apart from a deck-top
+  or discard-pile play).
