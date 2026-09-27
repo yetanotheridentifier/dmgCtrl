@@ -1,5 +1,6 @@
 import type { GameState, PendingChoice, PlayFromZone, PlayerId } from '../engine/types'
 import { getCardDefinition } from '../engine/abilities'
+import { discloseRemaining } from '../engine/effects'
 import type { DescribePart } from './describeAction'
 
 /**
@@ -354,6 +355,15 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return [choice.optional ? `you may ${choice.text}` : choice.text]
     case 'chooseArenaThen':
       return [`choose an arena to ${choice.text}`]
+    case 'disclose': {
+      // Says what's still needed, since a hand click alone reads as "play this card" otherwise.
+      const hand = state.players[choice.controller].hand
+      const contributed = choice.picks.flatMap(i => state.cards[hand[i]]?.aspects ?? [])
+      const remaining = discloseRemaining(choice.need, contributed)
+      const label = `disclose ${choice.need.join(' ')} (reveal cards from your hand with these aspect icons)`
+      if (remaining.length === 0) return [`${label}, or Done`]
+      return [choice.picks.length === 0 && choice.optional ? `you may ${label}` : `${label} (${remaining.join(', ')} still needed)`]
+    }
     case 'mayPayThen': {
       const cost = choice.revealEvent ? 'reveal an event from your hand'
         : choice.damageSelf ? `deal ${choice.damageSelf} damage to this unit`
