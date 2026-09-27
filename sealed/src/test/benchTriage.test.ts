@@ -135,6 +135,27 @@ describe('triage blockers', () => {
     expect(r.triaged[0].blockers).toEqual([])
   })
 
+  it.each([
+    ['LOF_033 Nameless Terror', 'When Played: You may exhaust a Force unit. \nOn Attack: Each enemy unit loses the Force trait for this phase.'],
+    ['SEC_054 Exiled from the Force', "Attached unit loses the Force trait and all abilities except for Grit.\nAttached unit gains Grit."],
+  ])('does not credit force-token for %s losing the Force *trait*, a different (already-buildable) primitive', (_card, text) => {
+    const r = triage([card({ FrontText: text })])
+    expect(r.blockers.find(b => b.name === 'force-token')).toBeUndefined()
+  })
+
+  it('still catches a legitimate Force-token grant printed as "the Force is with you"', () => {
+    // LOF_129 Acolyte of the Beyond. The lookahead added for the trait false positive must not
+    // swallow the ordinary token-granting wording.
+    const r = triage([card({ FrontText: 'On Attack/When Defeated: The Force is with you (create your Force token).' })])
+    expect(r.triaged[0].blockers).toEqual(['force-token'])
+  })
+
+  it('still catches a legitimate Force-token cost printed as "use the Force"', () => {
+    // LOF_178 Adept of Anger.
+    const r = triage([card({ FrontText: 'Action [Exhaust, use the Force (lose your Force token)]: Exhaust a unit.' })])
+    expect(r.triaged[0].blockers).toEqual(['force-token'])
+  })
+
   it('does not credit capture for a Bounty card\'s own printed reminder text', () => {
     // Every Bounty card prints "(When this unit is defeated or captured, your opponent collects its
     // bounty.)" verbatim (CR 13). That reminder names the trigger points bounty fires at; it is not
