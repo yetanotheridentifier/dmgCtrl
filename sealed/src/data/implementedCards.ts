@@ -319,6 +319,10 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SEC_001', name: 'Chancellor Palpatine', front: true, back: false },
   // Disclose (#603): both sides ask the same question (which aspect to disclose) and share one hook.
   { id: 'SEC_004', name: 'Leia Organa', front: true, back: true },
+  // The Force (#462): front is the Action ability, back is the "while the Force is with you" grant.
+  { id: 'LOF_007', name: 'Avar Kriss', front: true, back: true },
+  { id: 'LOF_002', name: 'Mother Talzin', front: true, back: true },
+  { id: 'LOF_014', name: 'Grand Inquisitor', front: true, back: true },
 ]
 
 /**
@@ -492,6 +496,8 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'SHD_175', name: 'Armed to the Teeth' },
   { id: 'SHD_174', name: 'Hotshot DL-44 Blaster' },
   { id: 'SHD_225', name: 'Jetpack' },
+  // The Force (#462): attach restriction plus a "may use the Force" heal.
+  { id: 'LOF_102', name: "Yoda's Lightsaber" },
 ]
 
 /**
@@ -943,6 +949,14 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'JTL_181', name: 'Planetary Bombardment' },
   { id: 'JTL_234', name: 'Torpedo Barrage' },
   { id: 'JTL_127', name: 'Lightspeed Assault' },
+  // The Force (#462).
+  { id: 'LOF_041', name: 'Drain Essence' },
+  { id: 'LOF_075', name: 'Cure Wounds' },
+  { id: 'LOF_123', name: 'Directed by the Force' },
+  { id: 'LOF_172', name: 'Sorcerous Blast' },
+  { id: 'LOF_173', name: 'Unleash Rage' },
+  { id: 'LOF_175', name: 'Do or Do Not' },
+  { id: 'LOF_216', name: 'Disturbance in the Force' },
 ]
 
 /**
@@ -2112,6 +2126,24 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'TWI_162', name: 'Reckless Torrent' },
   { id: 'TWI_243', name: 'Republic Commando' },
   { id: 'TWI_213', name: "Sanctioner's Shuttle" },
+  // The Force (#462): LOF's set mechanic, the 17 units among the 28 cards that need nothing else.
+  { id: 'LOF_129', name: 'Acolyte of the Beyond' },
+  { id: 'LOF_193', name: 'Youngling Padawan' },
+  { id: 'LOF_231', name: 'Darth Tyranus' },
+  { id: 'LOF_196', name: 'Jedi Sentinel' },
+  { id: 'LOF_050', name: 'Plo Koon' },
+  { id: 'LOF_237', name: 'The Son' },
+  { id: 'LOF_097', name: 'Eeth Koth' },
+  { id: 'LOF_048', name: 'Itinerant Warrior' },
+  { id: 'LOF_031', name: 'Karis' },
+  { id: 'LOF_146', name: 'Ki-Adi-Mundi' },
+  { id: 'LOF_149', name: 'Mace Windu' },
+  { id: 'LOF_035', name: "Talzin's Assassin" },
+  { id: 'LOF_195', name: 'Vernestra Rwoh' },
+  { id: 'LOF_137', name: 'Savage Opress' },
+  { id: 'LOF_156', name: 'Infused Brawler' },
+  { id: 'LOF_159', name: 'Jedi In Hiding' },
+  { id: 'LOF_178', name: 'Adept of Anger' },
 ]
 
 /**

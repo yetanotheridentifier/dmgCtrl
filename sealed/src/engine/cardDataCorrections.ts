@@ -191,4 +191,12 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   TWI_050: { keywords: [{ name: 'Coordinate' }] }, // Luminara Unduli — Grit is conditional
   TWI_196: { keywords: [{ name: 'Ambush' }, { name: 'Coordinate' }] }, // Plo Koon — Ambush is real; Raid is conditional
   TWI_243: { keywords: [{ name: 'Coordinate' }] }, // Republic Commando — Saboteur is conditional
+
+  // The Force (#462): same source behaviour as Coordinate above, for "While the Force is with you,
+  // this unit gains <keyword>." No `Force` label to keep this time (unlike Coordinate's own name,
+  // "the Force is with you" isn't itself a keyword), so the conditional one is simply dropped.
+  LOF_231: { keywords: [{ name: 'Shielded' }] }, // Darth Tyranus — Ambush is conditional
+  LOF_196: { keywords: [] }, // Jedi Sentinel — Sentinel is conditional
+  LOF_050: { keywords: [] }, // Plo Koon — Grit is conditional
+  LOF_007: { keywords: [] }, // Avar Kriss (leader, deployed back) — Overwhelm is conditional
 }

@@ -814,3 +814,46 @@ triggered ability, active only while the condition holds.
   Amidala's leader front are deployed-leader `actionAbilities` gated by `usable`; Anakin Skywalker,
   Kit Fisto and Padmé Amidala's unit are simple gated `onAttack` effects held back only for time; For
   The Republic depends on the granted-ability-block work.
+
+## The Force
+
+LOF's set mechanic (CR 8.37): a Force token, capped at **one per player**, unlike Credit's plain
+count. "The Force is with you" creates it, a no-op while one is already held. "Use the Force" is
+**always optional**, even on a card whose own printed text omits the word "may" (CR 8.37.4), and is
+never offered without a token held.
+
+- **`PlayerState.forceToken?: boolean`** (a flag, not a count) with `hasForceToken`/
+  `createForceToken`/`defeatForceToken` (`effects.ts`), mirroring Credit's shape.
+- **Two cost surfaces, both extensions of existing machinery, not new mechanisms:**
+  - `mayPayThen.useForce`, a fourth mode of the choice `cost`/`damageSelf`/`revealEvent` already
+    share, for "You may use the Force. If you do, <effect>". `legalMoves.ts` offers `acceptChoice`
+    only while the controller holds a token; accepting defeats it instead of paying resources.
+    `mayUseForceWp` (`cardDefinitions.ts`) wraps `whenPlayed` the way `mayPayWp` does, and its
+    `declineStep` runs the `ifYouDo` hook on a decline too, at that step, for a card that goes on
+    either way regardless of the answer (Savage Opress: "if you don't, deal 9 damage to your base";
+    Do or Do Not: "if you do not, draw a card").
+  - `useForceCost` on `ActionAbilityDef`/`LeaderActionAbilityDef`, alongside `exhaustCost`, for
+    "Action [Exhaust, use the Force]:". Gated and paid everywhere `exhaustCost` already is
+    (`legalMoves.ts`'s `actionPhaseMoves`, `resolve.ts`'s `useAbility`/`useLeaderAbility`).
+- **"While the Force is with you" passive grants get the same live-board-read treatment as
+  Coordinate**: `unitHasForce` (a live read of the unit's own controller's token, never cached)
+  feeding `conditionalKeywords`/`statModifier`/`aura`, and the same `cardDataCorrections.ts`
+  treatment for a bundled conditional keyword the source lists as permanent (Jedi Sentinel's
+  Sentinel, Plo Koon's Grit, Darth Tyranus's Ambush — its unconditional Shielded stays).
+- **28 of the 57 sole-blocked cards shipped** (recounted against `registeredCardIds()` via
+  `--triage LOF`; the ticket's "unlocks 57" is correct once LOF_033's false-positive match is
+  discounted, see "Triage tooling" below). Everything shipped needed nothing beyond the primitive
+  above. Left for a follow-up: the 8 identical "When a friendly Force unit attacks" bases plus 3 more
+  bases, all needing a new `baseAbilities` primitive for a base's own printed ability (nothing today
+  covers a base's own triggered or action ability beyond `epicAction`/`aura`/upgrade-granted
+  actions/`interceptDamage`); a new `whenUseForce` player-level trigger point (Yoda, The Father); a
+  Force-gated option inside a "Choose one:" (Shatterpoint); an exhaust-a-unit-OR-use-the-Force
+  alternate cost (Impossible Escape); a granted-ability-block dependency (Leia Organa); an `onDefense`
+  context extension for the attacker's id (Chirrut Îmwe); a `whenUpgradeAttached` context read (Kylo
+  Ren); filtering "when you play another unit" down to unique units (Luke Skywalker); and a new "when
+  damage is dealt to your base" trigger point (The Daughter).
+- **Triage tooling**: `bench/triage.ts`'s `force-token` regex (`/\bthe Force\b|\bForce token\b/i`)
+  also matches LOF_033 and SEC_054, whose printed text is about a unit **losing the Force trait**
+  ("Each enemy unit loses the Force trait for this phase"), which needs trait removal and has nothing
+  to do with the token. A false positive, not a real blocker; the real sole count for LOF is 57 once
+  it is discounted.

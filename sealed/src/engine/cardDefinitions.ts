@@ -5460,7 +5460,7 @@ registerCard(GRANT_MAGNAGUARD, {
 /** An action's "attack with a unit": offered only while some friendly unit could make that attack. */
 const actionAttack = (owner: PlayerId, s: GameState, offer: AttackOffer): boolean =>
   s.players[owner].units.some(x => eligibleAttacker(s, x, offer.attacker, offer.exhausted) && canAttackSomething(s, x, offer.grantCardId))
-const attackAction = (description: string, offer: (s: GameState, self: UnitState) => AttackOffer, costs: { cost?: number; exhaustCost?: boolean; oncePerRound?: boolean }) => ({
+const attackAction = (description: string, offer: (s: GameState, self: UnitState) => AttackOffer, costs: { cost?: number; exhaustCost?: boolean; useForceCost?: boolean; oncePerRound?: boolean }) => ({
   actionAbilities: [{
     description,
     ...costs,
@@ -12229,3 +12229,131 @@ registerCard('JTL_133', allOf( // Allegiant General Pryde
   },
   onAttack(indirectDamageToChosenPlayer('On Attack: If you have the initiative, deal 2 indirect damage to a player.', (s, ctx) => (s.initiative === ctx.owner ? 2 : 0))),
 ))
+
+// ── The Force (LOF's set mechanic, #462) ──────────────────────────────────────────────────────
+// CR 8.37: a Force token is capped at one per player. "The Force is with you" creates it (a no-op
+// while already held, `createForceToken`); "Use the Force" is ALWAYS optional, even where a card's
+// own text omits "may" (`mayUseForceWp`, `useForceCost`, both defined earlier alongside `mayPayWp`/
+// `exhaustCost`). "While the Force is with you" grants get the same live-board-read treatment as
+// Coordinate (#472): a continuously checked condition, not a cached flag.
+//
+// 28 of the 57 sole-blocked cards shipped here: the ones needing nothing beyond the primitive.
+// Left for a follow-up (see the ticket comment, new ticket filed alongside this one): the 8 identical
+// "When a friendly Force unit attacks" bases plus LOF_019/022/025/028 (12 cards total, all needing a
+// new `baseAbilities` primitive for a base's own printed ability — nothing today covers a base's own
+// "When X:"/"Action:"); LOF_101 Yoda and LOF_260 The Father (a new `whenUseForce` player-level trigger
+// point — NOT shipping Yoda's simple When Played half alone, the same half-registration mistake #707
+// called out for Jabba the Hutt); LOF_079 Shatterpoint (a Force-gated option inside "Choose one");
+// LOF_218 Impossible Escape (an exhaust-a-unit-OR-use-the-Force alternate cost); LOF_098 Leia Organa
+// (granted-ability-block, already a known cross-ticket dependency); LOF_067 Chirrut Îmwe (`onDefense`
+// needs `attackerInstanceId` added to its ctx); LOF_229 Kylo Ren (needs a `whenUpgradeAttached` ctx
+// read, JTL_202 precedent on #680); LOF_249 Luke Skywalker (needs "when you play ANOTHER UNIQUE unit"
+// filtering on the existing "play another unit" trigger); LOF_252 The Daughter (needs a "when damage
+// is dealt to your base" trigger point).
+const unitHasForce = (s: GameState, u: UnitState): boolean => {
+  const o = unitOwner(s, u)
+  return o !== undefined && hasForceToken(s, o)
+}
+
+// Unconditional token creation.
+const forceWithYouWp = whenPlayed('On Attack/When Defeated: The Force is with you (create your Force token).', (s, ctx) => createForceToken(s, ctx.owner))
+registerCard('LOF_129', allOf(onAttack(forceWithYouWp), defeated(forceWithYouWp))) // Acolyte of the Beyond
+registerCard('LOF_007', { // Avar Kriss — front: Action [Exhaust]; back: while the Force is with you, +4/+0 and Overwhelm
+  leaderAbilities: {
+    actions: [{
+      description: 'Action [Exhaust]: The Force is with you (create your Force token).',
+      effect: (s, ctx) => createForceToken(s, ctx.owner),
+    }],
+  },
+  statModifier: (s, u) => (unitHasForce(s, u) ? { power: 4 } : {}),
+  conditionalKeywords: (s, u) => (unitHasForce(s, u) ? [{ name: 'Overwhelm' }] : []),
+})
+registerCard('LOF_193', whenPlayed('When Played: The Force is with you (create your Force token).', (s, ctx) => createForceToken(s, ctx.owner))) // Youngling Padawan
+registerCard('LOF_041', whenPlayed('Deal 2 damage to a unit. The Force is with you (create your Force token).', (s, ctx) => // Drain Essence
+  damageChoice(createForceToken(s, ctx.owner), ctx, 2, picked(s, ctx, pickAny))))
+
+// Passive "while the Force is with you" grants — the same treatment as Coordinate (#472).
+registerCard('LOF_231', { conditionalKeywords: (s, u) => (unitHasForce(s, u) ? [{ name: 'Ambush' }] : []) }) // Darth Tyranus (Shielded is unconditional, printed)
+registerCard('LOF_196', { conditionalKeywords: (s, u) => (unitHasForce(s, u) ? [{ name: 'Sentinel' }] : []) }) // Jedi Sentinel
+registerCard('LOF_050', { conditionalKeywords: (s, u) => (unitHasForce(s, u) ? [{ name: 'Grit' }] : []) }) // Plo Koon
+registerCard('LOF_237', { aura: (s, source, _target, sameController) => (sameController && unitHasForce(s, source) ? { power: 2 } : undefined) }) // The Son
+
+// "(You may) use the Force. If you do, <effect>" — When Played/When Defeated/events.
+registerCard('LOF_075', mayUseForceWp('Use the Force (lose your Force token). If you do, heal 6 damage from a unit.', 'heal 6 damage from a unit', (s, ctx) => // Cure Wounds
+  healChoice(s, ctx, 6, pickedIds(s, ctx, pickAny), [])))
+registerCard('LOF_097', defeated(mayUseForceWp('When Defeated: You may use the Force. If you do, put this card into play as a resource.', 'put this card into play as a resource', resourceDefeated(false)))) // Eeth Koth
+registerCard('LOF_048', mayUseForceWp('When Played: You may use the Force (lose your Force token). If you do, heal 3 damage from a base.', 'heal 3 damage from a base', (s, ctx) => // Itinerant Warrior (Shielded is unconditional, printed)
+  healChoice(s, ctx, 3, [], BOTH_BASES)))
+registerCard('LOF_031', defeated(mayUseForceWp('When Defeated: You may use the Force (lose your Force token). If you do, give a unit -2/-2 for this phase.', 'give a unit -2/-2 for this phase', (s, ctx) => // Karis
+  lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { power: -2, hp: -2 }))))
+registerCard('LOF_146', mayUseForceWp('When Played: You may use the Force (lose your Force token). If you do, draw 2 cards.', 'draw 2 cards', (s, ctx) => drawCards(s, ctx.owner, 2))) // Ki-Adi-Mundi
+registerCard('LOF_149', mayUseForceWp('When Played: You may use the Force (lose your Force token). If you do, deal 4 damage to a unit.', 'deal 4 damage to a unit', (s, ctx) => // Mace Windu (Overwhelm is unconditional, printed)
+  damageChoice(s, ctx, 4, picked(s, ctx, pickAny))))
+registerCard('LOF_035', mayUseForceWp('When Played: You may use the Force (lose your Force token). If you do, give a unit -3/-3 for this phase.', 'give a unit -3/-3 for this phase', (s, ctx) => // Talzin's Assassin
+  lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { power: -3, hp: -3 })))
+registerCard('LOF_173', mayUseForceWp('Use the Force (lose your Force token). If you do, give a friendly unit +3/+0 for this phase.', 'give a friendly unit +3/+0 for this phase', (s, ctx) => // Unleash Rage
+  lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickFriendly), { power: 3 })))
+registerCard('LOF_195', mayUseForceWp('When Played: You may use the Force (lose your Force token). If you do, ready this unit.', 'ready this unit', (s, ctx) => readyUnit(s, ctx.sourceInstanceId!))) // Vernestra Rwoh
+registerCard('LOF_102', { // Yoda's Lightsaber — attach to a non-Vehicle unit
+  attachRestriction: nonVehicle,
+  ...mayUseForceWp('When Played: You may use the Force (lose your Force token). If you do, heal 3 damage from a base.', 'heal 3 damage from a base', (s, ctx) => healChoice(s, ctx, 3, [], BOTH_BASES)),
+})
+registerCard('LOF_172', mayUseForceWp('Use the Force (lose your Force token). If you do, deal 3 damage to a unit.', 'deal 3 damage to a unit', (s, ctx) => // Sorcerous Blast
+  damageChoice(s, ctx, 3, picked(s, ctx, pickAny))))
+registerCard('LOF_175', mayUseForceWp( // Do or Do Not
+  'You may use the Force (lose your Force token). If you do, draw 2 cards. If you do not, draw a card.',
+  'draw 2 cards', (s, ctx) => drawCards(s, ctx.owner, ctx.step === 'decline' ? 1 : 2), 'decline'))
+registerCard('LOF_137', alsoAt(mayUseForceWp( // Savage Opress (Overwhelm is unconditional, printed)
+  "When Played/When Defeated: You may use the Force (lose your Force token). If you don't, deal 9 damage to your base.",
+  'deal 9 damage to your base', (s, ctx) => (ctx.step === 'decline' ? dealDamageToBase(s, ctx.owner, 9) : s), 'decline'), 'whenDefeated'))
+registerCard('LOF_156', allOf( // Infused Brawler (Ambush is unconditional, printed)
+  mayUseForceWp('When Played: You may use the Force (lose your Force token). If you do, give 2 Experience tokens to this unit.', 'give 2 Experience tokens to this unit', (s, ctx) =>
+    giveTokens(s, ctx.sourceInstanceId!, TOKEN_EXPERIENCE, 2)),
+  { abilities: [{ trigger: 'onAttackEnd', description: 'When this unit completes an attack: Defeat an Experience token on it.', effect: (s, ctx) => defeatUpgrade(s, ctx.sourceInstanceId!, TOKEN_EXPERIENCE) }] },
+))
+registerCard('LOF_159', defeated(mayUseForceWp('When Defeated: You may use the Force (lose your Force token). If you do, each opponent discards a card from their hand.', 'each opponent discards a card from their hand', (s, ctx) => // Jedi In Hiding (Hidden is unconditional, printed)
+  opponentDiscards(s, ctx.owner, ctx.sourceInstanceId!))))
+registerCard('LOF_123', whenPlayed('The Force is with you (create your Force token). You may play a unit from your hand (paying its cost).', (s, ctx) => // Directed by the Force
+  playFromZoneChoice(createForceToken(s, ctx.owner), ctx, { zone: 'hand', test: printedUnit, optional: true, id: `${ctx.cardId}-hand` })))
+registerCard('LOF_216', whenPlayed('If a friendly unit left play this phase, the Force is with you (create your Force token) and you may give a Shield token to a unit.', (s, ctx) => // Disturbance in the Force
+  (leftPlayThisPhase(s, ctx.owner).length > 0 ? shieldChoice(createForceToken(s, ctx.owner), ctx, pickedIds(s, ctx, pickAny), true) : s)))
+
+// `useForceCost` action abilities.
+registerCard('LOF_178', { actionAbilities: [{ // Adept of Anger
+  description: 'Action [Exhaust, use the Force]: Exhaust a unit.',
+  exhaustCost: true,
+  useForceCost: true,
+  usable: anyPicked(pickAny),
+  effect: (s, ctx) => targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, pickAny)),
+}] })
+
+// Leaders whose FRONT (undeployed) side prints the Force cost; each also has an unrelated BACK
+// (deployed-unit) ability, registered alongside so neither side is left half-built.
+registerCard('LOF_002', { // Mother Talzin — front: Action [Exhaust, use the Force]; back: On Attack, may
+  leaderAbilities: {
+    actions: [{
+      description: 'Action [Exhaust, use the Force]: Give a unit -1/-1 for this phase.',
+      useForceCost: true,
+      targets: s => allUnits(s).map(u => u.instanceId),
+      effect: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: -1, hp: -1 }),
+    }],
+  },
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'On Attack: You may give a unit -1/-1 for this phase.',
+    effect: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { power: -1, hp: -1 }, true),
+  }],
+})
+const GRANT_GRAND_INQUISITOR = 'GRANT_GRAND_INQUISITOR'
+registerCard(GRANT_GRAND_INQUISITOR, { sourceCardId: 'LOF_014', aura: defenderPowerAura(-2) })
+registerCard('LOF_014', { // Grand Inquisitor — front: Action [Exhaust, use the Force]; back: Shielded (from card data) + his own On Attack debuff
+  leaderAbilities: {
+    actions: [{
+      description: 'Action [Exhaust, use the Force]: Attack with a friendly unit. The defender gets -2/-0 for this attack.',
+      useForceCost: true,
+      usable: (s, owner) => actionAttack(owner, s, { grantCardId: GRANT_GRAND_INQUISITOR }),
+      effect: (s, ctx) => offerAttack(s, ctx.owner, `${ctx.cardId}-attack`, { grantCardId: GRANT_GRAND_INQUISITOR }),
+    }],
+  },
+  aura: defenderPowerAura(-2), // his own "On Attack: the defender gets -2/-0", unconditional
+})

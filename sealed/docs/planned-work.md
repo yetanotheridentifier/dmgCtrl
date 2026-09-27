@@ -198,8 +198,8 @@ Two phases:
   Exploit's step on ready resources. 19 cards shipped (HMW's Greater Sarlacc and Giant Gorax among
   them). Each card left touching the zone waits on another mechanic's ticket: Smuggle #723 (Lando
   Calrissian's leader and DJ, which also needs taking control of a resource, the one piece of the zone
-  not built — Enterprising Lackeys shipped with #469), Credit #719 (Chewbacca, Intimidator), the Force
-  #462 (Eeth Koth). When Has Become Now shipped with Plot (#470). Outlaw Corona and Price on
+  not built — Enterprising Lackeys shipped with #469), Credit #719 (Chewbacca, Intimidator). Eeth Koth
+  shipped with the Force (#462). When Has Become Now shipped with Plot (#470). Outlaw Corona and Price on
   Your Head shipped with Bounty (#467); Chancellor Valorum shipped with Disclose (#603).
   **Smuggle is finished** (#469): a full alternate cost (CR 14) read off the printed bracket
   (`EngineCard.smuggle`), not a discount — its own aspect list can differ from the card's printed
@@ -321,7 +321,22 @@ Two phases:
   "opponent's Nth card this phase" refinement of `whenPlayCard`; Ahsoka Tano and Padmé Amidala's
   leader front are deployed-leader action abilities; Anakin Skywalker, Kit Fisto and Padmé Amidala's
   unit are simple gated `onAttack` effects held back only for time; For The Republic needs the
-  granted-ability block (#464). Next is the Force (#462).
+  granted-ability block (#464).
+  **The Force's primitive is finished** (#462): a token capped at one per player (`PlayerState.forceToken`,
+  a flag rather than Credit's count), "the Force is with you" a no-op while already held, "use the
+  Force" always optional even where a card's own text omits "may" (CR 8.37.4). Two cost surfaces
+  extend existing machinery rather than adding new ones: `mayPayThen.useForce` (a fourth mode beside
+  `cost`/`damageSelf`/`revealEvent`) and `useForceCost` on an action ability (beside `exhaustCost`).
+  28 of the 57 sole-blocked cards shipped (recounted against `registeredCardIds()`; the ticket's
+  "unlocks 57" holds once a triage false-positive on two cards that merely mention losing the Force
+  *trait* is discounted). Left for a follow-up ticket: the 8 identical "When a friendly Force unit
+  attacks" bases plus 3 more (12 cards, needing a new `baseAbilities` primitive for a base's own
+  printed ability, nothing today covers one); a new `whenUseForce` player-level trigger point (Yoda,
+  The Father); a Force-gated option inside a "Choose one:" (Shatterpoint); an exhaust-OR-use-the-Force
+  alternate cost (Impossible Escape); a granted-ability-block dependency (Leia Organa); an `onDefense`
+  context extension (Chirrut Îmwe); a `whenUpgradeAttached` context read (Kylo Ren); filtering "play
+  another unit" down to unique units (Luke Skywalker); a new "damage dealt to your base" trigger point
+  (The Daughter).
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
 (with the token units, #605), the Weakness-token cards (#649), the Fortify cards (#650), the When Played

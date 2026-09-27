@@ -5,7 +5,7 @@ import { normaliseCard } from '../engine/cardDb'
 import { poolFor } from '../bench/setPools'
 import { defeatUnit } from '../engine/combat'
 import { hasForceToken, createForceToken } from '../engine/effects'
-import { effectivePower, effectiveHp } from '../engine/stats'
+import { effectivePower } from '../engine/stats'
 import { unitHasKeyword } from '../engine/keywords'
 import { TOKEN_EXPERIENCE } from '../engine/tokenUpgrades'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
@@ -45,7 +45,8 @@ const F: Record<string, EngineCard> = {
   ...Object.fromEntries(IDS.map(id => [id, real(id)])),
   FILLER: card({ id: 'FILLER', arena: 'ground', cost: 1, power: 1, hp: 1 }),
   FILLER2: card({ id: 'FILLER2', arena: 'ground', cost: 1, power: 2, hp: 2 }),
-  ENEMY: card({ id: 'ENEMY', arena: 'ground', cost: 3, power: 3, hp: 3 }),
+  ENEMY: card({ id: 'ENEMY', arena: 'ground', cost: 3, power: 3, hp: 10 }),
+  TOUGH: card({ id: 'TOUGH', arena: 'ground', cost: 2, power: 3, hp: 10 }),
 }
 
 const board = (overrides: { player?: Parameters<typeof player>[0]; opponent?: Parameters<typeof player>[0] } = {}): GameState => state({
@@ -81,12 +82,18 @@ describe('LOF_129 Acolyte of the Beyond / LOF_007 Avar Kriss / LOF_193 Youngling
     s = defeatUnit(s, 'u0')
     expect(hasForceToken(s, 'player')).toBe(true)
   })
-  it('LOF_007 creates a token via its Action', () => {
-    const s = board({ player: { units: [unit('u0', 'LOF_007', { exhausted: false })] } })
-    expect(legalMoves(s)).toContainEqual({ type: 'useAbility', instanceId: 'u0', cardId: 'LOF_007', index: 0 })
-    const after = resolve(s, { type: 'useAbility', instanceId: 'u0', cardId: 'LOF_007', index: 0 })
+  it('LOF_007 Avar Kriss creates a token via its undeployed leader Action, and its deployed back grants +4/+0 and Overwhelm while held', () => {
+    const s = board({ player: { leader: { cardId: 'LOF_007', deployed: false, epicActionUsed: false, exhausted: false } } })
+    expect(legalMoves(s)).toContainEqual({ type: 'useLeaderAbility', index: 0 })
+    const after = resolve(s, { type: 'useLeaderAbility', index: 0 })
     expect(hasForceToken(after, 'player')).toBe(true)
-    expect(U(after, 'u0')?.exhausted).toBe(true)
+    expect(after.players.player.leader.exhausted).toBe(true)
+    // Deployed back, gated on holding the token.
+    const deployed = board({ player: { units: [unit('c', 'LOF_007')] } })
+    expect(unitHasKeyword(deployed, U(deployed, 'c')!, 'Overwhelm')).toBe(false)
+    const held = withToken(deployed)
+    expect(effectivePower(held, U(held, 'c')!)).toBe(F.LOF_007.power! + 4)
+    expect(unitHasKeyword(held, U(held, 'c')!, 'Overwhelm')).toBe(true)
   })
   it('LOF_193 creates a token when played', () => {
     const s = playUnit(board({ player: { hand: ['LOF_193'] } }))
@@ -134,7 +141,7 @@ describe('Passive "while the Force is with you" grants', () => {
 
 describe('LOF_075 Cure Wounds / LOF_172 Sorcerous Blast / LOF_173 Unleash Rage: events, Use the Force (never optional wording, always optional in practice)', () => {
   it('LOF_075: heals 6 from a unit only on accept, never offered without a token', () => {
-    const dmg = board({ player: { hand: ['LOF_075'], units: [unit('u0', 'FILLER', { damage: 6 })] } })
+    const dmg = board({ player: { hand: ['LOF_075'], units: [unit('u0', 'TOUGH', { damage: 6 })] } })
     expect(playEvent(dmg).pendingChoices ?? []).toHaveLength(0) // no token: no choice at all
     let s = playEvent(withToken(dmg))
     expect(choice(s)).toMatchObject({ kind: 'mayPayThen', useForce: true })
@@ -181,13 +188,13 @@ describe('When Played / When Defeated: You may use the Force. If you do, <effect
     expect(choice(s)).toMatchObject({ kind: 'selectHealTarget', amount: 3 })
   })
   it('LOF_031 Karis: When Defeated, gives a unit -2/-2 for the phase on accept', () => {
-    let s = board({ player: { units: [unit('u0', 'LOF_031'), unit('u1', 'FILLER')] } })
+    let s = board({ player: { units: [unit('u0', 'LOF_031'), unit('u1', 'TOUGH')] } })
     s = withToken(s)
     s = defeatUnit(s, 'u0')
     s = accept(s)
     expect(choice(s)).toMatchObject({ kind: 'mayLastingBuff' })
     s = accept(s, { targetInstanceId: 'u1' })
-    expect(effectivePower(s, U(s, 'u1')!)).toBe(F.FILLER.power! - 2)
+    expect(effectivePower(s, U(s, 'u1')!)).toBe(F.TOUGH.power! - 2)
   })
   it('LOF_146 Ki-Adi-Mundi: When Played, draws 2 on accept', () => {
     let s = playUnit(withToken(board({ player: { hand: ['LOF_146'] } })))
@@ -221,6 +228,8 @@ describe('When Played / When Defeated: You may use the Force. If you do, <effect
     s = withToken(s)
     s = defeatUnit(s, 'u0')
     s = accept(s)
+    expect(choice(s)).toMatchObject({ kind: 'selectDiscard', controller: 'opponent' })
+    s = accept(s, { handIndex: 0 })
     expect(s.players.opponent.discard).toContain('TST_E1')
   })
   it('LOF_156 Infused Brawler: When Played gives 2 Experience on accept; completing an attack defeats one', () => {
@@ -228,7 +237,11 @@ describe('When Played / When Defeated: You may use the Force. If you do, <effect
     s = accept(s)
     const played = s.players.player.units.find(u => u.cardId === 'LOF_156')!
     expect(expTokens(played)).toBe(2)
-    s = { ...s, players: { ...s.players, player: { ...s.players.player, units: s.players.player.units.map(u => (u.instanceId === played.instanceId ? { ...u, exhausted: false } : u)) } } }
+    s = {
+      ...s,
+      activePlayer: 'player',
+      players: { ...s.players, player: { ...s.players.player, units: s.players.player.units.map(u => (u.instanceId === played.instanceId ? { ...u, exhausted: false } : u)) } },
+    }
     s = resolve(s, { type: 'attack', attackerId: played.instanceId, target: { kind: 'base' } })
     const after = s.players.player.units.find(u => u.instanceId === played.instanceId)!
     expect(expTokens(after)).toBe(1)
@@ -305,34 +318,54 @@ describe('LOF_216 Disturbance in the Force: conditional on a friendly unit leavi
   })
 })
 
-describe('useForceCost action abilities', () => {
-  it('LOF_002 Mother Talzin: Action [Exhaust, use the Force]: gives a unit -1/-1 for the phase', () => {
-    const s = withToken(board({ player: { units: [unit('u0', 'LOF_002', { exhausted: false })] }, opponent: { units: [unit('e0', 'ENEMY')] } }))
-    expect(legalMoves(s)).toContainEqual({ type: 'useAbility', instanceId: 'u0', cardId: 'LOF_002', index: 0 })
-    let after = resolve(s, { type: 'useAbility', instanceId: 'u0', cardId: 'LOF_002', index: 0 })
-    expect(hasForceToken(after, 'player')).toBe(false)
-    expect(U(after, 'u0')?.exhausted).toBe(true)
-    after = accept(after, { targetInstanceId: 'e0' })
-    expect(effectivePower(after, U(after, 'e0')!)).toBe(F.ENEMY.power! - 1)
-  })
-  it('LOF_002 is not usable without a held token', () => {
-    const s = board({ player: { units: [unit('u0', 'LOF_002', { exhausted: false })] } })
-    expect(legalMoves(s)).not.toContainEqual({ type: 'useAbility', instanceId: 'u0', cardId: 'LOF_002', index: 0 })
-  })
-  it('LOF_178 Adept of Anger: Action [Exhaust, use the Force]: exhausts a unit', () => {
+describe('LOF_178 Adept of Anger: a unit\'s own useForceCost action ability', () => {
+  it('Action [Exhaust, use the Force]: exhausts a unit', () => {
     const s = withToken(board({ player: { units: [unit('u0', 'LOF_178', { exhausted: false })] }, opponent: { units: [unit('e0', 'ENEMY', { exhausted: false })] } }))
     let after = resolve(s, { type: 'useAbility', instanceId: 'u0', cardId: 'LOF_178', index: 0 })
     expect(hasForceToken(after, 'player')).toBe(false)
     after = accept(after, { targetInstanceId: 'e0' })
     expect(U(after, 'e0')?.exhausted).toBe(true)
   })
-  it('LOF_014 Grand Inquisitor: Action [Exhaust, use the Force]: attack with a friendly unit, defender -2/-0', () => {
-    const s = withToken(board({ player: { units: [unit('u0', 'LOF_014', { exhausted: false }), unit('a0', 'FILLER2', { exhausted: false })] }, opponent: { units: [unit('e0', 'ENEMY')] } }))
-    let after = resolve(s, { type: 'useAbility', instanceId: 'u0', cardId: 'LOF_014', index: 0 })
+})
+
+describe('useForceCost on a leader\'s front (undeployed) action; each also has an unrelated deployed back', () => {
+  const undeployed = (cardId: string) => ({ cardId, deployed: false, epicActionUsed: false, exhausted: false })
+
+  it('LOF_002 Mother Talzin: front Action [Exhaust, use the Force]: gives a unit -1/-1 for the phase', () => {
+    const s = withToken(board({ player: { leader: undeployed('LOF_002') }, opponent: { units: [unit('e0', 'ENEMY')] } }))
+    expect(legalMoves(s)).toContainEqual({ type: 'useLeaderAbility', index: 0, targetInstanceId: 'e0' })
+    const after = resolve(s, { type: 'useLeaderAbility', index: 0, targetInstanceId: 'e0' })
     expect(hasForceToken(after, 'player')).toBe(false)
-    expect(U(after, 'u0')?.exhausted).toBe(true)
+    expect(after.players.player.leader.exhausted).toBe(true)
+    expect(effectivePower(after, U(after, 'e0')!)).toBe(F.ENEMY.power! - 1)
+  })
+  it('LOF_002 front is not offered without a held token', () => {
+    const s = board({ player: { leader: undeployed('LOF_002') }, opponent: { units: [unit('e0', 'ENEMY')] } })
+    expect(legalMoves(s)).not.toContainEqual({ type: 'useLeaderAbility', index: 0, targetInstanceId: 'e0' })
+  })
+  it("LOF_002's deployed back: On Attack, may give a unit -1/-1 for the phase (unrelated to the Force)", () => {
+    let s = board({ player: { units: [unit('u0', 'LOF_002', { exhausted: false })] }, opponent: { units: [unit('e0', 'ENEMY')] } })
+    s = resolve(s, { type: 'attack', attackerId: 'u0', target: { kind: 'base' } })
+    expect(choice(s)).toMatchObject({ kind: 'mayLastingBuff' })
+    s = accept(s, { targetInstanceId: 'e0' })
+    expect(effectivePower(s, U(s, 'e0')!)).toBe(F.ENEMY.power! - 1)
+  })
+
+  it('LOF_014 Grand Inquisitor: front Action [Exhaust, use the Force]: attack with a friendly unit, defender -2/-0', () => {
+    const s = withToken(board({ player: { leader: undeployed('LOF_014'), units: [unit('a0', 'FILLER2', { exhausted: false })] }, opponent: { units: [unit('e0', 'ENEMY')] } }))
+    expect(legalMoves(s)).toContainEqual({ type: 'useLeaderAbility', index: 0 })
+    let after = resolve(s, { type: 'useLeaderAbility', index: 0 })
+    expect(hasForceToken(after, 'player')).toBe(false)
+    expect(after.players.player.leader.exhausted).toBe(true)
+    expect(choice(after)).toMatchObject({ kind: 'mayAttackAnyUnit' })
     after = resolve(after, { type: 'attack', attackerId: 'a0', target: { kind: 'unit', instanceId: 'e0' } })
-    // The defender (e0) fought at -2/-0 for this attack: the attacker (2 power) should have dealt only 2, not been reduced itself.
-    expect(U(after, 'a0')?.damage).toBe(1) // ENEMY power 3, minus 2 = 1
+    // The defender (e0, power 3) fought at -2/-0 for this attack: the attacker (FILLER2, 2 power) took only 1.
+    expect(U(after, 'a0')?.damage).toBe(1)
+  })
+  it("LOF_014's deployed back: his own unconditional On Attack debuff (unrelated to the Force; Shielded is the printed keyword machinery, not new here)", () => {
+    let s = board({ player: { units: [unit('u0', 'LOF_014', { exhausted: false })] }, opponent: { units: [unit('e0', 'ENEMY')] } })
+    s = resolve(s, { type: 'attack', attackerId: 'u0', target: { kind: 'unit', instanceId: 'e0' } })
+    // LOF_014's own power fought at printed value; e0 (ENEMY, power 3) fought at -2/-0 against him.
+    expect(U(s, 'u0')?.damage).toBe(1)
   })
 })
