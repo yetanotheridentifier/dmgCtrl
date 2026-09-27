@@ -62,10 +62,15 @@ const SHIPPED = [
  * abilities" while you have the initiative) is built and covered in `enemyAbilityCards.test.ts`
  * (#708), but his front needs ability damage folded into `dealtBaseCombatDamageThisPhase` (#690,
  * open), so he too is neither SHIPPED nor LIFTED.
+ *
+ * SEC_001 Chancellor Palpatine, once Plot landed (#470): his FRONT (search the top 5 for a card
+ * with Plot, reveal it, draw it) is built and covered in `plot.test.ts`, but his back ("the next
+ * card you play using Plot this phase costs 3 less") needs a new `NextUnitGrant` restriction plus
+ * play-route context threaded into `effectiveCost`, so he too is neither SHIPPED nor LIFTED.
  */
 const LIFTED = [
   'JTL_001', 'JTL_003', 'JTL_011', 'JTL_012', 'JTL_015', 'JTL_017', 'JTL_018', 'TWI_017',
-  'SHD_006', 'SEC_001', 'LAW_017',
+  'SHD_006', 'LAW_017',
 ]
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])

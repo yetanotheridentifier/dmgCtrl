@@ -203,6 +203,12 @@ export interface CardDefinition {
    * unit. `player` is what "attach to a friendly unit" is read against (Darth Maul's Lightsaber).
    */
   attachRestriction?: (state: GameState, target: UnitState, player: PlayerId) => boolean
+  /**
+   * "This card can't be played from your hand" (SEC_053 One in a Million): the Play a Card action's
+   * hand scan skips it, so its only route into play is an alternate one (Plot, Smuggle, a discard
+   * grant, …), which do not go through the hand at all.
+   */
+  cannotPlayFromHand?: boolean
   /** Cost delta when playing this card (upgrades: `target` is the attach target). */
   costModifier?: (state: GameState, playerId: PlayerId, target?: UnitState) => number
   /**

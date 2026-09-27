@@ -37,7 +37,8 @@ const deployBoard = (resources: { cardId: string; exhausted: boolean }[], over: 
     opponent: player({ leader: undeployed('TST_L') }),
   },
 })
-const plotChoice = (s: GameState): PendingChoice | undefined => s.pendingChoices?.find(c => c.kind === 'playCardFrom')
+const plotChoice = (s: GameState): Extract<PendingChoice, { kind: 'playCardFrom' }> | undefined =>
+  s.pendingChoices?.find((c): c is Extract<PendingChoice, { kind: 'playCardFrom' }> => c.kind === 'playCardFrom')
 
 describe('Plot: the framework (CR 14)', () => {
   it('offers to play a Plot card from resources once the leader deploys', () => {
@@ -205,7 +206,7 @@ describe('Mas Amedda (SEC_084) — When Played: Experience token to each of up t
     })
     const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitThen', targets: expect.arrayContaining(['o1', 'o2']) })
-    expect(played.pendingChoices?.[0].targets).not.toContain('plain')
+    expect((played.pendingChoices?.[0] as { targets: string[] }).targets).not.toContain('plain')
   })
 })
 
@@ -227,7 +228,7 @@ describe('Jar Jar Binks (SEC_111) — When Played: may give another friendly uni
   it('offers another friendly unit, not itself', () => {
     const s = state({ cards: F, players: { player: player({ hand: ['SEC_111'], resources: ready(10), units: [unit('other', 'TST_U1')] }), opponent: player() } })
     const played = resolve(s, { type: 'playUnit', handIndex: 0 })
-    expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitThen', targets: ['other'] })
+    expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayLastingBuff', targets: ['other'] })
   })
 })
 
@@ -288,7 +289,7 @@ describe('Strike Force X-Wing (SEC_152) — When Played: may deal 2 damage to a 
       players: { player: player({ hand: ['SEC_152'], resources: ready(10) }), opponent: player({ units: [unit('ready', 'TST_U1'), unit('exh', 'TST_U1', { exhausted: true })] }) },
     })
     const played = resolve(s, { type: 'playUnit', handIndex: 0 })
-    expect(played.pendingChoices?.[0]).toMatchObject({ targets: ['ready'] })
+    expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'selectDamageTarget', unitTargets: ['ready'] })
   })
 })
 
@@ -297,7 +298,7 @@ describe('Cinta Kaz (SEC_172) — When Played: may attack with a unit', () => {
   it('offers an attack with a friendly ready unit', () => {
     const s = state({ cards: F, players: { player: player({ hand: ['SEC_172'], resources: ready(10), units: [unit('u1', 'TST_U1')] }), opponent: player() } })
     const played = resolve(s, { type: 'playUnit', handIndex: 0 })
-    expect(played.pendingChoices?.some(c => c.kind === 'mayAttack')).toBe(true)
+    expect(played.pendingChoices?.some(c => c.kind === 'mayAttackAnyUnit')).toBe(true)
   })
 })
 
@@ -320,7 +321,7 @@ describe('Garindan (SEC_186) — When Played: name a card, look at hand and disc
     const s = state({ cards: F, players: { player: player({ hand: ['SEC_186'], resources: ready(10) }), opponent: player({ hand: ['TST_U1'] }) } })
     const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'nameCard' })
-    const named = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id, optionIndex: 0 })
+    const named = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id, cardName: 'TST_U1' })
     expect(named.players.opponent.hand).not.toContain('TST_U1')
   })
 })
@@ -347,7 +348,7 @@ describe('One in a Million (SEC_053) — can\'t be played from hand; defeat a un
 
   it('is playable via Plot, and defeats a unit whose power and remaining HP both equal ready resources', () => {
     const s = deployBoard(
-      [{ cardId: 'SEC_053', exhausted: false }, ...ready(2)],
+      [{ cardId: 'SEC_053', exhausted: false }, ...ready(3)],
       {},
     )
     const withF = { ...s, cards: { ...PLOT_CARDS, SEC_053: real('SEC_053'), MATCH: card({ id: 'MATCH', type: 'unit', arena: 'ground', cost: 1, power: 3, hp: 3 }) } }
@@ -391,15 +392,16 @@ describe('Secret Marriage (TS26_46) — Shield up to 2 non-Vehicle units; draw i
   it('does not offer a Vehicle unit', () => {
     const s = state({ cards: F, players: { player: player({ hand: ['TS26_46'], resources: ready(10), units: [unit('veh', 'VEH'), unit('u1', 'TST_U1')] }), opponent: player() } })
     const played = resolve(s, { type: 'playEvent', handIndex: 0 })
-    expect(played.pendingChoices?.[0].targets).not.toContain('veh')
+    expect((played.pendingChoices?.[0] as { targets: string[] }).targets).not.toContain('veh')
   })
 
   it('draws a card when an enemy unit is shielded this way', () => {
     const s = state({ cards: F, players: { player: player({ hand: ['TS26_46'], resources: ready(10), deck: ['TST_U1'] }), opponent: player({ units: [unit('e', 'TST_U1')] }) } })
     const played = resolve(s, { type: 'playEvent', handIndex: 0 })
     const done = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id, targetInstanceId: 'e' })
-    const finished = resolve(done, { type: 'skipTrigger', choiceId: done.pendingChoices![0].id })
-    expect(finished.players.player.hand.length).toBeGreaterThan(0)
+    // Only one eligible unit existed ('e'), so the up-to-2 pick has nothing left to re-offer and
+    // finishes immediately rather than raising a second "Done" choice.
+    expect(done.players.player.hand.length).toBeGreaterThan(0)
   })
 })
 
@@ -436,7 +438,7 @@ describe('Chancellor Palpatine, leader front (SEC_001) — Action: search top 5 
     const used = resolve(s, { type: 'useLeaderAbility', index: 0 })
     expect(used.pendingChoices?.[0]).toMatchObject({ kind: 'searchDraw' })
     const choice = used.pendingChoices![0]
-    const done = resolve(used, { type: 'acceptChoice', choiceId: choice.id, optionIndex: (choice as { eligibleIndices: number[] }).eligibleIndices[0] })
+    const done = resolve(used, { type: 'acceptChoice', choiceId: choice.id, deckIndex: (choice as { eligibleIndices: number[] }).eligibleIndices[0] })
     expect(done.players.player.hand).toContain('PLOT1')
   })
 })

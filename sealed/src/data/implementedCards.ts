@@ -313,6 +313,10 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   // ("friendly units that damaged a base this phase can't be attacked") needs ability damage folded
   // into `dealtBaseCombatDamageThisPhase`, which records combat damage only (#690, open).
   { id: 'SEC_012', name: 'Cassian Andor', front: false, back: true },
+  // Front only ("search the top 5 for a card with Plot, reveal it, and draw it"). Back ("the next
+  // card you play using Plot this phase costs 3 less") needs a new `NextUnitGrant` restriction plus
+  // play-route context threaded into `effectiveCost`, split to a follow-up ticket.
+  { id: 'SEC_001', name: 'Chancellor Palpatine', front: true, back: false },
   // Disclose (#603): both sides ask the same question (which aspect to disclose) and share one hook.
   { id: 'SEC_004', name: 'Leia Organa', front: true, back: true },
 ]
@@ -928,6 +932,13 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SHD_075', name: 'Covert Strength' },
   { id: 'SHD_129', name: 'Timely Intervention' },
   { id: 'SHD_252', name: "Smuggler's Aid" },
+  // Plot (#470): the mechanic plus the SEC/TS26 cards that need nothing else.
+  { id: 'SEC_053', name: 'One in a Million' },
+  { id: 'SEC_126', name: 'Trade Route Taxation' },
+  { id: 'SEC_183', name: 'Topple the Summit' },
+  { id: 'SEC_235', name: 'The Wrong Ride' },
+  { id: 'SEC_245', name: 'When Has Become Now' },
+  { id: 'TS26_46', name: 'Secret Marriage' },
 ]
 
 /**
@@ -2049,6 +2060,22 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SHD_217', name: 'Tobias Beckett' },
   { id: 'SHD_086', name: 'Warbird Stowaway' },
   { id: 'SHD_203', name: 'Zorii Bliss' },
+  // Plot (#470): the mechanic plus the SEC/TS26 cards that need nothing else.
+  { id: 'SEC_034', name: 'Cad Bane' },
+  { id: 'SEC_082', name: 'Chancellor Palpatine' },
+  { id: 'SEC_084', name: 'Mas Amedda' },
+  { id: 'SEC_088', name: 'First Light' },
+  { id: 'SEC_099', name: 'Naboo Royal Starship' },
+  { id: 'SEC_111', name: 'Jar Jar Binks' },
+  { id: 'SEC_140', name: 'Hondo Ohnaka' },
+  { id: 'SEC_149', name: 'Kaydel Connix' },
+  { id: 'SEC_152', name: 'Strike Force X-Wing' },
+  { id: 'SEC_172', name: 'Cinta Kaz' },
+  { id: 'SEC_186', name: 'Garindan' },
+  { id: 'SEC_189', name: 'Lurking Snub Fighter' },
+  { id: 'SEC_203', name: 'Tala Durith' },
+  { id: 'SEC_243', name: 'FN Trooper Corps' },
+  { id: 'SEC_255', name: 'Remote Escort Tank' },
 ]
 
 /**
@@ -2178,7 +2205,7 @@ export const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
   HMW: { bases: 16, units: 42 },
   ASH: { bases: 8, units: 39 },
   LAW: { units: 47 },
-  SEC: { bases: 8, units: 32 },
+  SEC: { bases: 8, units: 34, upgrades: 4 },
   LOF: { units: 46 },
   JTL: { bases: 9, units: 22 },
   TWI: { bases: 8, units: 28 },

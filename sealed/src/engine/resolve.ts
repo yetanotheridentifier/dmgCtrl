@@ -1,10 +1,10 @@
 import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef } from './types'
-import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds, isFortify, recordBaseActionUsed } from './types'
+import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds, isFortify, isPlot, recordBaseActionUsed } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
+import { effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
 import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
@@ -2664,12 +2664,31 @@ function deployLeader(state: GameState, epicUsed = true): GameState {
   // leader arriving is one event. No route point is passed, so nothing reading "when you play a unit"
   // fires: a deployed leader is considered deployed, not played (CR 3).
   const inPlay = next.players[playerId].units.find(u => u.instanceId === leaderUnit.instanceId)
-  return inPlay
+  next = inPlay
     ? fireBatch(next, [
       ...collectUnitTriggers(next, 'whenDeployed', inPlay, playerId),
       ...collectArrivalTriggers(next, undefined, playerId, leaderUnit.instanceId),
     ])
     : next
+  return offerPlotPlays(next, playerId, leaderUnit.instanceId)
+}
+
+/**
+ * Plot (CR 14): "When you deploy a leader, you may play this card from your resources, paying its
+ * cost. Replace it with the top card of your deck." Not a per-card ability (the card sits inert in
+ * the resource zone, so it has no registered `whenDeployed`): every Plot card in the deploying
+ * player's own resources reacts to the same deploy event, so this raises one `playCardFrom` choice
+ * over all of them and re-offers it (`then.again`) until the player declines or none are left, the
+ * same "one at a time" shape Endless Legions already uses for its own repeated plays. The cost is
+ * the card's own printed cost: no `altCost`, unlike Smuggle.
+ */
+function offerPlotPlays(state: GameState, playerId: PlayerId, sourceId: string): GameState {
+  const candidates = playFromCandidates(state, playerId, 'resources', {}, isPlot)
+  if (candidates.length === 0) return state
+  return pushChoice(state, {
+    kind: 'playCardFrom', id: `${sourceId}-plot`, controller: playerId, zone: 'resources', candidates,
+    optional: true, then: { resourceTop: playerId, again: true },
+  })
 }
 
 /**
