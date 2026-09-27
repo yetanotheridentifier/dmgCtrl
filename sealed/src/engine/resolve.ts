@@ -134,6 +134,9 @@ function resolveAction(state: GameState, action: Action): GameState {
         if (activeChoice(played)) return resetPasses(handOffOpponentChoice(played, played.activePlayer))
         return advanceTurn(resetPasses(played))
       })
+    case 'smuggle':
+      // Stub: the real play (`takeSmuggle`) lands in the implementation commit.
+      return state
     case 'playUpgrade':
       return requirePhase(state, 'action', () => {
         const played = playUpgrade(state, action.handIndex, action.targetInstanceId)

@@ -50,6 +50,14 @@ export interface EngineCard {
    * card's worth in hand (#393). Absent for tokens and any source data that omits it.
    */
   rarity?: string
+  /**
+   * Smuggle's printed bracket ("Smuggle [C=4 Cunning]"), parsed off FrontText/BackText in cardDb.ts:
+   * the alternate cost and the aspect icons checked for ITS penalty (which can differ from the
+   * card's own printed `aspects` — Hotshot DL-44 Blaster is Aggression but smuggles as Cunning).
+   * `extra` is a trailing additional-cost clause this parser does not resolve (First Light: "deal 4
+   * damage to a friendly unit"), kept only so a reader can see the card was not silently dropped.
+   */
+  smuggle?: { cost: number; aspects: string[]; extra?: string }
 }
 
 export type CardDb = Readonly<Record<string, EngineCard>>

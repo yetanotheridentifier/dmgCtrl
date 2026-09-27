@@ -42,6 +42,8 @@ const SHIPPED = [
   // SHD_140 Trandoshan Hunters: Overwhelm plus a conditional token, shipped with Bounty (#467) —
   // its own condition ("if an enemy unit has a Bounty") is covered in bountyCards.test.ts.
   'SHD_140',
+  // SHD_075 Covert Strength: shipped with Smuggle (#469), which its alternate cost needed.
+  'SHD_075',
   // F: attacks, reactions and activated Actions
   'JTL_200', 'JTL_250', 'LAW_039', 'LAW_073', 'LAW_115', 'SHD_057', 'LAW_152', 'LOF_046', 'LOF_065', 'LOF_258',
   'SEC_051', 'SHD_045', 'SHD_141', 'SOR_036', 'SOR_094',
@@ -51,7 +53,7 @@ const SHIPPED = [
 /** Registered elsewhere; used here to play a unit for free, so "no resources were paid" can be reached. */
 const GALACTIC_AMBITION = 'SOR_235'
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
-const LIFTED = ['SHD_075']
+const LIFTED: string[] = []
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
 const real = (id: string): EngineCard => {
@@ -678,6 +680,15 @@ describe('Experience tokens, E: a token alongside something else', () => {
     expect(bottomed.players.player.deck).toContain('FORCE_U')
     const done = accept(bottomed, { handIndex: 0 })
     expect(exp(done, last(done))).toBe(2)
+  })
+
+  it('Covert Strength (SHD_075, shipped with Smuggle #469) heals 2 and gives an Experience token to the same chosen unit, friendly or enemy', () => {
+    const s = playEvent(board({ units: [unit('a', 'GRD', { damage: 5 })] }, { units: [unit('e', 'GRD2', { damage: 3 })] }), 'SHD_075')
+    expect(choice(s)).toMatchObject({ controller: 'player', targets: ['a', 'e'] })
+    const done = accept(s, { targetInstanceId: 'e' })
+    expect(U(done, 'e')!.damage).toBe(1)
+    expect(exp(done, 'e')).toBe(1)
+    expect(exp(done, 'a')).toBe(0)
   })
 
   it('Echo (SHD_099) may discard a card to put 2 tokens on a unit sharing its name', () => {

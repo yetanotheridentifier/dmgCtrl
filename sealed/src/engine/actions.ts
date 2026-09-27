@@ -23,6 +23,11 @@ export type Action =
   // player takes it on a turn of their own. `grantIndex` addresses it in `state.discardPlayGrants`,
   // and `targetInstanceId` supplies the host when the granted card is an upgrade.
   | { type: 'playFromDiscard'; grantIndex: number; targetInstanceId?: string }
+  // Smuggle (CR 14): a resource with the keyword may be played for its own printed smuggle cost,
+  // replaced with the top card of the deck. A standing permission read straight off the card, like
+  // `playFromDiscard`, rather than a raised choice: `resourceIndex` addresses it in the player's own
+  // resource zone, and `targetInstanceId` supplies the host when the smuggled card is an upgrade.
+  | { type: 'smuggle'; resourceIndex: number; targetInstanceId?: string }
   // `choiceId` is set when this attack is how a pending choice is ANSWERED (Ambush, Support,
   // "you may attack"). Without it the resolver had to guess which choice the attack belonged to,
   // and guessed the queue head, consuming the wrong one when several were outstanding.

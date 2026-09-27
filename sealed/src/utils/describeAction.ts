@@ -130,6 +130,9 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const onto = action.targetInstanceId ? ` onto ${anyUnitName(state, action.targetInstanceId) ?? 'a unit'}` : ''
       return `Play ${card.name} from ${where}${onto} (${price})`
     }
+    case 'smuggle':
+      // Stub: the real description lands in the implementation commit.
+      return 'Smuggle a card'
     case 'playUpgrade': {
       const cardId = state.players[by].hand[action.handIndex]
       const card = cardId ? state.cards[cardId] : undefined
