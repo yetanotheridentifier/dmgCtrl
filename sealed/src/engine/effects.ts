@@ -1158,7 +1158,11 @@ export function returnOtherUpgradesToHand(state: GameState, instanceId: string, 
  * counts twice. Each entry in `contributed` cancels at most one matching entry in `need`; order
  * doesn't matter to the result. An empty return means the requirement is fully covered.
  */
-export function discloseRemaining(need: readonly string[], _contributed: readonly string[]): string[] {
-  // TODO(#603): not yet implemented — the signature exists so the failing tests compile.
-  return [...need]
+export function discloseRemaining(need: readonly string[], contributed: readonly string[]): string[] {
+  const left = [...need]
+  for (const a of contributed) {
+    const i = left.indexOf(a)
+    if (i !== -1) left.splice(i, 1)
+  }
+  return left
 }

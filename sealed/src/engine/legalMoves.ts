@@ -4,7 +4,7 @@ import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds, pu
 import { canAfford, readyResourceCount } from './resources'
 import { keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
 import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, baseEpicAction, usableBaseActions } from './abilities'
-import { friendlyCreditTokens } from './effects'
+import { friendlyCreditTokens, discloseRemaining } from './effects'
 import './cardDefinitions' // side effect: registers all real card behaviours
 
 type AttackTarget = Extract<Action, { type: 'attack' }>['target']
@@ -977,11 +977,13 @@ function choiceMoves(state: GameState): Action[] {
         // Imperial Defector / Remnant Lookouts: view the target's hand. With `mayDiscard`,
         // one accept per card in it; a Done to dismiss unless the card compels the discard.
         // Bodhi Rook takes "a non-unit card", so only those hand indices are offered.
-        // Jam Communications takes only an event; Hold For Questioning a card sharing an aspect.
+        // Jam Communications takes only an event; Hold For Questioning a card sharing an aspect;
+        // Charged with Espionage (disclose, #603) takes only a unit.
         const discardable = state.players[choice.target].hand.flatMap((cardId, handIndex) => {
           const c = state.cards[cardId]
           if (choice.discardFilter === 'nonUnit' && c?.type === 'unit') return []
           if (choice.discardFilter === 'event' && c?.type !== 'event') return []
+          if (choice.discardFilter === 'unit' && c?.type !== 'unit') return []
           const aspects = choice.discardAspects
           if (aspects && !(c?.aspects ?? []).some(a => aspects.includes(a.toLowerCase()))) return []
           return [handIndex]
@@ -1122,6 +1124,33 @@ function choiceMoves(state: GameState): Action[] {
         // Ground then space. Never optional.
         moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 }, { type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 })
         break
+      case 'disclose': {
+        // Disclose (#603): reveal hand cards one at a time, like `exploit`'s picks, until `need` is
+        // covered, then Done (no `handIndex`) to finish. Declining is offered only before any card is
+        // revealed — once you've shown something there's no rule to un-show it, and the per-pick
+        // completability check below guarantees the requirement can always still be reached.
+        const hand = state.players[choice.controller].hand
+        const unpicked = hand.map((cardId, i) => ({ cardId, handIndex: i })).filter(h => !choice.picks.includes(h.handIndex))
+        const contributed = choice.picks.flatMap(i => state.cards[hand[i]]?.aspects ?? [])
+        const remaining = discloseRemaining(choice.need, contributed)
+        if (remaining.length === 0) {
+          moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        } else {
+          if (choice.picks.length === 0 && choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+          for (const { cardId, handIndex } of unpicked) {
+            const aspects = state.cards[cardId]?.aspects ?? []
+            if (!aspects.some(a => remaining.includes(a))) continue
+            const afterThis = discloseRemaining(remaining, aspects)
+            if (afterThis.length === 0) { moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex }); continue }
+            // A pick is only offered while what's LEFT in hand (everything but this pick and the
+            // ones already made) could still finish the job — otherwise a greedy early pick could
+            // strand the choice with no legal move at all.
+            const restPool = unpicked.filter(h => h.handIndex !== handIndex).flatMap(h => state.cards[h.cardId]?.aspects ?? [])
+            if (discloseRemaining(afterThis, restPool).length === 0) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
+          }
+        }
+        break
+      }
       case 'selectHandCardThen': {
         for (const handIndex of choice.handIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
         if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
