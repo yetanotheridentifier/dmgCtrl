@@ -591,3 +591,40 @@ one is always optional whatever its printed wording says.
   Played ability uses (`damageChoice`, `healChoice`, `shieldChoice`, `targetChoice`, `expUpTo`,
   `readyResource`) and wrapped in `bounty()`, which remaps a `whenPlayed`-shaped definition's trigger
   to `'bounty'`, mirroring the existing `defeated()` idiom for When Defeated.
+
+## Disclose
+
+"Disclose \<aspect icons\>" (reveal cards from your hand with these aspect icons among them) is SEC's
+set mechanic. `need` is a flat multiset of aspect names — `['Command', 'Command', 'Villainy']` for
+"disclose Command Command Villainy" — matched against each hand card's own `aspects` array, which can
+itself repeat an entry: a card printed with two icons of the same aspect (Chancellor Valorum's two
+Command icons) counts twice toward that aspect's requirement on its own.
+
+- **The choice.** `disclose` (`PendingChoice`, `types.ts`) mirrors `exploit`'s shape: `picks` are hand
+  indices already revealed, offered one at a time (`legalMoves.ts`), and nothing ever leaves hand —
+  disclosing only reveals. `acceptChoice` with no `handIndex` finishes it, offered once
+  `discloseRemaining(need, contributed)` (`effects.ts`) is empty, and runs the card's `ifYouDo` hook
+  told the revealed card ids as `disclosed`. `skipTrigger` declines, offered only while `picks` is
+  still empty (once you have shown a card there is no rule to un-show it).
+- **No dead ends.** A pick is only offered when revealing it still leaves the rest of the hand able to
+  finish the job: `legalMoves` re-checks completability against every remaining hand card before
+  offering each pick, so a bad early choice (revealing a card that "uses up" the wrong icon) can never
+  strand the choice with no legal move.
+- **`onDecline`** runs a literal side effect on decline instead (`{ damageOwnBase: N }`), for the one
+  card whose only branch is "if you don't" (Warrior of Clan Ordo). **`hookOnDecline`** runs the SAME
+  `then` on decline too, told `disclosed: []`, for a card whose ability goes on regardless (Ebon Hawk:
+  "Heroism and/or Villainy" is two independent optional disclosures chained one after the other;
+  declining the first still offers the second).
+- **Multi-stage cards** chain through the card's own `ifYouDo`, exactly as `unitThen`/`selectUnitThen`
+  chains already do elsewhere: `ctx.step` names the stage, and `ctx.unitChosen` (via `IfYouDo.unit`)
+  carries an earlier pick forward when a later stage needs it (Relief Request's second heal excludes
+  the first target; Ebon Hawk's Villainy debuff needs the defender chosen before either disclosure
+  was raised; Charged with Corruption chains disclose → guardian → target → `captureUnit`, the same
+  shape `captureGuardianTargetWp` uses, inlined rather than reused since that helper owns its own
+  `ifYouDo`).
+- **28 of the 33 cards Disclose unlocked need nothing else.** Three need a genuinely separate new
+  primitive each and are not registered: a lasting effect tied to a specific unit's continued
+  presence rather than a round/phase boundary (Cantwell Arrestor Cruiser), a "deal damage unless the
+  controller discards a card" prevention distinct from `mayPreventDamage`'s exhaust-a-unit cost
+  (Syril Karn), and a wholly new "when a player draws cards during the action phase" trigger point,
+  unrelated to Disclose itself (Chairman Papanoida).

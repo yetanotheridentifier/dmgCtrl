@@ -194,9 +194,9 @@ Two phases:
   Exploit's step on ready resources. 19 cards shipped (HMW's Greater Sarlacc and Giant Gorax among
   them). Each card left touching the zone waits on another mechanic's ticket: Smuggle #469 (Lando
   Calrissian's leader, Enterprising Lackeys, and DJ, which also needs taking control of a resource, the
-  one piece of the zone not built), Credit #719 (Chewbacca, Intimidator), the Force #462 (Eeth Koth),
-  Disclose #603 (Chancellor Valorum) and Plot #470 (When Has Become Now). Outlaw Corona and Price on
-  Your Head shipped with Bounty (#467).
+  one piece of the zone not built), Credit #719 (Chewbacca, Intimidator), the Force #462 (Eeth Koth)
+  and Plot #470 (When Has Become Now). Outlaw Corona and Price on
+  Your Head shipped with Bounty (#467); Chancellor Valorum shipped with Disclose (#603).
   **Capture's primitive is finished** (#466): `captureUnit`/`baseCapturesUnit`/`rescueCaptured`/
   `discardCaptured`/`appendCaptured` plus the `cannotBeCaptured`/`captureReplacement` hooks are built
   and documented in `keywords-effects.md`. Of the 29 cards it unlocks on its own, the 10 with a single
@@ -210,8 +210,8 @@ Two phases:
   When Played, a base guardian with a scheduled rescue, playing a captured card outright, and Jabba the
   Hutt's leader (which needs an unbuilt "grant a chosen unit a temporary keyword ability" primitive as
   well as capture) are on #715. 17 more that only needed Bounty's "When Captured" half shipped once
-  Bounty landed (#467). Three (L3-37, Charged with Corruption, Sanctioner's Shuttle) are sole-blocked
-  by Smuggle (#469), Disclose (#603) and Coordinate (#472) respectively.
+  Bounty landed (#467). L3-37 and Sanctioner's Shuttle are sole-blocked by Smuggle (#469) and
+  Coordinate (#472) respectively; Charged with Corruption shipped with Disclose (#603).
   **The enemy-ability protection primitive is finished** (#708): `cannotBeTargetedByEnemyAbility`
   (a unit or a granting upgrade protecting itself), `grantsEnemyAbilityProtection` (an aura granting it
   to another unit) and `protectsAttachedUpgrade` (the one printed case landing on an attached upgrade,
@@ -225,10 +225,10 @@ Two phases:
   already fired; the damage points became one both-sides event (`whenDamageDealt`), and the heads no
   point raised got their own (a unit attacking, healing, the ready step, a card being drawn, a unit
   leaving play). "Choose two, in any order" is `chooseMode` with a queued continuation. The cards
-  whose other blocker is a keyword are on that keyword's ticket (Disclose #603, the Force #462,
-  Pilot #465, Plot #470, capture #466; Jango Fett, Krrsantan and Chain Code Collector shipped with
-  Bounty, #467), Arquitens Assault Cruiser (an opponent-owned
-  resource) shipped with #475, and
+  whose other blocker is a keyword are on that keyword's ticket (the Force #462, Pilot #465,
+  Plot #470, capture #466; Jango Fett, Krrsantan and Chain Code Collector shipped with Bounty, #467;
+  Ahsoka Tano, Captain Typho and Chancellor Valorum shipped with Disclose, #603), Arquitens Assault
+  Cruiser (an opponent-owned resource) shipped with #475, and
   Traitorous, Nabat Village and Lux Bonteri are on #686.
   Darth Vader, Victor Squadron Leader waits on #465 (his
   back is a Pilot), Queen Amidala (defeat a unit to prevent damage) shipped with the replacement effects (#684), and Roger Roger (an
@@ -258,7 +258,16 @@ Two phases:
   Security Captain needs #682 too and
   Han's Golden Dice/Targeted For Removal/Payroll Heist need a granted ability block (#464) as well;
   Boba Fett and Dengar need a one-off trigger head with no ticket of its own yet.
-  Next are Disclose (#603, 19), and indirect damage (#604, 15).
+  **Disclose is finished** (#603): "reveal cards from your hand with these aspect icons among them"
+  is a flat aspect multiset (`need`) matched against each hand card's own `aspects`, which can itself
+  repeat an entry (a double-icon card counts twice on its own). 28 of the 33 cards it unlocked
+  (recounted; the ticket's own "19 sole" predated #711/#713 correcting the triage tool) shipped.
+  Three need a genuinely separate new primitive each and are on follow-up ticket **#721**: a lasting
+  effect tied to a specific unit's continued presence rather than a round/phase boundary (Cantwell
+  Arrestor Cruiser), a "deal damage unless the controller discards a card" prevention (Syril Karn),
+  and a wholly new "when a player draws cards" trigger point (Chairman Papanoida). Condemn and
+  Diplomatic Immunity stay blocked on the unbuilt granted-ability-block (#464) regardless.
+  Next is indirect damage (#604, 15).
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
 (with the token units, #605), the Weakness-token cards (#649), the Fortify cards (#650), the When Played

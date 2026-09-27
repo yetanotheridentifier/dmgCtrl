@@ -126,6 +126,12 @@ unit, upgrade or hand card, or the discarded card.
 - **`chooseNumber`** with an `IfYouDo` hands on the number as `optionIndex` (Choke on Aspirations'
   "up to 5").
 - A **`selectDiscard`** with `then.ifYouDo` hands on the card discarded (R2-D2, Ahsoka Tano).
+- **`disclose`** ("reveal cards from your hand with these aspect icons among them", SEC's set
+  mechanic) accumulates hand indices one at a time like `exploit`'s picks — nothing leaves hand — and
+  finishes once a flat aspect multiset (`need`) is covered, running `then` told the revealed ids as
+  `disclosed`. `onDecline` runs a literal side effect on decline instead ("if you don't", Warrior of
+  Clan Ordo); `hookOnDecline` (below) runs `then` on decline too, told `disclosed: []` (Ebon Hawk's
+  two disclosures are independent, so declining one still offers the other).
 
 `owner` is the player whose ability it is, not the one answering: Governor's Shuttle's second pick and
 Ahsoka Tano's discard are the opponent's to answer and still the player's ability to finish. `step`
@@ -135,9 +141,9 @@ the next (Strike True's friendly unit, then the enemy it damages; a capture's ch
 target, or the reverse — Ephant Mon picks its target first). A card that picks several things in
 turn keeps the picks so far in its step, so "another" and "sharing a Trait" can be checked against
 them (Attack Pattern Delta, Bold Resistance, Unlimited Power, whose damage all lands after the last
-pick). `hookOnDecline` runs the hook once more on Done, on `selectUnitThen`, `selectUpgradeThen` and
-`selectCardThen`, for an ability that goes on after its picks stop (AAT Incinerator, Sweep the Area,
-Jump to Lightspeed).
+pick). `hookOnDecline` runs the hook once more on Done, on `selectUnitThen`, `selectUpgradeThen`,
+`selectCardThen` and `disclose`, for an ability that goes on after its picks stop (AAT Incinerator,
+Sweep the Area, Jump to Lightspeed, Ebon Hawk).
 
 A hook resumed this way runs as its card's (`resumeAbility`): the choices it raises carry that card as
 their source, and damage it deals is dealt by that card. Answering any choice runs the same way, as the
