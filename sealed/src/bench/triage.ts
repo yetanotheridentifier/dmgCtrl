@@ -74,6 +74,16 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
 const triggerPoint = (head: string): string => head.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase()
 
 /**
+ * A keyword printed as a lead-in to its own trigger: "Coordinate - On Attack:", "Coordinate — Action:".
+ * The keyword name varies without limit (any keyword can print this way, and the list would keep
+ * drifting), so this strips the *shape* rather than a spelling: a single capitalised word, optionally
+ * with a trailing numeral ("Raid 2"), then a dash surrounded by spaces. Any dash character is accepted
+ * (hyphen, en dash, em dash), since sets print more than one. A hyphen with no surrounding spaces
+ * ("non-token", "non-leader") is part of a word, not this shape, and the required spaces leave it alone.
+ */
+const KEYWORD_TRIGGER_PREFIX = /^[A-Z][A-Za-z']*(?:\s+\d+)?\s+[-‐-―]\s+/
+
+/**
  * Things the engine cannot express. Grounded in `engine/effects.ts`, the hook table in
  * `docs/abilities.md`, and the blocked-subsystem list in `data/implementedCards.ts`. Anything NOT
  * listed is treated as already expressible.
@@ -253,7 +263,7 @@ export function triggerHeads(text: string): string[] {
   const heads: string[] = []
   for (const line of text.split('\n')) {
     const m = /^\s*([A-Z][^:\n]*):/.exec(line)
-    if (m) heads.push(m[1].replace(/\s*\[[^\]]*\]\s*/g, ' ').replace(/\s+/g, ' ').trim())
+    if (m) heads.push(m[1].replace(KEYWORD_TRIGGER_PREFIX, '').replace(/\s*\[[^\]]*\]\s*/g, ' ').replace(/\s+/g, ' ').trim())
   }
   return heads
 }
