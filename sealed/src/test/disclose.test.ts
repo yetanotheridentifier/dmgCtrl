@@ -90,7 +90,7 @@ describe('disclose: legal moves', () => {
 
   it('a double-icon card alone can satisfy a doubled requirement', () => {
     const s = raise(board(['CMD2']), ['Command', 'Command'])
-    let next = pick(s, 0)
+    const next = pick(s, 0)
     expect(canFinish(next)).toBe(true)
   })
 
