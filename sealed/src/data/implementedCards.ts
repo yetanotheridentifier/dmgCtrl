@@ -2096,6 +2096,22 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'JTL_152', name: 'Tactical Heavy Bomber' },
   { id: 'JTL_138', name: 'Decimator of Dissidents' },
   { id: 'JTL_133', name: 'Allegiant General Pryde' },
+  // Coordinate (#472): the mechanic plus the TWI units that need nothing else.
+  { id: 'TWI_240', name: '332nd Stalwart' },
+  { id: 'TWI_045', name: '41st Elite Corps' },
+  { id: 'TWI_114', name: 'Clone Commander Cody' },
+  { id: 'TWI_205', name: 'Clone Dive Trooper' },
+  { id: 'TWI_158', name: 'Clone Heavy Gunner' },
+  { id: 'TWI_106', name: 'Coruscant Guard' },
+  { id: 'TWI_090', name: 'Echo' },
+  { id: 'TWI_164', name: 'Hevy' },
+  { id: 'TWI_061', name: 'Infantry of the 212th' },
+  { id: 'TWI_050', name: 'Luminara Unduli' },
+  { id: 'TWI_095', name: 'Pelta Supply Frigate' },
+  { id: 'TWI_196', name: 'Plo Koon' },
+  { id: 'TWI_162', name: 'Reckless Torrent' },
+  { id: 'TWI_243', name: 'Republic Commando' },
+  { id: 'TWI_213', name: "Sanctioner's Shuttle" },
 ]
 
 /**

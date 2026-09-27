@@ -780,3 +780,37 @@ where it lands, one point at a time, and it ignores Shields and every base-damag
   trigger point for "when you deal non-combat damage"), Targeting Computer and Superheavy Ion Cannon
   (JTL_171/JTL_227, both need a granted-ability block), and Dengar (JTL_139, needs Piloting) — each
   noted on the ticket that already owns its remaining blocker.
+
+## Coordinate
+
+"Coordinate - <printed effect>. (Gain this ability while you control 3 or more units[, including this
+one].)" is a conditional ability grant keyed on the controller's own board state, not a keyword with
+rules of its own: everything after the dash is the card's real printed keyword, stat buff, aura or
+triggered ability, active only while the condition holds.
+
+- **`hasCoordinate`/`unitHasCoordinate`** (`cardDefinitions.ts`) are the one condition: `s.players[owner].units.length >= 3`.
+  It is a live, continuously read board state, the same treatment `conditionalKeywords`/`statModifier`/
+  `aura` already give every other conditional grant: it turns on and off mid-round as units enter or
+  leave play, never cached, so a Coordinate unit's buff or keyword can drop mid-combat if a
+  Sentinel'd ally is defeated first. A one-shot ability (When Played, When Defeated) settles the
+  condition once, at the moment it would fire, exactly like every other triggered ability.
+- **No new hook was needed.** A stat buff uses `statModifier` (Mandalorian Super Commandos'
+  "+2/+0 while you control a leader unit" is the precedent), a self-keyword grant uses
+  `conditionalKeywords`, an effect on OTHER units or the current defender uses `aura`, and a gated
+  one-shot effect (create a token, an optional damage pair, a capture) checks the condition inline in
+  its `whenPlayed`/`whenDefeated` effect, the same shape Lifetree Caravan's "If you control 3 or more
+  units (including this one), you may resource the top card of your deck" already uses.
+- **A bundled keyword is corrected out of the card's base `Keywords[]`** in `cardDataCorrections.ts`,
+  the same treatment every other conditional-keyword card above gets: the source lists "Coordinate -
+  Sentinel" as `["Coordinate", "Sentinel"]`, which would make Sentinel permanent left alone. A keyword
+  the card also has UNCONDITIONALLY, on its own separate printed line (Plo Koon's Ambush), is left in
+  place alongside `Coordinate`.
+- **15 of the 23 candidate cards need nothing else** (recounted against `registeredCardIds()`; the
+  ticket's stale count read 15 sole-blocked, which the recount confirms by a different route: 14
+  sole plus Sanctioner's Shuttle, whose only other blocker, capture, is a fully built primitive).
+  Left out, each commented on the ticket rather than filed as a new one: Aayla Secura needs a new
+  "prevent all combat damage for this attack" lasting-effect field; Ki-Adi-Mundi needs a new
+  "opponent's Nth card this phase" refinement of the `whenPlayCard` trigger; Ahsoka Tano and Padmé
+  Amidala's leader front are deployed-leader `actionAbilities` gated by `usable`; Anakin Skywalker,
+  Kit Fisto and Padmé Amidala's unit are simple gated `onAttack` effects held back only for time; For
+  The Republic depends on the granted-ability-block work.

@@ -242,7 +242,7 @@ Two phases:
   When Played, a base guardian with a scheduled rescue, playing a captured card outright, and Jabba the
   Hutt's leader (which needs an unbuilt "grant a chosen unit a temporary keyword ability" primitive as
   well as capture) are on #715. 17 more that only needed Bounty's "When Captured" half shipped once
-  Bounty landed (#467). L3-37 shipped with Smuggle (#469); Sanctioner's Shuttle is sole-blocked by
+  Bounty landed (#467). L3-37 shipped with Smuggle (#469); Sanctioner's Shuttle shipped with
   Coordinate (#472); Charged with Corruption shipped with Disclose (#603).
   **The enemy-ability protection primitive is finished** (#708): `cannotBeTargetedByEnemyAbility`
   (a unit or a granting upgrade protecting itself), `grantsEnemyAbilityProtection` (an aura granting it
@@ -308,8 +308,20 @@ Two phases:
   `whenDamageDealt` point, filtered on a new flag, rather than a trigger point of its own. 18 of the
   22 candidate cards shipped (recounted; the ticket's stale "unlocks 15" undercounted). Left out: Boba
   Fett's leader (a further, unrelated trigger point, noted on #680), Targeting Computer and Superheavy
-  Ion Cannon (both need the granted-ability block, #464), and Dengar (needs Piloting, #465). Next is
-  Coordinate (#472).
+  Ion Cannon (both need the granted-ability block, #464), and Dengar (needs Piloting, #465).
+  **Coordinate is finished** (#472): "Gain this ability while you control 3 or more units" is a
+  live board-state condition (`hasCoordinate`/`unitHasCoordinate`, read fresh everywhere it's asked,
+  the same treatment every other conditional keyword/stat/aura grant already gets), not a new hook:
+  a stat buff uses `statModifier`, a self-keyword grant uses `conditionalKeywords`, an effect on other
+  units or the current defender uses `aura`, and a gated one-shot effect checks the condition inline.
+  15 of the 23 candidate cards shipped (recounted; the ticket's "unlocks 15" held, though which 15
+  moved: Sanctioner's Shuttle's capture half reused the existing primitive, so it's in this batch
+  in place of one whose second blocker was really a triage mis-parse). Left out: Aayla Secura needs
+  a new "prevent all combat damage for this attack" lasting-effect field; Ki-Adi-Mundi needs a new
+  "opponent's Nth card this phase" refinement of `whenPlayCard`; Ahsoka Tano and Padmé Amidala's
+  leader front are deployed-leader action abilities; Anakin Skywalker, Kit Fisto and Padmé Amidala's
+  unit are simple gated `onAttack` effects held back only for time; For The Republic needs the
+  granted-ability block (#464). Next is the Force (#462).
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
 (with the token units, #605), the Weakness-token cards (#649), the Fortify cards (#650), the When Played
