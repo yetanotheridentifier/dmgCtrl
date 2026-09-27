@@ -903,6 +903,10 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SHD_106', name: 'Rule with Respect' },
   { id: 'SHD_076', name: 'Unexpected Escape' },
   { id: 'SHD_243', name: 'Altering the Deal' },
+  // Credit tokens (#602): the 20 that need nothing beyond the token and its payment path.
+  { id: 'LAW_244', name: 'Unmarked Credits' },
+  { id: 'LAW_248', name: 'Windfall' },
+  { id: 'LAW_247', name: 'Backed by the Hutts' },
 ]
 
 /**
@@ -1971,6 +1975,24 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LAW_149', name: 'Rey' },
   { id: 'SEC_061', name: 'Willrow Hood' },
   { id: 'LOF_073', name: 'Mythosaur' },
+  // Credit tokens (#602): the 20 that need nothing beyond the token and its payment path.
+  { id: 'LAW_262', name: 'Bank Job Fugitives' },
+  { id: 'LAW_232', name: "Champion's KT9 Podracer" },
+  { id: 'LAW_121', name: 'Canto Bight Security' },
+  { id: 'LAW_071', name: 'The Max Rebo Band' },
+  { id: 'LAW_116', name: 'Rodian Bondsman' },
+  { id: 'LAW_134', name: 'Bib Fortuna' },
+  { id: 'LAW_155', name: 'Getaway Freighter' },
+  { id: 'LAW_258', name: 'Criminal Contact' },
+  { id: 'LAW_236', name: 'Bix Caleen' },
+  { id: 'LAW_032', name: 'Cad Bane' },
+  { id: 'LAW_106', name: 'Defiant Scrapper' },
+  { id: 'LAW_221', name: 'Lieutenant Gorn' },
+  { id: 'LAW_191', name: 'Arvel Skeen' },
+  { id: 'LAW_040', name: 'Taramyn Barcona' },
+  { id: 'LAW_161', name: 'Partisan U-Wing' },
+  { id: 'LAW_252', name: "Fett's Firespray" },
+  { id: 'LAW_238', name: 'Scavenging Sandcrawler' },
 ]
 
 /**

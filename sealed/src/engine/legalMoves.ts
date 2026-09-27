@@ -4,6 +4,7 @@ import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds, pu
 import { canAfford, readyResourceCount } from './resources'
 import { keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
 import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, baseEpicAction, usableBaseActions } from './abilities'
+import { friendlyCreditTokens } from './effects'
 import './cardDefinitions' // side effect: registers all real card behaviours
 
 type AttackTarget = Extract<Action, { type: 'attack' }>['target']
@@ -225,7 +226,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
  * `resources` makes the picks ready resources rather than units (Greater Sarlacc), and `fromDiscard`
  * unit cards in the discard pile costing at most `maxCost` (Vernestra Rwoh).
  */
-export interface ExploitTerms { limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number }
+export interface ExploitTerms { limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean }
 
 /**
  * Where in `playerId`'s discard pile the unit cards costing at most `maxCost` are: the picks Vernestra
@@ -255,19 +256,30 @@ export function exploitTerms(state: GameState, playerId: PlayerId, card: EngineC
     const there = discardUnitPicks(state, playerId, own.fromDiscard.maxCost).length
     return there > 0
       ? { limit: Math.min(own.fromDiscard.limit, there), discount: 0, fromDiscard: true, maxCost: own.fromDiscard.maxCost }
-      : undefined
+      : creditExploitTerms(state, playerId)
   }
   if (own && 'resources' in own) {
     const readyNow = readyResourceCount(state.players[playerId])
-    return readyNow > 0 ? { limit: readyNow, discount: own.discount, resources: true } : undefined
+    return readyNow > 0 ? { limit: readyNow, discount: own.discount, resources: true } : creditExploitTerms(state, playerId)
   }
   const units = state.players[playerId].units.length
-  if (units === 0) return undefined
-  if (own) return { limit: units, discount: own.discount, damage: own.damage }
+  if (own) return units > 0 ? { limit: units, discount: own.discount, damage: own.damage } : creditExploitTerms(state, playerId)
   const granted = (state.players[playerId].nextUnitGrants ?? [])
     .reduce((sum, g) => sum + (nextUnitGrantMatches(card, g, state, playerId) ? g.exploit ?? 0 : 0), 0)
   const x = keywordValue(state, card.id, 'Exploit') + granted + extra
-  return x > 0 ? { limit: Math.min(x, units), discount: 2 } : undefined
+  if (x > 0 && units > 0) return { limit: Math.min(x, units), discount: 2 }
+  return creditExploitTerms(state, playerId)
+}
+
+/**
+ * Credit's own standing rule (#602): "while paying resources, you may defeat this token. If you do,
+ * pay 1 less" — offered on any card play, not declared by the card, whenever nothing else already
+ * claims this step and the payer holds any. No LAW card both needs its own `whilePlaying`/Exploit AND
+ * has Credit tokens, so combining the two in one step is left unbuilt rather than guessed at.
+ */
+function creditExploitTerms(state: GameState, playerId: PlayerId): ExploitTerms | undefined {
+  const held = friendlyCreditTokens(state, playerId)
+  return held > 0 ? { limit: held, discount: 1, credit: true } : undefined
 }
 
 /**
@@ -282,6 +294,7 @@ export function raiseExploit(state: GameState, owner: PlayerId, cardId: string, 
     limit: terms.limit, discount: terms.discount, ...(terms.damage !== undefined ? { damage: terms.damage } : {}),
     ...(terms.resources ? { resources: true } : {}),
     ...(terms.fromDiscard ? { fromDiscard: true, maxCost: terms.maxCost } : {}),
+    ...(terms.credit ? { credit: true } : {}),
     source: { cardId, controller: owner },
   })
 }
@@ -853,6 +866,13 @@ function choiceMoves(state: GameState): Action[] {
           })
           break
         }
+        if (choice.credit) {
+          // Credit tokens are fungible, so picks are read by ordinal position, same as `resources`.
+          for (let i = 0; i < friendlyCreditTokens(state, choice.controller); i++) {
+            if (!choice.picks.includes(String(i))) moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i })
+          }
+          break
+        }
         for (const u of state.players[choice.controller].units) {
           if (!choice.picks.includes(u.instanceId)) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: u.instanceId })
         }
@@ -1089,9 +1109,17 @@ function choiceMoves(state: GameState): Action[] {
         choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
         if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
-      case 'choosePlayerThen':
+      case 'choosePlayerThen': {
+        // Option 0 is the opponent, option 1 the controller, restricted to `candidates` when given
+        // ("defeat a Credit token belonging to any player", #602 — only a player who holds one).
+        const cands = choice.candidates ?? [opponentOf(choice.controller), choice.controller]
+        if (cands.includes(opponentOf(choice.controller))) moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 })
+        if (cands.includes(choice.controller)) moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'chooseArenaThen':
-        // The opponent then yourself, or ground then space. Neither choice is ever optional.
+        // Ground then space. Never optional.
         moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 }, { type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 })
         break
       case 'selectHandCardThen': {

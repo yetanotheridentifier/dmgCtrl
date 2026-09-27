@@ -507,6 +507,15 @@ with no exploit step. No card in the sealed sets both has Exploit and is commonl
 
 In the AI the step is an ordinary chain: quiescence scores Done and each pick, within its budget.
 
+**A fourth mode, Credit tokens (#602), is not declared by the card at all.** Its printed rule is a
+standing one ("while paying resources, you may defeat this token. If you do, pay 1 less"), so
+`exploitTerms` offers it as a fallback whenever the payer holds any Credit token and none of the
+other three modes apply to the card being played — `own`/Exploit/Greater Sarlacc/Vernestra Rwoh all
+take priority when they apply, since no sealed card needs both at once. Picks are read by ordinal
+position among however many Credits are held, exactly like Greater Sarlacc's `resources` mode, and a
+defeated Credit triggers nothing and does not reduce what is left to pay with (it is a separate
+currency from ready resources). See `keywords-effects.md` "Credit tokens".
+
 ### Playing a card out of another zone
 
 **`playCardFrom` is the one door for a play that is not the Play a Card action**: a card of any type,

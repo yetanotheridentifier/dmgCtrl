@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers, collectCardTriggers } from './abilities'
-import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured } from './effects'
+import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -11435,3 +11435,107 @@ registerCard('SEC_012', { // Cassian Andor — Climb! Front ("friendly units tha
   survivesNoHp: (s, u) => s.initiative === unitOwner(s, u),
   cannotBeTargetedByEnemyAbility: (s, u, action) => action === 'defeat' && s.initiative === unitOwner(s, u),
 })
+
+// ── Credit tokens (LAW's set mechanic, #602) ──────────────────────────────────────────────────────
+// A Credit token belongs to a PLAYER, not a unit (`friendlyCreditTokens`/`createCreditTokens`/
+// `defeatCreditTokens`/`takeControlOfCreditTokens` in effects.ts). Its own printed rule ("while
+// paying resources, you may defeat this token. If you do, pay 1 less") is a standing step read by
+// `exploitTerms` (legalMoves.ts) whenever a player holds any — see docs/choices.md "Exploit" — so no
+// card here registers the discount itself. This section is the 20 cards that need nothing else:
+// straightforward creates, defeats and one take-control. The rest (6 leaders' `LeaderActionAbilityDef`
+// wiring, a base Epic Action spanning three token kinds, "any player may use this ability", two cards
+// where an OPPONENT decides a friendly card's When Played, a reveal-then-play-for-free chain, and a
+// "exchange control of two units" primitive) are split to a follow-up ticket.
+
+/** "(If ...,) create `n` Credit token(s)", as a When Played; `onAttack` retargets it. The
+ *  player-counter spelling of `createWp`, which creates a token UNIT instead. */
+const createCreditWp = (description: string, n = 1, when: When = always) =>
+  whenPlayed(description, (s, ctx) => (when(s, ctx) ? createCreditTokens(s, ctx.owner, n) : s))
+
+registerCard('LAW_262', createCreditWp('Create a Credit token.')) // Bank Job Fugitives
+registerCard('LAW_232', createCreditWp('Create a Credit token.')) // Champion's KT9 Podracer
+registerCard('LAW_244', createCreditWp('Create a Credit token.')) // Unmarked Credits (event)
+registerCard('LAW_248', createCreditWp('Create 3 Credit tokens.', 3)) // Windfall (event)
+registerCard('LAW_134', createCreditWp('If you control another Underworld unit, create a Credit token.', // Bib Fortuna
+  1, (s, ctx) => youControl(s, ctx, pickOther, pickTrait('Underworld'))))
+registerCard('LAW_161', createCreditWp('If a friendly unit was defeated this phase, create a Credit token.', 1, friendlyWasDefeated)) // Partisan U-Wing
+registerCard('LAW_155', onAttack(createCreditWp('If you control a ground unit, create a Credit token.', // Getaway Freighter
+  1, (s, ctx) => youControl(s, ctx, pickGround))))
+registerCard('LAW_258', onAttack(mayPayWp('You may pay 2. If you do, create a Credit token.', 2, 'create a Credit token', // Criminal Contact
+  (s, ctx) => createCreditTokens(s, ctx.owner, 1))))
+registerCard('LAW_236', alsoAt(mayDiscardThen('You may discard a card from your hand. If you do, create a Credit token.', // Bix Caleen
+  (s, ctx) => createCreditTokens(s, ctx.owner, 1)), 'onAttack'))
+
+registerCard('LAW_121', { // Canto Bight Security — Sentinel is printed.
+  abilities: [{ trigger: 'onDefense', description: 'On Defense: Create a Credit token.', effect: (s, ctx) => createCreditTokens(s, ctx.owner, 1) }],
+})
+registerCard('LAW_071', { // The Max Rebo Band — Jatz-Wailers
+  abilities: [{ trigger: 'whenRegroupStarts', description: 'When the regroup phase starts: Create a Credit token.', effect: (s, ctx) => createCreditTokens(s, ctx.owner, 1) }],
+})
+registerCard('LAW_116', whenDefeated('When Defeated: Each player creates a Credit token.', // Rodian Bondsman
+  (s, ctx) => createCreditTokens(createCreditTokens(s, ctx.owner, 1), opponentOf(ctx.owner), 1)))
+registerCard('LAW_252', { // Fett's Firespray — In Pursuit. Ambush is printed.
+  abilities: [{ trigger: 'onAttackEnd', description: 'When Attack Ends: If the defending unit was defeated, create a Credit token.',
+    effect: (s, ctx) => (ctx.defenderDefeated ? createCreditTokens(s, ctx.owner, 1) : s) }],
+})
+
+registerCard('LAW_247', whenPlayed('Create a Credit token. You may deal damage to a unit equal to the number of friendly Credit tokens.', (s, ctx) => { // Backed by the Hutts (event)
+  const next = createCreditTokens(s, ctx.owner, 1)
+  return damageChoice(next, ctx, friendlyCreditTokens(next, ctx.owner), allUnits(next), [], true)
+}))
+
+registerCard('LAW_106', { // Defiant Scrapper
+  ...whenPlayed('You may defeat an enemy Credit token.', (s, ctx) =>
+    (friendlyCreditTokens(s, opponentOf(ctx.owner)) > 0
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'defeat an enemy Credit token', then: resume(ctx) })
+      : s)),
+  ifYouDo: (s, ctx) => defeatCreditTokens(s, opponentOf(ctx.owner), 1),
+})
+registerCard('LAW_221', attacks('Take control of an enemy Credit token.', // Lieutenant Gorn
+  (s, ctx) => takeControlOfCreditTokens(s, opponentOf(ctx.owner), ctx.owner, 1)))
+registerCard('LAW_032', { // Cad Bane — Now it's My Turn. Shielded and Overwhelm are printed.
+  abilities: [{ trigger: 'onAttack', description: 'Defeat any number of friendly Credit tokens. Give an Experience token to this unit for each Credit defeated this way.',
+    effect: (s, ctx) => {
+      const held = friendlyCreditTokens(s, ctx.owner)
+      return held > 0 ? pushChoice(s, { kind: 'chooseNumber', id: ctx.sourceInstanceId!, controller: ctx.owner, max: held, then: resume(ctx) }) : s
+    } }],
+  ifYouDo: (s, ctx) => {
+    const n = ctx.optionIndex ?? 0
+    return n > 0 ? expSelf(defeatCreditTokens(s, ctx.owner, n), ctx, n) : s
+  },
+})
+
+/** "(You may) defeat a Credit token (belonging to any player). If you do, ..." (#602): a real choice
+ *  only when both players hold one; with exactly one candidate it is still declinable ("may"). */
+const mayDefeatAnyCreditThen = (description: string, then: NonNullable<CardDefinition['ifYouDo']>): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) => {
+    const candidates = ([opponentOf(ctx.owner), ctx.owner] as PlayerId[]).filter(p => friendlyCreditTokens(s, p) > 0)
+    return candidates.length
+      ? pushChoice(s, { kind: 'choosePlayerThen', id: ctx.sourceInstanceId!, controller: ctx.owner, text: 'defeat a Credit token (belonging to any player)', then: resume(ctx), optional: true, candidates })
+      : s
+  }),
+  ifYouDo: then,
+})
+registerCard('LAW_191', alsoAt(mayDefeatAnyCreditThen( // Arvel Skeen — Win and Walk Away
+  'You may defeat a Credit token (belonging to any player). If you do, deal 1 damage to a unit or base.',
+  (s, ctx) => {
+    const next = defeatCreditTokens(s, ctx.playerChosen!, 1)
+    return damageChoice(next, ctx, 1, allUnits(next), BOTH_BASES)
+  }), 'onAttack'))
+registerCard('LAW_040', mayDefeatAnyCreditThen( // Taramyn Barcona — Eyes Front!
+  'You may defeat a Credit token (belonging to any player). If you do, give an Experience token to this unit and another friendly unit.',
+  (s, ctx) => {
+    const next = defeatCreditTokens(s, ctx.playerChosen!, 1)
+    const self = expSelf(next, ctx, 1)
+    return expChoice(self, ctx, pickedIds(self, ctx, pickAll(pickFriendly, pickOther)), 1)
+  }))
+
+registerCard('LAW_238', onAttack({ // Scavenging Sandcrawler
+  ...whenPlayed('You may put a card from your discard pile on the bottom of your deck. If you do, create a Credit token.', (s, ctx) => {
+    const candidates = s.players[ctx.owner].discard
+    return candidates.length
+      ? pushChoice(s, { kind: 'selectFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, toDeckBottom: true, then: resume(ctx) })
+      : s
+  }),
+  ifYouDo: (s, ctx) => createCreditTokens(s, ctx.owner, 1),
+}))

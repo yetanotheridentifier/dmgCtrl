@@ -164,7 +164,6 @@ describe('triage blockers', () => {
    * card's, chosen because the mechanic is the only thing it needs.
    */
   it.each([
-    ['credit-token', 'LAW Credit', 'When Played: Create a Credit token.'],
     ['disclose', 'SEC_062 Bardottan Ornithopter', 'When Played: You may disclose Vigilance (reveal a card from your hand with this aspect icon). If you do, draw a card.'],
     ['indirect-damage', 'JTL_234 Torpedo Barrage', 'Deal 5 indirect damage to a player. (They assign 5 unpreventable damage among their base and units.)'],
   ])('reports %s as the blocker on %s', (name, _card, text) => {
@@ -378,7 +377,7 @@ describe('the ASH anchor', () => {
 
   it('finds no mechanic ASH plays without, since every ASH card is built', () => {
     // A blocker firing on the implemented set is a false positive in its pattern.
-    const mechanics = ['token-unit', 'credit-token', 'disclose', 'indirect-damage']
+    const mechanics = ['token-unit', 'disclose', 'indirect-damage']
     expect(report.blockers.filter(b => mechanics.includes(b.name))).toEqual([])
   })
 
