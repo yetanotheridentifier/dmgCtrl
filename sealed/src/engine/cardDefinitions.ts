@@ -3715,10 +3715,10 @@ const unitThenWp = (description: string, test: Pick, text: string, optional: boo
   ...whenPlayed(description, (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, test), text, optional)),
   ifYouDo: then,
 })
-const opponentDiscards = (s: GameState, owner: PlayerId, id: string, then?: IfYouDo): GameState => {
+const opponentDiscards = (s: GameState, owner: PlayerId, id: string, then?: IfYouDo, count = 1): GameState => {
   const opp = opponentOf(owner)
   return s.players[opp].hand.length
-    ? pushChoice(s, { kind: 'selectDiscard', id, controller: opp, count: 1, ...(then ? { then: { ifYouDo: then } } : {}) })
+    ? pushChoice(s, { kind: 'selectDiscard', id, controller: opp, count: Math.min(count, s.players[opp].hand.length), ...(then ? { then: { ifYouDo: then } } : {}) })
     : s
 }
 
@@ -11539,3 +11539,224 @@ registerCard('LAW_238', onAttack({ // Scavenging Sandcrawler
   }),
   ifYouDo: (s, ctx) => createCreditTokens(s, ctx.owner, 1),
 }))
+
+// ── Disclose (SEC's set mechanic, #603) ──────────────────────────────────────────────────────────
+// "Disclose <aspect icons>" reveals cards from hand whose aspects, together, cover the printed list
+// (a repeated aspect is a repeated icon requirement: "Command Command Villainy" needs two Command
+// icons and one Villainy icon among what's revealed — one card can supply more than one of the same
+// icon, as Chancellor Valorum's own two Command icons show). The `disclose` PendingChoice
+// (legalMoves.ts/resolve.ts) is the primitive; this section is the 28 cards that need nothing else.
+// Three cards need a genuinely new primitive each and are split to a follow-up ticket: Cantwell
+// Arrestor Cruiser (a lasting effect tied to a SPECIFIC unit's continued presence, not a round/phase
+// boundary), Syril Karn (a "deal damage unless the controller discards a card" prevention, distinct
+// from `mayPreventDamage`'s exhaust-a-unit cost), and Chairman Papanoida (a wholly new "when a player
+// draws cards" trigger point, unrelated to Disclose itself). Condemn and Diplomatic Immunity stay
+// blocked on `granted-ability-block` (unbuilt) regardless.
+
+/** "You may disclose <need>", raised as a card's own `ifYouDo` continuation (`resume`), so a card
+ *  with more than one stage names the next with `step`, and one that needs to read a specific
+ *  earlier pick (a unit, in `unit`) carries it forward the same way `unitThen`'s callers do. */
+const discloseThen = (s: GameState, ctx: Resumable, need: string[], optional: boolean, step?: string, unit?: string, extra: { onDecline?: { damageOwnBase: number }; hookOnDecline?: boolean } = {}): GameState =>
+  pushChoice(s, { kind: 'disclose', id: ctx.sourceInstanceId!, controller: ctx.owner, need, picks: [], optional, then: resume(ctx, step, unit), ...extra })
+/** "You may disclose <need>. If you do, <then>", as a When Played; `onAttack`/`defeated`/`alsoAt` retarget it. */
+const mayDiscloseThen = (description: string, need: string[], then: NonNullable<CardDefinition['ifYouDo']>): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) => discloseThen(s, ctx, need, true)),
+  ifYouDo: then,
+})
+
+registerCard('SEC_062', mayDiscloseThen('You may disclose Vigilance (reveal a card from your hand with this aspect icon). If you do, draw a card.', // Bardottan Ornithopter
+  ['Vigilance'], (s, ctx) => drawCards(s, ctx.owner, 1)))
+registerCard('SEC_109', mayDiscloseThen("You may disclose Command (reveal a card from your hand with this aspect icon). If you do, the next unit you play this phase gains Ambush for this phase.", // Diplomatic Envoy
+  ['Command'], (s, ctx) => grantNextUnit(s, ctx.owner, { keywords: [{ name: 'Ambush' }] })))
+registerCard('SEC_141', mayDiscloseThen('You may disclose Aggression Aggression Villainy (reveal cards from your hand with these aspect icons among them). If you do, create 3 Spy tokens.', // The Galleon
+  ['Aggression', 'Aggression', 'Villainy'], (s, ctx) => create(s, ctx.owner, TOKEN_SPY, 3)))
+registerCard('SEC_223', mayDiscloseThen('You may disclose Cunning (reveal a card from your hand with this aspect icon). If you do, each opponent discards a random card from their hand.', // Duchess's Investigators
+  ['Cunning'], (s, ctx) => opponentDiscards(s, ctx.owner, ctx.sourceInstanceId!)))
+registerCard('SEC_182', mayDiscloseThen('You may disclose Aggression Aggression (reveal cards from your hand with these aspect icons among them). If you do, deal 5 damage to a unit.', // Charged with Treason
+  ['Aggression', 'Aggression'], (s, ctx) => damageChoice(s, ctx, 5, picked(s, ctx, pickAny))))
+registerCard('SEC_230', mayDiscloseThen("You may disclose Cunning Cunning (reveal cards from your hand with these aspect icons among them). If you do, look at an opponent's hand and discard a unit from it.", // Charged with Espionage
+  ['Cunning', 'Cunning'], (s, ctx) => opponentHandDiscard(s, ctx, { discardFilter: 'unit' })))
+
+registerCard('SEC_181', { // Unauthorized Investigation — the first Spy is unconditional, the second gated.
+  ...whenPlayed('Create a Spy token.\nYou may disclose Aggression (reveal a card from your hand with this aspect icon). If you do, create another Spy token.', (s, ctx) =>
+    discloseThen(create(s, ctx.owner, TOKEN_SPY, 1), ctx, ['Aggression'], true)),
+  ifYouDo: (s, ctx) => create(s, ctx.owner, TOKEN_SPY, 1),
+})
+
+const chargedWithCorruptionThen = (s: GameState, ctx: IfYouDoContext): GameState => {
+  if (ctx.step === 'target') return captureUnit(s, ctx.unitChosen!, ctx.targetInstanceId!)
+  if (ctx.step === 'guardian') return unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, nonLeader)), 'choose an enemy non-leader unit to capture', false, 'target', ctx.targetInstanceId!)
+  return unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'choose a friendly unit to capture with', false, 'guardian')
+}
+registerCard('SEC_127', mayDiscloseThen('You may disclose Command Command (reveal cards from your hand with these aspect icons among them). If you do, a friendly unit captures an enemy non-leader unit. (Put the captured card facedown under that unit until that unit leaves play.)', // Charged with Corruption
+  ['Command', 'Command'], chargedWithCorruptionThen))
+
+const faithInYourFriendsThen = (s: GameState, ctx: IfYouDoContext): GameState => {
+  if (ctx.step === 'revealed') return create(s, ctx.owner, TOKEN_SPY, 2)
+  return discloseThen(s, ctx, ['Cunning', 'Cunning', 'Cunning', 'Heroism', 'Heroism'], true, 'revealed')
+}
+registerCard('SEC_211', { // Faith in Your Friends — the search-and-draw is unconditional.
+  ...whenPlayed('Search the top 3 cards of your deck for a card and draw it. Then, you may disclose Cunning Cunning Cunning Heroism Heroism (reveal cards from your hand with these aspect icons among them). If you do, create 2 Spy tokens.', (s, ctx) =>
+    searchDrawChoice(s, ctx, 3, () => true, 1, resume(ctx))),
+  ifYouDo: faithInYourFriendsThen,
+})
+
+const reliefRequestThen = (s: GameState, ctx: IfYouDoContext): GameState => {
+  if (ctx.step === 'healed1') {
+    const healed = healUnit(s, ctx.targetInstanceId!, 3)
+    return discloseThen(healed, ctx, ['Vigilance'], true, 'revealed', ctx.targetInstanceId)
+  }
+  if (ctx.step === 'revealed') {
+    const exclude = ctx.unitChosen
+    return unitThen(s, ctx, pickedIds(s, ctx, pickAll(damaged, (_s, u) => u.instanceId !== exclude)), 'heal 3 damage from another unit', false, 'healed2')
+  }
+  if (ctx.step === 'healed2') return healUnit(s, ctx.targetInstanceId!, 3)
+  return s
+}
+registerCard('SEC_074', { // Relief Request — the first heal is unconditional, the second gated.
+  ...whenPlayed('Heal 3 damage from a unit.\nYou may disclose Vigilance (reveal a card from your hand with this aspect icon). If you do, heal 3 damage from another unit.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, damaged), 'heal 3 damage from a unit', false, 'healed1')),
+  ifYouDo: reliefRequestThen,
+})
+
+const thunderousApplauseThen = (s: GameState, ctx: IfYouDoContext): GameState => {
+  if (ctx.step === 'buffed1') {
+    const buffed = addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: 2, hp: 2 })
+    return discloseThen(buffed, ctx, ['Command'], true, 'revealed', ctx.targetInstanceId)
+  }
+  if (ctx.step === 'revealed') {
+    const exclude = ctx.unitChosen
+    return unitThen(s, ctx, pickedIds(s, ctx, (_s, u) => u.instanceId !== exclude), 'give another unit +2/+2 for this phase', false, 'buffed2')
+  }
+  if (ctx.step === 'buffed2') return addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: 2, hp: 2 })
+  return s
+}
+registerCard('SEC_129', { // With Thunderous Applause — the first buff is unconditional, the second gated.
+  ...whenPlayed('Give a unit +2/+2 for this phase.\nYou may disclose Command (reveal a card from your hand with this aspect icon). If you do, give another unit +2/+2 for this phase.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'give a unit +2/+2 for this phase', false, 'buffed1')),
+  ifYouDo: thunderousApplauseThen,
+})
+
+const bogDownThen = (s: GameState, ctx: IfYouDoContext): GameState => {
+  if (ctx.step === 'exhausted1') {
+    const exhausted = exhaustUnit(s, ctx.targetInstanceId!)
+    return discloseThen(exhausted, ctx, ['Cunning'], true, 'revealed', ctx.targetInstanceId)
+  }
+  if (ctx.step === 'revealed') {
+    const exclude = ctx.unitChosen
+    return unitThen(s, ctx, pickedIds(s, ctx, (_s, u) => !u.exhausted && u.instanceId !== exclude), 'exhaust another unit', false, 'exhausted2')
+  }
+  if (ctx.step === 'exhausted2') return exhaustUnit(s, ctx.targetInstanceId!)
+  return s
+}
+registerCard('SEC_234', { // Bog Down in Procedure — the first exhaust is unconditional, the second gated.
+  ...whenPlayed('Exhaust a unit.\nYou may disclose Cunning (reveal a card from your hand with this aspect icon). If you do, exhaust another unit.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, (_s, u) => !u.exhausted), 'exhaust a unit', false, 'exhausted1')),
+  ifYouDo: bogDownThen,
+})
+
+registerCard('SEC_076', mayDiscloseThen('You may disclose Vigilance Vigilance (reveal cards from your hand with these aspect icons among them). If you do, defeat a damaged non-leader unit.', // Charged with Murder
+  ['Vigilance', 'Vigilance'], (s, ctx) => (ctx.step === 'defeat'
+    ? defeatUnit(s, ctx.targetInstanceId!)
+    : unitThen(s, ctx, pickedIds(s, ctx, pickAll(damaged, nonLeader)), 'defeat a damaged non-leader unit', false, 'defeat'))))
+
+// ── When Defeated: disclose ──────────────────────────────────────────────────────────────────────
+registerCard('SEC_059', defeated(mayDiscloseThen('You may disclose Vigilance (reveal a card from your hand with this aspect icon). If you do, give an Experience token to a unit.', // Senate Warden
+  ['Vigilance'], (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, pickAny), 1, false))))
+registerCard('SEC_094', defeated(mayDiscloseThen('You may disclose Command Command Heroism (reveal cards from your hand with these aspect icons among them). If you do, draw a card.', // Mina Bonteri — Restore 1 is printed.
+  ['Command', 'Command', 'Heroism'], (s, ctx) => drawCards(s, ctx.owner, 1))))
+registerCard('SEC_148', defeated(mayDiscloseThen('You may disclose Aggression Heroism (reveal cards from your hand with these aspect icons among them). If you do, create a Spy token and ready it.', // Karis Nemik — Hidden is printed.
+  ['Aggression', 'Heroism'], (s, ctx) => create(s, ctx.owner, TOKEN_SPY, 1, readyIt))))
+registerCard('SEC_153', defeated(mayDiscloseThen('You may choose an opponent and disclose Aggression Aggression Heroism (reveal cards from your hand with these aspect icons among them). If you do, that opponent discards 2 cards from their hand.', // Luthen's Haulcraft — 2 players, so the opponent is fixed.
+  ['Aggression', 'Aggression', 'Heroism'], (s, ctx) => opponentDiscards(s, ctx.owner, ctx.sourceInstanceId!, undefined, 2))))
+
+registerCard('SEC_120', alsoAt({ // Naboo Security Force
+  ...whenPlayed('You may disclose Command (reveal a card from your hand with this aspect icon). If you do, give a friendly unit Sentinel for this phase.', (s, ctx) => discloseThen(s, ctx, ['Command'], true)),
+  ifYouDo: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickFriendly), { keywords: [{ name: 'Sentinel' }] }, false),
+}, 'whenDefeated'))
+
+// ── On Attack: disclose ──────────────────────────────────────────────────────────────────────────
+registerCard('SEC_065', onAttack(mayDiscloseThen('You may disclose Vigilance Vigilance (reveal cards from your hand with these aspect icons among them). If you do, heal up to 4 damage from among other units.', // Nala Se
+  ['Vigilance', 'Vigilance'], (s, ctx) => {
+    const targets = allUnits(s).filter(u => u.damage > 0 && u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
+    return targets.length ? pushChoice(s, { kind: 'distributeHealing', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: 4, healed: 0, unitTargets: targets, baseTargets: [] }) : s
+  })))
+registerCard('SEC_085', onAttack(mayDiscloseThen('You may disclose Command Command Villainy (reveal cards from your hand with these aspect icons among them). If you do, give an Experience token to each of up to 2 other units.', // Vice Admiral Rampart
+  ['Command', 'Command', 'Villainy'], (s, ctx) => {
+    const targets = pickedIds(s, ctx, pickOther)
+    return targets.length ? pushChoice(s, { kind: 'distributeTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_EXPERIENCE, remaining: 2, total: 2, targets, upTo: true, anyUnit: true, exclude: ctx.sourceInstanceId }) : s
+  })))
+registerCard('SEC_190', onAttack(mayDiscloseThen('You may disclose Cunning Cunning Villainy (reveal cards from your hand with these aspect icons among them). If you do, ready 2 resources.', // Soulless One
+  ['Cunning', 'Cunning', 'Villainy'], (s, ctx) => readyResource(readyResource(s, ctx.owner), ctx.owner))))
+registerCard('SEC_248', onAttack(mayDiscloseThen('You may disclose Heroism Heroism (reveal cards from your hand with these aspect icons among them). If you do, give a unit Sentinel for this phase.', // B2EM0 — Restore 1 is printed.
+  ['Heroism', 'Heroism'], (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { keywords: [{ name: 'Sentinel' }] }, false))))
+registerCard('SEC_164', onAttack(whenPlayed("You may disclose Aggression. If you don't, deal 2 damage to your base.", (s, ctx) => // Warrior of Clan Ordo
+  discloseThen(s, ctx, ['Aggression'], true, undefined, undefined, { onDecline: { damageOwnBase: 2 } }))))
+
+const ebonHawkThen = (s: GameState, ctx: IfYouDoContext): GameState => {
+  if (ctx.step === 'villainy') {
+    if (!ctx.disclosed?.length || !ctx.unitChosen) return s
+    return addLastingEffect(s, { targetInstanceId: ctx.unitChosen, power: -4, untilEndOfAttack: true })
+  }
+  // Heroism just resolved (or was declined): `ctx.unitChosen` still carries the defender from the
+  // initial raise below, since neither disclose stage overwrites it unless told to.
+  const buffed = ctx.disclosed?.length ? forThisAttack(s, ctx.sourceInstanceId!, 2) : s
+  return discloseThen(buffed, ctx, ['Villainy'], true, 'villainy', ctx.unitChosen)
+}
+registerCard('SEC_219', onAttack({ // Ebon Hawk — each disclosure is independent, so each is checked and buffed on its own.
+  ...whenPlayed('You may disclose Heroism and/or Villainy. If you disclosed Heroism, this unit gets +2/+0 for this attack. If you disclosed Villainy, give the defender -4/-0 for this attack.', (s, ctx) =>
+    discloseThen(s, ctx, ['Heroism'], true, undefined, defenderOf(s, ctx)?.instanceId, { hookOnDecline: true })),
+  ifYouDo: ebonHawkThen,
+}))
+
+// ── Raw trigger points: disclose ─────────────────────────────────────────────────────────────────
+registerCard('SEC_096', { // Ahsoka Tano, I Learned it From You
+  abilities: [{
+    trigger: 'onAttackEnd',
+    hears: (s, ctx) => survivedAttack(s, ctx),
+    description: 'When this unit completes an attack (and survives): You may disclose Command Heroism. If you do, attack with another unit.',
+    effect: (s, ctx) => discloseThen(s, ctx, ['Command', 'Heroism'], true),
+  }],
+  ifYouDo: (s, ctx) => attackWithAnother(s, ctx, pickAll(pickFriendly, pickOther)),
+})
+registerCard('SEC_098', { // Captain Typho, All Necessary Precautions — Sentinel is printed.
+  abilities: [{
+    trigger: 'onDefense',
+    description: 'When this unit is attacked: You may disclose Command Heroism. If you do, heal 1 damage from your base.',
+    effect: (s, ctx) => discloseThen(s, ctx, ['Command', 'Heroism'], true),
+  }],
+  ifYouDo: (s, ctx) => healBase(s, ctx.owner, 1),
+})
+registerCard('SEC_107', { // Chancellor Valorum, Civil Servant
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'When this unit completes an attack: You may disclose Command Command Command. If you do, put the top card of your deck into play as a resource.',
+    effect: (s, ctx) => discloseThen(s, ctx, ['Command', 'Command', 'Command'], true),
+  }],
+  ifYouDo: (s, ctx) => resourceTopOfDeck(s, ctx.owner),
+})
+
+// ── Leader: disclose ─────────────────────────────────────────────────────────────────────────────
+const LEIA_ASPECTS = ['Vigilance', 'Command', 'Aggression', 'Cunning', 'Heroism']
+const leiaAction = (s: GameState, ctx: Resumable): GameState =>
+  pushChoice(s, { kind: 'chooseMode', id: ctx.sourceInstanceId!, controller: ctx.owner, modes: LEIA_ASPECTS, then: resume(ctx) })
+const leiaIfYouDo = (s: GameState, ctx: IfYouDoContext): GameState => {
+  if (ctx.step === 'exp') return expChoice(s, ctx, [ctx.targetInstanceId!], 1, false)
+  if (ctx.step === 'revealed') {
+    const disclosedId = ctx.disclosed?.[0]
+    if (!disclosedId) return s
+    const cardAspects = s.cards[disclosedId]?.aspects ?? []
+    const targets = pickedIds(s, ctx, (s2, u) => !(s2.cards[u.cardId]?.aspects ?? []).some(a => cardAspects.includes(a)))
+    return unitThen(s, ctx, targets, "give an Experience token to a unit that doesn't share an aspect with the disclosed card", false, 'exp')
+  }
+  // A mode chosen ("chooseMode" hands its literal text back as `step`): disclose exactly that aspect.
+  return ctx.step && LEIA_ASPECTS.includes(ctx.step) ? discloseThen(s, ctx, [ctx.step], true, 'revealed') : s
+}
+registerCard('SEC_004', { // Leia Organa, Of A Secret Bloodline
+  ...leaderFront("Disclose Vigilance, Command, Aggression, Cunning, or Heroism (reveal a card from your hand with this aspect icon). If you do, give an Experience token to a unit that doesn't share an aspect with the disclosed card.", {
+    cost: 1,
+    effect: leiaAction,
+  }),
+  ...attacks("You may disclose Vigilance, Command, Aggression, Cunning, or Heroism. If you do, give an Experience token to a unit that doesn't share an aspect with the disclosed card.", leiaAction),
+  ifYouDo: leiaIfYouDo,
+})

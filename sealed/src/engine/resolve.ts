@@ -1074,8 +1074,10 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   }
   // "If you don't, deal 2 damage to your base" (Warrior of Clan Ordo, disclose #603): the decline
   // is the condition, offered only here since `disclose` never offers this move once a pick exists.
-  if (choice.kind === 'disclose' && choice.onDecline?.damageOwnBase) {
-    next = dealDamageToBase(next, choice.controller, choice.onDecline.damageOwnBase)
+  if (choice.kind === 'disclose') {
+    if (choice.onDecline?.damageOwnBase) next = dealDamageToBase(next, choice.controller, choice.onDecline.damageOwnBase)
+    // Ebon Hawk: declining one aspect still offers the other, so its `then` runs either way.
+    if (choice.hookOnDecline && choice.then) next = runIfYouDo(next, choice.then, { disclosed: [] })
   }
   // "If you don't, you may discard it" (Improvise): the decline is the condition, so this is the
   // only branch that offers it. The card is still on top, having never left the deck.

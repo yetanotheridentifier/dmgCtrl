@@ -1253,8 +1253,10 @@ type ChoiceVariant =
    * it (offered once `need` is fully covered) and runs `then`, told the revealed card ids as
    * `disclosed`. `skipTrigger` (offered only while `picks` is empty, when `optional`) declines instead,
    * running `onDecline` for the rare card whose only branch is "if you don't" (Warrior of Clan Ordo).
+   * `hookOnDecline` runs `then` on a decline too, told `disclosed: []`, for a card whose ability goes
+   * on regardless (Ebon Hawk's Villainy half is still offered after Heroism is declined).
    */
-  | { kind: 'disclose'; id: string; controller: PlayerId; need: string[]; picks: number[]; optional: boolean; then?: IfYouDo; onDecline?: { damageOwnBase: number } }
+  | { kind: 'disclose'; id: string; controller: PlayerId; need: string[]; picks: number[]; optional: boolean; then?: IfYouDo; onDecline?: { damageOwnBase: number }; hookOnDecline?: boolean }
   // Heal 1 at a time from `unitTargets` / `baseTargets` until `remaining` is spent or Done, then deal
   // what was healed to `damageUnit`, when there is one (Redemption). `oneUnit` keeps every point on the first unit picked
   // (Kashyyyk Defender's "from another unit").
