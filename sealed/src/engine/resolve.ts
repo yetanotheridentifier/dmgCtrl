@@ -1,6 +1,6 @@
 import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
-import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef } from './types'
+import type { DelayedEffect, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds, isFortify, isPlot, recordBaseActionUsed } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
@@ -1739,6 +1739,35 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         : finishHealing(next, choice.damageUnit, healed)
       break
     }
+    case 'distributeIndirectDamage': {
+      // Assign one point at a time to a unit or the target player's own base — mandatory until the
+      // whole amount is spent (nobody may decline to absorb indirect damage), unlike `distributeHealing`.
+      // `boosted` skips re-adding `indirectDamageBonus`/`abilityDamageBonus` past the first point: the
+      // total already carries it, once, for the whole instance.
+      let hitUnit: string | undefined
+      let hitBase = false
+      if (targetInstanceId && choice.unitTargets.includes(targetInstanceId)) {
+        next = dealDamageToUnit(next, targetInstanceId, 1, choice.source, undefined, !choice.boosted)
+        hitUnit = targetInstanceId
+      } else if (baseTarget === choice.targetPlayer) {
+        next = dealDamageToBase(next, baseTarget, 1, choice.source, undefined, !choice.boosted)
+        hitBase = true
+      }
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      if (hitUnit !== undefined || hitBase) {
+        const remaining = choice.remaining - 1
+        const unitsDamaged = hitUnit ? [...(choice.unitsDamaged ?? []), hitUnit] : (choice.unitsDamaged ?? [])
+        const baseDamaged = choice.baseDamaged === true || hitBase
+        // The base never leaves play, so it alone guarantees this can always finish even once every
+        // unit on that side is defeated.
+        const unitTargets = next.players[choice.targetPlayer].units.filter(u => !isDoomed(next, u)).map(u => u.instanceId)
+        next = remaining > 0
+          ? pushChoice(next, { ...choice, remaining, boosted: true, unitTargets, unitsDamaged, baseDamaged })
+          : finishIndirectDamage(next, choice.then, unitsDamaged, baseDamaged)
+      }
+      break
+    }
     case 'distributeTokens': {
       // Helgait: give one token to the chosen friendly unit, then re-offer the rest.
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
@@ -3087,6 +3116,19 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
 /** "Deal that much damage to this unit", once a healing distribution ends. */
 function finishHealing(state: GameState, damageUnit: string | undefined, healed: number): GameState {
   return healed > 0 && damageUnit && findUnit(state, damageUnit) ? checkWin(dealDamageToUnit(state, damageUnit, healed)) : state
+}
+
+/**
+ * Run an indirect-damage follow-up once the whole amount is spent, read off what actually got hit
+ * (Guerilla Soldier, Kimoglia Heavy Fighter, Tactical Heavy Bomber). A no-op with no `then`.
+ */
+function finishIndirectDamage(state: GameState, then: IndirectDamageFollowUp | undefined, unitsDamaged: string[], baseDamaged: boolean): GameState {
+  if (!then) return state
+  let next = state
+  if (then.readyIfBaseDamaged && baseDamaged) next = readyUnit(next, then.readyIfBaseDamaged)
+  if (then.drawIfBaseDamaged && baseDamaged) next = drawCards(next, then.drawIfBaseDamaged, 1)
+  if (then.exhaustUnitsDamaged) for (const id of unitsDamaged) next = exhaustUnit(next, id)
+  return next
 }
 
 /** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */

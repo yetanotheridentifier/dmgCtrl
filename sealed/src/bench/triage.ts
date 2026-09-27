@@ -60,6 +60,10 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
   // trigger point of its own — unlike "When you play A CARD using SMUGGLE" (Hondo Ohnaka, Lando
   // Calrissian), which watches every play and still has nowhere to dispatch from (`kw:Smuggle` above).
   'when played using smuggle',
+  // "When indirect damage is dealt to a unit" (Allegiant General Pryde, #604) is `whenDamageDealt`
+  // filtered to `DamageDealt.indirect`, the same treatment as "dealt damage and survives" above, not a
+  // point of its own.
+  'when indirect damage is dealt to a unit',
 ])
 
 /**

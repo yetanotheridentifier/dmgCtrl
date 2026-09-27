@@ -357,6 +357,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : action.baseTarget === by ? 'your base' : action.baseTarget ? "opponent's base" : undefined
         return `Heal 1${target ? ` from ${target}` : ''}`
       }
+      if (choice.kind === 'distributeIndirectDamage') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : action.baseTarget === by ? 'your base' : action.baseTarget ? "opponent's base" : undefined
+        return `Assign 1${target ? ` to ${target}` : ''}`
+      }
       if (choice.kind === 'distributeTokens') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         const tokenName = state.cards[choice.token]?.name ?? 'token'

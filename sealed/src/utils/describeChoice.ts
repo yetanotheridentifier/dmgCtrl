@@ -172,6 +172,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     }
     case 'distributeDamage':
       return [`deal damage across your targets: ${choice.total - choice.remaining} of ${choice.total} allocated`]
+    case 'distributeIndirectDamage':
+      return [`assign ${choice.remaining} indirect damage among your base and units, one point at a time`]
     case 'distributeHealing':
       return [choice.damageUnit
         ? `heal up to ${choice.remaining} more damage, one point at a time; this unit then takes ${choice.healed} so far`

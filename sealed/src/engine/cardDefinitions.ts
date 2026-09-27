@@ -1,18 +1,18 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers, collectCardTriggers } from './abilities'
 import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens } from './effects'
-import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
+import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer, abilityCardIds } from './types'
+import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, indirectDamageDealtThisPhase, markAbilityUsed, updatePlayer, abilityCardIds } from './types'
 import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost, readyResourceCount } from './resources'
 import { cardHasTrait, cardTraits, unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywords, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
-import type { CombatContext, DiscardPlayGrant, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PendingTrigger, PlayerId, PlayFromTail, PlayFromZone, UnitState, UpgradeAttachment, UpgradeRef } from './types'
+import type { CombatContext, DamageSource, DiscardPlayGrant, EngineCard, GameState, IfYouDo, IndirectDamageFollowUp, KeywordInstance, LastingEffect, PendingChoice, PendingTrigger, PlayerId, PlayFromTail, PlayFromZone, UnitState, UpgradeAttachment, UpgradeRef } from './types'
 
 /**
  * Real card definitions. Side-effect module: importing it registers every
@@ -12016,3 +12016,123 @@ registerCard('SEC_001', // Chancellor Palpatine — front only; the back's "next
     cost: 1,
     effect: (s, ctx) => searchDrawChoice(s, ctx, 5, isPlot),
   }))
+
+// ── Indirect damage (JTL) ───────────────────────────────────────
+//
+// Damage dealt to a PLAYER rather than a unit or base directly, which THEY assign (as unpreventable
+// damage) among their own base and units — see `dealIndirectDamage` (combat.ts) and the
+// `distributeIndirectDamage` choice it raises. "A player" is a genuine choice between both players,
+// the same convention `choosePlayerThen` already serves elsewhere (defeating a Credit token belonging
+// to any player); it is never assumed to mean the opponent.
+
+const srcOf = (ctx: EventCtx & { cardId: string }): DamageSource =>
+  ({ cardId: ctx.cardId, controller: ctx.owner, ...(ctx.sourceInstanceId ? { instanceId: ctx.sourceInstanceId } : {}) })
+
+/**
+ * "Deal N indirect damage to a player": choose the player (mandatory whenever `amount` is positive),
+ * then resolve it as indirect damage. `amount` is recomputed at the `ifYouDo` stage rather than
+ * carried through the choice — safe, since nothing else runs between the two steps — so a
+ * board-dependent amount (Dornean Gunship's Vehicle count) reads current state either way.
+ * `then` is the follow-up read off what the distribution actually hit (Guerilla Soldier, Kimoglia
+ * Heavy Fighter): a function of the settled `ifYouDo` context, since it may need `sourceInstanceId`.
+ */
+const indirectDamageToChosenPlayer = (
+  description: string,
+  amount: (s: GameState, ctx: EventCtx) => number,
+  then?: (ctx: Resumable) => IndirectDamageFollowUp,
+): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) => (amount(s, ctx) > 0 ? choosePlayer(s, ctx, 'deal that indirect damage to a player') : s)),
+  ifYouDo: (s, ctx) => dealIndirectDamage(s, ctx.playerChosen!, amount(s, ctx), srcOf(ctx), then?.(ctx)),
+})
+
+/** "You control Boba Fett (as a unit, upgrade, or leader)" (Fett's Firespray). */
+const controlsBobaFett = (s: GameState, owner: PlayerId): boolean =>
+  playerControlsNamed(s, owner, 'Boba Fett') || allUnits(s).some(u => u.upgrades.some(up => up.owner === owner && s.cards[up.cardId]?.name === 'Boba Fett'))
+
+registerCard('JTL_165', { indirectDamageBonus: () => 1 }) // Hunting Aggressor
+
+registerCard('JTL_143', { // Devastator
+  assignsIndirectDamage: () => true,
+  ...whenPlayed('You assign all indirect damage you deal to opponents. \nWhen Played: Deal 4 indirect damage to each opponent.', (s, ctx) =>
+    dealIndirectDamage(s, opponentOf(ctx.owner), 4, srcOf(ctx))),
+})
+
+registerCard('JTL_226', { // Radiant VII
+  aura: (_s, _src, tgt, friendly) => (!friendly && !tgt.isLeader && tgt.damage > 0 ? { power: -tgt.damage } : undefined),
+  ...indirectDamageToChosenPlayer('Each enemy non-leader unit gets -1/-0 for each damage on it. \nWhen Played: Deal 5 indirect damage to a player.', () => 5),
+})
+
+registerCard('JTL_116', indirectDamageToChosenPlayer( // Dornean Gunship
+  'When Played: Deal indirect damage to a player equal to the number of Vehicle units you control.',
+  (s, ctx) => s.players[ctx.owner].units.filter(u => unitHasTrait(s, u, 'Vehicle')).length))
+
+registerCard('JTL_218', indirectDamageToChosenPlayer( // Guerilla Soldier
+  'When Played: Deal 3 indirect damage to a player. If a base is damaged this way, ready this unit.',
+  () => 3, ctx => ({ readyIfBaseDamaged: ctx.sourceInstanceId })))
+
+registerCard('JTL_222', indirectDamageToChosenPlayer( // Kimoglia Heavy Fighter
+  'When Played: Deal 3 indirect damage to a player. Exhaust each unit damaged this way.',
+  () => 3, () => ({ exhaustUnitsDamaged: true })))
+
+registerCard('JTL_240', alsoAt(indirectDamageToChosenPlayer( // Fett's Firespray
+  'When Played/On Attack: Deal 1 indirect damage to a player. If you control Boba Fett (as a unit, upgrade, or leader), deal 2 indirect damage instead.',
+  (s, ctx) => (controlsBobaFett(s, ctx.owner) ? 2 : 1)), 'onAttack'))
+
+registerCard('JTL_162', defeated(indirectDamageToChosenPlayer('When Defeated: Deal 3 indirect damage to a player.', () => 3))) // Droid Missile Platform
+registerCard('JTL_183', defeated(indirectDamageToChosenPlayer('When Defeated: Deal 2 indirect damage to a player.', () => 2))) // Zygerrian Starhopper
+
+registerCard('JTL_132', onAttack(alsoAt(indirectDamageToChosenPlayer( // First Order Stormtrooper
+  'On Attack/When Defeated: Deal 1 indirect damage to a player.', () => 1), 'whenDefeated')))
+
+registerCard('JTL_181', indirectDamageToChosenPlayer( // Planetary Bombardment
+  'Deal 8 indirect damage to a player. If you control a Capital Ship unit, deal 12 indirect damage instead.',
+  (s, ctx) => (s.players[ctx.owner].units.some(u => unitHasTrait(s, u, 'Capital Ship')) ? 12 : 8)))
+
+registerCard('JTL_234', indirectDamageToChosenPlayer('Deal 5 indirect damage to a player.', () => 5)) // Torpedo Barrage
+
+registerCard('JTL_149', onAttack(whenPlayed('On Attack: Deal 3 indirect damage to the defending player.', (s, ctx) => // Red Squadron Y-Wing
+  dealIndirectDamage(s, opponentOf(ctx.owner), 3, srcOf(ctx)))))
+registerCard('JTL_237', onAttack(whenPlayed('On Attack: Deal 3 indirect damage to the defending player.', (s, ctx) => // TIE Bomber
+  dealIndirectDamage(s, opponentOf(ctx.owner), 3, srcOf(ctx)))))
+
+registerCard('JTL_152', onAttack(whenPlayed( // Tactical Heavy Bomber
+  "On Attack: Deal indirect damage equal to this unit's power to the defending player. If a base is damaged this way, draw a card.",
+  (s, ctx) => dealIndirectDamage(s, opponentOf(ctx.owner), attackingPower(s, ctx), srcOf(ctx), { drawIfBaseDamaged: ctx.owner }))))
+
+registerCard('JTL_138', { costModifier: (s, p) => (indirectDamageDealtThisPhase(s, p) ? -1 : 0) }) // Decimator of Dissidents
+
+registerCard('JTL_127', { // Lightspeed Assault
+  ...whenPlayed("Defeat a friendly space unit and deal damage equal to its power to an enemy space unit. If you do, deal indirect damage equal to the enemy unit's power to its controller.", (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickArena('space'))), 'choose the friendly space unit to defeat', false, 'friendly')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'friendly') {
+      return unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, pickArena('space'))), 'choose the enemy space unit to damage', false, 'enemy', ctx.targetInstanceId)
+    }
+    const friendly = findUnit(s, ctx.unitChosen ?? '')?.unit
+    const targetId = ctx.targetInstanceId
+    if (!friendly || !targetId) return s
+    const target = findUnit(s, targetId)
+    if (!target) return s
+    const friendlyPower = effectivePower(s, friendly)
+    const enemyPower = effectivePower(s, target.unit)
+    const enemyOwner = target.owner
+    const next = dealDamageToUnit(defeatUnit(s, friendly.instanceId), targetId, friendlyPower)
+    return dealIndirectDamage(next, enemyOwner, enemyPower, srcOf(ctx))
+  },
+})
+
+registerCard('JTL_133', allOf( // Allegiant General Pryde
+  {
+    abilities: [{
+      trigger: 'whenDamageDealt',
+      hears: (_s, ctx) => ctx.damageDealt?.indirect === true && (ctx.damageDealt?.units.length ?? 0) > 0,
+      description: 'When indirect damage is dealt to a unit: You may defeat a non-unique upgrade on it.',
+      effect: (s, ctx) => {
+        const hitId = ctx.damageDealt!.units[0].instanceId
+        const candidates = upgradeCandidates(s, { on: 'unit' }).filter(up => up.unitId === hitId && !s.cards[up.cardId]?.unique)
+        return candidates.length ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: `${ctx.sourceInstanceId}-indirect`, controller: ctx.owner, candidates, optional: true }) : s
+      },
+    }],
+  },
+  onAttack(indirectDamageToChosenPlayer('On Attack: If you have the initiative, deal 2 indirect damage to a player.', (s, ctx) => (s.initiative === ctx.owner ? 2 : 0))),
+))

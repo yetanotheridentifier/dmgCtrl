@@ -939,6 +939,10 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SEC_235', name: 'The Wrong Ride' },
   { id: 'SEC_245', name: 'When Has Become Now' },
   { id: 'TS26_46', name: 'Secret Marriage' },
+  // Indirect damage (#604): the events among the JTL cards that need nothing else.
+  { id: 'JTL_181', name: 'Planetary Bombardment' },
+  { id: 'JTL_234', name: 'Torpedo Barrage' },
+  { id: 'JTL_127', name: 'Lightspeed Assault' },
 ]
 
 /**
@@ -2076,6 +2080,22 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SEC_203', name: 'Tala Durith' },
   { id: 'SEC_243', name: 'FN Trooper Corps' },
   { id: 'SEC_255', name: 'Remote Escort Tank' },
+  // Indirect damage (#604): the mechanic plus the JTL units that need nothing else.
+  { id: 'JTL_165', name: 'Hunting Aggressor' },
+  { id: 'JTL_143', name: 'Devastator' },
+  { id: 'JTL_226', name: 'Radiant VII' },
+  { id: 'JTL_116', name: 'Dornean Gunship' },
+  { id: 'JTL_218', name: 'Guerilla Soldier' },
+  { id: 'JTL_222', name: 'Kimoglia Heavy Fighter' },
+  { id: 'JTL_240', name: "Fett's Firespray" },
+  { id: 'JTL_162', name: 'Droid Missile Platform' },
+  { id: 'JTL_183', name: 'Zygerrian Starhopper' },
+  { id: 'JTL_132', name: 'First Order Stormtrooper' },
+  { id: 'JTL_149', name: 'Red Squadron Y-Wing' },
+  { id: 'JTL_237', name: 'TIE Bomber' },
+  { id: 'JTL_152', name: 'Tactical Heavy Bomber' },
+  { id: 'JTL_138', name: 'Decimator of Dissidents' },
+  { id: 'JTL_133', name: 'Allegiant General Pryde' },
 ]
 
 /**

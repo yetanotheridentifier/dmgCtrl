@@ -975,6 +975,15 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'distributeIndirectDamage': {
+        // The receiving player must assign the whole amount (CR: nobody may decline to absorb indirect
+        // damage), so — unlike `distributeHealing` — there is never a Done here while `remaining` > 0.
+        // The base is always a legal target (it can never leave play), so the choice can never strand
+        // even once every eligible unit is defeated.
+        for (const id of choice.unitTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: choice.targetPlayer })
+        break
+      }
       case 'distributeTokens': {
         // Every token is placed (CR 3.7.2.b) unless the card says otherwise. "Up to" (`upTo`, Elzar Mann)
         // stops at any point. "You may" (`optional`, Helgait) declines only before the first token,

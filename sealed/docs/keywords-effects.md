@@ -737,3 +737,46 @@ with no bracket to parse).
   preceding action" sequencing, which the engine does not track), and Chancellor Palpatine's back,
   above. Galen Erso (SEC_046, needs "loses all abilities") is commented directly on #682, which
   already owns that primitive, rather than routed to #726.
+
+## Indirect damage
+
+"Indirect damage. (They assign that much unpreventable damage among their base and units.)" is JTL's
+damage mechanic: unlike every other instance of damage, the RECEIVING player, not the dealer, decides
+where it lands, one point at a time, and it ignores Shields and every base-damage prevention outright.
+
+- **`dealIndirectDamage`** (`combat.ts`) is the entry point: it folds in `indirectDamageBonus` (Hunting
+  Aggressor's "+1 to opponents"), checks whether a card flips the assignment to the dealer instead
+  (`indirectDamageAssignedByDealer`, Devastator's "you assign all indirect damage you deal to
+  opponents"), then raises **one** `distributeIndirectDamage` choice controlled by whichever player
+  assigns it. Both hooks (`CardDefinition.indirectDamageBonus` / `.assignsIndirectDamage`) are asked
+  only of units the DEALER controls, mirroring `abilityDamageBonus`'s shape but never of the target's
+  own side.
+- **The distribution is mandatory, unlike `distributeDamage`'s "may stop early".** Nobody may decline
+  to absorb indirect damage, so the choice never offers a Done while any amount remains. The target
+  player's own base is always one of the offered targets and can never leave play, so the choice can
+  never strand even once every eligible unit on that side is dead — no completability recheck (#603's
+  class of fix) was needed for this shape.
+- **Unpreventable is a flag on the instance, not a card hook.** `DamageSource.unpreventable` is a new,
+  general field `damageIsUnpreventable` checks first, before the existing `makesDamageUnpreventable`
+  hook scan (Gorian Shard's Corsair) — indirect damage's own printed reminder sets it directly on every
+  instance, since every printing means the same thing and none needs a hook of its own. `dealDamageToBase`
+  also gained a `boost` parameter (mirroring `dealDamageToUnit`'s existing one) so a multi-point
+  distribution to the base only ever applies `abilityDamageBonus` once, on the instance's first point.
+- **Allegiant General Pryde's "When indirect damage is dealt to a unit" needs no trigger point of its
+  own.** `DamageSource.indirect` threads through to `DamageDealt.indirect` exactly the way `byCombat`
+  already does, so the existing `whenDamageDealt` point (heard on both sides already) is filtered on it
+  — the same treatment "dealt damage and survives" already gets, above.
+- **Follow-ups that read what the distribution actually hit** ("if a base is damaged this way, ready
+  this unit"; "exhaust each unit damaged this way") are carried on the choice itself as an
+  `IndirectDamageFollowUp` (`readyIfBaseDamaged` / `drawIfBaseDamaged` / `exhaustUnitsDamaged`), applied
+  once the whole amount is spent, off the base-hit flag and unit-id list the distribution recorded as
+  it went.
+- **"Deal N indirect damage to a player"** is a genuine choice between both players (`choosePlayerThen`,
+  the same convention "defeat a Credit token belonging to any player" already uses), never assumed to
+  mean the opponent. A card whose text instead names "the defending player" or "each opponent" deals it
+  to a fixed target and raises no such choice.
+- **18 of the 22 candidate cards need nothing else** (recounted against `registeredCardIds()`; the
+  ticket's stale count read 15). Left out: Boba Fett's leader (JTL_009, needs a further, unrelated
+  trigger point for "when you deal non-combat damage"), Targeting Computer and Superheavy Ion Cannon
+  (JTL_171/JTL_227, both need a granted-ability block), and Dengar (JTL_139, needs Piloting) — each
+  noted on the ticket that already owns its remaining blocker.
