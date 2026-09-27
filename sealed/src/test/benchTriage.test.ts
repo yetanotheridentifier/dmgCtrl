@@ -235,8 +235,50 @@ describe('trigger heads', () => {
     ['SHD_250 Tarfful', "Restore 2 \nWhen a friendly Wookiee unit is dealt combat damage and isn't defeated: That unit deals that much damage to an enemy ground unit.", "When a friendly Wookiee unit is dealt combat damage and isn't defeated"],
     ['SOR_085 Rukh', 'SHIELDED (When you play this unit, give a Shield token to it.)\nWhen this unit deals combat damage to a non-leader unit while attacking: Defeat that unit.', 'When this unit deals combat damage to a non-leader unit while attacking'],
     ['SOR_133 Seventh Sister', "SABOTEUR (When this unit attacks, ignore Sentinel and defeat the defender's Shields.)\nWhen this unit deals combat damage to an opponent's base: You may deal 3 damage to a ground unit that opponent controls.", "When this unit deals combat damage to an opponent's base"],
+    // TWI_096 Aayla Secura and TWI_147 Anakin Skywalker (#731): a keyword printed as a lead-in to its
+    // own trigger, "Coordinate <dash> On Attack:". Two different dash characters as printed.
+    ['TWI_096 Aayla Secura', 'Coordinate — On Attack: Prevent all combat damage that would be dealt to this unit for this attack.', 'On Attack'],
+    ['TWI_147 Anakin Skywalker', 'Coordinate - On Attack: Draw a card. (Gain this ability while you control 3 or more units.)', 'On Attack'],
   ])('reads the whole head on %s', (_card, text, head) => {
     expect(triggerHeads(text)).toEqual([head])
+  })
+
+  /**
+   * #731: `triggerHeads()` used to capture the whole leading line up to the colon, so a card printed
+   * "Coordinate - On Attack:" read as the head "Coordinate - On Attack" rather than "On Attack", and
+   * `CANONICAL_BLOCKERS` only folded back the one exact spelling it was given. The general shape is a
+   * single capitalised keyword name, then a dash surrounded by spaces, then the real trigger point:
+   * that shape belongs to any keyword printed this way, not to a list of spellings, so the strip is
+   * general rather than keyed to "Coordinate". A hyphen with no surrounding spaces ("non-token") is
+   * part of a word, not this shape, and is left alone.
+   */
+  it.each([
+    ['a hyphen', 'Foo - When Played: Draw a card.', 'When Played'],
+    ['an em dash', 'Foo — When Played: Draw a card.', 'When Played'],
+    ['an en dash', 'Foo – When Played: Draw a card.', 'When Played'],
+    ['a numbered keyword', 'Foo 2 - When Played: Draw a card.', 'When Played'],
+    ['a bracketed cost after the prefix', 'Coordinate — Action [Exhaust]: Draw a card.', 'Action'],
+  ])('strips a leading keyword-and-dash prefix (%s) before reading the head', (_case, text, head) => {
+    expect(triggerHeads(text)).toEqual([head])
+  })
+
+  it('leaves an embedded hyphen with no surrounding spaces alone, since it is part of a word', () => {
+    expect(triggerHeads('When a non-leader ground unit enters play: Draw a card.')).toEqual(['When a non-leader ground unit enters play'])
+  })
+
+  it('reports no trigger:one-off blocker for the four TWI Coordinate cards named in #731', () => {
+    const cases: [string, string[]][] = [
+      // TWI_096 Aayla Secura
+      ['Coordinate — On Attack: Prevent all combat damage that would be dealt to this unit for this attack.', ['Coordinate']],
+      // TWI_147 Anakin Skywalker
+      ['Coordinate - On Attack: Draw a card. (Gain this ability while you control 3 or more units.)', ['Coordinate']],
+      // TWI_165 Kit Fisto
+      ['Saboteur\nCoordinate — On Attack: You may deal 3 damage to a ground unit. (Gain this ability while you control 3 or more units.)', ['Coordinate', 'Saboteur']],
+      // TWI_192 Padmé Amidala
+      ['Coordinate - On Attack: Give an enemy unit -3/-0 for this phase. (Gain this ability while you control 3 or more units.)', ['Coordinate']],
+    ]
+    const r = triage(cases.map(([FrontText, Keywords], i) => card({ Number: String(i + 1), Name: `Test ${i + 1}`, Keywords, FrontText })))
+    for (const c of r.triaged) expect(c.blockers, c.name).toEqual([])
   })
 
   it('reads no head from keyword reminder text, which carries no colon', () => {
