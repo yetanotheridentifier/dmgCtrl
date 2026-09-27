@@ -436,6 +436,19 @@ export interface CardDefinition {
    */
   abilityDamageBonus?: (state: GameState, self: UnitState, owner: PlayerId, source: DamageSource, targetController: PlayerId) => number
   /**
+   * "Indirect damage you deal to opponents is increased by 1" (Hunting Aggressor): what `self`'s
+   * controller's indirect damage gains before the receiving player assigns it. Asked only of units the
+   * DEALER controls, never the target's side — unlike `abilityDamageBonus`, this is specific to
+   * indirect damage and never fires for an ordinary ability ping.
+   */
+  indirectDamageBonus?: (state: GameState, self: UnitState, source: DamageSource, targetController: PlayerId) => number
+  /**
+   * "You assign all indirect damage you deal to opponents" (Devastator): true flips the assignment
+   * from the receiving player to `self`'s controller for indirect damage that controller deals to an
+   * opponent. Asked only of units the DEALER controls.
+   */
+  assignsIndirectDamage?: (state: GameState, self: UnitState, source: DamageSource, targetController: PlayerId) => boolean
+  /**
    * "If an upgrade on your base would be defeated, you may defeat this unit instead" (Vice Admiral
    * Rampart). True while `self` can stand in for an upgrade on its controller's base.
    */
