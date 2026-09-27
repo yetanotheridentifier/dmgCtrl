@@ -544,6 +544,14 @@ export interface LeaderActionAbilityDef {
   description: string
   /** Resource cost paid on use (default 0). */
   cost?: number
+  /**
+   * The ability's "use the Force" cost (#462): only usable while the controller holds their Force
+   * token, which is defeated on use alongside any other cost. Distinct from a card's own optional
+   * "may use the Force. If you do" (`mayPayThen.useForce`): this is a mandatory part of paying for
+   * the action, the same way `exhaustCost` is for a leader's front side (always paid, since taking
+   * the action already requires the leader to be ready).
+   */
+  useForceCost?: boolean
   /** Valid target-unit instance ids; omit for a target-less ability. */
   targets?: (state: GameState, owner: PlayerId) => string[]
   /** Gate for a target-less ability (defaults usable). */
@@ -651,6 +659,8 @@ export interface ActionAbilityDef {
    * "[Exhaust]" in its cost, e.g. Improvised Identity, which then attacks).
    */
   exhaustCost?: boolean
+  /** The ability's "use the Force" cost (#462): see `LeaderActionAbilityDef.useForceCost`. */
+  useForceCost?: boolean
   /** May be used only once per round by a given unit (tracked on `UnitState.usedAbilities`). */
   oncePerRound?: boolean
   /**

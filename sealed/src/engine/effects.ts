@@ -286,6 +286,30 @@ export function takeControlOfCreditTokens(state: GameState, from: PlayerId, to: 
   return moved > 0 ? createCreditTokens(defeatCreditTokens(state, from, moved), to, moved) : state
 }
 
+// ── The Force (LOF's set mechanic, #462) ──────────────────────────────────────────────────────
+// CR 8.37: a Force token is capped at one per player (unlike Credit, a plain boolean rather than a
+// count). "The Force is with you" creates it (a no-op while already held); "Use the Force" is always
+// an OPTIONAL defeat of it, per CR 8.37.4, even on a card whose printed text omits the word "may" —
+// `mayPayThen.useForce` (legalMoves.ts/resolve.ts) is where that optionality is enforced, mirroring
+// how every Bounty collection is optional regardless of its own printed wording (#467).
+
+/** Whether `owner` currently controls their Force token. */
+export function hasForceToken(state: GameState, owner: PlayerId): boolean {
+  return state.players[owner].forceToken ?? false
+}
+
+/** "The Force is with you": `owner` creates their Force token. A no-op while they already hold one
+ *  (CR 8.37.1), so this never needs its own affordability check. */
+export function createForceToken(state: GameState, owner: PlayerId): GameState {
+  return hasForceToken(state, owner) ? state : recordTokenCreated(updatePlayer(state, owner, { forceToken: true }), owner)
+}
+
+/** "Use the Force": defeat `owner`'s Force token. A no-op if they don't hold one — callers gate the
+ *  choice on `hasForceToken` first, the same as any other cost that can't be offered unaffordable. */
+export function defeatForceToken(state: GameState, owner: PlayerId): GameState {
+  return hasForceToken(state, owner) ? updatePlayer(state, owner, { forceToken: false }) : state
+}
+
 /**
  * Move a unit to the other arena (Blue Leader: "move this unit to the ground arena"). The unit keeps
  * its damage, upgrades and ready state: only where it fights changes, and every arena test in the

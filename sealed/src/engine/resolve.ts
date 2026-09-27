@@ -9,7 +9,7 @@ import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, col
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, defeatForceToken } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, cardHasTrait, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
@@ -1800,8 +1800,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     case 'mayPayThen':
       // The cost first, then the rest of the ability. Revealing an event is its own cost: the card
-      // stays in hand.
-      next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      // stays in hand. "Use the Force" (#462) defeats the Force token instead of paying resources.
+      next = choice.useForce
+        ? defeatForceToken(next, choice.controller)
+        : updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
       if (choice.damageSelf && choice.then.sourceInstanceId) next = dealDamageToUnit(next, choice.then.sourceInstanceId, choice.damageSelf)
       next = runIfYouDo(next, choice.then)
       break
@@ -2566,6 +2568,7 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
   let next = state
   if (ability.cost) next = updatePlayer(next, owner, payCost(next.players[owner], ability.cost))
   if (ability.exhaustCost) next = exhaustUnit(next, instanceId) // pay the "[Exhaust]" cost
+  if (ability.useForceCost) next = defeatForceToken(next, owner) // pay the "[use the Force]" cost (#462)
   if (ability.oncePerRound) {
     const key = actionAbilityKey(cardId, index)
     next = updatePlayer(next, found.owner, {
@@ -2594,6 +2597,7 @@ function useLeaderAbility(state: GameState, index: number, targetInstanceId?: st
 
   const paid = ability.cost ? payCost(p, ability.cost) : p
   let next = updatePlayer(state, owner, { ...paid, leader: { ...p.leader, exhausted: true } })
+  if (ability.useForceCost) next = defeatForceToken(next, owner) // pay the "[use the Force]" cost (#462)
   next = runAttributed(next, { cardId: p.leader.cardId, controller: owner }, s => ability.effect(s, { owner, cardId: p.leader.cardId, targetInstanceId }))
   next = checkWin(next)
   if (next.winner !== null) return next
