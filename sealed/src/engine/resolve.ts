@@ -1936,7 +1936,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       const owner = choice.owners?.[optionIndex ?? 0] ?? choice.controller
       next = choice.toDeckBottom ? moveCardFromDiscardToDeckBottom(next, owner, cardId) : returnCardFromDiscardToHand(next, owner, cardId)
-      if (choice.then && choice.then !== 'discardFate') next = runIfYouDo(next, choice.then, { cardChosen: cardId })
+      // Only an IfYouDo can reach here: the `'discardFate'` case already broke out above.
+      if (choice.then) next = runIfYouDo(next, choice.then, { cardChosen: cardId })
       break
     }
     case 'searchDraw': {

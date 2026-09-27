@@ -73,8 +73,6 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
   // Shield, Experience, Advantage and Weakness are implemented, and so is every token unit. The Force is
   // printed but never granted.
   ['force-token', /\bthe Force\b|\bForce token/i],
-  // A token that pays costs, not a unit or an upgrade.
-  ['credit-token', /\bCredit tokens?\b/i],
   // Revealing cards from hand by aspect icon.
   ['disclose', /\bdisclosed?\b/i],
   // Damage the receiving player assigns among their base and units.

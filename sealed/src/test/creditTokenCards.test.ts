@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
-import { legalMoves } from '../engine/legalMoves'
 import { normaliseCard } from '../engine/cardDb'
 import { poolFor } from '../bench/setPools'
 import { defeatUnit } from '../engine/combat'
@@ -45,8 +44,6 @@ const noChoice = (s: GameState): boolean => (s.pendingChoices?.length ?? 0) === 
 // the ability that follows.
 const skipCreditExploit = (s: GameState): GameState =>
   s.pendingChoices?.[0]?.kind === 'exploit' && s.pendingChoices[0].credit ? resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices[0].id }) : s
-const answers = (s: GameState) => legalMoves(s).filter(m => m.type === 'acceptChoice' || m.type === 'skipTrigger') as Action[]
-const canDecline = (s: GameState) => answers(s).some(m => m.type === 'skipTrigger')
 const accept = (s: GameState, extra: Partial<Extract<Action, { type: 'acceptChoice' }>> = {}) =>
   resolve(s, { type: 'acceptChoice', choiceId: choice(s).id, ...extra })
 const decline = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: choice(s).id })
@@ -203,12 +200,12 @@ describe('LAW_252 Fett\'s Firespray: When Attack Ends, if the defending unit was
 
 describe('LAW_247 Backed by the Hutts: create a Credit token, then may deal damage equal to friendly Credit tokens', () => {
   it('counts the token it just created (1)', () => {
-    let s = playEvent(board({ player: { hand: ['LAW_247'] }, opponent: { units: [unit('e0', 'TST_U1')] } }))
+    const s = playEvent(board({ player: { hand: ['LAW_247'] }, opponent: { units: [unit('e0', 'TST_U1')] } }))
     expect(choice(s)).toMatchObject({ kind: 'selectDamageTarget', amount: 1, optional: true })
     expect(friendlyCreditTokens(s, 'player')).toBe(1)
   })
   it('counts tokens already held too', () => {
-    let s = skipCreditExploit(playEvent(board({ player: { hand: ['LAW_247'], creditTokens: 2 }, opponent: { units: [unit('e0', 'TST_U1')] } })))
+    const s = skipCreditExploit(playEvent(board({ player: { hand: ['LAW_247'], creditTokens: 2 }, opponent: { units: [unit('e0', 'TST_U1')] } })))
     expect(choice(s)).toMatchObject({ kind: 'selectDamageTarget', amount: 3 })
   })
 })

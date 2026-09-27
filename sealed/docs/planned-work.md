@@ -194,7 +194,7 @@ Two phases:
   Exploit's step on ready resources. 19 cards shipped (HMW's Greater Sarlacc and Giant Gorax among
   them). Each card left touching the zone waits on another mechanic's ticket: Smuggle #469 (Lando
   Calrissian's leader, Enterprising Lackeys, and DJ, which also needs taking control of a resource, the
-  one piece of the zone not built), Credit #602 (Chewbacca, Intimidator), the Force #462 (Eeth Koth),
+  one piece of the zone not built), Credit #719 (Chewbacca, Intimidator), the Force #462 (Eeth Koth),
   Disclose #603 (Chancellor Valorum) and Plot #470 (When Has Become Now). Outlaw Corona and Price on
   Your Head shipped with Bounty (#467).
   **Capture's primitive is finished** (#466): `captureUnit`/`baseCapturesUnit`/`rescueCaptured`/
@@ -243,8 +243,22 @@ Two phases:
   picked and remembered on the unit (`UnitState.namedKeyword`), a unit's own keywords lent to others,
   and a count of how many different ones a unit has. All 5 cards shipped, with the literal
   `Keyword`/`Keywords` the source parses out of their ability text corrected away.
-  Next are Credit tokens (#602, 29),
-  Disclose (#603, 19), and indirect damage (#604, 15).
+  **Credit tokens are finished** (#602): a per-PLAYER count (`PlayerState.creditTokens`), unlike
+  Experience/Shield/Weakness which attach to a unit, with its own standing payment rule ("while
+  paying resources, you may defeat this token, pay 1 less") read by `exploitTerms` as a fourth mode of
+  the Exploit/`whilePlaying` step (#473) rather than a parallel mechanism. 20 of the 35 cards it
+  unlocked on its own shipped (Unmarked Credits, Windfall, Backed by the Hutts, Bank Job Fugitives,
+  Champion's KT9 Podracer, Canto Bight Security, The Max Rebo Band, Rodian Bondsman, Bib Fortuna,
+  Getaway Freighter, Criminal Contact, Bix Caleen, Cad Bane, Defiant Scrapper, Lieutenant Gorn, Arvel
+  Skeen, Taramyn Barcona, Partisan U-Wing, Fett's Firespray, Scavenging Sandcrawler); the other 15 (6
+  leaders' activated-action wiring, a base Epic Action spanning three token kinds, an "any player may
+  use this" unit action, an ordinary action ability and an "any number" resource-zone return each cut
+  only for time, two cards where an opponent decides a friendly When Played, a reveal-then-play-for-free
+  chain, and an "exchange control of two units" primitive Double-Cross needs) are on #719. Conveyex
+  Security Captain needs #682 too and
+  Han's Golden Dice/Targeted For Removal/Payroll Heist need a granted ability block (#464) as well;
+  Boba Fett and Dengar need a one-off trigger head with no ticket of its own yet.
+  Next are Disclose (#603, 19), and indirect damage (#604, 15).
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
 (with the token units, #605), the Weakness-token cards (#649), the Fortify cards (#650), the When Played

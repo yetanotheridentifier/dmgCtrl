@@ -277,6 +277,28 @@ you play another unit", Poggle the Lesser). Each token created raises `whenCreat
 `whenFriendlyEntersPlay` from `createTokenUnit`, the one place token units are made, so "when you play or
 create a unit" (Greef Karga) and "when a friendly unit enters play" (Outcast) see every one of them.
 
+## Credit tokens
+
+A Credit token is neither a unit nor an upgrade: it belongs to a **player**, not to a unit, so it has
+no board identity and no attach event. `PlayerState.creditTokens` is a plain count (`undefined` reads
+as 0), read and written by `friendlyCreditTokens`/`createCreditTokens`/`defeatCreditTokens`/
+`takeControlOfCreditTokens` in `engine/effects.ts`. "Take control of an enemy Credit token" is the
+count moving from one player to the other, not a target changing controller.
+
+Its printed rule, "While paying resources, you may defeat this token. If you do, pay 1 less", is a
+**standing payment step**, not a card-level declaration: `exploitTerms` (`engine/legalMoves.ts`) offers
+it as a fourth mode of the Exploit/`whilePlaying` step (see "Exploit" below) whenever the payer holds
+any Credit token and the card being played carries no `whilePlaying` mode of its own. No sealed card
+combines Exploit (or Greater Sarlacc's or Vernestra Rwoh's own `whilePlaying` modes) with holding a
+Credit token, so the two are not offered together; a card with its own mode simply does not also see
+Credit's discount. The `exploit` choice's `credit` flag reads picks by ordinal position (0 to however
+many are held), the same as Greater Sarlacc's `resources` mode, since one Credit token cannot be told
+apart from another. A defeated Credit triggers nothing and, unlike a defeated ready resource, does not
+reduce what is left to pay with: it is a separate currency.
+
+`createCreditTokens` records `phaseEvents.tokensCreated` like `giveTokens`/`createTokenUnits`, so "if
+you created a token this phase" (The Client) sees a Credit token too.
+
 ## Spent tokens are defeated upgrades
 
 A Shield that soaks damage and an Advantage token that finishes a combat are both **defeats**, as
