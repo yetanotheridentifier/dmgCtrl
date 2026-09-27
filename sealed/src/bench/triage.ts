@@ -90,8 +90,9 @@ const KEYWORD_TRIGGER_PREFIX = /^[A-Z][A-Za-z']*(?:\s+\d+)?\s+[-‐-―]\s+/
  */
 const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
   // Shield, Experience, Advantage and Weakness are implemented, and so is every token unit. The Force is
-  // printed but never granted.
-  ['force-token', /\bthe Force\b|\bForce token/i],
+  // printed but never granted. The lookahead excludes "the Force trait" (LOF_033, SEC_054): losing a
+  // trait is a different, already-buildable primitive, not the token.
+  ['force-token', /\bthe Force\b(?!\s+trait\b)|\bForce token/i],
   // Revealing cards from hand by aspect icon.
   ['disclose', /\bdisclosed?\b/i],
   // Damage the receiving player assigns among their base and units.
