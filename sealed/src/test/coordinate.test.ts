@@ -42,7 +42,7 @@ const F: Record<string, EngineCard> = {
   ...CARDS,
   ...Object.fromEntries(SHIPPED.map(id => [id, real(id)])),
   FILLER: card({ id: 'FILLER', arena: 'ground', cost: 1, power: 1, hp: 1 }),
-  FILLER_SP: card({ id: 'FILLER_SP', arena: 'space', cost: 1, power: 1, hp: 1 }),
+  FILLER_SP: card({ id: 'FILLER_SP', arena: 'space', cost: 1, power: 1, hp: 5 }),
   ENEMY: card({ id: 'ENEMY', arena: 'ground', cost: 3, power: 3, hp: 3 }),
   ENEMY_SP: card({ id: 'ENEMY_SP', arena: 'space', cost: 3, power: 3, hp: 6 }),
   ENEMY_CHEAP: card({ id: 'ENEMY_CHEAP', arena: 'space', cost: 2, power: 2, hp: 2 }),
@@ -72,13 +72,13 @@ describe('Coordinate stat buffs (statModifier)', () => {
     expect(effectiveHp(below, U(below, 'c')!)).toBe(printed.hp)
 
     const at3 = board({ units: [unit('c', id), unit('f1', 'FILLER'), unit('f2', 'FILLER')] }) // 3 units
-    expect(effectivePower(at3, U(at3, 'c')!)).toBe(printed.power + dp)
-    expect(effectiveHp(at3, U(at3, 'c')!)).toBe(printed.hp + dh)
+    expect(effectivePower(at3, U(at3, 'c')!)).toBe(printed.power! + dp)
+    expect(effectiveHp(at3, U(at3, 'c')!)).toBe(printed.hp! + dh)
   })
 
   it('turns off immediately when a unit is defeated mid-round, not just at the next phase change', () => {
     let s = board({ units: [unit('c', 'TWI_240'), unit('f1', 'FILLER'), unit('f2', 'FILLER')] })
-    expect(effectivePower(s, U(s, 'c')!)).toBe(F.TWI_240.power + 1)
+    expect(effectivePower(s, U(s, 'c')!)).toBe(F.TWI_240.power! + 1)
     s = defeatUnit(s, 'f1')
     expect(effectivePower(s, U(s, 'c')!)).toBe(F.TWI_240.power) // back to 2 units: printed value
   })
@@ -156,8 +156,8 @@ describe('TWI_114 Clone Commander Cody — Overwhelm (own, unconditional) + Coor
     expect(unitHasKeyword(below, U(below, 'ally')!, 'Overwhelm')).toBe(false)
 
     const at3 = board({ units: [unit('cody', 'TWI_114'), unit('ally', 'FILLER'), unit('f3', 'FILLER')] })
-    expect(effectivePower(at3, U(at3, 'ally')!)).toBe(F.FILLER.power + 1)
-    expect(effectiveHp(at3, U(at3, 'ally')!)).toBe(F.FILLER.hp + 1)
+    expect(effectivePower(at3, U(at3, 'ally')!)).toBe(F.FILLER.power! + 1)
+    expect(effectiveHp(at3, U(at3, 'ally')!)).toBe(F.FILLER.hp! + 1)
     expect(unitHasKeyword(at3, U(at3, 'ally')!, 'Overwhelm')).toBe(true)
     // Cody's own aura excludes himself.
     expect(effectivePower(at3, U(at3, 'cody')!)).toBe(F.TWI_114.power)
@@ -171,7 +171,7 @@ describe('TWI_205 Clone Dive Trooper — Coordinate: while attacking, the defend
     expect(effectivePower(below, U(below, 'def')!, { defending: true, combat })).toBe(F.ENEMY.power)
 
     const at3 = board({ units: [unit('dt', 'TWI_205'), unit('f1', 'FILLER'), unit('f2', 'FILLER')] }, { units: [unit('def', 'ENEMY')] })
-    expect(effectivePower(at3, U(at3, 'def')!, { defending: true, combat })).toBe(F.ENEMY.power - 2)
+    expect(effectivePower(at3, U(at3, 'def')!, { defending: true, combat })).toBe(F.ENEMY.power! - 2)
     // Outside combat, the aura does not apply.
     expect(effectivePower(at3, U(at3, 'def')!)).toBe(F.ENEMY.power)
   })

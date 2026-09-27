@@ -180,4 +180,15 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   // A card type the source gets wrong. "When Played: you may attack with attached unit" is an
   // upgrade's text, and the printed card is an upgrade with +1/+1 that the source omits.
   SOR_215: { type: 'upgrade', power: 1, hp: 1 }, // Snapshot Reflexes
+
+  // Coordinate (#472): the bundled keyword named after the dash ("Coordinate - Sentinel") is
+  // entirely conditional, not real, the same treatment as every other conditional-keyword card
+  // above. `Coordinate` itself stays (it's the real, always-printed label); a keyword the card also
+  // has UNCONDITIONALLY on a separate printed line (TWI_196's Ambush) stays alongside it.
+  TWI_106: { keywords: [{ name: 'Coordinate' }] }, // Coruscant Guard — Ambush is conditional
+  TWI_164: { keywords: [{ name: 'Coordinate' }] }, // Hevy — Raid is conditional
+  TWI_061: { keywords: [{ name: 'Coordinate' }] }, // Infantry of the 212th — Sentinel is conditional
+  TWI_050: { keywords: [{ name: 'Coordinate' }] }, // Luminara Unduli — Grit is conditional
+  TWI_196: { keywords: [{ name: 'Ambush' }, { name: 'Coordinate' }] }, // Plo Koon — Ambush is real; Raid is conditional
+  TWI_243: { keywords: [{ name: 'Coordinate' }] }, // Republic Commando — Saboteur is conditional
 }

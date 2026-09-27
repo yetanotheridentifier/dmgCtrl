@@ -7897,6 +7897,85 @@ const readyUnits = (s: GameState): UnitState[] => allUnits(s).filter(u => !u.exh
 /** "Any number" for an up-to offer: more than any board holds, and a plain number so the step serialises. */
 const ANY_NUMBER = 99
 
+// ── Coordinate (#472): "Gain this ability while you control 3 or more units." ──────────────────
+// A live board-state condition, read fresh everywhere it's asked (like every other conditional
+// keyword/stat/aura grant above and in cardDataCorrections.ts): it turns on and off mid-round as
+// units enter or leave play, never cached. Placed here (not with the other conditionals near the
+// top of the file) because several registrations below need `createWp`/`captureWp`, defined above
+// this point but not before it.
+//
+// 15 of the 23 Coordinate cards ship here: 14 sole-blocked plus TWI_213 (Sanctioner's Shuttle),
+// whose only other blocker is capture (#466), a fully built primitive already reused elsewhere
+// (`costAtMost`/`pickEnemy`/`nonLeader` is exactly SEC_253 Covert Operative's shape at a different
+// cost). The bundled keyword a card's Coordinate line grants ("Coordinate - Sentinel") is corrected
+// out of its base `Keywords[]` in `cardDataCorrections.ts`; a keyword the card ALSO has
+// unconditionally, on its own printed line (Plo Koon's Ambush), is left alone.
+//
+// Left for a follow-up (commented on #472, not filed as a new ticket): TWI_096 Aayla Secura needs a
+// new "prevent all combat damage for this attack" lasting-effect field (`preventEach`/`preventNext`
+// don't fit "prevent ALL"); TWI_064 Ki-Adi-Mundi needs a new "opponent's Nth card this phase"
+// refinement of `whenPlayCard`; TWI_011 Ahsoka Tano and TWI_008 Padmé Amidala are deployed-leader
+// `actionAbilities` gated by `usable`; TWI_147 Anakin Skywalker, TWI_165 Kit Fisto and TWI_192
+// Padmé Amidala (unit) are simple gated `onAttack` effects held back only for time; TWI_051 For The
+// Republic depends on #464's granted-ability-block.
+const hasCoordinate = (s: GameState, owner: PlayerId): boolean => s.players[owner].units.length >= 3
+const unitHasCoordinate = (s: GameState, u: UnitState): boolean => {
+  const o = unitOwner(s, u)
+  return o !== undefined && hasCoordinate(s, o)
+}
+
+// Stat buffs: "Coordinate - This unit gets +X/+Y."
+registerCard('TWI_240', { statModifier: (s, u) => (unitHasCoordinate(s, u) ? { power: 1, hp: 1 } : {}) }) // 332nd Stalwart
+registerCard('TWI_045', { statModifier: (s, u) => (unitHasCoordinate(s, u) ? { hp: 3 } : {}) }) // 41st Elite Corps
+registerCard('TWI_158', { statModifier: (s, u) => (unitHasCoordinate(s, u) ? { power: 2 } : {}) }) // Clone Heavy Gunner
+registerCard('TWI_090', { statModifier: (s, u) => (unitHasCoordinate(s, u) ? { power: 2, hp: 2 } : {}) }) // Echo
+
+// Self-keyword grants: "Coordinate - <Keyword>."
+registerCard('TWI_106', { conditionalKeywords: (s, u) => (unitHasCoordinate(s, u) ? [{ name: 'Ambush' }] : []) }) // Coruscant Guard
+registerCard('TWI_061', { conditionalKeywords: (s, u) => (unitHasCoordinate(s, u) ? [{ name: 'Sentinel' }] : []) }) // Infantry of the 212th
+registerCard('TWI_243', { conditionalKeywords: (s, u) => (unitHasCoordinate(s, u) ? [{ name: 'Saboteur' }] : []) }) // Republic Commando
+
+// Self-keyword grant plus an unconditional ability on the same card.
+registerCard('TWI_164', { // Hevy — Coordinate: Raid 2; When Defeated: 1 damage to each enemy ground unit
+  conditionalKeywords: (s, u) => (unitHasCoordinate(s, u) ? [{ name: 'Raid', value: 2 }] : []),
+  ...whenDefeated('Deal 1 damage to each enemy ground unit.', (s, ctx) =>
+    s.players[opponentOf(ctx.owner)].units.filter(u => u.arena === 'ground').reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 1), s)),
+})
+registerCard('TWI_050', { // Luminara Unduli — Coordinate: Grit; When Played: heal 1 damage per unit you control from a chosen base
+  conditionalKeywords: (s, u) => (unitHasCoordinate(s, u) ? [{ name: 'Grit' }] : []),
+  ...whenPlayed('Choose a base. Heal 1 damage from it for each unit you control.', (s, ctx) =>
+    healChoice(s, ctx, s.players[ctx.owner].units.length, [], BOTH_BASES)),
+})
+registerCard('TWI_196', { conditionalKeywords: (s, u) => (unitHasCoordinate(s, u) ? [{ name: 'Raid', value: 3 }] : []) }) // Plo Koon — Ambush (unconditional, in Keywords[]) + Coordinate: Raid 3
+
+// Aura: grants OTHER friendly units a stat buff and/or keyword.
+registerCard('TWI_114', { // Clone Commander Cody — Coordinate: each other friendly unit gets +1/+1 and gains Overwhelm
+  aura: (s, source, target, sameController) =>
+    (sameController && target.instanceId !== source.instanceId && unitHasCoordinate(s, source)
+      ? { power: 1, hp: 1, keywords: [{ name: 'Overwhelm' }] }
+      : undefined),
+})
+registerCard('TWI_205', { // Clone Dive Trooper — Coordinate: while this unit is attacking, the defender gets -2/-0
+  aura: (s, source, target, _sameController, combat) =>
+    (combat?.attackerInstanceId === source.instanceId && combat.defenderInstanceId === target.instanceId && unitHasCoordinate(s, source)
+      ? { power: -2 }
+      : undefined),
+})
+
+// Gated When Played effects.
+registerCard('TWI_095', createWp('Coordinate - When Played: Create a Clone Trooper token.', TOKEN_CLONE_TROOPER, 1, (s, ctx) => hasCoordinate(s, ctx.owner))) // Pelta Supply Frigate
+registerCard('TWI_162', { // Reckless Torrent — Coordinate: you may deal 2 damage to a friendly unit and 2 to an enemy unit in the same arena
+  ...whenPlayed('Coordinate - When Played: You may deal 2 damage to a friendly unit and 2 damage to an enemy unit in the same arena.', (s, ctx) =>
+    (hasCoordinate(s, ctx.owner)
+      ? unitThen(s, ctx, pickedIds(s, ctx, (st, u, c) => pickFriendly(st, u, c) && picked(st, c, pickEnemy).some(e => e.arena === u.arena)), 'choose a friendly unit', true, 'dealer')
+      : s)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'dealer') return unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, sameArenaAs(s, ctx.targetInstanceId))), 'choose an enemy unit in the same arena', false, 'target', ctx.targetInstanceId)
+    return dealDamageToUnit(dealDamageToUnit(s, ctx.targetInstanceId!, 2), ctx.unitChosen!, 2)
+  },
+})
+registerCard('TWI_213', captureWp('Coordinate - When Played: This unit captures an enemy non-leader unit that costs 3 or less.', pickAll(pickEnemy, nonLeader, costAtMost(3)), false, (s, ctx) => hasCoordinate(s, ctx.owner))) // Sanctioner's Shuttle
+
 // A: tokens on a trigger
 registerCard('JTL_082', createWp('Create a TIE Fighter token.', TOKEN_TIE_FIGHTER)) // Kijimi Patrollers
 registerCard('JTL_099', createWp('Create an X-Wing token.', TOKEN_X_WING)) // Veteran Fleet Officer
