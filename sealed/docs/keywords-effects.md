@@ -681,3 +681,59 @@ smuggles as Cunning.
   engine does not yet have: every non-resource-zone play door already collapses to the same
   `fromResources`-shaped boolean, which is not precise enough to tell "from hand" apart from a deck-top
   or discard-pile play).
+
+## Plot
+
+"Plot. (When you deploy a leader, you may play this card from your resources, paying its cost.
+Replace it with the top card of your deck.)" is SEC's set mechanic (CR 14): unlike Smuggle, it is an
+alternate **route** into play, not an alternate **cost** (`isPlot`, `types.ts`, a plain keyword check
+with no bracket to parse).
+
+- **A reaction to the controller's own leader deploying, not a per-card ability.** A Plot card sits
+  inert in the resource zone (it has no `whenDeployed` of its own to register), so `deployLeader`
+  (`resolve.ts`) calls `offerPlotPlays` once the leader is in play, which raises **one**
+  `playCardFrom` choice over every Plot card in the deploying player's own resources
+  (`playFromCandidates(state, playerId, 'resources', {}, isPlot)`), re-offered via `then: {
+  resourceTop, again: true }` until the player declines or none are left, the same "one at a time"
+  shape Endless Legions already uses for its own repeated plays.
+- **Full printed cost, no discount.** Unlike Smuggle's bracket, Plot carries no alternate cost or
+  aspect list: the card is paid for exactly as a hand play would be, through the same `playFromZone`
+  door every other zone-play uses. "Replace it with the top card of your deck" is the existing
+  `resourceTop` tail.
+- **28 of the 31 candidate cards need nothing else** (recounted from the ticket's stale "unlocks 27";
+  29 sole-blocked per the triage aggregate, plus two the tool itself misses: **Lurking Snub Fighter**
+  (SEC_189), whose source record ships no `Keywords` array at all despite printing the full Plot
+  reminder in `FrontText` (fixed via `CARD_DATA_CORRECTIONS`, the `ASH_127`-class of source-data gap),
+  and **First Light** (SEC_088), flagged as blocked on its trigger head too because that head's text
+  is not a literal string in `EXISTING_TRIGGERS`, though the point it needs (`onAttackEnd` +
+  `ctx.defenderDefeated`) already dispatches. Both are a source-data/trigger-matching gap in the
+  triage tool, not its own lists, a fourth and fifth class of triage inaccuracy alongside the
+  reminder-text, built-keywords-list and bracketed-cost gaps #711/#713/#469 already found.
+- **Chancellor Palpatine (SEC_001), front only**: "search the top 5 cards of your deck for a card
+  with Plot, reveal it, and draw it" needs nothing beyond `isPlot` as a `searchDraw` predicate. His
+  back ("the next card you play using Plot this phase costs 3 less") needs a new `NextUnitGrant`
+  restriction plus threading which door a play came through into `effectiveCost`, and is not built.
+- **When Has Become Now (SEC_245)** plays a Plot card from resources itself (a `whenPlayed` ability,
+  not the leader-deploy reaction), reusing `playFromZoneChoice` with `{ zone: 'resources', test:
+  isPlot, then: { resourceTop } }` exactly as the reaction does, just raised from a different trigger.
+- **Two small additions shipped alongside the mechanic**, each needed by exactly one card:
+  `CardDefinition.cannotPlayFromHand` (One in a Million, SEC_053, whose only route into play is Plot,
+  so the Play a Card action's hand scan must skip it) and `GameState.eventsBanned` /
+  `eventsBannedFor()` (Trade Route Taxation, SEC_126, "that opponent can't play events this phase").
+- **One in a Million never shows as played by the `--sweep` coverage tool.** It is an event
+  (`playCoverage.ts` only credits an event through the `playEvent` action, by design: "an event played
+  through a choice rather than through `playEvent` is missed... the intended direction of error"),
+  and `cannotPlayFromHand` closes off `playEvent` as a route entirely, so `playCardFrom`'s
+  `acceptChoice` is its ONLY way into play, always uncredited. Confirmed still firing correctly:
+  direct engine stepping over 1,000 games on the one deck that decks it found it resourced 945 times,
+  offered as a Plot candidate 323 times and actually chosen 173 times, and its own unit test
+  (`plot.test.ts`) exercises the same path. The card genuinely plays; the sweep's own documented
+  blind spot just cannot see it, and no other shipped card yet has an event with no route but a
+  choice, so this is the first permanent instance of it rather than an occasional miss.
+- **Not shipped, each needing something Plot itself does not touch, on #726**: Sly Moore (SEC_033,
+  needs a phase-scoped "-2/-0 while attacking a base" modifier no existing `LastingEffect` shape
+  reaches), Vigil (SEC_050, needs constant damage-prevention/redirection primitives beyond the
+  existing per-phase ones), Fully Armed and Operational (SEC_194, needs "as their immediately
+  preceding action" sequencing, which the engine does not track), and Chancellor Palpatine's back,
+  above. Galen Erso (SEC_046, needs "loses all abilities") is commented directly on #682, which
+  already owns that primitive, rather than routed to #726.

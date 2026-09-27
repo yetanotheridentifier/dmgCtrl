@@ -7,10 +7,10 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer, abilityCardIds } from './types'
+import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer, abilityCardIds } from './types'
 import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
-import { canAfford, payCost } from './resources'
+import { canAfford, payCost, readyResourceCount } from './resources'
 import { cardHasTrait, cardTraits, unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywords, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
 import type { CombatContext, DiscardPlayGrant, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PendingTrigger, PlayerId, PlayFromTail, PlayFromZone, UnitState, UpgradeAttachment, UpgradeRef } from './types'
 
@@ -11894,3 +11894,125 @@ registerCard('SEC_004', { // Leia Organa, Of A Secret Bloodline
   ...attacks("You may disclose Vigilance, Command, Aggression, Cunning, or Heroism. If you do, give an Experience token to a unit that doesn't share an aspect with the disclosed card.", leiaAction),
   ifYouDo: leiaIfYouDo,
 })
+
+// ── Plot (#470): CR 14, a reaction to the controller's own leader deploying, not a per-card
+// ability — the card sits inert in the resource zone, so `deployLeader` (resolve.ts) raises one
+// `playCardFrom` choice over every Plot card there (`offerPlotPlays`), re-offered until declined or
+// none are left. The cost is the card's own printed cost; "replace it with the top card of your
+// deck" is the existing `resourceTop` tail. Nothing here declares the keyword itself (that is
+// `isPlot`, types.ts, read off `EngineCard.keywords`) or the dispatch (resolve.ts).
+//
+// Six otherwise-vanilla cards print nothing else and need no entry: SEC_036 Dogmatic Shock Squad,
+// SEC_070 Armor of Fortune, SEC_100 Dressellian Commandos, SEC_123 Unveiled Might, SEC_176 Sudden
+// Ferocity, SEC_226 Sneaking Suspicion (credited in `data/implementedCards.ts`'s
+// `PLAYABLE_AS_PRINTED` instead).
+//
+// Four cards from the same recount are NOT here, each blocked by something Plot does not touch:
+// SEC_046 Galen Erso needs "loses all abilities" (#682, open, commented there), SEC_033 Sly Moore
+// needs a phase-scoped "each enemy unit -2/-0 while attacking a base" modifier (no existing
+// LastingEffect shape reaches "while attacking a base" broadly, only a unit's own printed
+// statModifier), SEC_050 Vigil needs new constant damage-prevention/redirection primitives beyond
+// the existing per-phase ones, and SEC_194 Fully Armed and Operational needs "during their previous
+// action" sequencing (the engine tracks "attacked your base this phase", not "as the immediately
+// preceding action") — all four are split to a follow-up ticket with this analysis carried over.
+// SEC_001 Chancellor Palpatine's back ("the next card you play using Plot this phase costs 3 less")
+// needs a new `NextUnitGrant` restriction plus threading which door a play came through into
+// `effectiveCost`; its front (search for a card with Plot) needs nothing new and is built below.
+
+registerCard('SEC_189', whenPlayed('You may exhaust a unit.', (s, ctx) => // Lurking Snub Fighter
+  targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, pickAny), true)))
+
+registerCard('SEC_088', { // First Light
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'When this unit attacks and defeats a unit: You may draw a card.',
+    effect: (s, ctx) => (ctx.defenderDefeated ? pushChoice(s, { kind: 'mayPayToDraw', id: `${ctx.sourceInstanceId}-fl`, controller: ctx.owner, cost: 0, draw: 1 }) : s),
+  }],
+})
+
+registerCard('SEC_034', targetWp('You may defeat a unit with 2 or less remaining HP.', 'selectUnitToDefeat', (s, u) => remainingHp(s, u) <= 2, true)) // Cad Bane
+
+registerCard('SEC_053', { // One in a Million — only ever playable via Plot (or another alternate route)
+  cannotPlayFromHand: true,
+  ...targetWp('Defeat a unit with power and remaining HP both equal to the number of ready resources you control.', 'selectUnitToDefeat',
+    (s, u, ctx) => {
+      const n = readyResourceCount(s.players[ctx.owner])
+      return n > 0 && effectivePower(s, u) === n && remainingHp(s, u) === n
+    }, false),
+})
+
+registerCard('SEC_082', whenPlayed('If you control a leader unit, create 2 Spy tokens and give those tokens Sentinel for this phase.', (s, ctx) => { // Chancellor Palpatine
+  if (!s.players[ctx.owner].units.some(u => isLeaderUnit(s, u))) return s
+  const first = `u${s.instanceCounter}`
+  const second = `u${s.instanceCounter + 1}`
+  const created = createTokenUnits(s, ctx.owner, TOKEN_SPY, 2)
+  return addLastingEffect(addLastingEffect(created, { targetInstanceId: first, keywords: [KW.sentinel] }), { targetInstanceId: second, keywords: [KW.sentinel] })
+}))
+
+registerCard('SEC_084', eachOfUpTo('Give an Experience token to each of up to 2 other Official units.', 2, { // Mas Amedda
+  text: 'give an Experience token to another Official unit (up to 2)',
+  test: pickAll(pickOther, pickTrait('Official')),
+  apply: (s, ctx, id) => giveToken(s, id, TOKEN_EXPERIENCE, ctx.owner),
+}))
+
+registerCard('SEC_099', friendlyAura(isLeaderUnit, { keywords: [KW.raid(2), KW.overwhelm] }, false)) // Naboo Royal Starship
+
+registerCard('SEC_111', buffWp('You may give another friendly unit +2/+2 for this phase.', pickAll(pickFriendly, pickOther), () => ({ power: 2, hp: 2 }), true)) // Jar Jar Binks
+
+registerCard('SEC_126', whenPlayed("Choose an opponent. If you control more units than that opponent, they can't play events for this phase.", (s, ctx) => { // Trade Route Taxation
+  const opp = opponentOf(ctx.owner)
+  return s.players[ctx.owner].units.length > s.players[opp].units.length ? { ...s, eventsBanned: [...(s.eventsBanned ?? []), opp] } : s
+}))
+
+registerCard('SEC_140', friendlyAura(() => true, { keywords: [KW.raid(1)] }, true)) // Hondo Ohnaka
+
+registerCard('SEC_149', unitThenWp('You may defeat all non-unique upgrades on a unit.', (_s, u) => u.upgrades.length > 0, 'choose a unit to defeat its non-unique upgrades', true, // Kaydel Connix
+  (s, ctx) => {
+    const u = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!u) return s
+    return u.upgrades.filter(a => !s.cards[a.cardId]?.unique).reduce((acc, a) => defeatUpgrade(acc, ctx.targetInstanceId!, a.cardId), s)
+  }))
+
+registerCard('SEC_152', damageWp('You may deal 2 damage to a ready unit.', (_s, u) => !u.exhausted, 2, true)) // Strike Force X-Wing
+
+registerCard('SEC_172', attackWp('You may attack with a unit.', { optional: true })) // Cinta Kaz
+
+registerCard('SEC_183', whenPlayed('Deal 3 damage to each damaged unit.', s => // Topple the Summit
+  allUnits(s).filter(u => u.damage > 0).reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 3), s)))
+
+registerCard('SEC_186', { // Garindan
+  ...whenPlayed("Name a card. Look at an opponent's hand and discard a card with that name from it.", (s, ctx) =>
+    pushChoice(s, { kind: 'nameCard', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, then: resume(ctx) })),
+  ifYouDo: (s, ctx) => {
+    const opp = opponentOf(ctx.owner)
+    const at = s.players[opp].hand.findIndex(id => s.cards[id]?.name === ctx.nameChosen)
+    return at === -1 ? s : discardFromHand(s, opp, at)
+  },
+})
+
+registerCard('SEC_203', friendlyAura(() => true, { keywords: [{ name: 'Hidden' }] }, true)) // Tala Durith
+
+registerCard('SEC_235', whenPlayed('Exhaust 2 enemy resources.', (s, ctx) => // The Wrong Ride
+  Array.from({ length: 2 }).reduce<GameState>(acc => exhaustReadyResource(acc, opponentOf(ctx.owner)), s)))
+
+registerCard('SEC_243', expWp('Give an Experience token to another friendly unit.', pickAll(pickOther, pickFriendly))) // FN Trooper Corps
+
+registerCard('SEC_255', buffWp('Give a unit Sentinel for this phase.', pickAny, () => ({ keywords: [KW.sentinel] }), false)) // Remote Escort Tank
+
+registerCard('TS26_46', eachOfUpTo('Give a Shield token to each of up to 2 non-Vehicle units. If you give a Shield to an enemy unit this way, draw a card.', 2, { // Secret Marriage
+  text: 'give a non-Vehicle unit a Shield token (up to 2)',
+  test: (s, u) => nonVehicle(s, u),
+  apply: shieldEach,
+  mark: (before, _after, ctx, id) => !before.players[ctx.owner].units.some(u => u.instanceId === id),
+  finish: (s, ctx, step) => (step.flag ? drawCards(s, ctx.owner, 1) : s),
+}))
+
+registerCard('SEC_245', whenPlayed('Play a card with Plot from your resources (paying its cost). Put the top card of your deck into play as a resource.', (s, ctx) => // When Has Become Now
+  playFromZoneChoice(s, ctx, { zone: 'resources', test: isPlot, then: { resourceTop: ctx.owner } })))
+
+registerCard('SEC_001', // Chancellor Palpatine — front only; the back's "next card played using Plot
+// costs 3 less" needs a NextUnitGrant restriction plus play-route context in effectiveCost, split out.
+  leaderFront('Search the top 5 cards of your deck for a card with Plot, reveal it, and draw it.', {
+    cost: 1,
+    effect: (s, ctx) => searchDrawChoice(s, ctx, 5, isPlot),
+  }))

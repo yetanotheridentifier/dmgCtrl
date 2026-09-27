@@ -557,6 +557,14 @@ and `tokens`. The `again` re-offer fires from **either** step, since a unit's or
 finishes at the pick and an upgrade's at the attach. `always` raises the choice even with nothing
 playable, so a player still sees what they looked at and the decline's tail still runs.
 
+**Plot (CR 14, #470) raises this same `playCardFrom` choice from a game event rather than from a
+card's own ability**: `deployLeader` calls it directly once the leader is in play, offering every
+Plot card in the deploying player's own resources at once (`resourceTop`/`again`, exactly Endless
+Legions' shape), at full printed cost with no `altCost`. No card registers a `whenDeployed` for
+this: the reaction belongs to the deploy event, not to any one Plot card sitting inert in the
+resource zone. See `keywords-effects.md` "Plot" for which cards need only the keyword and which need
+more.
+
 **Two comprehensive-rules facts decide what it costs**, and neither is inferable from the engine:
 
 - **A card in its controller's own resource zone helps pay for itself.** CR 6.2.f orders the steps

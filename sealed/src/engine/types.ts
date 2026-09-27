@@ -242,6 +242,15 @@ export function isFortify(card: EngineCard | undefined): boolean {
 }
 
 /**
+ * True if a card carries the Plot keyword (CR 14): "When you deploy a leader, you may play this
+ * card from your resources, paying its cost. Replace it with the top card of your deck." Any card
+ * type may print it, unlike Fortify (upgrades only).
+ */
+export function isPlot(card: EngineCard | undefined): boolean {
+  return (card?.keywords ?? []).some(k => k.name === 'Plot')
+}
+
+/**
  * Every card that supplies a base's abilities: the base card itself and each upgrade attached to it.
  * The base-zone counterpart of `abilityCardIds`, and the one place that set is spelled out.
  */
@@ -496,6 +505,8 @@ export interface GameState {
   delayedEffects?: DelayedEffect[]
   /** Card names nobody can play this phase (Transmission Jamming). Cleared as the regroup phase starts. */
   bannedNames?: string[]
+  /** Players who can't play events for this phase (Trade Route Taxation). Cleared as the regroup phase starts. */
+  eventsBanned?: PlayerId[]
   /** Permissions to play a named card out of a discard pile this phase. Cleared as regroup starts. */
   discardPlayGrants?: DiscardPlayGrant[]
   /** Bases whose next damage this phase is prevented (Close the Shield Gate). Cleared as the regroup phase starts. */
@@ -1556,11 +1567,11 @@ export function addLastingEffect(state: GameState, effect: LastingEffect): GameS
  * until `clearRoundEffects`.
  */
 export function clearLastingEffects(state: GameState): GameState {
-  if (!state.lastingEffects && !state.bannedNames && !state.shieldedBases && !state.basesUnhealable && !state.discardPlayGrants && !state.traitsRemoved) return state
+  if (!state.lastingEffects && !state.bannedNames && !state.eventsBanned && !state.shieldedBases && !state.basesUnhealable && !state.discardPlayGrants && !state.traitsRemoved) return state
   const kept = (state.lastingEffects ?? []).filter(e => e.untilRoundEnd)
   return {
     ...state, lastingEffects: kept.length > 0 ? kept : undefined,
-    bannedNames: undefined, shieldedBases: undefined, basesUnhealable: undefined, discardPlayGrants: undefined,
+    bannedNames: undefined, eventsBanned: undefined, shieldedBases: undefined, basesUnhealable: undefined, discardPlayGrants: undefined,
     traitsRemoved: undefined,
   }
 }

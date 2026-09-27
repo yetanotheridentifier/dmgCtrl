@@ -154,9 +154,12 @@ Two phases:
   and is its own ticket, #710; Jabba the Hutt's back reads capture too, but #707 already built its
   chosen-guardian-and-target shape — what's left blocking the whole leader is an unbuilt "grant a
   chosen unit a temporary keyword ability" primitive his Action needs, on #715),
-  #470 Plot, #468 playing any card type, #602 Credit
+  #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #686 (defeat by an enemy card ability, and Chancellor Palpatine,
-  the one leader that flips between two faces rather than deploying).
+  the one leader that flips between two faces rather than deploying). Chancellor Palpatine's own
+  front (SEC_001, search for a card with Plot) shipped with Plot (#470); his back ("the next card
+  you play using Plot this phase costs 3 less") needs a new `NextUnitGrant` restriction plus
+  play-route context in `effectiveCost` and is not built.
   **Bases are finished** (#460), which completes Phase 1: the engine gained base abilities (an Epic
   Action once a game, an aura over units in play, and the two setup numbers a base can change), and
   the eight LAW bases that play any card type from hand went to #468, and Sundari Palace has shipped
@@ -196,7 +199,7 @@ Two phases:
   them). Each card left touching the zone waits on another mechanic's ticket: Smuggle #723 (Lando
   Calrissian's leader and DJ, which also needs taking control of a resource, the one piece of the zone
   not built — Enterprising Lackeys shipped with #469), Credit #719 (Chewbacca, Intimidator), the Force
-  #462 (Eeth Koth) and Plot #470 (When Has Become Now). Outlaw Corona and Price on
+  #462 (Eeth Koth). When Has Become Now shipped with Plot (#470). Outlaw Corona and Price on
   Your Head shipped with Bounty (#467); Chancellor Valorum shipped with Disclose (#603).
   **Smuggle is finished** (#469): a full alternate cost (CR 14) read off the printed bracket
   (`EngineCard.smuggle`), not a discount — its own aspect list can differ from the card's printed
@@ -211,6 +214,21 @@ Two phases:
   printing the keyword, needing a watch flag and, for Lando, an ability that initiates a smuggle play),
   and Millennium Falcon ("if you play this unit from your hand" needs a zone-specific read the engine
   does not have — every non-resource door already collapses to one `fromResources`-shaped boolean).
+  **Plot is finished** (#470): CR 14, an alternate ROUTE into play rather than an alternate cost
+  (unlike Smuggle): a Plot card sits inert in the resource zone, so `deployLeader` raises one
+  `playCardFrom` choice over every Plot card there, re-offered until declined or empty, at full
+  printed cost. 28 of the 31 candidate cards shipped (recounted from the ticket's stale "unlocks 27";
+  29 sole-blocked per the triage aggregate, plus two the tool itself missed: Lurking Snub Fighter,
+  whose source record ships no `Keywords` array at all despite printing the reminder in `FrontText`,
+  and First Light, whose trigger head text isn't literal in `EXISTING_TRIGGERS` though the point it
+  needs already dispatches). Chancellor Palpatine's front (search for a card with Plot) shipped;
+  his back, Sly Moore, Vigil and Fully Armed and Operational each need a primitive beyond Plot and
+  are on **#726**. One in a Million (its only route into play, `cannotPlayFromHand`) and Trade Route
+  Taxation (`eventsBanned`, "that opponent can't play events this phase") each needed one small
+  addition alongside the mechanic. One in a Million never shows as played by `--sweep`: it is an
+  event whose only route is a choice rather than `playEvent`, the coverage tool's own documented
+  blind spot (`playCoverage.ts`), confirmed still firing correctly by direct engine stepping (played
+  in 173 of 1,000 games) and by its own unit test.
   **Capture's primitive is finished** (#466): `captureUnit`/`baseCapturesUnit`/`rescueCaptured`/
   `discardCaptured`/`appendCaptured` plus the `cannotBeCaptured`/`captureReplacement` hooks are built
   and documented in `keywords-effects.md`. Of the 29 cards it unlocks on its own, the 10 with a single
@@ -240,8 +258,9 @@ Two phases:
   point raised got their own (a unit attacking, healing, the ready step, a card being drawn, a unit
   leaving play). "Choose two, in any order" is `chooseMode` with a queued continuation. The cards
   whose other blocker is a keyword are on that keyword's ticket (the Force #462, Pilot #465,
-  Plot #470, capture #466; Jango Fett, Krrsantan and Chain Code Collector shipped with Bounty, #467;
-  Ahsoka Tano, Captain Typho and Chancellor Valorum shipped with Disclose, #603), Arquitens Assault
+  capture #466; Jango Fett, Krrsantan and Chain Code Collector shipped with Bounty, #467;
+  Ahsoka Tano, Captain Typho and Chancellor Valorum shipped with Disclose, #603; First Light shipped
+  with Plot, #470), Arquitens Assault
   Cruiser (an opponent-owned resource) shipped with #475, and
   Traitorous, Nabat Village and Lux Bonteri are on #686.
   Darth Vader, Victor Squadron Leader waits on #465 (his
@@ -325,7 +344,7 @@ Three findings that contradict the assumptions the programme started from:
   programme: the token was already a card in the db and the token machinery already attached it, so the
   work was registrations plus a handful of helpers.
 - **Resource manipulation was near the bottom at 15 cards, not the top.** What matters is *playing a
-  card out of the resource zone*, which gated Smuggle (shipped, #469) and gates Plot (#470), roughly 50
+  card out of the resource zone*, which gated Smuggle and Plot (both shipped, #469/#470), over 50
   cards between them. That door is built: see `playCardFrom` in `choices.md`.
 - **Bounty is gated behind capture**, not resources.
 

@@ -373,6 +373,11 @@ export function namedByOpponent(state: GameState, playerId: PlayerId): Set<strin
     (u.namedCard && u.namedCardSurcharge === undefined ? [u.namedCard] : [])), ...(state.bannedNames ?? [])])
 }
 
+/** Whether `playerId` can't play events for this phase (Trade Route Taxation). */
+export function eventsBannedFor(state: GameState, playerId: PlayerId): boolean {
+  return (state.eventsBanned ?? []).includes(playerId)
+}
+
 export function affordableHandUnits(state: GameState, owner: PlayerId, extraResourceCost: number, costDelta: number): HandCardRef[] {
   const p = state.players[owner]
   const budget = readyResourceCount(p) - extraResourceCost
@@ -618,6 +623,8 @@ function actionPhaseMoves(state: GameState): Action[] {
     const card = state.cards[cardId]
     if (!card || (card.type !== 'unit' && card.type !== 'event')) return
     if (forbiddenNames.has(card.name)) return
+    if (getCardDefinition(cardId)?.cannotPlayFromHand) return
+    if (card.type === 'event' && eventsBannedFor(state, playerId)) return
     if (!canAffordFromHand(state, playerId, card)) return
     moves.push(card.type === 'unit' ? { type: 'playUnit', handIndex } : { type: 'playEvent', handIndex })
   })

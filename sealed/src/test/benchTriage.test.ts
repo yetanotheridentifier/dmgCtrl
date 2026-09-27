@@ -91,7 +91,7 @@ describe('triage buckets', () => {
   const report = triage([
     card({ Number: '1', Name: 'Plain' }),
     card({ Number: '2', Name: 'Keyworded', Keywords: ['Sentinel'], FrontText: 'Sentinel' }),
-    card({ Number: '3', Name: 'Plotter', Keywords: ['Plot'], FrontText: 'Plot' }),
+    card({ Number: '3', Name: 'Schemer', Keywords: ['Scheme'], FrontText: 'Scheme' }),
     card({ Number: '4', Name: 'Abilitied', FrontText: 'When Played: Draw a card.' }),
     card({ Number: '5', Name: 'Chief', Type: 'Leader', FrontText: 'Action: Draw a card.' }),
     card({ Number: '6', Name: 'Shield', Type: 'Token' }),
