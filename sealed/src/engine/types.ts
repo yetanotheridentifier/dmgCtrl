@@ -283,6 +283,13 @@ export interface PlayerState {
    * `undefined` reads the same as 0.
    */
   creditTokens?: number
+  /**
+   * Whether this player controls their Force token (LOF's set mechanic, #462). Unlike Credit, CR
+   * 8.37.1 caps a player at ONE Force token, so this is a flag rather than a count — "The Force is
+   * with you" (`createForceToken`, effects.ts) is a no-op while already true, and "Use the Force"
+   * (`defeatForceToken`) is only ever offered while it holds. `undefined` reads the same as false.
+   */
+  forceToken?: boolean
 }
 
 /**
@@ -1277,10 +1284,12 @@ type ChoiceVariant =
   | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number; costlierThanDiscard?: boolean } | { exhaustUnit: true } | { buffFor: PlayerId; power?: number; hp?: number; nonVehicleOnly?: boolean } | { ifYouDo: IfYouDo } }
   // "You may <cost>. If you do, <effect>": a yes/no that pays `cost` resources, or deals `damageSelf`
   // to the source, or only reveals an event (`revealEvent`, which costs nothing and leaves the card in
-  // hand), and then runs the card's `ifYouDo` hook. `text` is the effect, for the prompt.
-  // `declineStep` runs the hook on a decline too, at that step, for an ability that goes on either way
-  // ("you may deal 5 instead", "unless its controller says no").
-  | { kind: 'mayPayThen'; id: string; controller: PlayerId; cost: number; damageSelf?: number; revealEvent?: boolean; text: string; then: IfYouDo; declineStep?: string }
+  // hand), or defeats the controller's Force token (`useForce`, #462: "Use the Force (lose your Force
+  // token)" is always optional per CR 8.37.4 even where the card omits the word "may", and is offered
+  // only while the controller holds one), and then runs the card's `ifYouDo` hook. `text` is the
+  // effect, for the prompt. `declineStep` runs the hook on a decline too, at that step, for an ability
+  // that goes on either way ("you may deal 5 instead", "unless its controller says no").
+  | { kind: 'mayPayThen'; id: string; controller: PlayerId; cost: number; damageSelf?: number; revealEvent?: boolean; useForce?: boolean; text: string; then: IfYouDo; declineStep?: string }
   // "Collect this Bounty?" (CR 13): every Bounty ability is optional whether or not its printed text
   // says "may", so the gate lives here at dispatch rather than on each card — which also sidesteps a
   // card-level `ifYouDo` collision for a Bounty reward that needs its own (Rich Reward's `expUpTo`).

@@ -4,7 +4,7 @@ import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds, pu
 import { canAfford, readyResourceCount } from './resources'
 import { keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
 import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, baseEpicAction, usableBaseActions } from './abilities'
-import { friendlyCreditTokens, discloseRemaining } from './effects'
+import { friendlyCreditTokens, discloseRemaining, hasForceToken } from './effects'
 import './cardDefinitions' // side effect: registers all real card behaviours
 
 type AttackTarget = Extract<Action, { type: 'attack' }>['target']
@@ -684,6 +684,7 @@ function actionPhaseMoves(state: GameState): Action[] {
       if (theirs && !ability.anyPlayer) continue
       if (ability.oncePerRound && u.usedAbilities?.includes(actionAbilityKey(cardId, index))) continue
       if (ability.exhaustCost && u.exhausted) continue // "[Exhaust]" — the unit must be ready to pay it
+      if (ability.useForceCost && !hasForceToken(state, playerId)) continue // "[use the Force]" (#462)
       if (!canAfford(p, ability.cost ?? 0)) continue
       if (ability.usable && !ability.usable(state, u)) continue
       moves.push({ type: 'useAbility', instanceId: u.instanceId, cardId, index })
@@ -695,6 +696,7 @@ function actionPhaseMoves(state: GameState): Action[] {
   // `usable` and affordability.
   if (!p.leader.deployed && !p.leader.exhausted) {
     leaderActions(p.leader.cardId).forEach((ability, index) => {
+      if (ability.useForceCost && !hasForceToken(state, playerId)) return // "[use the Force]" (#462)
       if (!canAfford(p, ability.cost ?? 0)) return
       if (ability.targets) {
         for (const targetInstanceId of ability.targets(state, playerId)) {
@@ -1136,8 +1138,11 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'mayPayThen': {
-        // A yes/no: accept only while the resources can still be paid.
-        if (readyResourceCount(p) >= choice.cost) moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        // A yes/no: accept only while the cost can still be paid — resources, or (#462) the
+        // controller's own Force token, which "Use the Force" can never be offered without (CR 8.37.4).
+        if (choice.useForce ? hasForceToken(state, choice.controller) : readyResourceCount(p) >= choice.cost) {
+          moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        }
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }

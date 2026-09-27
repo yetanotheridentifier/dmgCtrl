@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers, collectCardTriggers } from './abilities'
-import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens } from './effects'
+import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -3705,6 +3705,20 @@ const resume = (ctx: Resumable, step?: string, unit?: string): IfYouDo =>
 const mayPayWp = (description: string, cost: number, text: string, then: NonNullable<CardDefinition['ifYouDo']>): CardDefinition => ({
   ...whenPlayed(description, (s, ctx) =>
     (canAfford(s.players[ctx.owner], cost) ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost, text, then: resume(ctx) }) : s)),
+  ifYouDo: then,
+})
+/**
+ * "You may use the Force (lose your Force token). If you do, <then>" (#462, CR 8.37.4: always
+ * optional even where the printed text omits "may"). Not offered at all while the controller holds
+ * no Force token, the same as `mayPayWp` when the resource cost can't be paid.
+ * `declineStep` runs `then` on a decline too, at that step (Savage Opress: "If you don't, deal 9
+ * damage to your base"; Do or Do Not: "If you do not, draw a card").
+ */
+const mayUseForceWp = (description: string, text: string, then: NonNullable<CardDefinition['ifYouDo']>, declineStep?: string): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) =>
+    (hasForceToken(s, ctx.owner)
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, useForce: true, text, then: resume(ctx), ...(declineStep ? { declineStep } : {}) })
+      : (declineStep ? then(s, { owner: ctx.owner, cardId: ctx.cardId, sourceInstanceId: ctx.sourceInstanceId, step: declineStep }) : s))),
   ifYouDo: then,
 })
 /** Choose one of `targets` for the card's `ifYouDo` hook, or nothing when there are none. */
