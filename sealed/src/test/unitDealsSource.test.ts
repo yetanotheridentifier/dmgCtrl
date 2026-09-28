@@ -25,6 +25,8 @@ const F: Record<string, EngineCard> = {
   SHD_087: card({ id: 'SHD_087', name: 'Crosshair', type: 'unit', arena: 'ground', cost: 4, power: 3, hp: 4 }),
   SHD_250: card({ id: 'SHD_250', name: 'Tarfful', type: 'unit', arena: 'ground', cost: 5, power: 3, hp: 6, traits: ['Wookiee'] }),
   TWI_256: card({ id: 'TWI_256', name: 'Hold-Out Blaster', type: 'upgrade', cost: 1, power: 1, hp: 0 }),
+  ASH_070: card({ id: 'ASH_070', name: 'At Attin Safety Droid', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 5 }),
+  UWOVER: card({ id: 'UWOVER', arena: 'ground', cost: 5, power: 10, hp: 10, traits: ['UNDERWORLD'], keywords: [{ name: 'Overwhelm' }] }),
   UWWOOK: card({ id: 'UWWOOK', arena: 'ground', cost: 2, power: 1, hp: 10, traits: ['WOOKIEE', 'UNDERWORLD'] }),
   SOR_127: ev('SOR_127', 3), SOR_151: ev('SOR_151', 2), LOF_128: ev('LOF_128', 4), HMW_192: ev('HMW_192'),
   SOR_234: ev('SOR_234', 4), JTL_129: ev('JTL_129', 4), JTL_131: ev('JTL_131', 7), SOR_092: ev('SOR_092', 5),
@@ -218,6 +220,12 @@ describe('a named dealer is what source-reading prevention sees', () => {
     const s = pick(dealDamageToUnit(s0, 'g', 2, { cardId: 'SOR_127', controller: 'opponent' }), 'e')
     expect(U(s, 'e')!.damage).toBe(2)
     expect(shields(s, 'e')).toBe(1)
+  })
+
+  it("Breach (HMW_114): the Overwhelm unit deals the excess to the base too, past At Attin Safety Droid's cap", () => {
+    const s0 = board({ hand: ['HMW_114'], units: [unit('gs', 'ASH_196'), unit('o', 'UWOVER')] }, { units: [unit('e', 'P3', { damage: 4 }), unit('sd', 'ASH_070')] })
+    const s = pick(resolve(s0, { type: 'playEvent', handIndex: 0 }), 'o', 'e')
+    expect(s.players.opponent.base.damage).toBe(9)
   })
 
   it('Tarfful (SHD_250): the Wookiee that survived deals it, not Tarfful', () => {
