@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { defeatUnit } from '../engine/combat'
+import { drawCards } from '../engine/effects'
 import { normaliseCard } from '../engine/cardDb'
 import { poolFor } from '../bench/setPools'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
@@ -9,9 +10,10 @@ import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState } from '
 
 /**
  * Cards registered against Disclose (#603): the primitive itself is `disclose.test.ts`. Each test
- * here checks the registration's own aspects/effect, not the primitive (already covered). 28 cards;
- * three sole-blocked cards need a separate new primitive each and are split to a follow-up ticket
- * (Cantwell Arrestor Cruiser, Syril Karn, Chairman Papanoida), not registered here.
+ * here checks the registration's own aspects/effect, not the primitive (already covered). 31 cards,
+ * including the three (#721) that each needed a genuinely new primitive of their own: Cantwell
+ * Arrestor Cruiser (`LastingEffect.whileSourceInPlay`), Syril Karn (the `discardOrDamage` choice),
+ * and Chairman Papanoida (no new trigger point after all — `whenDrawCards` already covers it).
  */
 
 const POOL = poolFor(['SEC'])
@@ -25,7 +27,7 @@ const SHIPPED = [
   'SEC_062', 'SEC_109', 'SEC_141', 'SEC_223', 'SEC_182', 'SEC_230', 'SEC_181', 'SEC_127', 'SEC_211',
   'SEC_074', 'SEC_129', 'SEC_234', 'SEC_076', 'SEC_059', 'SEC_094', 'SEC_148', 'SEC_153', 'SEC_120',
   'SEC_065', 'SEC_085', 'SEC_190', 'SEC_248', 'SEC_164', 'SEC_219', 'SEC_096', 'SEC_098', 'SEC_107',
-  'SEC_004',
+  'SEC_004', 'SEC_037', 'SEC_133', 'SEC_159',
 ]
 
 // Aspect-icon fixture cards, one per aspect (plus a dual-icon one), for satisfying `need`.
@@ -80,6 +82,10 @@ const disclose = (s: GameState, ...handIndices: number[]): GameState => {
   return done(next)
 }
 const declineDisclose = (s: GameState) => skip(s)
+/** Both players pass to end the action phase, then both skip their resource step, landing back in
+ *  a fresh action phase — for checking whether a lasting effect outlives a round (Cantwell). */
+const toRegroup = (s: GameState) => resolve(resolve(s, { type: 'pass' }), { type: 'pass' })
+const toNextRound = (s: GameState) => resolve(resolve(s, { type: 'skipResource' }), { type: 'skipResource' })
 const attackBase = (s: GameState, attackerId: string, who: PlayerId = 'player') =>
   resolve({ ...s, activePlayer: who }, { type: 'attack', attackerId, target: { kind: 'base' } })
 const attackUnit = (s: GameState, attackerId: string, defenderId: string, who: PlayerId = 'player') =>
@@ -220,6 +226,22 @@ describe('Unconditional first, gated second', () => {
     next = accept(next, { targetInstanceId: 'e' })
     expect(all(next).some(u => u.instanceId === 'e')).toBe(false)
   })
+
+  it("SEC_037 Cantwell Arrestor Cruiser: disclose Vigilance Vigilance Villainy, exhaust an enemy unit that can't ready while this is in play", () => {
+    const s = board({ hand: ['SEC_037', 'VIGVIL', 'VIG'], deck: [] }, { units: [unit('e', 'GRD')] })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 }) // Cantwell itself enters as u10
+    const revealed = disclose(played, played.players.player.hand.indexOf('VIGVIL'), played.players.player.hand.indexOf('VIG'))
+    expect(choice(revealed)).toMatchObject({ kind: 'selectUnitThen', targets: ['e'] })
+    const locked = accept(revealed, { targetInstanceId: 'e' })
+    expect(U(locked, 'e')?.exhausted).toBe(true)
+    // Outlives the round, unlike an `untilRoundEnd` effect, for as long as Cantwell stays in play.
+    const nextRound = toNextRound(toRegroup(locked))
+    expect(U(nextRound, 'e')?.exhausted).toBe(true)
+    // Once Cantwell itself leaves play the lock lifts, and the next regroup readies the unit.
+    const gone = defeatUnit(nextRound, 'u10')
+    const readiedRound = toNextRound(toRegroup(gone))
+    expect(U(readiedRound, 'e')?.exhausted).toBe(false)
+  })
 })
 
 describe('When Defeated: disclose', () => {
@@ -331,6 +353,28 @@ describe('On Attack: disclose', () => {
     next = declineDisclose(next)
     expect(next.pendingChoices ?? []).toHaveLength(0)
   })
+
+  it('SEC_133 Syril Karn: disclose, choose a unit, discarding a card cancels the 2 damage', () => {
+    const s = board({ hand: ['AGGVIL', 'AGG'], units: [unit('a', 'SEC_133')] }, { hand: ['GRD'], units: [unit('e', 'TANK')] })
+    const attacked = attackBase(s, 'a')
+    const revealed = disclose(attacked, attacked.players.player.hand.indexOf('AGGVIL'), attacked.players.player.hand.indexOf('AGG'))
+    expect(choice(revealed)).toMatchObject({ kind: 'selectUnitThen' })
+    const targeted = accept(revealed, { targetInstanceId: 'e' })
+    expect(choice(targeted)).toMatchObject({ kind: 'discardOrDamage', targetInstanceId: 'e', amount: 2 })
+    const discarded = accept(targeted, { handIndex: 0 })
+    expect(U(discarded, 'e')?.damage).toBe(0)
+    expect(discarded.players.opponent.hand).toHaveLength(0)
+  })
+
+  it('SEC_133 Syril Karn: declining to discard lets the 2 damage through', () => {
+    const s = board({ hand: ['AGGVIL', 'AGG'], units: [unit('a', 'SEC_133')] }, { hand: ['GRD'], units: [unit('e', 'TANK')] })
+    const attacked = attackBase(s, 'a')
+    const revealed = disclose(attacked, attacked.players.player.hand.indexOf('AGGVIL'), attacked.players.player.hand.indexOf('AGG'))
+    const targeted = accept(revealed, { targetInstanceId: 'e' })
+    const declined = skip(targeted)
+    expect(U(declined, 'e')?.damage).toBe(2)
+    expect(declined.players.opponent.hand).toHaveLength(1) // never discarded
+  })
 })
 
 describe('Raw trigger points: disclose', () => {
@@ -355,6 +399,22 @@ describe('Raw trigger points: disclose', () => {
     const attacked = attackBase(s, 'a')
     const done1 = disclose(attacked, 0)
     expect(done1.players.player.resources.map(r => r.cardId)).toContain('GRD')
+  })
+
+  it('SEC_159 Chairman Papanoida: a draw during the action phase offers disclose, then creates a Spy token', () => {
+    const s = board({ hand: ['AGG2'], units: [unit('p', 'SEC_159')], deck: ['GRD'] })
+    const drew = drawCards(s, 'player', 1)
+    expect(choice(drew)).toMatchObject({ kind: 'disclose', need: ['Aggression', 'Aggression'] })
+    const done1 = disclose(drew, drew.players.player.hand.indexOf('AGG2'))
+    expect(done1.players.player.units.filter(u => u.cardId === 'TOKEN_SPY')).toHaveLength(1)
+  })
+
+  it("SEC_159 Chairman Papanoida: fires for an opponent's draw too, but not for the regroup phase's draw", () => {
+    const s = board({ units: [unit('p', 'SEC_159')] }, { deck: ['GRD'] })
+    const oppDrew = drawCards(s, 'opponent', 1)
+    expect(choice(oppDrew).kind).toBe('disclose')
+    const regroupDraw = drawCards({ ...s, phase: 'regroup' }, 'opponent', 1)
+    expect(regroupDraw.pendingChoices ?? []).toHaveLength(0)
   })
 })
 
