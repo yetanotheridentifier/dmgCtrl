@@ -346,8 +346,10 @@ describe('Hold Them Off (139) — a friendly unit spreads its power among units 
     expect(dist).toMatchObject({ kind: 'distributeDamage', remaining: 5 })
     expect(dist.kind === 'distributeDamage' && dist.targets).not.toContain('sp') // space unit is out of reach
 
-    let cur = picked
-    for (let i = 0; i < 5; i++) cur = resolve(cur, { type: 'acceptChoice', choiceId: choice(cur).id, targetInstanceId: 'a' })
+    let cur = resolve(picked, { type: 'acceptChoice', choiceId: dist.id, targetInstanceId: 'a' })
+    const afterOne = choice(cur)
+    expect(afterOne.kind === 'distributeDamage' && afterOne.targets).not.toContain('sp') // still out of reach after the first point
+    for (let i = 0; i < 4; i++) cur = resolve(cur, { type: 'acceptChoice', choiceId: choice(cur).id, targetInstanceId: 'a' })
     expect(U(cur, 'a')!.damage).toBe(5)
     expect(cur.pendingChoices ?? []).toHaveLength(0)
   })
