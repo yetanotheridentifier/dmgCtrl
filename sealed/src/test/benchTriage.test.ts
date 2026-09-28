@@ -347,9 +347,10 @@ describe('trigger heads', () => {
 
   /**
    * A head ending in "gains", or in "gains <a keyword or trait> and", hands a quoted ability to a unit.
-   * It is a granted-ability lead-in, not a trigger point, however it is spelled. Read as a trigger
-   * point, each spelling was a head of its own and folded into trigger:one-off, undercounting the
-   * granted-ability work. Each text is the real card's.
+   * It is a granted-ability lead-in, not a trigger point, however it is spelled, and handing a unit an
+   * ability block is something the engine does (an upgrade's abilities are its host's, a phase grant is
+   * a lasting effect, an aura grant is `grantsAbilities`). So the lead-in blocks nothing: the QUOTED
+   * ability's own head is judged instead, as if it were printed. Each text is the real card's.
    */
   it.each([
     ['SOR_121 Hardpoint Heavy Blaster', "Attach to a VEHICLE unit.\nAttached unit gains: \"On Attack: If this unit isn't attacking a base, you may deal 2 damage to a unit in the defender's arena.\""],
@@ -364,17 +365,30 @@ describe('trigger heads', () => {
     ['SEC_156 Nemik\'s Manifesto', 'Attach to a non-Vehicle unit.\nAttached unit gains the Rebel trait and: “When Defeated: Deal 1 damage to each enemy base for each other friendly Rebel unit.”'],
     ['SEC_231 Implicate', 'Choose a unit. For this phase, it gains Sentinel and: “When this unit is attacked: Create a Spy token.”'],
     ['TWI_129 In Defense of Kamino', 'For this phase, each friendly Republic unit gains Restore 2 and: "When Defeated: Create a Clone Trooper token."'],
-  ])('reads the lead-in on %s as granted-ability-block alone', (_card, text) => {
-    expect(triage([card({ FrontText: text })]).triaged[0].blockers).toEqual(['granted-ability-block'])
+  ])('reads the lead-in on %s as no blocker, its quoted head being dispatched', (_card, text) => {
+    expect(triage([card({ FrontText: text })]).triaged[0].blockers).toEqual([])
+  })
+
+  it.each([
+    ['TWI_218 Droid Cohort', 'Attached unit gains, "When Defeated: Create a Battle Droid token."'],
+    ['SHD_126 The Darksaber', 'Attach to a non-Vehicle unit.\nWhile playing this upgrade on a Mandalorian unit, ignore its aspect penalty.\nAttached unit gains, “On Attack: Give an Experience token to each other friendly Mandalorian unit.”'],
+  ])('reads the comma-led lead-in on %s the same way, not as a one-off head', (_card, text) => {
+    expect(triage([card({ FrontText: text })]).triaged[0].blockers).toEqual([])
+  })
+
+  it('blocks a quoted ability on its own head when that point is not dispatched', () => {
+    // TS26_63 Rex's DC-17s: no point fires on an enemy unit readying during the action phase.
+    const r = triage([card({ FrontText: 'Attach to a non-Vehicle unit.\nAttached unit gains: “When an enemy unit readies during the action phase: Ready this unit. Use this ability only once each round.”' })])
+    expect(r.triaged[0].blockers).toEqual(['trigger:one-off'])
   })
 
   it.each([
     ['LOF_098 Leia Organa', 'force-token', 'While this unit is in the space arena, she can\'t ready and gains: "Action [use the Force]: Move this unit to the ground arena and give each friendly Heroism unit +2/+2 for this phase."'],
-  ])('reads the lead-in on %s as granted-ability-block beside its %s blocker', (_card, other, text) => {
-    expect(triage([card({ FrontText: text })]).triaged[0].blockers.sort()).toEqual([other, 'granted-ability-block'].sort())
+  ])('reads the lead-in on %s as nothing beside its %s blocker', (_card, other, text) => {
+    expect(triage([card({ FrontText: text })]).triaged[0].blockers).toEqual([other])
   })
 
-  it('counts three lead-ins sharing a stat notation as granted-ability-block, not as compound or one-off', () => {
+  it('reads three lead-ins sharing a stat notation by their quoted heads, not as compound or one-off', () => {
     // JTL_177 Stay on Target, JTL_156 Trench Run, SOR_150 Heroic Sacrifice. "+2/+0" is a stat line, not
     // a second trigger point.
     const r = triage([
@@ -382,14 +396,14 @@ describe('trigger heads', () => {
       card({ Number: '2', Type: 'Event', Name: 'Trench Run', FrontText: "Attack with a Fighter unit. For this attack, it gets +4/+0 and gains: \"On Attack: Discard 2 cards from the defending player's deck. Deal unpreventable damage equal to the difference in the discarded cards' costs to this unit.\"" }),
       card({ Number: '3', Type: 'Event', Name: 'Heroic Sacrifice', FrontText: 'Draw a card, then attack with a unit. For this attack, it gets +2/+0 and gains: "When this unit deals combat damage: Defeat it."' }),
     ])
-    expect(r.triaged.map(c => c.blockers)).toEqual([['granted-ability-block'], ['granted-ability-block'], ['granted-ability-block']])
-    expect(r.blockers).toEqual([{ name: 'granted-ability-block', sole: 3, touched: 3 }])
+    expect(r.triaged[1].blockers).toEqual([])
+    expect(r.blockers.map(b => b.name)).not.toContain('granted-ability-block')
   })
 
   it('keeps a printed trigger head beside a lead-in on the same card', () => {
-    // JTL_260 Death Star Plans: "When attached unit is attacked" is a real trigger point.
+    // JTL_260 Death Star Plans: "When attached unit is attacked" is the upgrade's own printed head.
     const r = triage([card({ FrontText: 'When attached unit is attacked: The attacking player takes control of this upgrade and attaches it to a unit they control. \nAttached unit gains: "The first unit you play each round costs 2 less."' })])
-    expect(r.triaged[0].blockers.sort()).toEqual(['granted-ability-block', 'trigger:one-off'])
+    expect(r.triaged[0].blockers).toEqual(['trigger:one-off'])
   })
 
   it('blocks a card on a long head the framework does not dispatch', () => {
