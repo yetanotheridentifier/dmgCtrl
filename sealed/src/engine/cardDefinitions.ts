@@ -11788,13 +11788,14 @@ registerCard('LAW_238', onAttack({ // Scavenging Sandcrawler
 // (a repeated aspect is a repeated icon requirement: "Command Command Villainy" needs two Command
 // icons and one Villainy icon among what's revealed — one card can supply more than one of the same
 // icon, as Chancellor Valorum's own two Command icons show). The `disclose` PendingChoice
-// (legalMoves.ts/resolve.ts) is the primitive; this section is the 28 cards that need nothing else.
-// Three cards need a genuinely new primitive each and are split to a follow-up ticket: Cantwell
-// Arrestor Cruiser (a lasting effect tied to a SPECIFIC unit's continued presence, not a round/phase
-// boundary), Syril Karn (a "deal damage unless the controller discards a card" prevention, distinct
-// from `mayPreventDamage`'s exhaust-a-unit cost), and Chairman Papanoida (a wholly new "when a player
-// draws cards" trigger point, unrelated to Disclose itself). Diplomatic Immunity is registered with
-// the granted-ability cards; Condemn also needs its host to lose all other abilities.
+// (legalMoves.ts/resolve.ts) is the primitive; most of this section is the cards that need nothing
+// else. Three needed a genuinely new primitive each (#721): Cantwell Arrestor Cruiser
+// (`LastingEffect.whileSourceInPlay`, a lock read live against its own source's presence rather than
+// pruned on a round/phase boundary), Syril Karn (`discardOrDamage`, a one-shot "unless the controller
+// discards" cost distinct from `mayPreventDamage`'s standing, in-play prevention), and Chairman
+// Papanoida (no new trigger point after all: `whenDrawCards` already covers it, gated inline like
+// HMW_169/LAW_052/JTL_111). Diplomatic Immunity is registered with the granted-ability cards; Condemn
+// also needs its host to lose all other abilities.
 
 /** "You may disclose <need>", raised as a card's own `ifYouDo` continuation (`resume`), so a card
  *  with more than one stage names the next with `step`, and one that needs to read a specific
@@ -11903,6 +11904,14 @@ registerCard('SEC_076', mayDiscloseThen('You may disclose Vigilance Vigilance (r
     ? defeatUnit(s, ctx.targetInstanceId!)
     : unitThen(s, ctx, pickedIds(s, ctx, pickAll(damaged, nonLeader)), 'defeat a damaged non-leader unit', false, 'defeat'))))
 
+// The lock is tied to Cantwell's own continued presence, not a round/phase boundary: `whileSourceInPlay`
+// (types.ts) is read live by `unitCannotReady`, so it lasts past any number of rounds and lifts the
+// instant this ship itself leaves play.
+registerCard('SEC_037', mayDiscloseThen("You may disclose Vigilance Vigilance Villainy (reveal cards from your hand with these aspect icons among them). If you do, exhaust an enemy unit. That unit can't ready while this unit is in play.", // Cantwell Arrestor Cruiser
+  ['Vigilance', 'Vigilance', 'Villainy'], (s, ctx) => (ctx.step === 'lock'
+    ? addLastingEffect(exhaustUnit(s, ctx.targetInstanceId!), { targetInstanceId: ctx.targetInstanceId!, cannotReady: true, whileSourceInPlay: ctx.sourceInstanceId! })
+    : unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), 'exhaust an enemy unit', false, 'lock'))))
+
 // ── When Defeated: disclose ──────────────────────────────────────────────────────────────────────
 registerCard('SEC_059', defeated(mayDiscloseThen('You may disclose Vigilance (reveal a card from your hand with this aspect icon). If you do, give an Experience token to a unit.', // Senate Warden
   ['Vigilance'], (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, pickAny), 1, false))))
@@ -11935,6 +11944,18 @@ registerCard('SEC_248', onAttack(mayDiscloseThen('You may disclose Heroism Heroi
   ['Heroism', 'Heroism'], (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { keywords: [{ name: 'Sentinel' }] }, false))))
 registerCard('SEC_164', onAttack(whenPlayed("You may disclose Aggression. If you don't, deal 2 damage to your base.", (s, ctx) => // Warrior of Clan Ordo
   discloseThen(s, ctx, ['Aggression'], true, undefined, undefined, { onDecline: { damageOwnBase: 2 } }))))
+
+// "Unless its controller discards a card" is a cost the TARGET's controller pays to cancel the
+// damage, not a standing prevention (`mayPreventDamage`) on a unit already in play: `discardOrDamage`
+// (types.ts) is its own one-shot choice, offered to whoever controls the chosen unit.
+registerCard('SEC_133', onAttack(mayDiscloseThen('You may disclose Aggression Aggression Villainy (reveal cards from your hand with these aspect icons among them). If you do, choose a unit. Deal 2 damage to that unit unless its controller discards a card from their hand.', // Syril Karn
+  ['Aggression', 'Aggression', 'Villainy'], (s, ctx) => {
+    if (ctx.step !== 'target') return unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'choose a unit', false, 'target')
+    const found = findUnit(s, ctx.targetInstanceId!)
+    return found
+      ? pushChoice(s, { kind: 'discardOrDamage', id: ctx.sourceInstanceId!, controller: found.owner, targetInstanceId: ctx.targetInstanceId!, amount: 2, source: { cardId: ctx.cardId, controller: ctx.owner, instanceId: ctx.sourceInstanceId! } })
+      : s
+  })))
 
 const ebonHawkThen = (s: GameState, ctx: IfYouDoContext): GameState => {
   if (ctx.step === 'villainy') {
@@ -11977,6 +11998,17 @@ registerCard('SEC_107', { // Chancellor Valorum, Civil Servant
     effect: (s, ctx) => discloseThen(s, ctx, ['Command', 'Command', 'Command'], true),
   }],
   ifYouDo: (s, ctx) => resourceTopOfDeck(s, ctx.owner),
+})
+// No new trigger point needed: `whenDrawCards` already fires for every draw (both sides), and "during
+// the action phase" is the same inline `s.phase === 'action'` gate HMW_169/LAW_052/JTL_111 already use
+// to exclude the regroup draw. "A player" reads either side, so unlike those three there's no owner check.
+registerCard('SEC_159', { // Chairman Papanoida
+  abilities: [{
+    trigger: 'whenDrawCards',
+    description: 'When a player draws 1 or more cards during the action phase: You may disclose Aggression Aggression. If you do, create a Spy token.',
+    effect: (s, ctx) => (ctx.drawingPlayer !== undefined && s.phase === 'action' ? discloseThen(s, ctx, ['Aggression', 'Aggression'], true) : s),
+  }],
+  ifYouDo: (s, ctx) => create(s, ctx.owner, TOKEN_SPY, 1),
 })
 
 // ── Leader: disclose ─────────────────────────────────────────────────────────────────────────────

@@ -291,16 +291,15 @@ Two phases:
   Security Captain needs #682 too; Han's Golden Dice, Targeted For Removal and Payroll Heist are
   no longer held by the granted ability block (#464, shipped) and wait only on #719;
   Boba Fett and Dengar need a one-off trigger head with no ticket of its own yet.
-  **Disclose is finished** (#603): "reveal cards from your hand with these aspect icons among them"
-  is a flat aspect multiset (`need`) matched against each hand card's own `aspects`, which can itself
-  repeat an entry (a double-icon card counts twice on its own). 28 of the 33 cards it unlocked
-  (recounted; the ticket's own "19 sole" predated #711/#713 correcting the triage tool) shipped.
-  Three need a genuinely separate new primitive each and are on follow-up ticket **#721**: a lasting
-  effect tied to a specific unit's continued presence rather than a round/phase boundary (Cantwell
-  Arrestor Cruiser), a "deal damage unless the controller discards a card" prevention (Syril Karn),
-  and a wholly new "when a player draws cards" trigger point (Chairman Papanoida). Diplomatic
-  Immunity shipped with the granted ability blocks (#464); Condemn is on #682 (its host loses all
-  other abilities).
+  **Disclose is finished** (#603, #721): "reveal cards from your hand with these aspect icons among
+  them" is a flat aspect multiset (`need`) matched against each hand card's own `aspects`, which can
+  itself repeat an entry (a double-icon card counts twice on its own). All 33 cards it unlocked
+  shipped: 28 needed nothing else, and three needed a small primitive of their own (#721) —
+  `LastingEffect.whileSourceInPlay` (Cantwell Arrestor Cruiser's ready-lock tied to its own presence,
+  not a round boundary), the `discardOrDamage` choice (Syril Karn's "unless the controller discards"),
+  and Chairman Papanoida turned out to need no new trigger point at all, since `whenDrawCards` already
+  covers "when a player draws during the action phase". Diplomatic Immunity shipped with the granted
+  ability blocks (#464); Condemn is on #682 (its host loses all other abilities).
   **Indirect damage is finished** (#604): unlike every other instance of damage, the RECEIVING
   player assigns it, as unpreventable damage, among their own base and units — `dealIndirectDamage`
   raises a mandatory `distributeIndirectDamage` choice, folding in Hunting Aggressor's +1 and
