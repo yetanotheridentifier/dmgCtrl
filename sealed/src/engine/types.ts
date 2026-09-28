@@ -1340,10 +1340,12 @@ type ChoiceVariant =
   // Mando's N-1: a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.
   | { kind: 'mayExhaustLeaderBuffSelf'; id: string; controller: PlayerId; unitId: string; power: number; hp: number }
   // Deal `total` damage spread among any units (Ninth Sister), one point per pick until
-  // `remaining` reaches 0. `targets` are the currently-eligible unit instance ids (both sides,
-  // recomputed as units are defeated). Always optional — the controller may stop early (a "may").
-  // `enemiesOf` keeps the re-offers to that player's enemy units, and makes the whole amount mandatory
-  // while any remain (Emperor Palpatine's "deal 6 damage divided as you choose among enemy units").
+  // `remaining` reaches 0. `targets` are the currently-eligible unit instance ids: whatever
+  // restriction the card raised the choice with (an arena, "other units", enemies only, ...),
+  // narrowed each point to drop units that are now defeated, never recomputed from scratch. Always
+  // optional — the controller may stop early (a "may").
+  // `enemiesOf` makes the whole amount mandatory while any remain (Emperor Palpatine's "deal 6 damage
+  // divided as you choose among enemy units"); the enemies-only restriction itself lives in `targets`.
   // `boosted` are the units already dealt a point: the division is one instance of damage to each unit,
   // so a "that much damage plus 1" replacement (Ty Yorrick) adds to a unit's first point only.
   | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[]; enemiesOf?: PlayerId; boosted?: string[] }
