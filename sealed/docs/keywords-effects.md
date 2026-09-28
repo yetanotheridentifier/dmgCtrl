@@ -61,7 +61,9 @@ A unit that has lost its abilities keeps **only** the upgrades whose printed tex
 "gains" (CR 3.6.10: Entrenched's "attached unit can't attack bases" still binds a unit Force Lightning
 has blanked), plus whatever the loss itself keeps. It gains nothing from an aura (`grantsAbilities`,
 an aura's keywords), a lasting effect (`abilityCardIds`, `keywords`), or a lent card. An upgrade that
-prints both kinds is treated as a giver as a whole.
+prints both kinds is treated as a giver as a whole, and so is a lent attack rider: a blanked unit
+attacking through One Way Out or Flash the Vents loses the rider's +X/+0 along with its keyword, since
+the carrier card holds both.
 
 | Source | Declared as | Cards |
 | --- | --- | --- |
