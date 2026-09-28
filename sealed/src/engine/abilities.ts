@@ -268,8 +268,9 @@ export interface CardDefinition {
   /**
    * Aspect icons whose penalty this card ignores while `player` plays it (Rey: "ignore her Heroism
    * aspect penalty if you control Kylo Ren"). Only those icons: any other missing icon still costs.
+   * `target` is the unit an upgrade is being played on (The Darksaber, on a Mandalorian unit).
    */
-  ignoresOwnAspectPenalty?: (state: GameState, player: PlayerId) => string[]
+  ignoresOwnAspectPenalty?: (state: GameState, player: PlayerId, target?: UnitState) => string[]
   /**
    * Multiplier applied to each instance of damage this unit takes (the unit's own
    * card, or an upgrade) — e.g. Deadly Vulnerability's ×2. Multipliers from the card
@@ -673,11 +674,14 @@ export interface ActionAbilityDef {
   effect: (state: GameState, ctx: EffectContext) => GameState
 }
 
-/** A unit's action abilities, from its own card and each attached upgrade, with the
- *  source card id and per-card index so callers can address and track each one. */
-export function unitActionAbilities(unit: UnitState): { cardId: string; index: number; ability: ActionAbilityDef }[] {
+/**
+ * A unit's action abilities: from its own card, each attached upgrade, and any card whose abilities it
+ * gains from an aura or for the phase (Satine Kryze hands every unit an "Action [exhaust]"), with the
+ * source card id and per-card index so callers can address and track each one.
+ */
+export function unitActionAbilities(state: GameState, unit: UnitState): { cardId: string; index: number; ability: ActionAbilityDef }[] {
   const out: { cardId: string; index: number; ability: ActionAbilityDef }[] = []
-  for (const cardId of abilityCardIds(unit)) {
+  for (const cardId of [...abilityCardIds(unit), ...grantedAbilityCards(state, unit, unitController(state, unit))]) {
     const defs = registry.get(cardId)?.actionAbilities ?? []
     defs.forEach((ability, index) => out.push({ cardId, index, ability }))
   }
@@ -846,6 +850,24 @@ function auraGrantedAbilityCards(state: GameState, unit: UnitState, owner: Playe
 }
 
 /**
+ * The cards whose abilities `unit` gains from the board rather than carries: a `grantsAbilities` aura
+ * in play, and a lasting effect's `abilityCardIds` ("for this phase, each friendly unit gains: ...").
+ * `abilityCardIds` covers what the unit carries (its card, its upgrades, a lent card); this is the rest,
+ * and needs the state to find. Read for triggered abilities and for "Action:" abilities alike.
+ */
+function grantedAbilityCards(state: GameState, unit: UnitState, owner: PlayerId): string[] {
+  return [
+    ...auraGrantedAbilityCards(state, unit, owner),
+    ...(state.lastingEffects ?? []).flatMap(e => (e.targetInstanceId === unit.instanceId ? e.abilityCardIds ?? [] : [])),
+  ]
+}
+
+/** Who controls `unit`, which is in play. */
+function unitController(state: GameState, unit: UnitState): PlayerId {
+  return state.players.opponent.units.some(u => u.instanceId === unit.instanceId) ? 'opponent' : 'player'
+}
+
+/**
  * The same abilities `runUnitTrigger` would fire, as data instead of as effects.
  *
  * Split out so a batch can be **ordered before it runs** (CR 7.6.9, 7.6.10). The card list is
@@ -864,11 +886,7 @@ export function collectUnitTriggers(
   ctx?: TriggerContext,
 ): PendingTrigger[] {
   const out: PendingTrigger[] = []
-  const cardIds = [
-    ...abilityCardIds(unit),
-    ...auraGrantedAbilityCards(state, unit, owner),
-    ...(state.lastingEffects ?? []).flatMap(e => (e.targetInstanceId === unit.instanceId ? e.abilityCardIds ?? [] : [])),
-  ]
+  const cardIds = [...abilityCardIds(unit), ...grantedAbilityCards(state, unit, owner)]
   for (const cardId of cardIds) {
     getAbilities(cardId).forEach((ability, abilityIndex) => {
       if (ability.trigger !== point || !hearsEvent(state, ability, owner, cardId, unit.instanceId, ctx)) return

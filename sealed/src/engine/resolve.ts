@@ -2925,7 +2925,8 @@ function runAttackStages(state: GameState, attackerId: string, target: AttackTar
   if (stage === 'onDefense' && target.kind === 'unit') {
     const defender = state.players[enemyId].units.find(u => u.instanceId === target.instanceId)
     if (defender) {
-      const afterDefense = fireBatch(state, collectUnitTriggers(state, 'onDefense', defender, enemyId))
+      // The attacker is on the context, for "the attacker gets -2/-0" (Diplomatic Immunity).
+      const afterDefense = fireBatch(state, collectUnitTriggers(state, 'onDefense', defender, enemyId, { attackerInstanceId: attackerId, attackingPlayer: playerId }))
       if (batchOutstanding(state, afterDefense)) {
         // Hand control to the defender; resume at the damage stage.
         return { ...afterDefense, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage', viaAmbush, ...prevent }, activePlayer: enemyId }

@@ -47,9 +47,13 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
   // their own. "Dealt damage and survives" is `whenDamageDealt` filtered to one surviving unit;
   // "deals combat damage to a base" is `onAttackEnd` with `combatDamageToBase`, read from the
   // attacker's side or, for the last one, the base owner's (`whenDamageDealt` with `byCombat`).
+  // "Deals combat damage (to a unit while attacking)" is `onAttackEnd` with the combat damage the
+  // attack dealt (Heroic Sacrifice, Dorsal Turret), and "when this unit is attacked" is `onDefense`.
   'when this unit is dealt damage and survives', 'when a friendly unit is dealt damage and survives',
   'when this unit deals combat damage to a base', "when this unit deals combat damage to an opponent's base",
   'when a friendly unit deals combat damage to a base', 'when an enemy unit deals combat damage to your base',
+  'when this unit deals combat damage', 'when this unit deals combat damage to a unit while attacking',
+  'when this unit is attacked',
   // Printed spellings of points that dispatch under another name: `whenTakeInitiative`,
   // `whenFriendlyAttackEnds`, `whenActionPhaseStarts`, and `whenPlayCard`, which fires on both sides.
   'when you take the initiative', "when a friendly unit's attack ends", 'when the action phase starts',
@@ -101,7 +105,7 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
   ['capture', /\bcaptures?\b|\bcaptured\b/i],
   // A card that is both a unit and an upgrade.
   ['pilot', /\bPilot(ing)?\b|\bpilot\b/i],
-  // `granted-ability-block` is read from the trigger heads instead: see GRANTED_ABILITY_LEAD_IN.
+  // A granted ability block is not a blocker: its quoted head is judged instead (GRANTED_ABILITY_QUOTE).
   // Resources are defeated, returned to hand, and put into play from any zone, including another
   // player's card (`ResourceState.owner`). Taking control of a resource already in play is not.
   ['resource-zone', /\btake control of (?:an? )?(?:enemy )?resource\b/i],
@@ -123,10 +127,22 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
  * A colon-led head that hands a quoted ability to a unit rather than naming a trigger point: it ends
  * in "gains", or in "gains" plus a keyword or trait and "and" ("it gains Sentinel and:"). The spelling
  * before "gains" varies without limit ("Attached unit", "If attached unit is a Force unit, it", "For this
- * attack, it gets +2/+0 and"), so the rule reads only the end. Every such head is the one blocker
- * `granted-ability-block`; read as a trigger point, each spelling folded into `trigger:one-off`.
+ * attack, it gets +2/+0 and"), so the rule reads only the end.
+ *
+ * Handing a unit an ability block is something the engine does (an upgrade's abilities are its host's,
+ * a phase grant is a lasting effect, an aura grant is `grantsAbilities`), so the lead-in blocks nothing.
+ * Read as a trigger point, each spelling would fold into `trigger:one-off`.
  */
 const GRANTED_ABILITY_LEAD_IN = /\bgains(?:\s[^:]*\sand)?$/i
+
+/**
+ * The same lead-in followed by its quoted ability, colon- or comma-led ("Attached unit gains, “On
+ * Attack: ...”"), the quote on the same line or the next. Rewritten so the quoted ability starts a line
+ * of its own, which makes its head a head like any printed one: judged by whether its point is
+ * dispatched, so a granted "When an enemy unit readies" is blocked exactly as a printed one would be.
+ */
+const GRANTED_ABILITY_QUOTE = /^([^\n]*?\bgains(?:\s[^:\n]*\sand)?)\s*[:,]\s*["“]/gm
+const splitGrantedAbilities = (text: string): string => text.replace(GRANTED_ABILITY_QUOTE, '$1\n')
 
 /**
  * Blockers that are one engine change wearing two hats. The Piloting keyword and the pilot text
@@ -308,17 +324,15 @@ export function triage(pool: SwuCard[]): TriageReport {
     const blockers = new Set<string>()
     for (const [name, re] of NEW_MECHANICS) if (re.test(withoutReminders)) blockers.add(name)
     for (const k of newKeywords) blockers.add(`kw:${k}`)
-    for (const h of triggerHeads(text)) {
-      // A base upgrade handing its base an ability is how Fortify upgrades work, which the engine does,
-      // not a unit's granted ability block.
-      if (GRANTED_ABILITY_LEAD_IN.test(h)) {
-        if (!/^Attached base\b/i.test(h)) blockers.add('granted-ability-block')
-      }
+    for (const h of triggerHeads(splitGrantedAbilities(text))) {
+      // A lead-in left without a quoted ability after it ("Attached unit gains: Raid 1.") hands over a
+      // keyword, which blocks nothing either.
+      if (GRANTED_ABILITY_LEAD_IN.test(h)) continue
       // A slash joins two or three trigger points ("When Played/On Attack/When Defeated"). Registering
       // one ability block at several points is what the engine does, so the join costs nothing and each
       // part is judged on its own: the card is held back by whichever part is not dispatched, named
       // alone so cards waiting on the same point group together however their heads are spelled.
-      else for (const part of h.split('/').map(p => p.trim()).filter(Boolean)) {
+      for (const part of h.split('/').map(p => p.trim()).filter(Boolean)) {
         if (!EXISTING_TRIGGERS.has(triggerPoint(part))) blockers.add(`trigger:${part}`)
       }
     }

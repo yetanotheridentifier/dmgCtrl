@@ -23,8 +23,8 @@ import type { EngineCard, GameState, PlayerId, UnitState } from '../engine/types
  * "prevent all combat damage this attack" lasting-effect field; TWI_064 Ki-Adi-Mundi needs a new
  * per-phase play-count condition; TWI_011 Ahsoka Tano and TWI_008 Padmé Amidala are deployed-leader
  * action abilities; TWI_147 Anakin Skywalker, TWI_165 Kit Fisto and TWI_192 Padmé Amidala (unit) are
- * simple gated `onAttack` effects held back only for time; TWI_051 For The Republic depends on
- * #464's granted-ability-block.
+ * simple gated `onAttack` effects held back only for time, and so is TWI_051 For The Republic's
+ * granted "Coordinate - Restore 2".
  */
 
 const POOL = poolFor(['TWI'])

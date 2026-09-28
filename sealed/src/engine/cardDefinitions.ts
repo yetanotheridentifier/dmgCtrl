@@ -7942,7 +7942,7 @@ const ANY_NUMBER = 99
 // refinement of `whenPlayCard`; TWI_011 Ahsoka Tano and TWI_008 Padmé Amidala are deployed-leader
 // `actionAbilities` gated by `usable`; TWI_147 Anakin Skywalker, TWI_165 Kit Fisto and TWI_192
 // Padmé Amidala (unit) are simple gated `onAttack` effects held back only for time; TWI_051 For The
-// Republic depends on #464's granted-ability-block.
+// Republic's granted "Coordinate - Restore 2" is an upgrade's own gated keyword, also held back only for time.
 const hasCoordinate = (s: GameState, owner: PlayerId): boolean => s.players[owner].units.length >= 3
 const unitHasCoordinate = (s: GameState, u: UnitState): boolean => {
   const o = unitOwner(s, u)
@@ -11793,8 +11793,8 @@ registerCard('LAW_238', onAttack({ // Scavenging Sandcrawler
 // Arrestor Cruiser (a lasting effect tied to a SPECIFIC unit's continued presence, not a round/phase
 // boundary), Syril Karn (a "deal damage unless the controller discards a card" prevention, distinct
 // from `mayPreventDamage`'s exhaust-a-unit cost), and Chairman Papanoida (a wholly new "when a player
-// draws cards" trigger point, unrelated to Disclose itself). Condemn and Diplomatic Immunity stay
-// blocked on `granted-ability-block` (unbuilt) regardless.
+// draws cards" trigger point, unrelated to Disclose itself). Diplomatic Immunity is registered with
+// the granted-ability cards; Condemn also needs its host to lose all other abilities.
 
 /** "You may disclose <need>", raised as a card's own `ifYouDo` continuation (`resume`), so a card
  *  with more than one stage names the next with `step`, and one that needs to read a specific
@@ -12261,8 +12261,8 @@ registerCard('JTL_133', allOf( // Allegiant General Pryde
 // point — NOT shipping Yoda's simple When Played half alone, the same half-registration mistake #707
 // called out for Jabba the Hutt); LOF_079 Shatterpoint (a Force-gated option inside "Choose one");
 // LOF_218 Impossible Escape (an exhaust-a-unit-OR-use-the-Force alternate cost); LOF_098 Leia Organa
-// (granted-ability-block, already a known cross-ticket dependency); LOF_067 Chirrut Îmwe (`onDefense`
-// needs `attackerInstanceId` added to its ctx); LOF_229 Kylo Ren (needs a `whenUpgradeAttached` ctx
+// (her gated "Action [use the Force]" is her own `actionAbilities` with `usable`); LOF_067 Chirrut Îmwe
+// (`onDefense` now carries `attackerInstanceId`); LOF_229 Kylo Ren (needs a `whenUpgradeAttached` ctx
 // read, JTL_202 precedent on #680); LOF_249 Luke Skywalker (needs "when you play ANOTHER UNIQUE unit"
 // filtering on the existing "play another unit" trigger); LOF_252 The Daughter (needs a "when damage
 // is dealt to your base" trigger point).
@@ -12372,4 +12372,412 @@ registerCard('LOF_014', { // Grand Inquisitor — front: Action [Exhaust, use th
     }],
   },
   aura: defenderPowerAura(-2), // his own "On Attack: the defender gets -2/-0", unconditional
+})
+
+// ── Granted ability blocks: "Attached unit gains: ...", "each friendly unit gains: ..." ──────────────
+// A card that hands a unit a whole ability block needs no plumbing of its own. An upgrade's abilities
+// are its host's (`abilityCardIds`), so an upgrade registers the granted block as its own and it fires
+// for the host with `ctx.sourceInstanceId` the host and `ctx.owner` its controller, as if printed on
+// it. A phase-long grant is a lasting effect's `abilityCardIds`, an aura grant is `grantsAbilities`,
+// and a grant for one attack is the attack's lent card; all three reach triggered and "Action:"
+// abilities alike. A grant that holds only while the host qualifies ("If attached unit is a Force
+// unit, it gains: ...") gates the ability with `hears`, so a host that does not qualify never has it.
+
+/** "If attached unit is a <trait> unit, it gains: ..." — the granted triggered ability's gate. */
+const hostHasTrait = (trait: string) => (s: GameState, ctx: EffectContext): boolean => {
+  const host = findUnit(s, ctx.sourceInstanceId!)?.unit
+  return host !== undefined && unitHasTrait(s, host, trait)
+}
+/** A granted On Attack that exists only while the host has `trait`. */
+const onAttackIf = (trait: string, description: string, effect: AbilityDef['effect']): AbilityDef =>
+  ({ trigger: 'onAttack', description, hears: hostHasTrait(trait), effect })
+const forceUnit = (s: GameState, t: UnitState): boolean => unitHasTrait(s, t, 'Force')
+const vehicle = (s: GameState, t: UnitState): boolean => unitHasTrait(s, t, 'Vehicle')
+const nonLeaderHost = (s: GameState, t: UnitState): boolean => !isLeaderUnit(s, t)
+/** Where the upgrade `cardId` sits on `hostId`, for an ability that moves or defeats the upgrade itself. */
+const upgradeOn = (s: GameState, hostId: string, cardId: string): UpgradeRef | undefined => {
+  const index = findUnit(s, hostId)?.unit.upgrades.findIndex(u => u.cardId === cardId) ?? -1
+  return index === -1 ? undefined : { unitId: hostId, upgradeIndex: index, cardId }
+}
+
+// On Attack
+registerCard('LAW_186', { // Enfys Nest's Helmet
+  attachRestriction: nonVehicle,
+  ...onAttack(buffWp('Attached unit gains: "On Attack: You may give another unit +3/+0 for this phase."', pickOther, () => ({ power: 3 }), true)),
+})
+registerCard('LAW_125', { // Watchful
+  ...attacks('Attached unit gains: "On Attack: Look at the top card of a deck. You may put it on the bottom of that deck."', (s, ctx) =>
+    (s.players.player.deck.length + s.players.opponent.deck.length > 0 ? choosePlayer(s, ctx, 'look at the top card of the deck of', 'deck') : s)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'deck') {
+      const who = ctx.playerChosen!
+      const top = s.players[who].deck[0]
+      return top === undefined ? s : pushChoice(s, {
+        kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-watchful`, controller: ctx.owner, cost: 0,
+        text: `put ${s.cards[top]?.name ?? top} on the bottom of that deck`, then: resume(ctx, `bottom:${who}`),
+      })
+    }
+    const who = ctx.step?.split(':')[1] as PlayerId | undefined
+    const deck = who ? s.players[who].deck : []
+    return who && deck.length > 0 ? updatePlayer(s, who, { deck: [...deck.slice(1), deck[0]] }) : s
+  },
+})
+registerCard('SEC_264', onAttack(mayPayWp('Attached unit gains: "On Attack: You may pay 2. If you do, deal 2 damage to a base."', 2, 'pay 2 to deal 2 damage to a base', // Clandestine Connections
+  (s, ctx) => damageChoice(s, ctx, 2, [], BOTH_BASES))))
+registerCard('SEC_210', { // Stolen Starpath Unit
+  ...attacks('Attached unit gains: "On Attack: Name a card. The defending player reveals their hand. For each card in their hand with that name, create a Spy token."', (s, ctx) =>
+    pushChoice(s, { kind: 'nameCard', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, then: resume(ctx) })),
+  ifYouDo: (s, ctx) => create(s, ctx.owner, TOKEN_SPY,
+    s.players[opponentOf(ctx.owner)].hand.filter(id => s.cards[id]?.name === ctx.nameChosen).length),
+})
+registerCard('LOF_139', attacks('Attached unit gains: "On Attack: Discard a card from your hand."', (s, ctx) => // Battle Fury
+  discards(s, ctx.owner, 1, ctx.sourceInstanceId!)))
+registerCard('LOF_051', { // Jedi Holocron
+  attachRestriction: forceUnit,
+  ...onAttack(whenPlayed('Attached unit gains: "On Attack: You may heal 3 damage from another unit."', (s, ctx) =>
+    healChoice(s, ctx, 3, pickedIds(s, ctx, pickOther), [], true))),
+})
+registerCard('LOF_052', { // Jedi Trials
+  attachRestriction: forceUnit,
+  ...attacks('Attached unit gains: "On Attack: Give an Experience token to this unit."', (s, ctx) => expSelf(s, ctx)),
+  // Tokens are upgrades too, so they count toward the four.
+  grantedTraits: (_s, u) => (u.upgrades.length >= 4 ? ['Jedi'] : []),
+})
+registerCard('LOF_138', { // Sith Holocron
+  attachRestriction: forceUnit,
+  ...attacks('Attached unit gains: "On Attack: You may deal 2 damage to a friendly unit. If you do, this unit gets +2/+0 for this attack."', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'deal 2 damage to a friendly unit so this unit gets +2/+0 for this attack', true)),
+  ifYouDo: (s, ctx) => forThisAttack(dealDamageToUnit(s, ctx.targetInstanceId!, 2, srcOf(ctx)), ctx.sourceInstanceId!, 2),
+})
+registerCard('JTL_172', { // Twin Laser Turret
+  attachRestriction: vehicle,
+  ...onAttack(eachOfUpTo('Attached unit gains: "On Attack: Deal 1 damage to each of up to 2 units in this arena."', 2, {
+    text: 'deal 1 damage to a unit in this arena (up to 2)',
+    test: (s, u, ctx) => u.arena === selfOf(s, ctx)?.arena,
+    apply: damageEach(1),
+  })),
+})
+registerCard('JTL_227', { // Superheavy Ion Cannon
+  attachRestriction: (s, t) => unitHasTrait(s, t, 'Capital Ship') || unitHasTrait(s, t, 'Transport'),
+  ...attacks('Attached unit gains: "On Attack: You may exhaust a non-leader unit the defending player controls. If you do, deal indirect damage equal to its power to that player."', (s, ctx) =>
+    // Only a ready unit can be exhausted, so only one of those makes "if you do" true.
+    unitThen(s, ctx, pickedIds(s, ctx, (st, u, c) => pickEnemy(st, u, c) && !isLeaderUnit(st, u) && !u.exhausted), 'exhaust an enemy non-leader unit to deal indirect damage equal to its power', true)),
+  ifYouDo: (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!target) return s
+    const power = effectivePower(s, target)
+    return dealIndirectDamage(exhaustUnit(s, target.instanceId), opponentOf(ctx.owner), power, srcOf(ctx))
+  },
+})
+registerCard('JTL_171', { // Targeting Computer — "You assign all indirect damage dealt by this unit."
+  assignsIndirectDamage: (_s, self, source) => source.instanceId === self.instanceId,
+})
+const inspiringMentor = whenPlayed('Attached unit gains: "On Attack/When Defeated: Give an Experience token to another friendly unit."', (s, ctx) =>
+  expChoice(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickOther))))
+registerCard('SHD_104', { attachRestriction: nonVehicle, ...allOf(onAttack(inspiringMentor), defeated(inspiringMentor)) }) // Inspiring Mentor
+registerCard('SHD_126', { // The Darksaber
+  attachRestriction: nonVehicle,
+  // "While playing this upgrade on a Mandalorian unit, ignore its aspect penalty."
+  ignoresOwnAspectPenalty: (s, _player, target) => (target && unitHasTrait(s, target, 'Mandalorian') ? s.cards.SHD_126?.aspects ?? [] : []),
+  ...attacks('Attached unit gains, "On Attack: Give an Experience token to each other friendly Mandalorian unit."', (s, ctx) =>
+    pickedIds(s, ctx, pickAll(pickFriendly, pickOther, pickTrait('Mandalorian'))).reduce((acc, id) => giveToken(acc, id, TOKEN_EXPERIENCE), s)),
+})
+registerCard('SHD_177', { // Vambrace Flamethrower
+  attachRestriction: nonVehicle,
+  ...attacks('Attached unit gains: "On Attack: You may deal 3 damage divided as you choose among enemy ground units."', (s, ctx) => {
+    const targets = pickedIds(s, ctx, enemyGroundUnit)
+    return targets.length ? pushChoice(s, { kind: 'distributeDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: 3, total: 3, targets }) : s
+  }),
+})
+registerCard('SHD_074', { // Vambrace Grappleshot
+  attachRestriction: nonVehicle,
+  ...attacks('Attached unit gains: "On Attack: Exhaust the defender."', (s, ctx) => { const d = defenderOf(s, ctx); return d ? exhaustUnit(s, d.instanceId) : s }),
+})
+registerCard('SOR_121', { // Hardpoint Heavy Blaster
+  attachRestriction: vehicle,
+  ...attacks("Attached unit gains: \"On Attack: If this unit isn't attacking a base, you may deal 2 damage to a unit in the defender's arena.\"", (s, ctx) => {
+    const d = defenderOf(s, ctx)
+    return d ? damageChoice(s, ctx, 2, allUnits(s).filter(u => u.arena === d.arena), [], true) : s
+  }),
+})
+registerCard('SOR_214', { // Smuggling Compartment
+  attachRestriction: vehicle,
+  ...attacks('Attached unit gains: "On Attack: Ready a resource."', (s, ctx) => readyResource(s, ctx.owner)),
+})
+const ahsokasLightsabers = whenPlayed('Attached unit gains: "On Attack/When Defeated: You may give a Shield token to an enemy unit. If you do, the next event you play this phase costs 2 less."', (s, ctx) =>
+  unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), 'give a Shield token to an enemy unit so the next event you play this phase costs 2 less', true))
+registerCard('TS26_35', { // Ahsoka's Lightsabers
+  attachRestriction: nonVehicle,
+  ...allOf(onAttack(ahsokasLightsabers), defeated(ahsokasLightsabers)),
+  ifYouDo: (s, ctx) => grantNextUnit(giveToken(s, ctx.targetInstanceId!, TOKEN_SHIELD), ctx.owner, { event: true, costDelta: -2 }),
+})
+registerCard('TS26_52', { // Sith Traditions
+  attachRestriction: nonVehicle,
+  abilities: [
+    { trigger: 'onAttack', description: 'Attached unit gains: "On Attack: Give an Experience token to this unit."', effect: (s, ctx) => expSelf(s, ctx) },
+    { trigger: 'whenDefeated', description: 'Attached unit gains: "When Defeated: Give an Experience token to a friendly unit."', effect: (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, pickFriendly)) },
+  ],
+})
+
+// When Defeated
+registerCard('LAW_201', { // Thermal Detonator
+  attachRestriction: nonVehicle,
+  ...whenDefeated('Attached unit gains: "When Defeated: If this unit was ready, deal 2 damage to each enemy ground unit."', (s, ctx) =>
+    (ctx.defeatedUnit && !ctx.defeatedUnit.exhausted
+      ? unitsIn(s, opponentOf(ctx.owner), 'ground').reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 2), s)
+      : s)),
+})
+registerCard('SEC_039', defeated(targetWp('Attached unit gains: "When Defeated: You may defeat a unit with 3 or less remaining HP."', 'selectUnitToDefeat', // Creditor's Claim
+  (s, u) => remainingHp(s, u) <= 3, true)))
+registerCard('SEC_156', { // Nemik's Manifesto
+  attachRestriction: nonVehicle,
+  grantedTraits: () => ['Rebel'],
+  // The host has left play by now, so every friendly Rebel unit still there is an "other" one.
+  ...whenDefeated('Attached unit gains the Rebel trait and: "When Defeated: Deal 1 damage to each enemy base for each other friendly Rebel unit."', (s, ctx) => {
+    const rebels = s.players[ctx.owner].units.filter(u => u.instanceId !== ctx.sourceInstanceId && unitHasTrait(s, u, 'Rebel')).length
+    return rebels > 0 ? dealDamageToBase(s, opponentOf(ctx.owner), rebels) : s
+  }),
+})
+registerCard('JTL_073', defeated(targetWp('Attached unit gains: "When Defeated: You may exhaust a unit."', 'mayExhaustUnit', pickAny, true))) // Grim Valor
+registerCard('TWI_169', createWd('Attached unit gains Raid 2 and: "When Defeated: Create a Clone Trooper token."', TOKEN_CLONE_TROOPER)) // Clone Cohort (Raid 2 is printed)
+registerCard('TWI_218', createWd('Attached unit gains, "When Defeated: Create a Battle Droid token."', TOKEN_BATTLE_DROID)) // Droid Cohort
+registerCard('SHD_053', { // Second Chance
+  attachRestriction: nonLeaderHost,
+  ...whenDefeated('Attached unit gains: "When Defeated: For this phase, this unit\'s owner may play it from their discard pile for free."', (s, ctx) => {
+    const host = ctx.defeatedUnit
+    if (!host || isTokenCard(host.cardId)) return s
+    const owner = host.owner ?? ctx.owner
+    return s.players[owner].discard.includes(host.cardId)
+      ? addDiscardPlayGrant(s, { player: owner, owner, cardId: host.cardId, free: true })
+      : s
+  }),
+})
+
+// Granted only while the host qualifies
+registerCard('SOR_054', { // Jedi Lightsaber
+  attachRestriction: nonVehicle,
+  abilities: [onAttackIf('Force', 'If attached unit is a Force unit, it gains: "On Attack: Give the defender -2/-2 for this phase."', (s, ctx) => {
+    const d = defenderOf(s, ctx)
+    return d ? addLastingEffect(s, { targetInstanceId: d.instanceId, power: -2, hp: -2 }) : s
+  })],
+})
+registerCard('SOR_137', { // Fallen Lightsaber
+  attachRestriction: nonVehicle,
+  abilities: [onAttackIf('Force', 'If attached unit is a Force unit, it gains: "On Attack: Deal 1 damage to each ground unit the defending player controls."', (s, ctx) =>
+    unitsIn(s, opponentOf(ctx.owner), 'ground').reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 1, srcOf(ctx)), s))],
+})
+registerCard('LOF_187', { // Corrupted Saber
+  attachRestriction: nonVehicle,
+  abilities: [onAttackIf('Force', 'If attached unit is a Force unit, it gains: "On Attack: The defender gets -2/-0 for this attack."', (s, ctx) => {
+    const d = defenderOf(s, ctx)
+    return d ? forThisAttack(s, d.instanceId, -2) : s
+  })],
+})
+registerCard('LOF_040', { // Kylo Ren's Lightsaber
+  attachRestriction: nonVehicle,
+  cannotBeTargetedByEnemyAbility: (s, self, action) => action === 'exhaust' && forceUnit(s, self),
+})
+registerCard('TWI_121', { // General's Blade
+  attachRestriction: nonVehicle,
+  abilities: [onAttackIf('Jedi', 'If attached unit is a Jedi, it gains: "On Attack: The next unit you play this phase costs 2 less."', (s, ctx) =>
+    grantNextUnit(s, ctx.owner, { costDelta: -2 }))],
+})
+
+// Other trigger points
+registerCard('LAW_077', { // Shadow of Stygeon Prime
+  attachRestriction: nonLeaderHost,
+  cannotReady: () => true,
+  // "Your base" is the ability's controller's, which for a granted ability is the host's controller.
+  abilities: [{ trigger: 'whenRegroupStarts', description: 'Attached unit can\'t ready. It gains: "When the regroup phase starts: Deal 2 damage to your base."', effect: (s, ctx) =>
+    dealDamageToBase(s, ctx.owner, 2, srcOf(ctx)) }],
+})
+// TWI_068 Foresight is not registered: its "When the regroup phase starts (before drawing cards)" needs
+// the regroup draw to wait for that trigger's choices, and `enterRegroup` draws first.
+registerCard('SEC_052', { // Diplomatic Immunity
+  abilities: [{
+    trigger: 'onDefense',
+    description: 'Attached unit gains: "When this unit is attacked: You may disclose Vigilance Vigilance Heroism Heroism. If you do, the attacker gets -2/-0 for this attack."',
+    effect: (s, ctx) => (ctx.attackerInstanceId ? discloseThen(s, ctx, ['Vigilance', 'Vigilance', 'Heroism', 'Heroism'], true, undefined, ctx.attackerInstanceId) : s),
+  }],
+  ifYouDo: (s, ctx) => (ctx.unitChosen && findUnit(s, ctx.unitChosen) ? forThisAttack(s, ctx.unitChosen, -2) : s),
+})
+registerCard('SHD_143', { abilities: [{ // Ruthlessness
+  trigger: 'onAttackEnd',
+  description: 'Attached unit gains: "When this unit attacks and defeats a unit: Deal 2 damage to the defending player\'s base."',
+  effect: (s, ctx) => (ctx.defenderDefeated ? dealDamageToBase(s, opponentOf(ctx.owner), 2, srcOf(ctx)) : s),
+}] })
+registerCard('JTL_120', { // Dorsal Turret
+  attachRestriction: vehicle,
+  // Read as the attack ends, as Heroic Sacrifice's "when this unit deals combat damage" is.
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'Attached unit gains: "When this unit deals combat damage to a unit while attacking: Defeat that unit."',
+    effect: (s, ctx) => {
+      const d = defenderOf(s, ctx)
+      return d && (ctx.combatDamageToDefender ?? 0) > 0 ? defeatUnit(s, d.instanceId) : s
+    },
+  }],
+})
+
+// Constant and Action abilities
+const sniperTarget: Pick = (s, u) => u.arena === 'ground' && u.damage === 0 && !isLeaderUnit(s, u)
+registerCard('LAW_126', { // Adventurer Sniper Rifle
+  attachRestriction: nonVehicle,
+  actionAbilities: [{
+    description: 'Attached unit gains: "Action [Exhaust]: Choose an undamaged non-leader ground unit. Its printed HP is considered to be 1 for this phase."',
+    exhaustCost: true,
+    usable: s => allUnits(s).some(u => sniperTarget(s, u, { owner: 'player' })),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, sniperTarget), 'set the printed HP of an undamaged non-leader ground unit to 1 for this phase', false),
+  }],
+  ifYouDo: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, printedHp: 1 }),
+})
+registerCard('SEC_104', { // Figure of Unity
+  attachRestriction: (s, t) => s.cards[t.cardId]?.unique === true,
+  aura: (_s, source, target, sameController) =>
+    (sameController && target.instanceId !== source.instanceId && !source.exhausted
+      ? { keywords: [{ name: 'Overwhelm' }, { name: 'Raid', value: 1 }, { name: 'Restore', value: 1 }] }
+      : undefined),
+})
+registerCard('LOF_090', { // Inquisitor's Lightsaber
+  attachRestriction: nonVehicle,
+  statModifier: (s, _u, ctx) => {
+    const defenderId = ctx.attacking ? ctx.combat?.defenderInstanceId : undefined
+    const defender = defenderId ? findUnit(s, defenderId)?.unit : undefined
+    return defender && forceUnit(s, defender) ? { power: 2 } : {}
+  },
+})
+registerCard('TWI_122', { // Squad Support
+  attachRestriction: nonLeaderHost,
+  statModifier: (s, u) => perEach(s.players[controllerOf(s, u)].units.filter(x => unitHasTrait(s, x, 'Trooper')).length, 1, 1),
+})
+registerCard('TWI_120', { actionAbilities: [{ // Strategic Acumen
+  description: 'Attached unit gains: "Action [exhaust]: Play a unit from your hand. It costs 1 less."',
+  exhaustCost: true,
+  usable: handUnitPlayable(-1),
+  effect: (s, ctx) => playFromHand(s, ctx, { costDelta: -1 }),
+}] })
+const GRANT_HEROIC_RESOLVE = 'GRANT_HEROIC_RESOLVE'
+registerCard(GRANT_HEROIC_RESOLVE, { sourceCardId: 'SHD_155', ...attackBonus(4), conditionalKeywords: () => [{ name: 'Overwhelm' }] })
+registerCard('SHD_155', { actionAbilities: [{ // Heroic Resolve
+  description: 'Attached unit gains: "Action [C=2, defeat a Heroic Resolve on this unit]: Attack with this unit. It gets +4/+0 and gains Overwhelm for this attack."',
+  cost: 2,
+  usable: (s, self) => eligibleAttacker(s, self) && canAttackSomething(s, self, GRANT_HEROIC_RESOLVE),
+  effect: (s, ctx) => {
+    const self = ctx.sourceInstanceId!
+    const paid = upgradeOn(s, self, 'SHD_155')
+    const next = paid ? defeatUpgradeAt(s, self, paid.upgradeIndex) : s
+    return offerAttack(next, ctx.owner, `${self}-attack`, { attacker: { only: [self] }, grantCardId: GRANT_HEROIC_RESOLVE })
+  },
+}] })
+registerCard('JTL_260', { // Death Star Plans
+  // Granted: "The first unit you play each round costs 2 less." Cards are only played during the
+  // action phase, so "each round" is this phase's plays.
+  costDiscount: (s, _source, ctx) =>
+    (ctx.card.type === 'unit' && !cardsPlayedThisPhase(s, ctx.owner).some(id => s.cards[id]?.type === 'unit') ? -2 : 0),
+  // Its own printed ability: the attacking player takes it and chooses the unit it moves to.
+  abilities: [{
+    trigger: 'onDefense',
+    description: 'When attached unit is attacked: The attacking player takes control of this upgrade and attaches it to a unit they control.',
+    effect: (s, ctx) => {
+      const taker = opponentOf(ctx.owner)
+      return unitThen(s, { ...ctx, owner: taker }, s.players[taker].units.map(u => u.instanceId), 'attach Death Star Plans to a unit you control', false, undefined, ctx.sourceInstanceId)
+    },
+  }],
+  ifYouDo: (s, ctx) => {
+    const from = upgradeOn(s, ctx.unitChosen ?? '', 'JTL_260')
+    return from && ctx.targetInstanceId ? moveUpgrade(s, from, ctx.targetInstanceId, ctx.owner) : s
+  },
+})
+
+// Bounty
+registerCard('SHD_123', bounty(whenPlayed('Attached unit gains: "Bounty - Search the top 5 cards of your deck, or 10 cards instead if this unit is unique, for a unit that costs 3 or less and play it for free."', (s, ctx) => { // Bounty Hunter's Quarry
+  const p = s.players[ctx.owner]
+  const revealed = p.deck.slice(0, searchCount(s, ctx.owner, bountyUnique(s, ctx) ? 10 : 5))
+  if (revealed.length === 0) return s
+  const eligibleIndices = revealed.flatMap((id, i) => (printedUnit(s.cards[id]) && (s.cards[id]?.cost ?? 0) <= 3 ? [i] : []))
+  // The window is held out of the deck while the choice stands, as every searchPlayFree is.
+  const pulled = updatePlayer(s, ctx.owner, { deck: p.deck.slice(revealed.length) })
+  return pushChoice(pulled, { kind: 'searchPlayFree', id: `${ctx.sourceInstanceId}-quarry`, controller: ctx.owner, revealed, eligibleIndices, budget: 3, playOne: true })
+})))
+registerCard('SHD_222', { // Enticing Reward
+  ...bounty(whenPlayed('Attached unit gains: "Bounty - Search the top 10 cards of your deck for 2 non-unit cards, reveal them, and draw them. Then, if this unit isn\'t unique, discard a card from your hand."', (s, ctx) => {
+    const step = bountyUnique(s, ctx) ? 'unique' : 'discard'
+    const searched = searchDrawChoice(s, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-reward` }, 10, c => !printedUnit(c), 2, resume(ctx, step))
+    return searched === s ? getCardDefinition('SHD_222')!.ifYouDo!(s, { ...ctx, step }) : searched
+  })),
+  ifYouDo: (s, ctx) => (ctx.step === 'discard' ? discards(s, ctx.owner, 1, `${ctx.sourceInstanceId}-reward-discard`) : s),
+})
+registerCard('SHD_226', { // Unrefusable Offer
+  attachRestriction: nonLeaderHost,
+  abilities: [{
+    trigger: 'bounty',
+    description: 'Attached unit gains: "Bounty - Play this unit for free (under your control). It enters play ready. At the start of the regroup phase, defeat it."',
+    effect: (s, ctx) => {
+      const host = ctx.bountyUnit
+      if (!host || isTokenCard(host.cardId)) return s
+      // The collector is the host's controller's opponent; the card went to its OWNER's discard pile.
+      const cardOwner = host.owner ?? opponentOf(ctx.owner)
+      return playFromZoneChoice(s, ctx, {
+        zone: cardOwner === ctx.owner ? 'discard' : 'opponentDiscard',
+        test: c => c?.id === host.cardId, free: true,
+        then: { entersReady: true, sourceCardId: 'SHD_226', delay: 'regroupStart' },
+      })
+    },
+  }],
+  delayed: defeatItAtRegroup,
+})
+
+// Granted by an event or another unit
+const GRANT_IMPLICATE = 'GRANT_IMPLICATE'
+registerCard(GRANT_IMPLICATE, { sourceCardId: 'SEC_231', abilities: [{ trigger: 'onDefense', description: 'When this unit is attacked: Create a Spy token.', effect: (s, ctx) => create(s, ctx.owner, TOKEN_SPY) }] })
+registerCard('SEC_231', unitThenWp('Choose a unit. For this phase, it gains Sentinel and: "When this unit is attacked: Create a Spy token."', pickAny, 'choose a unit to gain Sentinel and a Spy token when attacked', false, // Implicate
+  (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, keywords: [{ name: 'Sentinel' }], abilityCardIds: [GRANT_IMPLICATE] })))
+const GRANT_FORCE_SPEED = 'GRANT_FORCE_SPEED'
+const forceSpeedCandidates = (s: GameState, defenderId: string): UpgradeRef[] =>
+  upgradeCandidates(s).filter(c => c.unitId === defenderId && !s.cards[c.cardId]?.unique)
+registerCard(GRANT_FORCE_SPEED, {
+  sourceCardId: 'LOF_205',
+  ...attacks("On Attack: Return any number of non-unique upgrades attached to the defender to their owners' hands.", (s, ctx) => {
+    const d = defenderOf(s, ctx)
+    const candidates = d ? forceSpeedCandidates(s, d.instanceId) : []
+    return candidates.length ? pushChoice(s, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, text: "return a non-unique upgrade on the defender to its owner's hand", then: resume(ctx) }) : s
+  }),
+  // One at a time until Done or none are left.
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    if (!up) return s
+    const next = returnUpgradeToHand(s, up.unitId, up.upgradeIndex)
+    const candidates = forceSpeedCandidates(next, up.unitId)
+    return candidates.length ? pushChoice(next, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, text: "return a non-unique upgrade on the defender to its owner's hand", then: resume(ctx) }) : next
+  },
+})
+registerCard('LOF_205', attackWithRider("Attack with a unit. For this attack, it gains: \"On Attack: Return any number of non-unique upgrades attached to the defender to their owners' hands.\"", GRANT_FORCE_SPEED)) // Force Speed
+const GRANT_DEFENSE_OF_KAMINO = 'GRANT_DEFENSE_OF_KAMINO'
+registerCard(GRANT_DEFENSE_OF_KAMINO, { sourceCardId: 'TWI_129', ...createWd('When Defeated: Create a Clone Trooper token.', TOKEN_CLONE_TROOPER) })
+registerCard('TWI_129', whenPlayed('For this phase, each friendly Republic unit gains Restore 2 and: "When Defeated: Create a Clone Trooper token."', (s, ctx) => // In Defense of Kamino
+  lastingOnEach(s, s.players[ctx.owner].units.filter(u => unitHasTrait(s, u, 'Republic')), { keywords: [{ name: 'Restore', value: 2 }], abilityCardIds: [GRANT_DEFENSE_OF_KAMINO] })))
+const GRANT_PYRRHIC_ASSAULT = 'GRANT_PYRRHIC_ASSAULT'
+registerCard(GRANT_PYRRHIC_ASSAULT, { sourceCardId: 'TWI_103', ...whenDefeated('When Defeated: Deal 2 damage to an enemy unit.', (s, ctx) =>
+  damageChoice(s, ctx, 2, s.players[opponentOf(ctx.owner)].units)) })
+registerCard('TWI_103', whenPlayed('For this phase, each friendly unit gains: "When Defeated: Deal 2 damage to an enemy unit."', (s, ctx) => // Pyrrhic Assault
+  lastingOnEach(s, s.players[ctx.owner].units, { abilityCardIds: [GRANT_PYRRHIC_ASSAULT] })))
+const GRANT_SATINE = 'GRANT_SATINE'
+registerCard(GRANT_SATINE, { sourceCardId: 'TWI_047', actionAbilities: [{
+  description: "Action [exhaust]: Discard cards from an opponent's deck equal to half this unit's remaining HP, rounded up.",
+  exhaustCost: true,
+  effect: (s, ctx) => {
+    const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+    return self ? millTop(s, opponentOf(ctx.owner), Math.ceil(remainingHp(s, self) / 2))[0] : s
+  },
+}] })
+registerCard('TWI_047', { grantsAbilities: () => [GRANT_SATINE] }) // Satine Kryze: each unit, enemy units and herself included
+const GRANT_KRELL = 'GRANT_KRELL'
+registerCard(GRANT_KRELL, {
+  sourceCardId: 'SOR_105',
+  ...whenDefeated('When Defeated: You may draw a card.', (s, ctx) =>
+    pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-krell`, controller: ctx.owner, cost: 0, text: 'draw a card', then: { cardId: GRANT_KRELL, owner: ctx.owner, sourceInstanceId: ctx.sourceInstanceId } })),
+  ifYouDo: (s, ctx) => drawCards(s, ctx.owner, 1),
+})
+registerCard('SOR_105', { // General Krell
+  grantsAbilities: (_s, source, target, sameController) => (sameController && target.instanceId !== source.instanceId ? [GRANT_KRELL] : []),
 })

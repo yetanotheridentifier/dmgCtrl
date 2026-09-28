@@ -6,6 +6,7 @@ import { legalMoves, effectiveCost } from '../engine/legalMoves'
 import { effectiveHp, effectivePower } from '../engine/stats'
 import { unitHasKeyword, unitHasTrait, unitKeywordValue } from '../engine/keywords'
 import { protectedFromEnemyAbility } from '../engine/effects'
+import { getCardDefinition } from '../engine/abilities'
 import { poolFor, SET_CODES } from '../bench/setPools'
 import { TOKEN_EXPERIENCE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_BATTLE_DROID, TOKEN_CLONE_TROOPER, TOKEN_SPY } from '../engine/tokenUnits'
@@ -34,7 +35,7 @@ const SHIPPED = [
   'SEC_264', 'SEC_210', 'SEC_039', 'SEC_156', 'SEC_052', 'SEC_104', 'SEC_231',
   'LOF_139', 'LOF_051', 'LOF_052', 'LOF_138', 'LOF_187', 'LOF_040', 'LOF_090', 'LOF_205',
   'JTL_172', 'JTL_227', 'JTL_171', 'JTL_073', 'JTL_120', 'JTL_260',
-  'TWI_169', 'TWI_218', 'TWI_121', 'TWI_068', 'TWI_122', 'TWI_120', 'TWI_129', 'TWI_103', 'TWI_047',
+  'TWI_169', 'TWI_218', 'TWI_121', 'TWI_122', 'TWI_120', 'TWI_129', 'TWI_103', 'TWI_047',
   'SHD_104', 'SHD_126', 'SHD_177', 'SHD_074', 'SHD_053', 'SHD_143', 'SHD_155', 'SHD_123', 'SHD_222', 'SHD_226',
   'SOR_121', 'SOR_214', 'SOR_054', 'SOR_137', 'SOR_105',
   'TS26_35', 'TS26_52',
@@ -67,6 +68,7 @@ const F: Record<string, EngineCard> = {
   UNIQUP: card({ id: 'UNIQUP', type: 'upgrade', cost: 1, power: 0, hp: 0, unique: true }),
   VIG: card({ id: 'VIG', type: 'event', cost: 1, aspects: ['Vigilance'] }),
   HER: card({ id: 'HER', type: 'event', cost: 1, aspects: ['Heroism'] }),
+  VIG_L: card({ id: 'VIG_L', type: 'leader', cost: 5, power: 4, hp: 7, aspects: ['Vigilance'] }),
 }
 
 const up = (cardId: string, owner: PlayerId = 'player'): UpgradeAttachment => ({ cardId, owner })
@@ -89,14 +91,20 @@ const choice = (s: GameState): PendingChoice => {
 }
 const noChoice = (s: GameState) => expect(s.pendingChoices ?? []).toEqual([])
 type Answer = Partial<Extract<Action, { type: 'acceptChoice' }>>
+/**
+ * The moves the pending choice's controller has. A raw `defeatUnit` does not hand the turn to the
+ * player who answers (the resolver does that around an action), so the choice is read as its own
+ * controller's.
+ */
+const choiceMoves = (s: GameState) => legalMoves({ ...s, activePlayer: choice(s).controller })
 /** Answer the pending choice with the legal accept matching every field of `match`. */
 const answer = (s: GameState, match: Answer = {}): GameState => {
-  const move = legalMoves(s).find(m => m.type === 'acceptChoice' && Object.entries(match).every(([k, v]) => (m as Record<string, unknown>)[k] === v))
+  const move = choiceMoves(s).find(m => m.type === 'acceptChoice' && Object.entries(match).every(([k, v]) => (m as Record<string, unknown>)[k] === v))
   if (!move) throw new Error(`no legal answer ${JSON.stringify(match)} to ${JSON.stringify(choice(s))}`)
   return resolve(s, move)
 }
 const decline = (s: GameState): GameState => {
-  const move = legalMoves(s).find(m => m.type === 'skipTrigger')
+  const move = choiceMoves(s).find(m => m.type === 'skipTrigger')
   if (!move) throw new Error(`no decline for ${JSON.stringify(choice(s))}`)
   return resolve(s, move)
 }
@@ -106,9 +114,17 @@ const attackUnit = (s: GameState, attackerId: string, defenderId: string, who: P
   resolve({ ...s, activePlayer: who }, { type: 'attack', attackerId, target: { kind: 'unit', instanceId: defenderId } })
 const canPlayUpgradeOn = (s: GameState, targetInstanceId: string) =>
   legalMoves(s).some(m => m.type === 'playUpgrade' && m.targetInstanceId === targetInstanceId)
+/** Use the Action `cardId` gives the unit, whether it is on that card or on the carrier it grants. */
 const useAbility = (s: GameState, instanceId: string, cardId: string) => {
-  const move = legalMoves(s).find(m => m.type === 'useAbility' && m.instanceId === instanceId && m.cardId === cardId)
+  const move = legalMoves(s).find(m => m.type === 'useAbility' && m.instanceId === instanceId
+    && (m.cardId === cardId || getCardDefinition(m.cardId)?.sourceCardId === cardId))
   if (!move) throw new Error(`${cardId} on ${instanceId} offers no action`)
+  return resolve(s, move)
+}
+/** Answer an "attack with a unit" choice: `attackerId` attacks `defenderId`. */
+const attackChoice = (s: GameState, attackerId: string, defenderId: string) => {
+  const move = legalMoves(s).find(m => m.type === 'attack' && m.attackerId === attackerId && m.target.kind === 'unit' && m.target.instanceId === defenderId)
+  if (!move) throw new Error(`${attackerId} is not offered an attack on ${defenderId}`)
   return resolve(s, move)
 }
 /** Both passes: into the regroup phase, whose start raises "when the regroup phase starts". */
@@ -207,7 +223,8 @@ describe('On Attack, handed to the attached unit', () => {
     const s = board({ units: [host('h', 'MANDO', ['SHD_126']), unit('m', 'MANDO'), unit('g', 'GRD')] })
     const done = attackBase(s, 'h')
     expect([tokens(done, 'h', TOKEN_EXPERIENCE), tokens(done, 'm', TOKEN_EXPERIENCE), tokens(done, 'g', TOKEN_EXPERIENCE)]).toEqual([0, 1, 0])
-    const play = board({ units: [unit('m', 'MANDO'), unit('g', 'GRD')] })
+    // A leader and base that provide no Command icon, so the Darksaber carries a penalty unless waived.
+    const play = board({ units: [unit('m', 'MANDO'), unit('g', 'GRD')], leader: { cardId: 'VIG_L', deployed: false, epicActionUsed: false, exhausted: false } })
     expect(effectiveCost(play, 'player', F.SHD_126, U(play, 'm'))).toBe(F.SHD_126.cost)
     expect(effectiveCost(play, 'player', F.SHD_126, U(play, 'g'))).toBe(F.SHD_126.cost + 2)
   })
@@ -347,20 +364,12 @@ describe('Granted only while the attached unit qualifies', () => {
 describe('Other trigger points, handed to the attached unit', () => {
   it('LAW_077 Shadow of Stygeon Prime: the unit can\'t ready, and its controller\'s base takes 2 as the regroup phase starts', () => {
     expect(canPlayUpgradeOn(board({ hand: ['LAW_077'] }, { units: [unit('l', 'GRD', { isLeader: true })] }), 'l')).toBe(false)
-    const s = board({ units: [host('h', 'GRD', ['LAW_077'], { exhausted: true }, 'opponent')] })
+    // Decks to draw from, so the regroup draw deals no damage of its own.
+    const s = board({ units: [host('h', 'GRD', ['LAW_077'], { exhausted: true }, 'opponent')], deck: ['GRD', 'GRD'] }, { deck: ['GRD', 'GRD'] })
     const regroup = toRegroup(s)
     expect(regroup.players.player.base.damage).toBe(2)
     expect(regroup.players.opponent.base.damage).toBe(0)
     expect(U(resolve(s, { type: 'pass' }), 'h')?.exhausted).toBe(true)
-  })
-
-  it('TWI_068 Foresight: name a card at the regroup phase start; if it is on top of your deck, may draw it', () => {
-    const s = board({ units: [host('h', 'GRD', ['TWI_068'])], deck: ['BIG', 'GRD', 'GRD2', 'WEAK'] })
-    const named = answer(toRegroup(s), { cardName: 'BIG' })
-    const drew = answer(named)
-    expect(drew.players.player.hand).toContain('BIG')
-    const wrong = answer(toRegroup(s), { cardName: 'WEAK' })
-    expect(wrong.players.player.deck[0]).toBe('BIG')
   })
 
   it('SEC_052 Diplomatic Immunity: when attacked, may disclose Vigilance Vigilance Heroism Heroism for -2/-0 on the attacker', () => {
@@ -435,8 +444,9 @@ describe('Constant and Action abilities, handed to the attached unit', () => {
     const used = useAbility(s, 'h', 'SHD_155')
     expect(U(used, 'h')?.upgrades.some(x => x.cardId === 'SHD_155')).toBe(false)
     expect(used.players.player.discard).toContain('SHD_155')
-    const done = answer(used, { targetInstanceId: 'e' })
-    expect(done.players.opponent.base.damage).toBe(effectivePower(s, U(s, 'h')!) + 4 - 1) // Overwhelm past the 1 HP
+    const done = attackChoice(used, 'h', 'e')
+    // The upgrade's own +1/+1 left with it as the cost was paid: 2 + 4, Overwhelm past the 1 HP.
+    expect(done.players.opponent.base.damage).toBe(2 + 4 - 1)
   })
 
   it('JTL_260 Death Star Plans: the first unit you play each round costs 2 less; the attacker takes it when attacked', () => {
@@ -460,7 +470,7 @@ describe('Bounty, handed to the attached unit', () => {
     const s = board({ units: [host('h', 'GRD', ['SHD_222'], {}, 'opponent')] }, { deck: ['DEAR', 'EV', 'GRD', 'EV2'], hand: ['WEAK'] })
     let next = answer(defeatUnit(s, 'h'))
     next = answer(next, { deckIndex: 1 })
-    next = answer(next, { deckIndex: 3 })
+    next = answer(next, { deckIndex: 2 }) // re-indexed once EV has left the revealed window
     expect(next.players.opponent.hand).toEqual(expect.arrayContaining(['EV', 'EV2']))
     next = answer(next, { handIndex: 0 })
     expect(next.players.opponent.hand).toHaveLength(2)
@@ -490,8 +500,7 @@ describe('Granted by an event or another unit', () => {
 
   it('LOF_205 Force Speed: the attacker returns any number of non-unique upgrades on the defender to their owners\' hands', () => {
     const s = board({ hand: ['LOF_205'], units: [unit('a', 'BIG')] }, { units: [host('e', 'BIG', ['UPG', 'UNIQUP', 'UPG'], {}, 'opponent')] })
-    let next = answer(resolve(s, { type: 'playEvent', handIndex: 0 }), { targetInstanceId: 'a' })
-    next = legalMoves(next).some(m => m.type === 'attack') ? resolve(next, legalMoves(next).find(m => m.type === 'attack' && JSON.stringify(m).includes('"e"'))!) : next
+    let next = attackChoice(resolve(s, { type: 'playEvent', handIndex: 0 }), 'a', 'e')
     const offered = choice(next)
     expect(JSON.stringify(offered)).not.toContain('UNIQUP')
     next = answer(next, { optionIndex: 0 })

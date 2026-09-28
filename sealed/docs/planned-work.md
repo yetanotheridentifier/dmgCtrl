@@ -288,8 +288,8 @@ Two phases:
   use this" unit action, an ordinary action ability and an "any number" resource-zone return each cut
   only for time, two cards where an opponent decides a friendly When Played, a reveal-then-play-for-free
   chain, and an "exchange control of two units" primitive Double-Cross needs) are on #719. Conveyex
-  Security Captain needs #682 too and
-  Han's Golden Dice/Targeted For Removal/Payroll Heist need a granted ability block (#464) as well;
+  Security Captain needs #682 too; Han's Golden Dice, Targeted For Removal and Payroll Heist are
+  no longer held by the granted ability block (#464, shipped) and wait only on #719;
   Boba Fett and Dengar need a one-off trigger head with no ticket of its own yet.
   **Disclose is finished** (#603): "reveal cards from your hand with these aspect icons among them"
   is a flat aspect multiset (`need`) matched against each hand card's own `aspects`, which can itself
@@ -298,8 +298,9 @@ Two phases:
   Three need a genuinely separate new primitive each and are on follow-up ticket **#721**: a lasting
   effect tied to a specific unit's continued presence rather than a round/phase boundary (Cantwell
   Arrestor Cruiser), a "deal damage unless the controller discards a card" prevention (Syril Karn),
-  and a wholly new "when a player draws cards" trigger point (Chairman Papanoida). Condemn and
-  Diplomatic Immunity stay blocked on the unbuilt granted-ability-block (#464) regardless.
+  and a wholly new "when a player draws cards" trigger point (Chairman Papanoida). Diplomatic
+  Immunity shipped with the granted ability blocks (#464); Condemn is on #682 (its host loses all
+  other abilities).
   **Indirect damage is finished** (#604): unlike every other instance of damage, the RECEIVING
   player assigns it, as unpreventable damage, among their own base and units — `dealIndirectDamage`
   raises a mandatory `distributeIndirectDamage` choice, folding in Hunting Aggressor's +1 and
@@ -307,8 +308,8 @@ Two phases:
   Allegiant General Pryde's "when indirect damage is dealt to a unit" reuses the existing
   `whenDamageDealt` point, filtered on a new flag, rather than a trigger point of its own. 18 of the
   22 candidate cards shipped (recounted; the ticket's stale "unlocks 15" undercounted). Left out: Boba
-  Fett's leader (a further, unrelated trigger point, noted on #680), Targeting Computer and Superheavy
-  Ion Cannon (both need the granted-ability block, #464), and Dengar (needs Piloting, #465).
+  Fett's leader (a further, unrelated trigger point, noted on #680) and Dengar (needs Piloting, #465).
+  Targeting Computer and Superheavy Ion Cannon shipped with the granted ability blocks (#464).
   **Coordinate is finished** (#472): "Gain this ability while you control 3 or more units" is a
   live board-state condition (`hasCoordinate`/`unitHasCoordinate`, read fresh everywhere it's asked,
   the same treatment every other conditional keyword/stat/aura grant already gets), not a new hook:
@@ -320,8 +321,8 @@ Two phases:
   a new "prevent all combat damage for this attack" lasting-effect field; Ki-Adi-Mundi needs a new
   "opponent's Nth card this phase" refinement of `whenPlayCard`; Ahsoka Tano and Padmé Amidala's
   leader front are deployed-leader action abilities; Anakin Skywalker, Kit Fisto and Padmé Amidala's
-  unit are simple gated `onAttack` effects held back only for time; For The Republic needs the
-  granted-ability block (#464).
+  unit are simple gated `onAttack` effects held back only for time, and so is For The Republic now
+  that the granted ability block has shipped (#464). All of these are on #730.
   **The Force's primitive is finished** (#462): a token capped at one per player (`PlayerState.forceToken`,
   a flag rather than Credit's count), "the Force is with you" a no-op while already held, "use the
   Force" always optional even where a card's own text omits "may" (CR 8.37.4). Two cost surfaces
@@ -333,10 +334,21 @@ Two phases:
   attacks" bases plus 3 more (12 cards, needing a new `baseAbilities` primitive for a base's own
   printed ability, nothing today covers one); a new `whenUseForce` player-level trigger point (Yoda,
   The Father); a Force-gated option inside a "Choose one:" (Shatterpoint); an exhaust-OR-use-the-Force
-  alternate cost (Impossible Escape); a granted-ability-block dependency (Leia Organa); an `onDefense`
-  context extension (Chirrut Îmwe); a `whenUpgradeAttached` context read (Kylo Ren); filtering "play
-  another unit" down to unique units (Luke Skywalker); a new "damage dealt to your base" trigger point
-  (The Daughter).
+  alternate cost (Impossible Escape); Leia Organa (her own gated Action, no longer blocked, #464);
+  Chirrut Îmwe (the `onDefense` context now carries the attacker, #464); a `whenUpgradeAttached`
+  context read (Kylo Ren); filtering "play another unit" down to unique units (Luke Skywalker); a new
+  "damage dealt to your base" trigger point (The Daughter). All on #733.
+  **Granted ability blocks are finished** (#464): "Attached unit gains: ...", "for this phase, each
+  friendly unit gains: ..." and "each other friendly unit gains: ..." needed no new hook, since an
+  upgrade's abilities are its host's, a phase grant is a lasting effect and an aura grant is
+  `grantsAbilities`. What was missing was an "Action:" gained from an aura or for a phase (Satine
+  Kryze), a printed HP set for the phase, the attacker on the `onDefense` context, and the triage tool
+  reading the quoted ability's own head instead of blocking on the lead-in. 51 cards shipped (recounted
+  per card against the registry; the ticket's "43 sole" and "81 touched" had counted the pilots and
+  the other tickets' cards). Split to **#740**: Rex's DC-17s (no point raises an enemy unit readying in
+  the action phase) and Foresight (the regroup draw happens before "when the regroup phase starts").
+  Condemn is on #682; the 16 pilot cards and pilot leaders are on #465; Han's Golden Dice, Targeted For
+  Removal and Payroll Heist on #719; Leia Organa on #733; For The Republic on #730.
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
 (with the token units, #605), the Weakness-token cards (#649), the Fortify cards (#650), the When Played

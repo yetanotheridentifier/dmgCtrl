@@ -36,6 +36,7 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   SEC_140: { keywords: [{ name: 'Plot' }] }, // Hondo Ohnaka — Raid 1 is given to each OTHER friendly unit, never held
   SEC_099: { keywords: [{ name: 'Plot' }] }, // Naboo Royal Starship — Raid 2 and Overwhelm go to each friendly LEADER unit, never held
   SEC_203: { keywords: [{ name: 'Plot' }] }, // Tala Durith — Hidden is given to each OTHER friendly unit, never held
+  SEC_104: { keywords: [] }, // Figure of Unity: its host gives each OTHER friendly unit Overwhelm, Raid 1 and Restore 1
   HMW_112: { keywords: [{ name: 'Fortify' }] }, // Military Academy: its base gives friendly units Overwhelm
   HMW_126: { keywords: [{ name: 'Fortify' }] }, // Verdant Fortress: its base gives friendly units Raid 1
   HMW_066: { keywords: [{ name: 'Shielded' }] }, // Carrion Spike: Shielded is real; Restore 1 per upgrade on your base
