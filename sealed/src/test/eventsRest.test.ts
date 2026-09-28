@@ -480,6 +480,8 @@ describe('events that deal damage read from a unit', () => {
     const c = choice(s)
     expect(c).toMatchObject({ kind: 'distributeDamage', remaining: 5, total: 5 })
     expect(unitOffers(s)).toEqual(['e', 'f'])
+    s = accept(s, { targetInstanceId: 'e' }) // one point spent; 'a' must stay excluded, not just on the first offer
+    expect(unitOffers(s)).toEqual(['e', 'f'])
   })
 })
 

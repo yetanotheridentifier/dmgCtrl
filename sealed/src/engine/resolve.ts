@@ -1710,8 +1710,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = checkWin(next)
         if (next.winner !== null) return next
         const remaining = choice.remaining - 1
-        const pool = choice.enemiesOf ? next.players[opponentOf(choice.enemiesOf)].units : [...next.players.player.units, ...next.players.opponent.units]
-        const targets = pool.map(u => u.instanceId)
+        // Re-offer within the restriction the card set when it first raised the choice (an arena,
+        // "other units", enemies only, ...): narrow the existing `targets`, don't recompute a fresh
+        // pool from every unit in play, which would forget that restriction from the second point on.
+        const targets = choice.targets.filter(id => { const f = findUnit(next, id); return f !== undefined && !isDoomed(next, f.unit) })
         if (remaining > 0 && targets.length > 0) {
           next = pushChoice(next, { ...choice, remaining, targets, boosted: [...boosted, targetInstanceId] })
         }
