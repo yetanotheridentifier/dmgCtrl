@@ -74,6 +74,9 @@ function printedStatOverride(state: GameState, unit: UnitState): { power?: numbe
       }
     }
   }
+  for (const effect of state.lastingEffects ?? []) {
+    if (effect.targetInstanceId === unit.instanceId && effect.printedHp !== undefined) out = { ...out, hp: effect.printedHp }
+  }
   return out
 }
 

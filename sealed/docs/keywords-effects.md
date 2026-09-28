@@ -48,6 +48,29 @@ contribute.
 
 Abilities travel; **printed traits do not**.
 
+### Granted ability blocks
+
+A card that hands a unit a whole ability block ("Attached unit gains: 'On Attack: ...'", "For this
+phase, each friendly unit gains: ...", "Each other friendly unit gains: ...") needs no plumbing of its
+own. There are three routes, and each reaches the unit's triggered **and** "Action:" abilities:
+
+| Route | Declared as | Read by |
+| --- | --- | --- |
+| an attached upgrade ("Attached unit gains:") | the upgrade's own `abilities`, `actionAbilities` and hooks | `abilityCardIds` |
+| an aura in play (General Krell, Satine Kryze) | `grantsAbilities` on the source, naming a carrier card | `collectUnitTriggers`, `unitActionAbilities` |
+| a lasting effect ("for this phase", Pyrrhic Assault, Implicate) | `LastingEffect.abilityCardIds` | `collectUnitTriggers`, `unitActionAbilities` |
+
+An upgrade's granted ability fires for the host with `ctx.sourceInstanceId` the host and `ctx.owner`
+the host's controller, so "this unit" and "your base" read as they would printed on the unit. A grant
+that holds only while the host qualifies ("If attached unit is a Force unit, it gains: ...") gates the
+triggered ability with `hears`, so a host that does not qualify never has it, and gates a constant hook
+inside the hook.
+
+The aura and lasting routes need the state, so they are not part of `abilityCardIds`: a constant hook
+(`statModifier`, `cannotBeTargetedByEnemyAbility` and the rest) reaches a unit only through what it
+carries. No printed card grants a constant ability by aura or for a phase; one that did would need
+those readers widened.
+
 ### Swapping one keyword for another
 
 ```ts
@@ -148,8 +171,11 @@ GameState.lastingEffects?: LastingEffect[]
 // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, untilRoundEnd?, abilityCardIds?,
 //   cannotAttack?, cannotAttackBases?, cannotBeAttacked?, unlessSentinel?, removeKeywords?,
 //   noCombatDamage?, attackersPower?, cannotReady?, preventNext?, preventEach?, survivesNoHp?,
-//   redirectDamageTo? }
+//   redirectDamageTo?, printedHp? }
 ```
+
+`printedHp` replaces the unit's printed HP for the duration ("its printed HP is considered to be 1 for
+this phase", Adventurer Sniper Rifle), read with `printedStats`, so upgrades still add to it.
 
 `addLastingEffect` appends one; `lastingEffectTotals(state, instanceId)` sums those aimed at a unit.
 Folded into stats and keywords exactly like auras.
@@ -812,8 +838,8 @@ triggered ability, active only while the condition holds.
   "prevent all combat damage for this attack" lasting-effect field; Ki-Adi-Mundi needs a new
   "opponent's Nth card this phase" refinement of the `whenPlayCard` trigger; Ahsoka Tano and Padmé
   Amidala's leader front are deployed-leader `actionAbilities` gated by `usable`; Anakin Skywalker,
-  Kit Fisto and Padmé Amidala's unit are simple gated `onAttack` effects held back only for time; For
-  The Republic depends on the granted-ability-block work.
+  Kit Fisto and Padmé Amidala's unit are simple gated `onAttack` effects held back only for time, and
+  so is For The Republic's granted "Coordinate - Restore 2".
 
 ## The Force
 
@@ -848,8 +874,8 @@ never offered without a token held.
   covers a base's own triggered or action ability beyond `epicAction`/`aura`/upgrade-granted
   actions/`interceptDamage`); a new `whenUseForce` player-level trigger point (Yoda, The Father); a
   Force-gated option inside a "Choose one:" (Shatterpoint); an exhaust-a-unit-OR-use-the-Force
-  alternate cost (Impossible Escape); a granted-ability-block dependency (Leia Organa); an `onDefense`
-  context extension for the attacker's id (Chirrut Îmwe); a `whenUpgradeAttached` context read (Kylo
+  alternate cost (Impossible Escape); Leia Organa's own gated Action; Chirrut Îmwe, whose `onDefense`
+  context now carries the attacker's id; a `whenUpgradeAttached` context read (Kylo
   Ren); filtering "when you play another unit" down to unique units (Luke Skywalker); and a new "when
   damage is dealt to your base" trigger point (The Daughter).
 - **Triage tooling**: `bench/triage.ts`'s `force-token` regex (`/\bthe Force\b|\bForce token\b/i`)

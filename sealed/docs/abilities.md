@@ -299,7 +299,9 @@ units, the attacker's own included, in the same batch as the On Attack. It carri
 friendly Official unit attacks" (Major Partagaz) or "an enemy unit attacks" (Barriss Offee) from one
 point. As at `whenDrawCards`, **every registration compares `ctx.attackingPlayer` against
 `ctx.owner`**. `whenEnemyAttacksBase` is narrower and older: the attacked player's units only, for
-base attacks only, raised as the damage lands.
+base attacks only, raised as the damage lands. **`onDefense`** ("when this unit is attacked") is the
+defender's, before combat damage, with the attacker in `ctx.attackerInstanceId` and whose attack it is
+in `ctx.attackingPlayer` ("the attacker gets -2/-0", Diplomatic Immunity).
 
 Two triggers fire **once per event, not once per item**, matching cards worded "1 or more":
 
@@ -342,7 +344,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `whilePlaying` | Exploit's step on the card's own terms: any number of friendly units, each dealt `damage` and saving `discount` (The Marauder), with `resources` any number of ready resources, each defeated and saving `discount` (Greater Sarlacc), or with `fromDiscard` up to `limit` unit cards costing at most `maxCost` in the discard pile, bottomed as an additional cost that saves nothing (Vernestra Rwoh); see `choices.md` |
 | `costDiscount` | a unit in play discounting cards its controller plays |
 | `waivesAspectPenalty` | a unit in play zeroing the aspect penalty |
-| `ignoresOwnAspectPenalty` | the aspect icons whose penalty a card ignores while it is played (Rey with Kylo Ren) |
+| `ignoresOwnAspectPenalty` | the aspect icons whose penalty a card ignores while it is played (Rey with Kylo Ren), told the unit an upgrade is played on (The Darksaber on a Mandalorian) |
 | `attachRestriction` | may this upgrade attach to that unit, when this player plays it ("a friendly unit") |
 | `conditionalKeywords` | extra keywords, folded into `unitKeywords` |
 | `suppressedKeywords` | keywords removed while a condition holds |
@@ -377,7 +379,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `entersReady` | the unit arrives ready, alongside Ambush and enters-ready grants |
 | `unitsEnterReady` | every unit its controller plays or creates arrives ready (Ritual Dragon) |
 | `ambushAttacksBases` | its controller's units may attack a base while using Ambush (Fett's Firespray) |
-| `grantsAbilities` | hands an ability block to the host unit |
+| `grantsAbilities` | an aura handing other units a carrier card's triggered and Action abilities (see Granted ability blocks in [keywords-effects.md](keywords-effects.md)) |
 | `grantedTraits` | extra traits, e.g. The Darksaber granting Mandalorian |
 | `cardTraits` | extra traits the card has **wherever it is**, in play or not (Zam Wesell copies her leader's) |
 | `makesLeaderUnit` | the host counts as a leader unit |

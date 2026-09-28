@@ -769,6 +769,11 @@ export interface LastingEffect {
   /** The unit can't ready for the duration (No Good to Me Dead). Read by `unitCannotReady`. */
   cannotReady?: boolean
   /**
+   * The unit's printed HP is considered to be this for the duration (Adventurer Sniper Rifle). A
+   * replacement of the printed value, like `CardDefinition.printedStats`, so upgrades still add to it.
+   */
+  printedHp?: number
+  /**
    * Lasts to the end of the round, through the regroup phase's ready step, rather than to the start of
    * the regroup phase ("this round (including during the regroup phase)"). Dropped as the next round starts.
    */

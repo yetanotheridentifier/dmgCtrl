@@ -167,7 +167,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
     }
   }
   let penalty = 0
-  const ignored = getCardDefinition(card.id)?.ignoresOwnAspectPenalty?.(state, playerId) ?? []
+  const ignored = getCardDefinition(card.id)?.ignoresOwnAspectPenalty?.(state, playerId, target) ?? []
   // Penalties this particular play forgives (`playCardFrom`'s `waive`), as distinct from the card's
   // own standing waiver above. "Ignoring 1 of its … penalties" forgives the first match only, so it
   // is tracked as it goes rather than applied to the total.
@@ -680,7 +680,7 @@ function actionPhaseMoves(state: GameState): Action[] {
   // An enemy unit's ability is offered only where any player may use it.
   for (const u of allUnits) {
     const theirs = enemy.units.includes(u)
-    for (const { cardId, index, ability } of unitActionAbilities(u)) {
+    for (const { cardId, index, ability } of unitActionAbilities(state, u)) {
       if (theirs && !ability.anyPlayer) continue
       if (ability.oncePerRound && u.usedAbilities?.includes(actionAbilityKey(cardId, index))) continue
       if (ability.exhaustCost && u.exhausted) continue // "[Exhaust]" — the unit must be ready to pay it

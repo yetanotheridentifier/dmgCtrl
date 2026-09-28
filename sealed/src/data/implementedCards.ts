@@ -498,6 +498,52 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'SHD_225', name: 'Jetpack' },
   // The Force (#462): attach restriction plus a "may use the Force" heal.
   { id: 'LOF_102', name: "Yoda's Lightsaber" },
+  // Granted ability blocks (#464): "Attached unit gains: ...", the upgrade's abilities being its host's.
+  { id: 'LAW_186', name: "Enfys Nest's Helmet" },
+  { id: 'LAW_125', name: 'Watchful' },
+  { id: 'LAW_201', name: 'Thermal Detonator' },
+  { id: 'LAW_077', name: 'Shadow of Stygeon Prime' },
+  { id: 'LAW_126', name: 'Adventurer Sniper Rifle' },
+  { id: 'SEC_264', name: 'Clandestine Connections' },
+  { id: 'SEC_210', name: 'Stolen Starpath Unit' },
+  { id: 'SEC_039', name: "Creditor's Claim" },
+  { id: 'SEC_156', name: "Nemik's Manifesto" },
+  { id: 'SEC_052', name: 'Diplomatic Immunity' },
+  { id: 'SEC_104', name: 'Figure of Unity' },
+  { id: 'LOF_139', name: 'Battle Fury' },
+  { id: 'LOF_051', name: 'Jedi Holocron' },
+  { id: 'LOF_052', name: 'Jedi Trials' },
+  { id: 'LOF_138', name: 'Sith Holocron' },
+  { id: 'LOF_187', name: 'Corrupted Saber' },
+  { id: 'LOF_040', name: "Kylo Ren's Lightsaber" },
+  { id: 'LOF_090', name: "Inquisitor's Lightsaber" },
+  { id: 'JTL_172', name: 'Twin Laser Turret' },
+  { id: 'JTL_227', name: 'Superheavy Ion Cannon' },
+  { id: 'JTL_171', name: 'Targeting Computer' },
+  { id: 'JTL_073', name: 'Grim Valor' },
+  { id: 'JTL_120', name: 'Dorsal Turret' },
+  { id: 'JTL_260', name: 'Death Star Plans' },
+  { id: 'TWI_169', name: 'Clone Cohort' },
+  { id: 'TWI_218', name: 'Droid Cohort' },
+  { id: 'TWI_121', name: "General's Blade" },
+  { id: 'TWI_122', name: 'Squad Support' },
+  { id: 'TWI_120', name: 'Strategic Acumen' },
+  { id: 'SHD_104', name: 'Inspiring Mentor' },
+  { id: 'SHD_126', name: 'The Darksaber' },
+  { id: 'SHD_177', name: 'Vambrace Flamethrower' },
+  { id: 'SHD_074', name: 'Vambrace Grappleshot' },
+  { id: 'SHD_053', name: 'Second Chance' },
+  { id: 'SHD_143', name: 'Ruthlessness' },
+  { id: 'SHD_155', name: 'Heroic Resolve' },
+  { id: 'SHD_123', name: "Bounty Hunter's Quarry" },
+  { id: 'SHD_222', name: 'Enticing Reward' },
+  { id: 'SHD_226', name: 'Unrefusable Offer' },
+  { id: 'SOR_121', name: 'Hardpoint Heavy Blaster' },
+  { id: 'SOR_214', name: 'Smuggling Compartment' },
+  { id: 'SOR_054', name: 'Jedi Lightsaber' },
+  { id: 'SOR_137', name: 'Fallen Lightsaber' },
+  { id: 'TS26_35', name: "Ahsoka's Lightsabers" },
+  { id: 'TS26_52', name: 'Sith Traditions' },
 ]
 
 /**
@@ -957,6 +1003,11 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LOF_173', name: 'Unleash Rage' },
   { id: 'LOF_175', name: 'Do or Do Not' },
   { id: 'LOF_216', name: 'Disturbance in the Force' },
+  // Granted ability blocks (#464): a phase-long or one-attack grant.
+  { id: 'SEC_231', name: 'Implicate' },
+  { id: 'LOF_205', name: 'Force Speed' },
+  { id: 'TWI_129', name: 'In Defense of Kamino' },
+  { id: 'TWI_103', name: 'Pyrrhic Assault' },
 ]
 
 /**
@@ -2144,6 +2195,9 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LOF_156', name: 'Infused Brawler' },
   { id: 'LOF_159', name: 'Jedi In Hiding' },
   { id: 'LOF_178', name: 'Adept of Anger' },
+  // Granted ability blocks (#464): an aura handing other units an ability block.
+  { id: 'TWI_047', name: 'Satine Kryze' },
+  { id: 'SOR_105', name: 'General Krell' },
 ]
 
 /**

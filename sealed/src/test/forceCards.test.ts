@@ -22,7 +22,7 @@ import type { Action } from '../engine/actions'
  * Left for a follow-up (see the ticket comment): the 8 identical "friendly Force unit attacks" bases
  * plus 3 more bases (a new `baseAbilities` primitive), the touched cards needing a context extension
  * or a new trigger point, Shatterpoint and Impossible Escape (alternate-cost shapes), and Leia
- * Organa (granted-ability-block).
+ * Organa (her own gated Action).
  */
 
 const POOL = poolFor(['LOF'])

@@ -1026,10 +1026,11 @@ it: Bounty prints "(When this unit is defeated or captured, your opponent collec
 every copy, and reading that literally flagged every Bounty card as blocked on capture.
 
 A colon-led head that is not a trigger point but a lead-in handing a quoted ability to a unit ("Attached
-unit gains:", "For this attack, it gets +2/+0 and gains:", "it gains Sentinel and:") is read by its
-ending, not its spelling, and blocks the card on `granted-ability-block` rather than on a trigger head.
-The one exception is "Attached base gains:", which blocks on nothing: an upgrade attached to a base
-(the Fortify keyword) handing the base an ability is how base upgrades work, which the engine does.
+unit gains:", "For this attack, it gets +2/+0 and gains:", "it gains Sentinel and:", or comma-led,
+"Attached unit gains, “When Defeated: ...”") is read by its ending, not its spelling, and blocks
+nothing: handing a unit or a base an ability block is something the engine does. The **quoted** ability's
+own head is judged instead, as if it were printed, so a granted "When an enemy unit readies" is held back
+exactly as a printed one would be.
 
 A head that joins trigger points with a slash ("When Played/On Attack", "When Played/On Attack/When
 Defeated") is **split and each part judged on its own**. Registering one ability block at several
