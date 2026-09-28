@@ -333,6 +333,12 @@ const survivedItself = (ctx: EffectContext): boolean => friendlySurvivors(ctx).s
 const friendlyBaseDamaged = (ctx: EffectContext): boolean => damageToFriendly(ctx) && (ctx.damageDealt!.base ?? 0) > 0
 /** The damage was dealt by `ctx.owner` ("when you deal damage"). */
 const dealtByYou = (ctx: EffectContext): boolean => ctx.damageDealt?.dealer?.controller === ctx.owner
+/**
+ * "A friendly unit deals damage": the unit deals it, so it is that unit's damage, not the effect's that
+ * chose it. "When a friendly unit deals damage" (Jango Fett) hears it, and a rule that reads who dealt
+ * the damage ("damage dealt by friendly Underworld cards is unpreventable") reads the unit.
+ */
+const dealtByUnit = (u: UnitState, controller: PlayerId): DamageSource => ({ cardId: u.cardId, controller, instanceId: u.instanceId })
 
 registerCard('ASH_012', { // Vane — front (undeployed) + deployed (On Attack)
   // The player chooses which upgrade to defeat (any upgrade, token or card), then where the 2 damage
@@ -1432,7 +1438,7 @@ registerCard('ASH_102', { abilities: [{ trigger: 'whenPlayUnit', description: 'Y
   if (!entered) return s
   const amount = effectivePower(s, entered)
   const targets = allUnits(s).filter(u => u.arena === entered.arena).map(u => u.instanceId)
-  return amount > 0 && targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount, optional: true }) : s
+  return amount > 0 && targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount, optional: true, source: dealtByUnit(entered, ctx.owner) }) : s
 } }] })
 
 registerCard('ASH_079', { // Koska Reeves
@@ -3984,9 +3990,8 @@ registerCard('TWI_256', { // Hold-Out Blaster
   ...whenPlayed('You may have attached unit deal 1 damage to a ground unit.', (s, ctx) => {
     const host = findUnit(s, ctx.sourceInstanceId!)?.unit
     const unitTargets = pickedIds(s, ctx, pickGround)
-    // The damage is the attached unit's, so it is its card that deals it.
     return host && unitTargets.length
-      ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 1, unitTargets, baseTargets: [], optional: true, source: { cardId: host.cardId, controller: ctx.owner } })
+      ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 1, unitTargets, baseTargets: [], optional: true, source: dealtByUnit(host, ctx.owner) })
       : s
   }),
 })
@@ -4360,7 +4365,7 @@ const unitDealsWp = (description: string, dealer: Pick, target: Pick, amount: (s
   ifYouDo: (s, ctx) => {
     if (ctx.step === 'dealer') return unitThen(s, ctx, pickedIds(s, ctx, target), 'choose the unit to damage', false, 'target', ctx.targetInstanceId)
     const from = findUnit(s, ctx.unitChosen ?? '')?.unit
-    return from ? dealDamageToUnit(s, ctx.targetInstanceId!, amount(s, from)) : s
+    return from ? dealDamageToUnit(s, ctx.targetInstanceId!, amount(s, from), dealtByUnit(from, ctx.owner)) : s
   },
 })
 
@@ -4375,18 +4380,22 @@ registerCard('SOR_234', { // Maximum Firepower
     unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, (st, u) => unitHasTrait(st, u, 'Imperial'))), 'choose the Imperial unit that deals the damage', false, 'dealer')),
   ifYouDo: (s, ctx) => {
     const imperials = (exclude?: string) => pickedIds(s, ctx, pickAll(pickFriendly, (st, u) => u.instanceId !== exclude && unitHasTrait(st, u, 'Imperial')))
-    const power = (id: string | undefined) => { const u = findUnit(s, id ?? '')?.unit; return u ? effectivePower(s, u) : 0 }
+    // Each Imperial unit deals its own hit; one no longer in play deals nothing.
+    const fire = (at: GameState, targetId: string, dealerId: string | undefined): GameState => {
+      const u = findUnit(at, dealerId ?? '')?.unit
+      return u ? dealDamageToUnit(at, targetId, effectivePower(at, u), dealtByUnit(u, ctx.owner)) : dealDamageToUnit(at, targetId, 0)
+    }
     switch (ctx.step) {
       case 'dealer':
         return unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'choose the unit to damage', false, `target:${ctx.targetInstanceId}`, ctx.targetInstanceId)
       case 'second': {
         const hit = findUnit(s, ctx.unitChosen ?? '')
-        return hit ? dealDamageToUnit(s, hit.unit.instanceId, power(ctx.targetInstanceId)) : s
+        return hit ? fire(s, hit.unit.instanceId, ctx.targetInstanceId) : s
       }
       default: {
         // `target:<first dealer>`: the first hit, then "another" Imperial unit, which excludes the first.
         const first = ctx.step?.slice('target:'.length)
-        const hit = dealDamageToUnit(s, ctx.targetInstanceId!, power(first))
+        const hit = fire(s, ctx.targetInstanceId!, first)
         return findUnit(hit, ctx.targetInstanceId!)
           ? unitThen(hit, ctx, imperials(first).filter(id => findUnit(hit, id)), 'choose another Imperial unit to deal damage', false, 'second', ctx.targetInstanceId)
           : hit
@@ -4399,7 +4408,7 @@ registerCard('JTL_129', unitThenWp('Choose a unit. Each friendly Vehicle unit in
     const target = findUnit(s, ctx.targetInstanceId!)?.unit
     if (!target) return s
     const vehicles = s.players[ctx.owner].units.filter(u => u.instanceId !== target.instanceId && u.arena === target.arena && unitHasTrait(s, u, 'Vehicle'))
-    return vehicles.reduce((acc, v) => (findUnit(acc, target.instanceId) ? dealDamageToUnit(acc, target.instanceId, effectivePower(acc, v)) : acc), s)
+    return vehicles.reduce((acc, v) => (findUnit(acc, target.instanceId) ? dealDamageToUnit(acc, target.instanceId, effectivePower(acc, v), dealtByUnit(v, ctx.owner)) : acc), s)
   }))
 registerCard('TWI_176', { // Caught in the Crossfire
   ...whenPlayed('Choose 2 enemy units in the same arena. Each of those units deals damage equal to its power to the other.', (s, ctx) =>
@@ -4436,7 +4445,7 @@ registerCard('SOR_092', unitThenWp('Give a friendly unit +2/+2 for this phase. T
     const u = findUnit(buffed, id)?.unit
     const total = u ? effectivePower(buffed, u) : 0
     const targets = allUnits(buffed).filter(x => x.instanceId !== id).map(x => x.instanceId)
-    return total > 0 && targets.length ? pushChoice(buffed, { kind: 'distributeDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: total, total, targets }) : buffed
+    return u && total > 0 && targets.length ? pushChoice(buffed, { kind: 'distributeDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: total, total, targets, source: dealtByUnit(u, ctx.owner) }) : buffed
   }))
 
 // "Choose an arena": the pick, then the card's hook with `arenaChosen`.
@@ -4459,7 +4468,7 @@ registerCard('JTL_131', { // Turbolaser Salvo
     const gun = findUnit(s, ctx.targetInstanceId!)?.unit
     if (!gun) return s
     const amount = effectivePower(s, gun)
-    return s.players[opponentOf(ctx.owner)].units.filter(u => u.arena === arena).reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, amount), s)
+    return s.players[opponentOf(ctx.owner)].units.filter(u => u.arena === arena).reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, amount, dealtByUnit(gun, ctx.owner)), s)
   },
 })
 
@@ -6904,14 +6913,16 @@ registerCard('SEC_002', { // Jabba the Hutt
     if (step === 'dealer') return unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), 'choose the enemy unit to damage', false, 'target', ctx.targetInstanceId)
     if (step === 'target') {
       const dealer = findUnit(s, ctx.unitChosen ?? '')?.unit
-      return dealer ? dealDamageToUnit(s, ctx.targetInstanceId!, dealer.damage >= 3 ? 2 : 1) : s
+      return dealer ? dealDamageToUnit(s, ctx.targetInstanceId!, dealer.damage >= 3 ? 2 : 1, dealtByUnit(dealer, ctx.owner)) : s
     }
     if (step.startsWith('dealer:')) {
       const amount = (JSON.parse(step.slice('dealer:'.length)) as { instanceId: string; amount: number }[]).find(d => d.instanceId === ctx.targetInstanceId)?.amount ?? 0
       return unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), `have it deal ${amount} damage to an enemy unit`, true, `deal:${amount}`, ctx.targetInstanceId)
     }
-    // "deal:N": the once-a-round limit is spent only when the ability is used.
-    return dealDamageToUnit(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, JABBA_ROUND_KEY), ctx.targetInstanceId!, Number(step.slice('deal:'.length)))
+    // "deal:N": the once-a-round limit is spent only when the ability is used. `unitChosen` is the
+    // damaged unit, which deals it.
+    const hurt = findUnit(s, ctx.unitChosen ?? '')?.unit
+    return dealDamageToUnit(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, JABBA_ROUND_KEY), ctx.targetInstanceId!, Number(step.slice('deal:'.length)), hurt ? dealtByUnit(hurt, ctx.owner) : undefined)
   },
 })
 
@@ -7618,7 +7629,7 @@ registerCard('LAW_168', { // Haymaker
       return targets.length ? unitThen(given, ctx, targets, 'deal damage equal to its power to an enemy unit in the same arena', false, 'hit', id) : given
     }
     const dealer = findUnit(s, id)?.unit
-    return dealer && ctx.targetInstanceId ? dealDamageToUnit(s, ctx.targetInstanceId, effectivePower(s, dealer)) : s
+    return dealer && ctx.targetInstanceId ? dealDamageToUnit(s, ctx.targetInstanceId, effectivePower(s, dealer), dealtByUnit(dealer, ctx.owner)) : s
   },
 })
 registerCard('JTL_091', { // Apology Accepted
@@ -9171,8 +9182,10 @@ registerCard('HMW_114', { // Breach
     if (!from) return s
     const amount = effectivePower(s, from)
     const spill = unitHasKeyword(s, from, 'Overwhelm') ? excessOver(s, ctx.targetInstanceId!, amount) : 0
-    const dealt = dealDamageToUnit(s, ctx.targetInstanceId!, amount)
-    return spill > 0 ? dealDamageToBase(dealt, opponentOf(ctx.owner), spill) : dealt
+    // The excess is the friendly unit's too, the way Overwhelm's is.
+    const source = dealtByUnit(from, ctx.owner)
+    const dealt = dealDamageToUnit(s, ctx.targetInstanceId!, amount, source)
+    return spill > 0 ? dealDamageToBase(dealt, opponentOf(ctx.owner), spill, source) : dealt
   },
 })
 
@@ -9188,7 +9201,7 @@ registerCard('HMW_151', { // Overgrowth
   ifYouDo: (s, ctx) => {
     if (ctx.step === 'dealer') return unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), 'choose the enemy unit to damage', false, 'target', ctx.targetInstanceId)
     const from = findUnit(s, ctx.unitChosen ?? '')?.unit
-    return from ? dealDamageToUnit(s, ctx.targetInstanceId!, effectivePower(s, from)) : s
+    return from ? dealDamageToUnit(s, ctx.targetInstanceId!, effectivePower(s, from), dealtByUnit(from, ctx.owner)) : s
   },
 })
 
@@ -10016,11 +10029,15 @@ registerCard('SHD_250', { // Tarfful
   }],
   ifYouDo: (s, ctx) => {
     const step = ctx.step ?? ''
-    if (step.startsWith('deal:')) return dealDamageToUnit(s, ctx.targetInstanceId!, Number(step.slice(5)))
+    if (step.startsWith('deal:')) {
+      // `unitChosen` is the Wookiee, which deals it.
+      const wookiee = findUnit(s, ctx.unitChosen ?? '')?.unit
+      return dealDamageToUnit(s, ctx.targetInstanceId!, Number(step.slice(5)), wookiee ? dealtByUnit(wookiee, ctx.owner) : undefined)
+    }
     if (step.startsWith('dealer:')) {
       const hurt = JSON.parse(step.slice(7)) as { instanceId: string; amount: number }[]
       const amount = hurt.find(h => h.instanceId === ctx.targetInstanceId)?.amount ?? 0
-      return unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, pickGround)), `have it deal ${amount} damage to an enemy ground unit`, false, `deal:${amount}`)
+      return unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, pickGround)), `have it deal ${amount} damage to an enemy ground unit`, false, `deal:${amount}`, ctx.targetInstanceId)
     }
     return s
   },
@@ -10704,8 +10721,7 @@ registerCard('SOR_107', chooseTwoWp([ // Command
 ], (s, ctx) => {
   if (ctx.step === 'dealer') return unitThen(s, ctx, nonUniqueEnemies(s, ctx.owner), 'choose the non-unique enemy unit to damage', false, 'hit', ctx.targetInstanceId)
   const from = ctx.step === 'hit' ? findUnit(s, ctx.unitChosen ?? '')?.unit : undefined
-  // The friendly unit deals it, so it is that unit's damage ("when a friendly unit deals damage").
-  return from ? dealDamageToUnit(s, ctx.targetInstanceId!, effectivePower(s, from), { cardId: from.cardId, controller: ctx.owner, instanceId: from.instanceId }) : s
+  return from ? dealDamageToUnit(s, ctx.targetInstanceId!, effectivePower(s, from), dealtByUnit(from, ctx.owner)) : s
 }))
 
 registerCard('SOR_155', chooseTwoWp([ // Aggression

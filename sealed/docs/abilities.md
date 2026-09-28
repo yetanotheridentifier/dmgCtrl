@@ -239,6 +239,16 @@ of the defeats the same damage caused. `ctx.damageDealt` carries:
   damage a player deals their own base as a cost. The fallback feeds the event only: prevention
   still reads only a named source.
 
+  An effect that has a unit deal the damage ("a friendly unit deals damage equal to its power",
+  "that unit deals damage divided as you choose", "have attached unit deal 1 damage") names that
+  unit as the source (`dealtByUnit` in `cardDefinitions.ts`), not the event or ability that chose
+  it. So "when a friendly unit deals damage" (Jango Fett) hears it, and a rule that reads who dealt
+  the damage ("damage dealt by friendly Underworld cards is unpreventable") reads the unit's card.
+  A `distributeDamage` choice deals each point with its `source`. Caught in the Crossfire, where two
+  **enemy** units deal damage to each other, still names the event. Nute Gunray's "each friendly unit
+  deals 1 damage to a different enemy unit" names Nute himself, since the engine does not pair a
+  friendly unit with each target.
+
 **Every registration's condition is its `hears`**, not a guard in its effect. The point is heard on
 both sides, and an ability collected only to do nothing still puts its side in the batch; a batch
 with both sides in it asks the active player who goes first. `hears` is the trigger condition,
