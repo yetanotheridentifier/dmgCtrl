@@ -23,6 +23,9 @@ const F: Record<string, EngineCard> = {
   ASH_196: card({ id: 'ASH_196', name: "Gorian Shard's Corsair", type: 'unit', arena: 'space', cost: 6, power: 6, hp: 5, traits: ['Underworld'] }),
   ASH_102: card({ id: 'ASH_102', name: 'Ravager', type: 'unit', arena: 'space', cost: 7, power: 4, hp: 6 }),
   SHD_087: card({ id: 'SHD_087', name: 'Crosshair', type: 'unit', arena: 'ground', cost: 4, power: 3, hp: 4 }),
+  SHD_250: card({ id: 'SHD_250', name: 'Tarfful', type: 'unit', arena: 'ground', cost: 5, power: 3, hp: 6, traits: ['Wookiee'] }),
+  TWI_256: card({ id: 'TWI_256', name: 'Hold-Out Blaster', type: 'upgrade', cost: 1, power: 1, hp: 0 }),
+  UWWOOK: card({ id: 'UWWOOK', arena: 'ground', cost: 2, power: 1, hp: 10, traits: ['WOOKIEE', 'UNDERWORLD'] }),
   SOR_127: ev('SOR_127', 3), SOR_151: ev('SOR_151', 2), LOF_128: ev('LOF_128', 4), HMW_192: ev('HMW_192'),
   SOR_234: ev('SOR_234', 4), JTL_129: ev('JTL_129', 4), JTL_131: ev('JTL_131', 7), SOR_092: ev('SOR_092', 5),
   ASH_139: ev('ASH_139', 4), HMW_114: ev('HMW_114', 3), HMW_151: ev('HMW_151', 2), LAW_168: ev('LAW_168', 3),
@@ -165,6 +168,13 @@ describe('an effect that has a friendly unit deal damage names that unit as the 
     expect(jangoHeard(s)).toBe(true)
   })
 
+  it('Hold-Out Blaster (TWI_256): the attached unit deals it', () => {
+    const s0 = board({ hand: ['TWI_256'], units: [jango(), unit('a', 'P3')] }, { units: [unit('e', 'BIG')] })
+    const s = pick(resolve(s0, { type: 'playUpgrade', handIndex: 0, targetInstanceId: 'a' }), 'e')
+    expect(U(s, 'e')!.damage).toBe(1)
+    expect(jangoHeard(s)).toBe(true)
+  })
+
   it('Crosshair (SHD_087): "this unit deals" is the unit\'s own ability, so it is already named', () => {
     const s0 = board({ units: [jango(), unit('c', 'SHD_087')] }, { units: [unit('e', 'BIG')] })
     const s = pick(resolve(s0, { type: 'useAbility', instanceId: 'c', cardId: 'SHD_087', index: 1 }), 'e')
@@ -207,6 +217,14 @@ describe('a named dealer is what source-reading prevention sees', () => {
     const s0 = board({ leader: { cardId: 'SEC_002', deployed: true, epicActionUsed: true, exhausted: false }, units: [unit('L', 'SEC_002', { isLeader: true }), unit('gs', 'ASH_196'), unit('g', 'UW3')] }, { units: [shielded('e')] })
     const s = pick(dealDamageToUnit(s0, 'g', 2, { cardId: 'SOR_127', controller: 'opponent' }), 'e')
     expect(U(s, 'e')!.damage).toBe(2)
+    expect(shields(s, 'e')).toBe(1)
+  })
+
+  it('Tarfful (SHD_250): the Wookiee that survived deals it, not Tarfful', () => {
+    const s0 = board({ units: [unit('gs', 'ASH_196'), unit('t', 'SHD_250'), unit('w', 'UWWOOK')] }, { units: [unit('x', 'BIG'), shielded('e')] })
+    const swung = resolve(s0, { type: 'attack', attackerId: 'w', target: { kind: 'unit', instanceId: 'x' } })
+    const s = pick(swung, 'e')
+    expect(U(s, 'e')!.damage).toBe(1)
     expect(shields(s, 'e')).toBe(1)
   })
 
