@@ -1,9 +1,9 @@
 import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
-import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
+import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint, ProtectedAction } from './abilities'
-import { getCardDefinition, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers } from './abilities'
+import { abilityCardIds, getCardDefinition, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers } from './abilities'
 import { enqueueTriggers, drainTriggers } from './triggerQueue'
 
 /**
@@ -58,7 +58,7 @@ export function thenAfterChoices(state: GameState, then: IfYouDo): GameState {
 export function searchCount(state: GameState, owner: PlayerId, baseCount: number): number {
   let n = baseCount
   for (const unit of state.players[owner].units) {
-    for (const cardId of abilityCardIds(unit)) {
+    for (const cardId of abilityCardIds(state, unit)) {
       n *= getCardDefinition(cardId)?.searchModifier?.(state, unit) ?? 1
     }
   }
@@ -104,12 +104,12 @@ export function protectedFromEnemyAbility(
   action: ProtectedAction,
 ): boolean {
   if (!attacker || attacker === targetController) return false
-  for (const id of abilityCardIds(target)) {
+  for (const id of abilityCardIds(state, target)) {
     if (getCardDefinition(id)?.cannotBeTargetedByEnemyAbility?.(state, target, action)) return true
   }
   for (const side of ['player', 'opponent'] as PlayerId[]) {
     for (const source of state.players[side].units) {
-      for (const id of abilityCardIds(source)) {
+      for (const id of abilityCardIds(state, source)) {
         if (getCardDefinition(id)?.grantsEnemyAbilityProtection?.(state, source, target, side === targetController, action)) return true
       }
     }
@@ -129,7 +129,7 @@ function upgradeProtectedFromEnemyAbility(
   const found = findUnit(state, hostId)
   const upgrade = found?.unit.upgrades[index]
   if (!found || !upgrade || !attacker || attacker === found.owner) return false
-  return abilityCardIds(found.unit).some(id => getCardDefinition(id)?.protectsAttachedUpgrade?.(state, found.unit, upgrade, action))
+  return abilityCardIds(state, found.unit).some(id => getCardDefinition(id)?.protectsAttachedUpgrade?.(state, found.unit, upgrade, action))
 }
 
 /**
@@ -379,7 +379,7 @@ export function abilityDamageBonus(state: GameState, from: DamageSource | undefi
   let bonus = 0
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
     for (const self of state.players[owner].units) {
-      for (const cardId of abilityCardIds(self)) {
+      for (const cardId of abilityCardIds(state, self)) {
         bonus += getCardDefinition(cardId)?.abilityDamageBonus?.(state, self, owner, from, targetController) ?? 0
       }
     }
@@ -488,7 +488,7 @@ export function baseDamageAfterPrevention(state: GameState, player: PlayerId, am
   if (amount > 0 && state.shieldedBases?.includes(player)) return 0
   let out = amount
   for (const u of state.players[player].units) {
-    for (const cid of abilityCardIds(u)) {
+    for (const cid of abilityCardIds(state, u)) {
       const hook = getCardDefinition(cid)?.preventBaseDamage
       if (hook) out = hook(state, u, out)
     }
@@ -505,7 +505,7 @@ export function damageIsUnpreventable(state: GameState, source?: DamageSource): 
   if (!source) return false
   if (source.unpreventable) return true
   return state.players[source.controller].units.some(u =>
-    abilityCardIds(u).some(id => getCardDefinition(id)?.makesDamageUnpreventable?.(state, u, source) ?? false),
+    abilityCardIds(state, u).some(id => getCardDefinition(id)?.makesDamageUnpreventable?.(state, u, source) ?? false),
   )
 }
 
@@ -518,7 +518,7 @@ export function indirectDamageBonus(state: GameState, source: DamageSource, targ
   if (source.controller === targetController) return 0
   let bonus = 0
   for (const self of state.players[source.controller].units) {
-    for (const cardId of abilityCardIds(self)) {
+    for (const cardId of abilityCardIds(state, self)) {
       bonus += getCardDefinition(cardId)?.indirectDamageBonus?.(state, self, source, targetController) ?? 0
     }
   }
@@ -533,7 +533,7 @@ export function indirectDamageBonus(state: GameState, source: DamageSource, targ
 export function indirectDamageAssignedByDealer(state: GameState, source: DamageSource, targetController: PlayerId): boolean {
   if (source.controller === targetController) return false
   return state.players[source.controller].units.some(self =>
-    abilityCardIds(self).some(cardId => getCardDefinition(cardId)?.assignsIndirectDamage?.(state, self, source, targetController) ?? false),
+    abilityCardIds(state, self).some(cardId => getCardDefinition(cardId)?.assignsIndirectDamage?.(state, self, source, targetController) ?? false),
   )
 }
 
@@ -643,7 +643,7 @@ function baseHealingSuppressed(state: GameState): boolean {
   if (state.basesUnhealable) return true
   for (const side of ['player', 'opponent'] as PlayerId[]) {
     for (const u of state.players[side].units) {
-      for (const cardId of abilityCardIds(u)) {
+      for (const cardId of abilityCardIds(state, u)) {
         if (getCardDefinition(cardId)?.suppressesBaseHealing?.(state, u) ?? false) return true
       }
     }
@@ -708,7 +708,7 @@ export function createTokenUnits(state: GameState, owner: PlayerId, tokenCardId:
   for (let i = 0; i < count; i++) next = createTokenUnit(next, owner, tokenCardId)
   if (count <= 0) return next
   const replacer = next.players[owner].units.find(u =>
-    abilityCardIds(u).some(id => getCardDefinition(id)?.doublesTokenCreation?.(next, u) ?? false),
+    abilityCardIds(next, u).some(id => getCardDefinition(id)?.doublesTokenCreation?.(next, u) ?? false),
   )
   return replacer
     ? pushChoice(next, { kind: 'mayDoubleTokens', id: `${replacer.instanceId}-double`, controller: owner, unitId: replacer.instanceId, token: tokenCardId, count })
@@ -717,7 +717,7 @@ export function createTokenUnits(state: GameState, owner: PlayerId, tokenCardId:
 
 /** Whether a unit `owner` plays or creates enters play ready because of a unit they control (Ritual Dragon). */
 export function friendlyUnitsEnterReady(state: GameState, owner: PlayerId): boolean {
-  return state.players[owner].units.some(u => abilityCardIds(u).some(id => getCardDefinition(id)?.unitsEnterReady?.(state, u) ?? false))
+  return state.players[owner].units.some(u => abilityCardIds(state, u).some(id => getCardDefinition(id)?.unitsEnterReady?.(state, u) ?? false))
 }
 
 export function createTokenUnit(state: GameState, owner: PlayerId, tokenCardId: string): GameState {
@@ -725,7 +725,7 @@ export function createTokenUnit(state: GameState, owner: PlayerId, tokenCardId: 
   const shielded = (tokenCard?.keywords ?? []).some(k => k.name === 'Shielded')
   const p = state.players[owner]
   const entersReady = friendlyUnitsEnterReady(state, owner)
-    || p.units.some(u => abilityCardIds(u).some(id => getCardDefinition(id)?.tokensEnterReady?.(state, u) ?? false))
+    || p.units.some(u => abilityCardIds(state, u).some(id => getCardDefinition(id)?.tokensEnterReady?.(state, u) ?? false))
   const token: UnitState = {
     instanceId: `u${state.instanceCounter}`,
     cardId: tokenCardId,
@@ -930,7 +930,7 @@ function attemptCapture(state: GameState, targetInstanceId: string, guardianOwne
   const { owner: controller, unit: target } = found
   const cardOwner = target.owner ?? controller
   if (protectedFromEnemyAbility(state, target, cardOwner, guardianOwner, 'capture')) return { state }
-  for (const id of abilityCardIds(target)) {
+  for (const id of abilityCardIds(state, target)) {
     const replaced = getCardDefinition(id)?.captureReplacement?.(state, target)
     if (replaced) return { state: replaced }
   }
@@ -992,7 +992,7 @@ export function readyUnit(state: GameState, instanceId: string): GameState {
 export function unitCannotReady(state: GameState, unit: UnitState): boolean {
   if ((state.lastingEffects ?? []).some(e =>
     e.cannotReady && e.targetInstanceId === unit.instanceId && (!e.whileSourceInPlay || findUnit(state, e.whileSourceInPlay) !== undefined))) return true
-  return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotReady?.(state, unit) ?? false)
+  return abilityCardIds(state, unit).some(id => getCardDefinition(id)?.cannotReady?.(state, unit) ?? false)
 }
 
 /** Ready one exhausted resource of `owner` (Emperor's Messenger). No-op if none is exhausted. */
@@ -1084,7 +1084,7 @@ export function defeatBaseUpgrade(state: GameState, baseOwner: PlayerId, cardId:
  */
 function offerDefeatInstead(state: GameState, baseOwner: PlayerId, upgradeCardId: string): GameState | undefined {
   const standIn = state.players[baseOwner].units.find(u =>
-    abilityCardIds(u).some(id => getCardDefinition(id)?.defeatsInsteadOfBaseUpgrade?.(state, u) ?? false))
+    abilityCardIds(state, u).some(id => getCardDefinition(id)?.defeatsInsteadOfBaseUpgrade?.(state, u) ?? false))
   if (!standIn) return undefined
   return pushChoice(state, { kind: 'mayDefeatInstead', id: `instead-${standIn.instanceId}`, controller: baseOwner, unitId: standIn.instanceId, baseOwner, upgradeCardId })
 }

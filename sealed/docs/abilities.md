@@ -374,6 +374,10 @@ Card-type-agnostic, all on `CardDefinition`:
 | `providesAspects` | supplies aspect icons while paying costs |
 | `deployCondition` | replaces the resource gate on deploying a leader |
 | `suppressesFriendlyAdvantage` | Advantage tokens are not spent after combat |
+| `suppressesEnemyCredits` | the other player's Credit tokens can't be defeated to pay (Conveyex Security Captain) |
+| `blanksHost` | the host loses all abilities while it returns a blank, keeping what the blank names (Imprisoned, Condemn, Exiled from the Force); see Losing all abilities in [keywords-effects.md](keywords-effects.md) |
+| `blanksCard` | a unit's constant ability that makes a card lose all abilities wherever it is (Brain Invaders, Galen Erso) |
+| `blanksPlayedEvent` | an event just played loses all abilities as it resolves (Relentless) |
 | `searchModifier` | multiplies how many cards a **search** looks at |
 | `doublesTokenCreation` | doubles a batch of created tokens |
 | `entersReady` | the unit arrives ready, alongside Ambush and enters-ready grants |

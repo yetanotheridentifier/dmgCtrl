@@ -544,6 +544,10 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'SOR_137', name: 'Fallen Lightsaber' },
   { id: 'TS26_35', name: "Ahsoka's Lightsabers" },
   { id: 'TS26_52', name: 'Sith Traditions' },
+  // Losing all abilities (#682): the host loses its abilities, always or while it attacks.
+  { id: 'SHD_072', name: 'Imprisoned' },
+  { id: 'SEC_038', name: 'Condemn' },
+  { id: 'SEC_054', name: 'Exiled from the Force' },
 ]
 
 /**
@@ -1008,6 +1012,12 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LOF_205', name: 'Force Speed' },
   { id: 'TWI_129', name: 'In Defense of Kamino' },
   { id: 'TWI_103', name: 'Pyrrhic Assault' },
+  // Losing all abilities (#682): units lose their abilities for a phase, a round or an attack.
+  { id: 'SOR_138', name: 'Force Lightning' },
+  { id: 'JTL_244', name: 'There Is No Escape' },
+  { id: 'LOF_202', name: 'Mind Trick' },
+  { id: 'SEC_157', name: 'One Way Out' },
+  { id: 'LAW_132', name: 'The Tree Remembers' },
 ]
 
 /**
@@ -2203,6 +2213,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // Granted ability blocks (#464): an aura handing other units an ability block.
   { id: 'TWI_047', name: 'Satine Kryze' },
   { id: 'SOR_105', name: 'General Krell' },
+  // Losing all abilities (#682): a constant ability that blanks leaders, a named card, the first event
+  // each opponent plays, or enemy Credit tokens.
+  { id: 'TWI_255', name: 'Brain Invaders' },
+  { id: 'SEC_046', name: 'Galen Erso' },
+  { id: 'SOR_089', name: 'Relentless' },
+  { id: 'LAW_117', name: 'Conveyex Security Captain' },
 ]
 
 /**

@@ -159,6 +159,12 @@ export interface UnitState {
    */
   namedCardSurcharge?: number
   /**
+   * A card name whose cards an opponent owns lose all abilities while this unit is in play (Galen
+   * Erso). Kept apart from `namedCard`, which forbids playing the name: this one leaves the card
+   * playable and blanks it instead. Held on the unit for the same reason, so it ends as he leaves.
+   */
+  blanksNamedCard?: string
+  /**
    * A keyword name this unit's controller chose as it arrived, which its constant ability then hands
    * out for as long as it is in play (Admiral Yularen: "choose Grit, Restore 1, Sentinel, or
    * Shielded … each friendly Vehicle unit gains the chosen Keyword"). Held on the unit for the same
@@ -400,13 +406,17 @@ export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUn
 }
 
 /**
- * Every card that supplies this unit's abilities: its own card, each attached upgrade, and any card
+ * Every card that CARRIES this unit's abilities: its own card, each attached upgrade, and any card
  * lent to it for a single attack (Support, Improvised Identity).
  *
  * The ONE definition of that set. It used to be spelled out at each lookup site, and the spellings
  * drifted: only some included the lent cards, so an ability whose hook happened to live at a
  * granted-blind site was silently never lent. Scion Shuttle's `aura` and Red Leader's
- * `attacksEitherArena` were both lost that way (#417). Route every ability lookup through here.
+ * `attacksEitherArena` were both lost that way (#417).
+ *
+ * Ability lookups do not call this directly: they go through `abilityCardIds` (abilities.ts), which
+ * is this set less whatever a "loses all abilities" effect has taken away. This is the raw set, for
+ * that gate and for reads that are not about abilities (traits).
  *
  * Duplicates are deliberate and must not be collapsed: two copies of the same upgrade on one host,
  * or a Support source whose card matches the borrower's, each apply their ability again, and
@@ -415,7 +425,7 @@ export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUn
  * Printed TRAITS are deliberately not covered by this: Support lends "this unit's other abilities",
  * and a trait is not an ability. Only a `grantedTraits` hook lends traits.
  */
-export function abilityCardIds(unit: UnitState): string[] {
+export function carriedAbilityCardIds(unit: UnitState): string[] {
   return [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]
 }
 
@@ -487,6 +497,13 @@ export interface GameState {
   // `prevented` collects units whose incoming combat damage a prevention effect has cancelled
   // (The Mandalorian) — decided at the `prevent` stage, honoured when damage is dealt.
   pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage'; viaAmbush?: boolean; preventAsked?: string[]; prevented?: string[] }
+  /**
+   * The unit attacking right now, from the declaration to the end of the attack (cleared with the
+   * other per-attack state by `clearAttackGrants`). For a card whose ability holds only "while
+   * attached unit is attacking" and must already hold as the On Attack abilities are collected
+   * (Condemn), which no stat context reaches.
+   */
+  attackingInstanceId?: string
   /**
    * A "take the initiative" whose "When you take the initiative" trigger raised a choice:
    * the turn transition (end the phase, or pass to the opponent) is deferred until the choice
@@ -751,6 +768,11 @@ export interface LastingEffect {
   unlessSentinel?: boolean
   /** Keyword names the unit loses for the duration (SpecForce Soldier: Sentinel). Read by `unitKeywords`. */
   removeKeywords?: string[]
+  /**
+   * The unit loses all abilities, and can't gain any, for the duration (Force Lightning, There Is No
+   * Escape). Read by `abilityBlank` (abilities.ts), the gate every ability lookup goes through.
+   */
+  losesAllAbilities?: boolean
   /** The unit deals no combat damage for the duration (Betrayed Trust). */
   noCombatDamage?: boolean
   /** Units attacking this unit get this much power for the duration (I Have the High Ground: -4). */

@@ -137,13 +137,13 @@ Two phases:
   expressible with the primitives already in `engine/effects.ts`. Cut by trigger point. **Events are finished** as far as the engine's choices express them.
   The rest are recorded on the ticket of what blocks them: #602 Credit, #603
   Disclose, #604 indirect damage, #469 Smuggle, #467 Bounty, #468 (playing any card type from a zone
-  other than the hand, or through an ability), #471 play from discard, #682 for "loses all
-  abilities" (One Way Out and seven more), and #686 for state the engine does not record and the
-  unique one-offs.
+  other than the hand, or through an ability), #471 play from discard, and #686 for state the engine
+  does not record and the unique one-offs. **Losing all abilities is finished** (#682): one gate on
+  every ability lookup, and the twelve cards that needed it.
   **When Played units and upgrades are finished**, and so are **constant abilities on units and
   upgrades**: the ones existing primitives expressed shipped first, and the hooks and choices the rest
   needed followed, group by group. Vult Skerris's Defender (needs "discarded a card this phase") is
-  on #678, and the 14 other constant-ability cards lifted out are on #682 (losing abilities), #465
+  on #678, and the 14 other constant-ability cards lifted out shipped with #682 (losing abilities) or are on #465
   (Phantom II) and #686; Fives, borrowing another unit's When Played abilities, shipped with #683. **When Defeated units are
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
   shared with another trigger point ("When Played/When Defeated") is built on the compound-head framework
@@ -288,7 +288,7 @@ Two phases:
   use this" unit action, an ordinary action ability and an "any number" resource-zone return each cut
   only for time, two cards where an opponent decides a friendly When Played, a reveal-then-play-for-free
   chain, and an "exchange control of two units" primitive Double-Cross needs) are on #719. Conveyex
-  Security Captain needs #682 too; Han's Golden Dice, Targeted For Removal and Payroll Heist are
+  Security Captain shipped with #682; Han's Golden Dice, Targeted For Removal and Payroll Heist are
   no longer held by the granted ability block (#464, shipped) and wait only on #719;
   Boba Fett and Dengar need a one-off trigger head with no ticket of its own yet.
   **Disclose is finished** (#603, #721): "reveal cards from your hand with these aspect icons among
@@ -299,7 +299,7 @@ Two phases:
   not a round boundary), the `discardOrDamage` choice (Syril Karn's "unless the controller discards"),
   and Chairman Papanoida turned out to need no new trigger point at all, since `whenDrawCards` already
   covers "when a player draws during the action phase". Diplomatic Immunity shipped with the granted
-  ability blocks (#464); Condemn is on #682 (its host loses all other abilities).
+  ability blocks (#464); Condemn shipped with #682 (its host loses all other abilities).
   **Indirect damage is finished** (#604): unlike every other instance of damage, the RECEIVING
   player assigns it, as unpreventable damage, among their own base and units — `dealIndirectDamage`
   raises a mandatory `distributeIndirectDamage` choice, folding in Hunting Aggressor's +1 and
@@ -346,7 +346,7 @@ Two phases:
   per card against the registry; the ticket's "43 sole" and "81 touched" had counted the pilots and
   the other tickets' cards). Split to **#740**: Rex's DC-17s (no point raises an enemy unit readying in
   the action phase) and Foresight (the regroup draw happens before "when the regroup phase starts").
-  Condemn is on #682; the 16 pilot cards and pilot leaders are on #465; Han's Golden Dice, Targeted For
+  Condemn shipped with #682; the 16 pilot cards and pilot leaders are on #465; Han's Golden Dice, Targeted For
   Removal and Payroll Heist on #719; Leia Organa on #733; For The Republic on #730.
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
@@ -372,7 +372,7 @@ cards held on it, and read against the engine as it now is, 28 needed no engine 
 registration (six HMW among them, and "when an opponent plays" now read from the far side of
 `whenPlayCard`), and shipped. Every other card went to the ticket that owns its real blocker: the
 mechanic tickets above by comment, #680 for trigger heads no point raises, #678 for the discard
-record, and five new ones, #682 losing abilities (8), #683 re-using abilities (7, of which the two that
+record, and five new ones, #682 losing abilities (8, all shipped), #683 re-using abilities (7, of which the two that
 borrow another card's When Played abilities shipped and the five that re-run an ability already used
 moved to #704), #684 replacement
 effects (5, all shipped), #685 cards that need only writing (22) and #686 the one-offs no other ticket owns (23).

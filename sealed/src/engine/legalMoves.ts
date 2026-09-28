@@ -1,9 +1,9 @@
 import type { Action } from './actions'
 import type { AspectWaiver, AttackerFilter, DiscardPlayGrant, EngineCard, GameState, HandCardRef, PendingChoice, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
-import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds, pushChoice, isFortify } from './types'
+import { opponentOf, hasPendingChoices, nextUnitGrantMatches, pushChoice, isFortify } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
-import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, baseEpicAction, usableBaseActions } from './abilities'
+import { abilityCardIds, cardAbilitiesBlanked, getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, leaderAbilitiesBlanked, baseEpicAction, usableBaseActions } from './abilities'
 import { friendlyCreditTokens, discloseRemaining, hasForceToken } from './effects'
 import './cardDefinitions' // side effect: registers all real card behaviours
 
@@ -55,7 +55,7 @@ export function enemyAttackTargets(state: GameState, attacker: UnitState, owner:
  * reads "attack an enemy unit", so the base is never on offer.
  */
 export function ambushAttacksBases(state: GameState, owner: PlayerId): boolean {
-  return state.players[owner].units.some(u => abilityCardIds(u).some(id => getCardDefinition(id)?.ambushAttacksBases?.(state, u) ?? false))
+  return state.players[owner].units.some(u => abilityCardIds(state, u).some(id => getCardDefinition(id)?.ambushAttacksBases?.(state, u) ?? false))
 }
 
 /** Whether an Ambush by `unit` has anything to attack: an enemy unit, or the base where `ambushAttacksBases` allows it. */
@@ -162,12 +162,14 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   ]
   // A unit may provide its aspect icons while its controller pays costs — The Darksaber.
   for (const u of p.units) {
-    for (const cardId of abilityCardIds(u)) {
+    for (const cardId of abilityCardIds(state, u)) {
       provided.push(...(getCardDefinition(cardId)?.providesAspects?.(state, u) ?? []))
     }
   }
   let penalty = 0
-  const ignored = getCardDefinition(card.id)?.ignoresOwnAspectPenalty?.(state, playerId, target) ?? []
+  // The card's own cost abilities, unless it has lost them (a name Galen Erso has named).
+  const own = cardAbilitiesBlanked(state, card.id, playerId) ? undefined : getCardDefinition(card.id)
+  const ignored = own?.ignoresOwnAspectPenalty?.(state, playerId, target) ?? []
   // Penalties this particular play forgives (`playCardFrom`'s `waive`), as distinct from the card's
   // own standing waiver above. "Ignoring 1 of its … penalties" forgives the first match only, so it
   // is tracked as it goes rather than applied to the total.
@@ -190,16 +192,16 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
     }
   }
   // Card-specific cost modifiers (e.g. −1 on an Imperial/Mandalorian unit).
-  const modifier = getCardDefinition(card.id)?.costModifier?.(state, playerId, target) ?? 0
+  const modifier = own?.costModifier?.(state, playerId, target) ?? 0
   // Units in play that discount cards their controller plays, or waive the aspect penalty
   // (Pit Droid Team / Peli Motto). Distinct from `costModifier`, which lives on the played card.
   let discount = 0
   let waivePenalty = false
   const discountCtx = { owner: playerId, card, target }
   // An undeployed leader's own waiver (Hera Syndulla); once deployed, the leader unit's hooks below apply.
-  if (!p.leader.deployed && getCardDefinition(p.leader.cardId)?.leaderAbilities?.waivesAspectPenalty?.(state, playerId, discountCtx)) waivePenalty = true
+  if (!p.leader.deployed && !leaderAbilitiesBlanked(state, playerId) && getCardDefinition(p.leader.cardId)?.leaderAbilities?.waivesAspectPenalty?.(state, playerId, discountCtx)) waivePenalty = true
   for (const u of p.units) {
-    for (const cid of abilityCardIds(u)) {
+    for (const cid of abilityCardIds(state, u)) {
       const def = getCardDefinition(cid)
       discount += def?.costDiscount?.(state, u, discountCtx) ?? 0
       if (def?.waivesAspectPenalty?.(state, u, discountCtx)) waivePenalty = true
@@ -209,7 +211,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   // Kept apart from `costDiscount` because that hook is only ever asked about its own controller's
   // payments, and a card reaching across the table has to say so.
   for (const u of state.players[opponentOf(playerId)].units) {
-    for (const cid of abilityCardIds(u)) {
+    for (const cid of abilityCardIds(state, u)) {
       discount += getCardDefinition(cid)?.enemyCostDelta?.(state, u, discountCtx) ?? 0
     }
   }
@@ -222,7 +224,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   const total = Math.max(0, (altCost?.cost ?? card.cost) + penalty + modifier + grantDelta + discount + surcharge)
   // "While paying costs, you pay half as many resources, rounded up" (The Starhawk) — last, because
   // it halves what is actually owed rather than the printed cost.
-  const halved = p.units.some(u => abilityCardIds(u).some(cid => getCardDefinition(cid)?.halvesCosts?.(state, u, playerId) ?? false))
+  const halved = p.units.some(u => abilityCardIds(state, u).some(cid => getCardDefinition(cid)?.halvesCosts?.(state, u, playerId) ?? false))
   return halved ? Math.ceil(total / 2) : total
 }
 
@@ -256,7 +258,9 @@ export function discardUnitPicks(state: GameState, playerId: PlayerId, maxCost: 
  * never offered with nothing to pick.
  */
 export function exploitTerms(state: GameState, playerId: PlayerId, card: EngineCard, extra = 0): ExploitTerms | undefined {
-  const own = getCardDefinition(card.id)?.whilePlaying
+  // A card that has lost its abilities (a name Galen Erso has named) has neither step nor printed Exploit.
+  const blanked = cardAbilitiesBlanked(state, card.id, playerId)
+  const own = blanked ? undefined : getCardDefinition(card.id)?.whilePlaying
   if (own && 'fromDiscard' in own) {
     const there = discardUnitPicks(state, playerId, own.fromDiscard.maxCost).length
     return there > 0
@@ -271,7 +275,7 @@ export function exploitTerms(state: GameState, playerId: PlayerId, card: EngineC
   if (own) return units > 0 ? { limit: units, discount: own.discount, damage: own.damage } : creditExploitTerms(state, playerId)
   const granted = (state.players[playerId].nextUnitGrants ?? [])
     .reduce((sum, g) => sum + (nextUnitGrantMatches(card, g, state, playerId) ? g.exploit ?? 0 : 0), 0)
-  const x = keywordValue(state, card.id, 'Exploit') + granted + extra
+  const x = (blanked ? 0 : keywordValue(state, card.id, 'Exploit')) + granted + extra
   if (x > 0 && units > 0) return { limit: Math.min(x, units), discount: 2 }
   return creditExploitTerms(state, playerId)
 }
@@ -284,7 +288,11 @@ export function exploitTerms(state: GameState, playerId: PlayerId, card: EngineC
  */
 function creditExploitTerms(state: GameState, playerId: PlayerId): ExploitTerms | undefined {
   const held = friendlyCreditTokens(state, playerId)
-  return held > 0 ? { limit: held, discount: 1, credit: true } : undefined
+  if (held === 0) return undefined
+  // "Enemy Credit tokens lose all abilities" (Conveyex Security Captain): theirs can't pay.
+  const enemy = opponentOf(playerId)
+  if (state.players[enemy].units.some(u => abilityCardIds(state, u, enemy).some(id => getCardDefinition(id)?.suppressesEnemyCredits?.(state, u) ?? false))) return undefined
+  return { limit: held, discount: 1, credit: true }
 }
 
 /**
@@ -477,7 +485,8 @@ function smuggleMoves(state: GameState, playerId: PlayerId, forbiddenNames: Set<
   const moves: Action[] = []
   state.players[playerId].resources.forEach((resource, resourceIndex) => {
     const card = state.cards[resource.cardId]
-    if (!card?.smuggle || forbiddenNames.has(card.name)) return
+    // Smuggle is a keyword ability, gone from a card that has lost its abilities (Galen Erso).
+    if (!card?.smuggle || forbiddenNames.has(card.name) || cardAbilitiesBlanked(state, card.id, playerId)) return
     const terms: PlayFromTerms = { altCost: card.smuggle }
     if (card.type === 'upgrade' && !isFortify(card)) {
       for (const id of validPlayTargets(state, playerId, 'resources', resourceIndex, card.id, terms)) {
@@ -694,7 +703,8 @@ function actionPhaseMoves(state: GameState): Action[] {
   // Use an undeployed leader's activated "Action:" ability. A targeted ability
   // yields one move per valid target (none = not usable); a target-less one is gated by
   // `usable` and affordability.
-  if (!p.leader.deployed && !p.leader.exhausted) {
+  // Not while it has lost its abilities (Brain Invaders); its epic action, above, is not one of these.
+  if (!p.leader.deployed && !p.leader.exhausted && !leaderAbilitiesBlanked(state, playerId)) {
     leaderActions(p.leader.cardId).forEach((ability, index) => {
       if (ability.useForceCost && !hasForceToken(state, playerId)) return // "[use the Force]" (#462)
       if (!canAfford(p, ability.cost ?? 0)) return

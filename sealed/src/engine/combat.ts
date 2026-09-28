@@ -1,12 +1,12 @@
 import type { DamageDealt, DamageSource, GameState, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayerId, UnitState } from './types'
-import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordDamagePrevented, recordUnitLeftPlay, recordDefeatedWhileAttacking, pushChoice, abilityCardIds, recordIndirectDamageDealt } from './types'
+import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordDamagePrevented, recordUnitLeftPlay, recordDefeatedWhileAttacking, pushChoice, recordIndirectDamageDealt } from './types'
 import type { DamagePreventionContext } from './abilities'
 import { enqueueTriggers, drainTriggers } from './triggerQueue'
 import { effectiveHp } from './stats'
 import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
-import { collectPlayerTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
+import { abilityCardIds, collectPlayerTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
 import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay, abilityDamageBonus, protectedFromEnemyAbility, indirectDamageBonus, indirectDamageAssignedByDealer } from './effects'
 
 /**
@@ -19,7 +19,7 @@ function preventedDamage(state: GameState, target: UnitState, amount: number, ct
   let prevented = 0
   for (const side of ['player', 'opponent'] as PlayerId[]) {
     for (const self of state.players[side].units) {
-      for (const cardId of abilityCardIds(self)) {
+      for (const cardId of abilityCardIds(state, self)) {
         prevented += getCardDefinition(cardId)?.preventUnitDamage?.(state, self, target, amount, ctx) ?? 0
       }
     }
@@ -38,7 +38,7 @@ function preventedDamage(state: GameState, target: UnitState, amount: number, ct
  */
 function survivesNoHp(state: GameState, unit: UnitState): boolean {
   return (state.lastingEffects ?? []).some(e => e.survivesNoHp && e.targetInstanceId === unit.instanceId)
-    || abilityCardIds(unit).some(id => getCardDefinition(id)?.survivesNoHp?.(state, unit) ?? false)
+    || abilityCardIds(state, unit).some(id => getCardDefinition(id)?.survivesNoHp?.(state, unit) ?? false)
 }
 
 /**
@@ -52,7 +52,7 @@ export function isDoomed(state: GameState, unit: UnitState): boolean {
 /** Product of the damage multipliers the unit's card and upgrades contribute. */
 function damageMultiplier(state: GameState, unit: UnitState): number {
   let m = 1
-  for (const cardId of abilityCardIds(unit)) {
+  for (const cardId of abilityCardIds(state, unit)) {
     m *= getCardDefinition(cardId)?.damageMultiplier?.(state, unit) ?? 1
   }
   return m
@@ -362,7 +362,7 @@ export function preventionOffer(state: GameState, targetId: string, source?: Dam
     const target = state.players[owner].units.find(u => u.instanceId === targetId)
     if (!target) continue
     for (const self of state.players[owner].units) {
-      for (const id of abilityCardIds(self)) {
+      for (const id of abilityCardIds(state, self)) {
         const def = getCardDefinition(id)
         if (!def?.canPreventDamage?.(state, self, target)) continue
         const costTargets = def.preventionCostTargets?.(state, self, target)

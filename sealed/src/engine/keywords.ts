@@ -1,6 +1,6 @@
 import type { GameState, KeywordInstance, PlayerId, UnitState, CombatContext } from './types'
-import { lastingEffectTotals, abilityCardIds, baseAbilityCardIds, traitsRemovedFrom } from './types'
-import { getCardDefinition } from './abilities'
+import { lastingEffectTotals, carriedAbilityCardIds, baseAbilityCardIds, traitsRemovedFrom } from './types'
+import { abilityBlank, abilityCardIds, getCardDefinition, leaderAbilitiesBlanked } from './abilities'
 import type { AttackContext, AuraContribution, StatModContext } from './abilities'
 
 /** Keyword lookups against the static card db. */
@@ -53,7 +53,7 @@ export function unitKeywords(state: GameState, unit: UnitState, ctx?: StatModCon
     // Keywords granted by other units' auras (Sloane → Overwhelm/Sentinel).
     // With the combat, so an aura can grant a keyword for one attack (Miraj Scintel's Overwhelm).
     const aura = auraContributions(state, unit, ctx?.combat)
-    out.push(...aura.keywords)
+    if (!abilityBlank(state, unit)) out.push(...aura.keywords) // one that has lost its abilities can't gain these
     // Removals: the unit's own card/upgrades (Marrok loses Sentinel while upgraded) plus auras
     // ("enemy/all units lose X"). Applied after all grants — a keyword survives unless removed by name.
     const suppressed = suppressedKeywordsOf(state, unit)
@@ -71,7 +71,7 @@ export function unitKeywords(state: GameState, unit: UnitState, ctx?: StatModCon
  */
 function keywordSwapsOf(state: GameState, unit: UnitState): Map<string, string> {
   const swaps = new Map<string, string>()
-  for (const cardId of abilityCardIds(unit)) {
+  for (const cardId of abilityCardIds(state, unit)) {
     for (const [from, to] of getCardDefinition(cardId)?.swappedKeywords?.(state, unit) ?? []) {
       swaps.set(from, to)
       swaps.set(to, from)
@@ -99,7 +99,9 @@ function withKeywordSwaps(state: GameState, unit: UnitState, keywords: KeywordIn
  */
 function printedKeywordList(state: GameState, unit: UnitState): KeywordInstance[] {
   const out: KeywordInstance[] = []
-  for (const cardId of abilityCardIds(unit)) out.push(...(state.cards[cardId]?.keywords ?? []))
+  for (const cardId of abilityCardIds(state, unit)) out.push(...(state.cards[cardId]?.keywords ?? []))
+  // Keywords given to it rather than carried: a unit that has lost all abilities can't gain them (CR 8.14.2).
+  if (abilityBlank(state, unit)) return out
   out.push(...(unit.grantedKeywords ?? []))
   out.push(...lastingEffectTotals(state, unit.instanceId).keywords)
   return out
@@ -115,7 +117,7 @@ function baseKeywordList(state: GameState, unit: UnitState, ctx?: StatModContext
   // Own card, each upgrade, and any card lent for this attack, each contributing its conditional
   // keywords too. A lent card used to contribute printed keywords only, so a conditional keyword on
   // a borrowed card was silently dropped (#417).
-  for (const cardId of abilityCardIds(unit)) {
+  for (const cardId of abilityCardIds(state, unit)) {
     out.push(...conditionalKeywordsOf(state, cardId, unit, ctx))
   }
   return out
@@ -147,7 +149,7 @@ export function nonAuraKeywordValue(state: GameState, unit: UnitState, name: str
 /** Keyword names conditionally removed from a unit by its own card or an upgrade. */
 function suppressedKeywordsOf(state: GameState, unit: UnitState): Set<string> {
   const names = new Set<string>()
-  for (const cardId of abilityCardIds(unit)) {
+  for (const cardId of abilityCardIds(state, unit)) {
     for (const name of getCardDefinition(cardId)?.suppressedKeywords?.(state, unit) ?? []) names.add(name)
   }
   // "Loses X for this phase" (SpecForce Soldier).
@@ -168,7 +170,7 @@ export function unitKeywordValue(state: GameState, unit: UnitState, name: string
 
 /** True if this unit (its card or an upgrade) makes an attacker lose Overwhelm while it defends. */
 export function unitNegatesOverwhelm(state: GameState, unit: UnitState): boolean {
-  return abilityCardIds(unit).some(id => getCardDefinition(id)?.negatesOverwhelm?.(state, unit) ?? false)
+  return abilityCardIds(state, unit).some(id => getCardDefinition(id)?.negatesOverwhelm?.(state, unit) ?? false)
 }
 
 /**
@@ -177,19 +179,19 @@ export function unitNegatesOverwhelm(state: GameState, unit: UnitState): boolean
  * Support gains his first strike too.
  */
 export function unitDealsDamageFirst(state: GameState, unit: UnitState, ctx?: AttackContext): boolean {
-  return abilityCardIds(unit)
+  return abilityCardIds(state, unit)
     .some(id => getCardDefinition(id)?.dealsDamageFirst?.(state, unit, ctx) ?? false)
 }
 
 /** True if this unit's excess combat damage spills onto another unit rather than the base (Wipe Them Out). */
 export function unitSpillsExcessToUnit(state: GameState, unit: UnitState): boolean {
-  return abilityCardIds(unit)
+  return abilityCardIds(state, unit)
     .some(id => getCardDefinition(id)?.spillsExcessToUnit?.(state, unit) ?? false)
 }
 
 /** True if the unit's combat damage is its remaining HP rather than its power, for this attack (Babu Frik). */
 export function unitDealsCombatDamageByHp(state: GameState, unit: UnitState): boolean {
-  return abilityCardIds(unit).some(id => getCardDefinition(id)?.dealsCombatDamageByHp?.(state, unit) ?? false)
+  return abilityCardIds(state, unit).some(id => getCardDefinition(id)?.dealsCombatDamageByHp?.(state, unit) ?? false)
 }
 
 /** True if the unit deals no combat damage for now (Betrayed Trust). */
@@ -200,7 +202,7 @@ export function unitDealsNoCombatDamage(state: GameState, unit: UnitState): bool
 /** True if any of the unit's cards forbids it attacking bases (Wicket). */
 export function unitCannotAttackBases(state: GameState, unit: UnitState): boolean {
   if ((state.lastingEffects ?? []).some(e => e.cannotAttackBases && e.targetInstanceId === unit.instanceId)) return true
-  return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotAttackBases?.(state, unit) ?? false)
+  return abilityCardIds(state, unit).some(id => getCardDefinition(id)?.cannotAttackBases?.(state, unit) ?? false)
 }
 
 /**
@@ -210,7 +212,7 @@ export function unitCannotAttackBases(state: GameState, unit: UnitState): boolea
 export function unitCannotAttack(state: GameState, unit: UnitState): boolean {
   // A lasting prohibition aimed at this unit (Chaotic Diversion) binds exactly like a printed one.
   if ((state.lastingEffects ?? []).some(e => e.cannotAttack && e.targetInstanceId === unit.instanceId)) return true
-  return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotAttack?.(state, unit) ?? false)
+  return abilityCardIds(state, unit).some(id => getCardDefinition(id)?.cannotAttack?.(state, unit) ?? false)
 }
 
 /** True if the unit currently can't be attacked (Tatooine Repulsor Train). */
@@ -218,12 +220,12 @@ export function unitCannotBeAttacked(state: GameState, unit: UnitState): boolean
   // A lasting protection aimed at this unit (Dooku; On Top of Things only while it lacks Sentinel).
   const lasting = (state.lastingEffects ?? []).filter(e => e.cannotBeAttacked && e.targetInstanceId === unit.instanceId)
   if (lasting.some(e => !e.unlessSentinel) || (lasting.length > 0 && !unitHasKeyword(state, unit, 'Sentinel'))) return true
-  return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotBeAttacked?.(state, unit) ?? false)
+  return abilityCardIds(state, unit).some(id => getCardDefinition(id)?.cannotBeAttacked?.(state, unit) ?? false)
 }
 
 /** True if the unit may attack enemy units in either arena (Red Leader). */
 export function unitAttacksEitherArena(state: GameState, unit: UnitState): boolean {
-  return abilityCardIds(unit).some(id => getCardDefinition(id)?.attacksEitherArena?.(state, unit) ?? false)
+  return abilityCardIds(state, unit).some(id => getCardDefinition(id)?.attacksEitherArena?.(state, unit) ?? false)
 }
 
 /**
@@ -264,7 +266,9 @@ export function unitTraits(state: GameState, unit: UnitState): string[] {
     ? [...cardTraits(state, unit.cardId, controllerOf(state, unit))]
     : [...(state.cards[unit.cardId]?.traits ?? [])]
   const removed = new Set<string>()
-  for (const cardId of abilityCardIds(unit)) {
+  // Every card it carries, including one whose abilities it has lost: a trait is not an ability, so
+  // "loses all abilities" leaves the Underworld trait Leia's Disguise gave it.
+  for (const cardId of carriedAbilityCardIds(unit)) {
     const def = getCardDefinition(cardId)
     out.push(...(def?.grantedTraits?.(state, unit) ?? []))
     for (const t of def?.removedTraits?.(state, unit) ?? []) removed.add(t.toLowerCase())
@@ -307,12 +311,12 @@ export function auraContributions(state: GameState, target: UnitState, combat?: 
     const sameController = owner === targetOwner
     const leader = state.players[owner].leader
     // An undeployed leader and the base are not units, so each contributes for its controller.
-    if (!leader.deployed) add(getCardDefinition(leader.cardId)?.leaderAbilities?.aura?.(state, owner, target, sameController, combat))
+    if (!leader.deployed && !leaderAbilitiesBlanked(state, owner)) add(getCardDefinition(leader.cardId)?.leaderAbilities?.aura?.(state, owner, target, sameController, combat))
     for (const cardId of baseAbilityCardIds(state.players[owner].base)) {
       add(getCardDefinition(cardId)?.baseAbilities?.aura?.(state, owner, target, sameController, combat))
     }
     for (const source of state.players[owner].units) {
-      for (const cardId of abilityCardIds(source)) {
+      for (const cardId of abilityCardIds(state, source)) {
         add(getCardDefinition(cardId)?.aura?.(state, source, target, sameController, combat))
       }
     }
@@ -323,5 +327,5 @@ export function auraContributions(state: GameState, target: UnitState, combat?: 
 /** True if this unit is a leader unit — natively, or made one by an upgrade (The Darksaber). */
 export function isLeaderUnit(state: GameState, unit: UnitState): boolean {
   if (unit.isLeader) return true
-  return abilityCardIds(unit).some(id => getCardDefinition(id)?.makesLeaderUnit?.(state, unit) ?? false)
+  return abilityCardIds(state, unit).some(id => getCardDefinition(id)?.makesLeaderUnit?.(state, unit) ?? false)
 }

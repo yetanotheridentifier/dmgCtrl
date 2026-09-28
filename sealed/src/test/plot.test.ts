@@ -335,9 +335,6 @@ describe('Sly Moore (SEC_033): not built here — needs a new phase-scoped attac
 describe('Vigil (SEC_050): not built here — needs new constant damage prevention/redirection primitives, split out', () => {
   it('is not registered', () => expect(getCardDefinition('SEC_050')).toBeUndefined())
 })
-describe('Galen Erso (SEC_046): not built here — blocked by #682 (losing all abilities), commented there', () => {
-  it('is not registered', () => expect(getCardDefinition('SEC_046')).toBeUndefined())
-})
 
 describe('One in a Million (SEC_053) — can\'t be played from hand; defeat a unit matching your ready resources', () => {
   const F = { ...CARDS, SEC_053: real('SEC_053') }
