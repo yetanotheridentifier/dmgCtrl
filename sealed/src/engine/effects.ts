@@ -988,9 +988,10 @@ export function readyUnit(state: GameState, instanceId: string): GameState {
   return state
 }
 
-/** True while something on the unit says it can't ready (Frozen in Carbonite). */
+/** True while something on the unit says it can't ready (Frozen in Carbonite; Cantwell Arrestor Cruiser). */
 export function unitCannotReady(state: GameState, unit: UnitState): boolean {
-  if ((state.lastingEffects ?? []).some(e => e.cannotReady && e.targetInstanceId === unit.instanceId)) return true
+  if ((state.lastingEffects ?? []).some(e =>
+    e.cannotReady && e.targetInstanceId === unit.instanceId && (!e.whileSourceInPlay || findUnit(state, e.whileSourceInPlay) !== undefined))) return true
   return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotReady?.(state, unit) ?? false)
 }
 

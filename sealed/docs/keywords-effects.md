@@ -170,8 +170,8 @@ same guard since a pair of Kelleran Beqs blew the stack.
 GameState.lastingEffects?: LastingEffect[]
 // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, untilRoundEnd?, abilityCardIds?,
 //   cannotAttack?, cannotAttackBases?, cannotBeAttacked?, unlessSentinel?, removeKeywords?,
-//   noCombatDamage?, attackersPower?, cannotReady?, preventNext?, preventEach?, survivesNoHp?,
-//   redirectDamageTo?, printedHp? }
+//   noCombatDamage?, attackersPower?, cannotReady?, whileSourceInPlay?, preventNext?, preventEach?,
+//   survivesNoHp?, redirectDamageTo?, printedHp? }
 ```
 
 `printedHp` replaces the unit's printed HP for the duration ("its printed HP is considered to be 1 for
@@ -187,9 +187,13 @@ Folded into stats and keywords exactly like auras.
 | "for this phase" | the default | at the start of the regroup phase, in `clearLastingEffects` |
 | "for this attack" | `untilEndOfAttack: true` | when that attack finishes, in `clearAttackGrants` |
 | "this round (including during the regroup phase)" | `untilRoundEnd: true` | as the next round starts, after the ready step, in `clearRoundEffects` |
+| "while this unit is in play" (a specific source, not a round/phase boundary) | `whileSourceInPlay: <sourceInstanceId>` | never pruned; read live against `findUnit` each time |
 
 A phase-scoped effect is gone before regroup resolves, so a unit defeated *during* regroup uses its
-base stats.
+base stats. `whileSourceInPlay` is the odd one out: both `clearLastingEffects` and `clearRoundEffects`
+keep an entry carrying it instead of dropping it at their usual boundary, so it can outlive any number
+of rounds, and it lifts the instant `findUnit` can no longer find its source (Cantwell Arrestor
+Cruiser's "that unit can't ready while this unit is in play").
 
 `cannotAttack: true` is a prohibition rather than a stat: "it can't attack your base or units you
 control for this phase" (Chaotic Diversion). `unitCannotAttack` reads it alongside the printed
@@ -648,12 +652,13 @@ Command icons) counts twice toward that aspect's requirement on its own.
   was raised; Charged with Corruption chains disclose → guardian → target → `captureUnit`, the same
   shape `captureGuardianTargetWp` uses, inlined rather than reused since that helper owns its own
   `ifYouDo`).
-- **28 of the 33 cards Disclose unlocked need nothing else.** Three need a genuinely separate new
-  primitive each and are not registered: a lasting effect tied to a specific unit's continued
-  presence rather than a round/phase boundary (Cantwell Arrestor Cruiser), a "deal damage unless the
-  controller discards a card" prevention distinct from `mayPreventDamage`'s exhaust-a-unit cost
-  (Syril Karn), and a wholly new "when a player draws cards during the action phase" trigger point,
-  unrelated to Disclose itself (Chairman Papanoida).
+- **28 of the 33 cards Disclose unlocked need nothing else.** Three needed a genuinely separate small
+  primitive each: `LastingEffect.whileSourceInPlay` narrows `cannotReady` to last only while its own
+  source stays in play, read live rather than pruned on a round/phase boundary (Cantwell Arrestor
+  Cruiser); the `discardOrDamage` choice offers the target's controller a hand-discard cost that
+  cancels the damage, distinct from `mayPreventDamage`'s standing, in-play prevention (Syril Karn);
+  and Chairman Papanoida needed no new trigger point at all — `whenDrawCards` already fires for every
+  draw, gated inline on `s.phase === 'action'` the same way HMW_169/LAW_052/JTL_111 already do.
 
 ## Smuggle
 

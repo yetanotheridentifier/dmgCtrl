@@ -1178,6 +1178,12 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
       if (choice.followUp?.kind === 'mayDamage') next = mayDamageFollowUps(next, choice.followUp, choice.targetId)
     }
   }
+  // Syril Karn: declining to discard lets the damage through.
+  if (choice.kind === 'discardOrDamage') {
+    next = dealDamageToUnit(next, choice.targetInstanceId, choice.amount, choice.source)
+    next = checkWin(next)
+    if (next.winner !== null) return next
+  }
   return resumeAfterChoice(next, choice)
 }
 
@@ -1199,6 +1205,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'payOrExhaust':
       // Pay the cost; the unit simply stays ready (no exhaust).
       next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      break
+    case 'discardOrDamage':
+      // Syril Karn: discarding pays the cost that cancels the damage — it never lands.
+      if (handIndex !== undefined) next = discardFromHand(next, choice.controller, handIndex)
       break
     case 'mayPlayTopFree': {
       next = playTopCardFree(next, choice.controller, choice.cardId, targetInstanceId)

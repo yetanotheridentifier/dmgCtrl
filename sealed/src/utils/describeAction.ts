@@ -209,6 +209,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayDiscardTop') return 'Leave'
       // Declining a prevention means the damage lands, which "Decline" alone does not convey (#422).
       if (choice.kind === 'mayPreventDamage') return 'Take the damage'
+      if (choice.kind === 'discardOrDamage') return 'Take the damage'
       if (choice.kind === 'mayDefeatInstead') return `Defeat ${state.cards[choice.upgradeCardId]?.name ?? 'the upgrade'}`
       // Never fall through to the kind's internal name: "Skip mayPlayUnitFromDiscard" reached
       // players (#379/#380), back when playing from a discard pile had a choice kind of its own.
@@ -345,7 +346,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const cardId = action.handIndex !== undefined ? state.players[by].hand[action.handIndex] : undefined
         return `Resource ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
       }
-      if (choice.kind === 'selectDiscard') {
+      if (choice.kind === 'selectDiscard' || choice.kind === 'discardOrDamage') {
         const cardId = action.handIndex !== undefined ? state.players[by].hand[action.handIndex] : undefined
         return `Discard ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
       }

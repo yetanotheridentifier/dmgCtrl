@@ -160,6 +160,11 @@ event waits on the answer.
   before any damage is committed; for ability damage the damage is deferred into the choice. With
   `costTargets` its price is a unit the player picks (Queen Amidala: another friendly unit sharing a
   trait with her), one accept per unit.
+- **`discardOrDamage`** is a one-shot "deal N damage to a unit unless its controller discards a card
+  from their hand" (Syril Karn), raised by the ability itself rather than by a standing prevention
+  already in play. Accepting spends the chosen hand card and the damage never happens; declining lets
+  it through via the ordinary `dealDamageToUnit`, so a standing prevention on the target (Mandalorian's
+  Shield) can still offer on top of it.
 - **`mayDefeatInstead`** is Vice Admiral Rampart's: "If an upgrade on your base would be defeated, you may
   defeat this unit instead." Every defeat of an upgrade on a base goes through `defeatUpgradeAt`, which
   raises it while its controller has such a unit, and the upgrade stays until it is answered. Accepted,

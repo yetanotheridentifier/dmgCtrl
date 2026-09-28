@@ -963,6 +963,13 @@ function choiceMoves(state: GameState): Action[] {
         if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'discardOrDamage': {
+        // Syril Karn: discard a card from hand to prevent the damage, or decline and take it. An
+        // empty hand leaves only the decline, matching "unless" with nothing to pay it with.
+        p.hand.forEach((_, handIndex) => moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex }))
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'distributeDamage': {
         // Ninth Sister: allocate a point to any eligible unit, or stop (Done). Emperor Palpatine's
         // enemy-only form must deal all of it.

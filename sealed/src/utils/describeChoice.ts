@@ -259,6 +259,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     /** The #422 prompt: the generic fallback read as "pick something to hit", the opposite of this. */
     case 'mayPreventDamage':
       return [`${choice.costText ?? 'defeat a Shield'} to prevent ${choice.amount} damage to this unit`]
+    case 'discardOrDamage':
+      return [`discard a card from your hand to prevent ${choice.amount} damage to this unit`]
     case 'mayDefeatInstead':
       return [`defeat this unit instead of ${cardName(state, choice.upgradeCardId)} on your base`]
 

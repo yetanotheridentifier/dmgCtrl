@@ -769,6 +769,16 @@ export interface LastingEffect {
   /** The unit can't ready for the duration (No Good to Me Dead). Read by `unitCannotReady`. */
   cannotReady?: boolean
   /**
+   * Narrows `cannotReady` to last only while this instance (the effect's own source) remains in
+   * play, read dynamically instead of pruned on a round/phase boundary (Cantwell Arrestor Cruiser:
+   * "can't ready while this unit is in play"). Neither `untilRoundEnd` nor a plain `cannotReady`
+   * expresses this: the lock can outlive a round, and it lifts the instant the source itself leaves
+   * play rather than at any phase boundary. `unitCannotReady` checks `findUnit` live; `clearLastingEffects`
+   * and `clearRoundEffects` both keep entries carrying it instead of dropping them at their usual
+   * boundary.
+   */
+  whileSourceInPlay?: string
+  /**
    * The unit's printed HP is considered to be this for the duration (Adventurer Sniper Rifle). A
    * replacement of the printed value, like `CardDefinition.printedStats`, so upgrades still add to it.
    */
@@ -1080,6 +1090,12 @@ type ChoiceVariant =
   | { kind: 'support'; id: string; controller: PlayerId; unitId: string }
   // `orReturn`: declining returns the unit to its owner's hand instead of exhausting it (Millennium Falcon).
   | { kind: 'payOrExhaust'; id: string; controller: PlayerId; unitId: string; cost: number; resumeAtInitiative?: boolean; orReturn?: boolean }
+  // "Deal N damage to a unit unless its controller discards a card from their hand" (Syril Karn):
+  // `controller` is the TARGET's controller, offered a discard as the cost that cancels the damage.
+  // Distinct from `mayPreventDamage`, which is a standing ability on a unit already in play
+  // (`canPreventDamage`/`payPreventionCost`) offered reactively as damage lands; this is a one-shot
+  // "unless" raised by the ability itself, with no preventer unit and a hand-discard cost instead.
+  | { kind: 'discardOrDamage'; id: string; controller: PlayerId; targetInstanceId: string; amount: number; source?: DamageSource }
   | { kind: 'mayPlayTopFree'; id: string; controller: PlayerId; unitId: string; cardId: string }
   | { kind: 'mayDamageExhaust'; id: string; controller: PlayerId; unitId: string; arena: Arena }
   // Improvised Identity: search the revealed top cards for a ground unit to
@@ -1624,7 +1640,7 @@ export function addLastingEffect(state: GameState, effect: LastingEffect): GameS
  */
 export function clearLastingEffects(state: GameState): GameState {
   if (!state.lastingEffects && !state.bannedNames && !state.eventsBanned && !state.shieldedBases && !state.basesUnhealable && !state.discardPlayGrants && !state.traitsRemoved) return state
-  const kept = (state.lastingEffects ?? []).filter(e => e.untilRoundEnd)
+  const kept = (state.lastingEffects ?? []).filter(e => e.untilRoundEnd || e.whileSourceInPlay)
   return {
     ...state, lastingEffects: kept.length > 0 ? kept : undefined,
     bannedNames: undefined, eventsBanned: undefined, shieldedBases: undefined, basesUnhealable: undefined, discardPlayGrants: undefined,
@@ -1669,9 +1685,14 @@ export function addDelayedEffect(state: GameState, effect: DelayedEffect): GameS
   return { ...state, delayedEffects: [...(state.delayedEffects ?? []), effect] }
 }
 
-/** Drop the lasting effects that last the round (called as the next round starts). */
+/**
+ * Drop the lasting effects that last the round (called as the next round starts), keeping any that
+ * carry `whileSourceInPlay`: those last until their own source leaves play, not to a round boundary.
+ */
 export function clearRoundEffects(state: GameState): GameState {
-  return state.lastingEffects ? { ...state, lastingEffects: undefined } : state
+  if (!state.lastingEffects) return state
+  const kept = state.lastingEffects.filter(e => e.whileSourceInPlay)
+  return { ...state, lastingEffects: kept.length > 0 ? kept : undefined }
 }
 
 /** Clear both players' "next unit you play this phase" grants — a phase-boundary reset. */

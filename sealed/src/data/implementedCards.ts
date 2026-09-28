@@ -969,7 +969,7 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LAW_244', name: 'Unmarked Credits' },
   { id: 'LAW_248', name: 'Windfall' },
   { id: 'LAW_247', name: 'Backed by the Hutts' },
-  // Disclose (#603): SEC's set mechanic, the 9 events among the 28 cards that need nothing else.
+  // Disclose (#603): SEC's set mechanic, the 9 events among the 31 cards that need nothing else.
   { id: 'SEC_074', name: 'Relief Request' },
   { id: 'SEC_076', name: 'Charged with Murder' },
   { id: 'SEC_127', name: 'Charged with Corruption' },
@@ -2094,7 +2094,10 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LAW_161', name: 'Partisan U-Wing' },
   { id: 'LAW_252', name: "Fett's Firespray" },
   { id: 'LAW_238', name: 'Scavenging Sandcrawler' },
-  // Disclose (#603): SEC's set mechanic, the 18 units among the 28 cards that need nothing else.
+  // Disclose (#603): SEC's set mechanic. 21 units; three (Cantwell Arrestor Cruiser, Syril Karn,
+  // Chairman Papanoida, #721) needed a small primitive of their own beyond Disclose itself, the rest
+  // need nothing else.
+  { id: 'SEC_037', name: 'Cantwell Arrestor Cruiser' },
   { id: 'SEC_059', name: 'Senate Warden' },
   { id: 'SEC_062', name: 'Bardottan Ornithopter' },
   { id: 'SEC_065', name: 'Nala Se' },
@@ -2105,9 +2108,11 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SEC_107', name: 'Chancellor Valorum' },
   { id: 'SEC_109', name: 'Diplomatic Envoy' },
   { id: 'SEC_120', name: 'Naboo Security Force' },
+  { id: 'SEC_133', name: 'Syril Karn' },
   { id: 'SEC_141', name: 'The Galleon' },
   { id: 'SEC_148', name: 'Karis Nemik' },
   { id: 'SEC_153', name: "Luthen's Haulcraft" },
+  { id: 'SEC_159', name: 'Chairman Papanoida' },
   { id: 'SEC_164', name: 'Warrior of Clan Ordo' },
   { id: 'SEC_190', name: 'Soulless One' },
   { id: 'SEC_219', name: 'Ebon Hawk' },
