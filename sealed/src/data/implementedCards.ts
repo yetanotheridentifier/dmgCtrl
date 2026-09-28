@@ -544,6 +544,7 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'SOR_137', name: 'Fallen Lightsaber' },
   { id: 'TS26_35', name: "Ahsoka's Lightsabers" },
   { id: 'TS26_52', name: 'Sith Traditions' },
+  { id: 'TS26_63', name: "Rex's DC-17s" },
   // Losing all abilities (#682): the host loses its abilities, always or while it attacks.
   { id: 'SHD_072', name: 'Imprisoned' },
   { id: 'SEC_038', name: 'Condemn' },

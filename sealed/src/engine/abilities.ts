@@ -35,6 +35,13 @@ export type TriggerPoint =
   // "When you ready cards during the regroup phase" (Millennium Falcon): the player's ready step, on
   // every unit they control whether or not it was exhausted, in the same batch as `whenReadies`.
   | 'whenReadyStep'
+  // "When an enemy unit readies during the action phase" (Rex's DC-17s): fires on the OTHER player's
+  // units, raised by `readyUnit` (the single-unit primitive) itself rather than a resolver call site,
+  // so it hears every route a unit readies through, not just the ones this file dispatches. Action-
+  // phase-only and only for a unit that was actually exhausted: the regroup phase's mass ready (CR
+  // 1.12.4) sets `exhausted` directly and never calls `readyUnit`, so it never raises this point.
+  // `ctx.targetInstanceId` is the unit that readied.
+  | 'whenEnemyUnitReadies'
   // "When you draw this card" (Rey): a card in hand, raised by `drawCards` for each card it drew, as
   // that card's own ability. `ctx.drawingPlayer` is who drew.
   | 'whenDrawn'

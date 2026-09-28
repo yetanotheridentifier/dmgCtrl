@@ -38,7 +38,7 @@ const SHIPPED = [
   'TWI_169', 'TWI_218', 'TWI_121', 'TWI_122', 'TWI_120', 'TWI_129', 'TWI_103', 'TWI_047',
   'SHD_104', 'SHD_126', 'SHD_177', 'SHD_074', 'SHD_053', 'SHD_143', 'SHD_155', 'SHD_123', 'SHD_222', 'SHD_226',
   'SOR_121', 'SOR_214', 'SOR_054', 'SOR_137', 'SOR_105',
-  'TS26_35', 'TS26_52',
+  'TS26_35', 'TS26_52', 'TS26_63',
 ]
 
 const u = (id: string, over: Partial<EngineCard> = {}) => card({ id, arena: 'ground', cost: 2, power: 2, hp: 5, ...over })
@@ -129,6 +129,10 @@ const attackChoice = (s: GameState, attackerId: string, defenderId: string) => {
 }
 /** Both passes: into the regroup phase, whose start raises "when the regroup phase starts". */
 const toRegroup = (s: GameState) => resolve({ ...s, consecutivePasses: 1 }, { type: 'pass' })
+/** Ready a unit through an ability, the way Galvanized Leap does (`resolve.ts`'s `selectUnitToReady`). */
+const readyViaChoice = (s: GameState, id: string, controller: PlayerId) =>
+  resolve({ ...s, activePlayer: controller, pendingChoices: [{ kind: 'selectUnitToReady', id: 'x', controller, targets: [id] }] },
+    { type: 'acceptChoice', choiceId: 'x', targetInstanceId: id })
 
 describe('On Attack, handed to the attached unit', () => {
   it('LAW_186 Enfys Nest\'s Helmet: may give another unit +3/+0 for this phase', () => {
@@ -392,6 +396,32 @@ describe('Other trigger points, handed to the attached unit', () => {
     expect(U(attackUnit(s, 'h', 'e'), 'e')).toBeUndefined()
     const defending = board({ units: [host('h', 'VEH', ['JTL_120'])] }, { units: [unit('e', 'CAP')] })
     expect(U(attackUnit(defending, 'e', 'h', 'opponent'), 'e')).toBeDefined()
+  })
+
+  it("TS26_63 Rex's DC-17s: when an enemy unit readies during the action phase, ready this unit (once each round)", () => {
+    const s = board(
+      { units: [host('h', 'GRD', ['TS26_63'], { exhausted: true })] },
+      { units: [unit('e1', 'BIG', { exhausted: true }), unit('e2', 'BIG', { exhausted: true })] },
+    )
+    const readied = readyViaChoice(s, 'e1', 'opponent')
+    expect(U(readied, 'e1')?.exhausted).toBe(false)
+    expect(U(readied, 'h')?.exhausted, 'an enemy unit readying readies the host').toBe(false)
+
+    // Once each round: exhaust the host again (by attacking), then ready a second enemy unit.
+    const attacked = attackBase(readied, 'h')
+    expect(U(attacked, 'h')?.exhausted).toBe(true)
+    const again = readyViaChoice(attacked, 'e2', 'opponent')
+    expect(U(again, 'e2')?.exhausted).toBe(false)
+    expect(U(again, 'h')?.exhausted, 'already used this round').toBe(true)
+
+    // A FRIENDLY unit readying is not "an enemy unit readying".
+    const friendly = board(
+      { units: [host('h', 'GRD', ['TS26_63'], { exhausted: true }), unit('f', 'BIG', { exhausted: true })] },
+      { units: [] },
+    )
+    const readiedFriendly = readyViaChoice(friendly, 'f', 'player')
+    expect(U(readiedFriendly, 'f')?.exhausted).toBe(false)
+    expect(U(readiedFriendly, 'h')?.exhausted, 'a friendly unit readying does not trigger it').toBe(true)
   })
 })
 
