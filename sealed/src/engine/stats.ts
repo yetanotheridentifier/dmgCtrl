@@ -1,7 +1,7 @@
 import type { Arena, GameState, UnitState, CombatContext, PlayerId } from './types'
-import { lastingEffectTotals, abilityCardIds } from './types'
+import { lastingEffectTotals } from './types'
 import { unitHasKeyword, unitKeywordValue, auraContributions } from './keywords'
-import { getCardDefinition } from './abilities'
+import { abilityCardIds, getCardDefinition } from './abilities'
 
 /**
  * Computed unit stats. All combat and defeat checks go through these
@@ -33,7 +33,7 @@ export interface StatContext {
  */
 export function friendlyAdvantageInert(state: GameState, owner: PlayerId): boolean {
   return state.players[owner].units.some(u =>
-    abilityCardIds(u).some(id => getCardDefinition(id)?.suppressesFriendlyAdvantage?.(state, u) ?? false),
+    abilityCardIds(state, u).some(id => getCardDefinition(id)?.suppressesFriendlyAdvantage?.(state, u) ?? false),
   )
 }
 
@@ -68,7 +68,7 @@ function printedStatOverride(state: GameState, unit: UnitState): { power?: numbe
   let out: { power?: number; hp?: number } | undefined
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
     for (const source of state.players[owner].units) {
-      for (const cardId of abilityCardIds(source)) {
+      for (const cardId of abilityCardIds(state, source)) {
         const override = getCardDefinition(cardId)?.printedStats?.(state, source, unit, owner === targetOwner)
         if (override) out = { ...out, ...override }
       }
@@ -102,7 +102,7 @@ function statModifiers(state: GameState, unit: UnitState, ctx: StatContext, stat
     let total = 0
     // Includes cards lent for a single attack (Support, Improvised Identity, and the attack-granting
     // events), so a rider's stat bonus applies for exactly that attack.
-    for (const cardId of abilityCardIds(unit)) {
+    for (const cardId of abilityCardIds(state, unit)) {
       total += getCardDefinition(cardId)?.statModifier?.(state, unit, ctx)?.[stat] ?? 0
     }
     return total

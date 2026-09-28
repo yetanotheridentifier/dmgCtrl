@@ -86,8 +86,6 @@ const toRegroup = (s: GameState) => resolve(resolve(s, { type: 'pass' }), { type
 const toNextRound = (s: GameState) => resolve(resolve(s, { type: 'skipResource' }), { type: 'skipResource' })
 const attackBase = (s: GameState, attackerId: string, who: PlayerId = 'player') =>
   resolve({ ...s, activePlayer: who }, { type: 'attack', attackerId, target: { kind: 'base' } })
-const attackUnit = (s: GameState, attackerId: string, defenderId: string, who: PlayerId = 'player') =>
-  resolve({ ...s, activePlayer: who }, { type: 'attack', attackerId, target: { kind: 'unit', instanceId: defenderId } })
 const baseDamage = (s: GameState, who: PlayerId) => s.players[who].base.damage
 
 const pingOpponentBase = (amount: number) => (s: GameState, ctx: { owner: PlayerId }) => {

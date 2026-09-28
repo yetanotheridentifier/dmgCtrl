@@ -1,5 +1,5 @@
-import type { Arena, DelayedEffect, EngineCard, GameState, IfYouDo, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeAttachment, UpgradeRef } from './types'
-import { abilityCardIds, baseAbilityCardIds, pushChoice } from './types'
+import type { Arena, CardDb, DelayedEffect, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeAttachment, UpgradeRef } from './types'
+import { carriedAbilityCardIds, baseAbilityCardIds, pushChoice } from './types'
 
 /**
  * Card ability framework. Card-type-agnostic: units, leaders, events and upgrades
@@ -364,6 +364,28 @@ export interface CardDefinition {
    */
   suppressesFriendlyAdvantage?: (state: GameState, source: UnitState) => boolean
   /**
+   * "Enemy Credit tokens lose all abilities" (Conveyex Security Captain): while this unit is in play,
+   * the other player's Credit tokens can't be defeated to pay. The Eviscerator shape, aimed at the enemy.
+   */
+  suppressesEnemyCredits?: (state: GameState, source: UnitState) => boolean
+  /**
+   * An upgrade that makes its host lose all abilities (CR 8.14.2) while it returns a blank: Imprisoned
+   * always, Condemn only while the host attacks. `keep` names the cards whose abilities survive it
+   * (Condemn's own granted On Attack, Exiled from the Force's Grit). Read by `abilityBlank`.
+   */
+  blanksHost?: (state: GameState, host: UnitState) => AbilityBlank | undefined
+  /**
+   * A unit's constant ability that makes a CARD lose all abilities, wherever the card is: a unit in
+   * play, an upgrade, an event being played, an undeployed leader (Brain Invaders: each leader; Galen
+   * Erso: the named card an opponent owns). `cardOwner` is the player who owns the card being asked about.
+   */
+  blanksCard?: (state: GameState, source: UnitState, sourceController: PlayerId, cardId: string, cardOwner: PlayerId) => boolean
+  /**
+   * An event `player` has just played loses all abilities (Relentless: the first each opponent plays
+   * each round). Asked once, as the event resolves, after it has been recorded as played.
+   */
+  blanksPlayedEvent?: (state: GameState, source: UnitState, sourceController: PlayerId, player: PlayerId) => boolean
+  /**
    * An aura that grants OTHER units a whole card's worth of triggered abilities
    * (Bo-Katan's Gauntlet: "each other friendly non-token unit gains 'When Defeated: …'").
    * Returns the card ids whose abilities `target` gains while `source` is in play. Distinct from
@@ -681,7 +703,8 @@ export interface ActionAbilityDef {
  */
 export function unitActionAbilities(state: GameState, unit: UnitState): { cardId: string; index: number; ability: ActionAbilityDef }[] {
   const out: { cardId: string; index: number; ability: ActionAbilityDef }[] = []
-  for (const cardId of [...abilityCardIds(unit), ...grantedAbilityCards(state, unit, unitController(state, unit))]) {
+  const owner = unitController(state, unit)
+  for (const cardId of [...abilityCardIds(state, unit, owner), ...grantedAbilityCards(state, unit, owner)]) {
     const defs = registry.get(cardId)?.actionAbilities ?? []
     defs.forEach((ability, index) => out.push({ cardId, index, ability }))
   }
@@ -734,9 +757,20 @@ export interface StatModContext {
 }
 
 const registry = new Map<string, CardDefinition>()
+/**
+ * Card ids with a `blanksHost` or a `blanksCard` hook. Kept so the gate every ability lookup goes
+ * through can answer "nothing on this board takes abilities away" with set lookups alone, which is
+ * nearly every board an AI search visits.
+ */
+const hostBlankers = new Set<string>()
+const cardBlankers = new Set<string>()
+/** Bumped whenever either set grows, so the gate's memos notice a card registered after they were made. */
+const blankerRegistry = { version: 0 }
 
 /** Register (merging) a card's definition — abilities append, static hooks overwrite. */
 export function registerCard(cardId: string, def: CardDefinition): void {
+  if (def.blanksHost) { hostBlankers.add(cardId); blankerRegistry.version++ }
+  if (def.blanksCard) { cardBlankers.add(cardId); blankerRegistry.version++ }
   const existing = registry.get(cardId)
   registry.set(cardId, {
     ...existing,
@@ -833,6 +867,271 @@ function runEffect(state: GameState, effect: (s: GameState, ctx: EffectContext) 
   return runAttributed(state, source, s => effect(s, ctx))
 }
 
+// ── Losing all abilities (CR 8.14.2) ──────────────────────────────────────────────────────────────
+// "If an ability causes a card to 'lose all abilities', the card ceases to have any abilities,
+// including abilities given to it by other cards, for the duration of the 'lose' effect. The card
+// cannot gain abilities for the duration of the effect." Keywords are abilities (CR 7.1.2), so they
+// go too. Power, HP and modifiers are not abilities and stay. Nor does the loss reach an upgrade's own
+// ability that affects its host without the word "gains" (CR 3.6.10: Entrenched still applies to a
+// unit Force Lightning has blanked), which is why an upgrade is kept or dropped by what it says.
+//
+// Everything here is read live off the board, so a loss ends the moment its source does, and an
+// ability that has already triggered resolves regardless (CR 8.14.3 for one already resolving; a
+// trigger already collected is treated the same way, as `collectUnitTriggers` snapshots its cards).
+
+const SIDES: readonly PlayerId[] = ['player', 'opponent']
+
+/** What a unit keeps while it has lost all its abilities: the cards named here, and nothing else it carries. */
+export interface AbilityBlank {
+  keep?: string[]
+}
+
+const givesAbilitiesCache = new WeakMap<EngineCard, boolean>()
+/**
+ * True for an upgrade whose text GIVES its host abilities ("attached unit gains ...", CR 7.1.1, 3.6.8).
+ * Those are the host's abilities, so a host that loses all abilities loses them and cannot gain them.
+ * An upgrade that only affects its host ("attached unit can't attack bases") keeps working (CR 3.6.10).
+ *
+ * Read off the printed text because that is where the rules draw the line. An upgrade printing both
+ * kinds (Death Star Plans) is treated as a giver as a whole: the registry keys abilities by card, not by
+ * sentence, and a blanked host carrying one of those is rare enough not to split them for.
+ */
+function upgradeGivesAbilities(card: EngineCard | undefined): boolean {
+  if (!card?.text) return false
+  let gives = givesAbilitiesCache.get(card)
+  if (gives === undefined) {
+    gives = /\bgains\b/i.test(card.text.replace(/\([^)]*\)/g, '')) // reminder text is not the ability
+    givesAbilitiesCache.set(card, gives)
+  }
+  return gives
+}
+
+/**
+ * The loss that comes from the unit's own situation: a lasting effect aimed at it, or an upgrade on it.
+ * Never reads another unit, which is what lets a card-level source ask it about itself without the
+ * two recursing. Where several apply, only what every one of them keeps survives.
+ */
+function directBlank(state: GameState, unit: UnitState): AbilityBlank | undefined {
+  let keep: string[] | undefined
+  if (lastingBlankTargets(state)?.has(unit.instanceId)) keep = []
+  if (hostBlankers.size === 0) return keep === undefined ? undefined : { keep }
+  for (const up of unit.upgrades) {
+    if (!hostBlankers.has(up.cardId)) continue
+    const blank = registry.get(up.cardId)?.blanksHost?.(state, unit)
+    if (!blank) continue
+    const kept = blank.keep ?? []
+    keep = keep === undefined ? kept : keep.filter(id => kept.includes(id))
+  }
+  return keep === undefined ? undefined : { keep }
+}
+
+// The gate is read on every ability lookup, which an AI search makes millions of times, and nearly
+// every board it sees has nothing to find. Both scans are therefore cached on the arrays they read.
+// The engine replaces a units or lasting-effects array rather than editing it, so an array's identity
+// stands for its contents, and a cached answer can never go stale.
+
+const lastingBlankCache = new WeakMap<readonly LastingEffect[], ReadonlySet<string> | undefined>()
+/** Instance ids a lasting effect has blanked, or undefined when none has. */
+function lastingBlankTargets(state: GameState): ReadonlySet<string> | undefined {
+  const effects = state.lastingEffects
+  if (!effects) return undefined
+  if (lastingBlankCache.has(effects)) return lastingBlankCache.get(effects)
+  const ids = effects.filter(e => e.losesAllAbilities).map(e => e.targetInstanceId)
+  const out = ids.length > 0 ? new Set(ids) : undefined
+  lastingBlankCache.set(effects, out)
+  return out
+}
+
+type Blanker = { source: UnitState; side: PlayerId }
+const NO_BLANKERS: readonly Blanker[] = []
+const blankerCache = new WeakMap<readonly UnitState[], { registered: number; found: readonly Blanker[] }>()
+function blankersAmong(units: readonly UnitState[], side: PlayerId): readonly Blanker[] {
+  const cached = blankerCache.get(units)
+  // Keyed on the registry's size as well, so a card registered after the scan (a test's) is seen.
+  if (cached && cached.registered === cardBlankers.size) return cached.found
+  const hits = units.filter(u => cardBlankers.has(u.cardId))
+  const found = hits.length > 0 ? hits.map(source => ({ source, side })) : NO_BLANKERS
+  blankerCache.set(units, { registered: cardBlankers.size, found })
+  return found
+}
+
+/** The units in play whose own card takes abilities away from cards (Brain Invaders, Galen Erso), with their controllers. */
+function cardBlankersInPlay(state: GameState): readonly Blanker[] {
+  if (cardBlankers.size === 0) return NO_BLANKERS
+  const mine = blankersAmong(state.players.player.units, 'player')
+  const theirs = blankersAmong(state.players.opponent.units, 'opponent')
+  return mine.length === 0 ? theirs : theirs.length === 0 ? mine : [...mine, ...theirs]
+}
+
+// `boardVerdict` is the gate's whole cost on nearly every board, and it is asked tens of millions of
+// times a game, so every read in it is paid for. Each memo below remembers ONE value, compared by
+// identity: the lookups come in long runs against one board, so a single entry answers nearly all of
+// them. Measured on a bench run, each of these cost about 5% on its own: a WeakMap keyed by board, and
+// reading fields of a state whose shape varies from call to call. The common case does neither.
+
+/** `boardVerdict`: nothing can blank anything here. */
+const QUIET = 0
+/** `boardVerdict`: the board is quiet, but a unit may carry a host-blanking upgrade, so ask the unit. */
+const ASK_UNIT = 1
+/** `boardVerdict`: something on the board takes abilities away; work it out. */
+const LOUD = 2
+
+/**
+ * The gate's memos, one remembered value each, compared by identity. Fields of one object rather than
+ * module `let`s, which measured slower on a path taken this often.
+ */
+const memo = {
+  state: undefined as GameState | undefined,
+  stateVersion: -1,
+  verdict: LOUD as number,
+  effects: null as GameState['lastingEffects'] | null,
+  effectsClean: true,
+  cards: undefined as CardDb | undefined,
+  cardsVersion: -1,
+  poolCanBlank: true,
+  players: undefined as GameState['players'] | undefined,
+  playersVersion: -1,
+  playersClean: true,
+}
+
+/**
+ * Whether this game's card pool holds a card with a blanking hook (`blanksHost`, `blanksCard`). Worked
+ * out once per pool, which lasts the whole game and every board a search imagines from it, so a game
+ * without one never looks at its board for them.
+ */
+function poolHasBlankers(cards: CardDb): boolean {
+  if (cards !== memo.cards || blankerRegistry.version !== memo.cardsVersion) {
+    memo.poolCanBlank = Object.values(cards).some(c => hostBlankers.has(c.id) || cardBlankers.has(c.id))
+    memo.cards = cards
+    memo.cardsVersion = blankerRegistry.version
+  }
+  return memo.poolCanBlank
+}
+
+/**
+ * Whether anything on this board takes abilities away: `QUIET`, `ASK_UNIT` or `LOUD`. The gate's whole
+ * cost on nearly every board, so the same board object as last time costs one comparison and no read.
+ */
+function boardVerdict(state: GameState): number {
+  if (state !== memo.state || blankerRegistry.version !== memo.stateVersion) {
+    memo.verdict = readVerdict(state)
+    memo.state = state
+    memo.stateVersion = blankerRegistry.version
+  }
+  return memo.verdict
+}
+function readVerdict(state: GameState): number {
+  const effects = state.lastingEffects
+  if (effects !== memo.effects) {
+    memo.effectsClean = lastingBlankTargets(state) === undefined
+    memo.effects = effects
+  }
+  if (!memo.effectsClean) return LOUD
+  if (!poolHasBlankers(state.cards)) return QUIET
+  if (state.players !== memo.players || blankerRegistry.version !== memo.playersVersion) {
+    memo.playersClean = cardBlankersInPlay(state).length === 0
+    memo.players = state.players
+    memo.playersVersion = blankerRegistry.version
+  }
+  return memo.playersClean ? ASK_UNIT : LOUD
+}
+
+/** True when `unit` has certainly lost nothing: the fast path of every gate read. */
+function surelyUnblanked(state: GameState, unit: UnitState): boolean {
+  const verdict = boardVerdict(state)
+  return verdict === QUIET || (verdict === ASK_UNIT && !carriesHostBlanker(unit))
+}
+/** Read off the unit itself, not the board, so it holds for a unit that has just left play too. */
+function carriesHostBlanker(unit: UnitState): boolean {
+  const upgrades = unit.upgrades
+  for (let i = 0; i < upgrades.length; i++) if (hostBlankers.has(upgrades[i].cardId)) return true
+  return false
+}
+
+function blankedBy(state: GameState, blankers: readonly Blanker[], cardId: string, owner: PlayerId): boolean {
+  // A source that has itself lost its abilities projects nothing. Only its direct loss is read, so two
+  // card-level sources never ask each other (two Galen Ersos naming each other both keep working).
+  return blankers.some(({ source, side }) =>
+    !directBlank(state, source) && (registry.get(source.cardId)?.blanksCard?.(state, source, side, cardId, owner) ?? false))
+}
+
+/**
+ * Whether a CARD `owner` owns has lost all abilities wherever it is: in play, attached, being played as
+ * an event, or an undeployed leader (Brain Invaders, Galen Erso).
+ */
+export function cardAbilitiesBlanked(state: GameState, cardId: string, owner: PlayerId): boolean {
+  if (boardVerdict(state) !== LOUD) return false
+  const blankers = cardBlankersInPlay(state)
+  return blankers.length > 0 && blankedBy(state, blankers, cardId, owner)
+}
+
+/** Whether `owner`'s undeployed leader has lost its front-side abilities. Its epic action is not asked about here. */
+export function leaderAbilitiesBlanked(state: GameState, owner: PlayerId): boolean {
+  // The verdict first: it is read inside the aura pass, where even finding the leader costs.
+  return boardVerdict(state) === LOUD && cardAbilitiesBlanked(state, state.players[owner].leader.cardId, owner)
+}
+
+/** Which side `unit` is in play on, or undefined when it has left play. */
+function sideOf(state: GameState, unit: UnitState): PlayerId | undefined {
+  return SIDES.find(p => state.players[p].units.some(u => u.instanceId === unit.instanceId))
+}
+
+/**
+ * Whether `unit` has lost all abilities right now, and what it keeps if so. `controller` is needed only
+ * for a unit that has already left play (a When Defeated being collected), where the board can't say.
+ */
+export function abilityBlank(state: GameState, unit: UnitState, controller?: PlayerId): AbilityBlank | undefined {
+  if (surelyUnblanked(state, unit)) return undefined
+  return blankWith(state, unit, controller, cardBlankersInPlay(state))
+}
+
+function blankWith(state: GameState, unit: UnitState, controller: PlayerId | undefined, blankers: readonly Blanker[]): AbilityBlank | undefined {
+  const direct = directBlank(state, unit)
+  if (blankers.length === 0 || (direct && direct.keep!.length === 0)) return direct
+  const owner = unit.owner ?? controller ?? sideOf(state, unit)
+  return owner !== undefined && blankedBy(state, blankers, unit.cardId, owner) ? { keep: [] } : direct
+}
+
+/**
+ * **The one read of which cards supply a unit's abilities right now**: what it carries
+ * (`carriedAbilityCardIds`: its card, its upgrades, a card lent for this attack), less whatever a "loses
+ * all abilities" effect has taken away. Route every ability lookup through here.
+ *
+ * A unit that has lost its abilities keeps only the upgrades that don't give it abilities, and anything
+ * the loss itself keeps. An upgrade that has lost its OWN abilities (a named card under Galen Erso, a
+ * leader piloting under Brain Invaders) supplies nothing to anyone.
+ */
+export function abilityCardIds(state: GameState, unit: UnitState, controller?: PlayerId): string[] {
+  // Kept this small on purpose, with the rest in its own function, so the engine can inline the path
+  // nearly every call takes. Measured: the combined function cost a bench run 5% on its own.
+  if (surelyUnblanked(state, unit)) return carriedAbilityCardIds(unit)
+  return remainingAbilityCardIds(state, unit, controller)
+}
+
+function remainingAbilityCardIds(state: GameState, unit: UnitState, controller: PlayerId | undefined): string[] {
+  const blankers = cardBlankersInPlay(state)
+  const blank = blankWith(state, unit, controller, blankers)
+  if (!blank && blankers.length === 0) return carriedAbilityCardIds(unit)
+  const keepUpgrade = (up: UpgradeAttachment): boolean =>
+    !(blankers.length > 0 && blankedBy(state, blankers, up.cardId, up.owner))
+    && (!blank || blank.keep!.includes(up.cardId) || !upgradeGivesAbilities(state.cards[up.cardId]))
+  return [
+    ...(blank ? [] : [unit.cardId]),
+    ...unit.upgrades.filter(keepUpgrade).map(u => u.cardId),
+    ...(blank ? [] : unit.grantedAbilityCardIds ?? []),
+  ]
+}
+
+/**
+ * Whether the event `player` is playing (owned by `owner`) has lost all abilities as it resolves: a
+ * card-level loss (Galen Erso), or one aimed at events as they are played (Relentless).
+ */
+export function playedEventBlanked(state: GameState, player: PlayerId, owner: PlayerId, cardId: string): boolean {
+  if (cardAbilitiesBlanked(state, cardId, owner)) return true
+  return SIDES.some(side => state.players[side].units.some(u =>
+    abilityCardIds(state, u, side).some(id => registry.get(id)?.blanksPlayedEvent?.(state, u, side, player) ?? false)))
+}
+
 /**
  * Card ids whose abilities `unit` (controlled by `owner`) currently gains from a `grantsAbilities`
  * aura in play. Scans both sides' units, since a future aura may target enemies.
@@ -841,7 +1140,7 @@ function auraGrantedAbilityCards(state: GameState, unit: UnitState, owner: Playe
   const out: string[] = []
   for (const side of ['player', 'opponent'] as PlayerId[]) {
     for (const source of state.players[side].units) {
-      for (const cardId of abilityCardIds(source)) {
+      for (const cardId of abilityCardIds(state, source, side)) {
         out.push(...(getCardDefinition(cardId)?.grantsAbilities?.(state, source, unit, side === owner) ?? []))
       }
     }
@@ -856,6 +1155,7 @@ function auraGrantedAbilityCards(state: GameState, unit: UnitState, owner: Playe
  * and needs the state to find. Read for triggered abilities and for "Action:" abilities alike.
  */
 function grantedAbilityCards(state: GameState, unit: UnitState, owner: PlayerId): string[] {
+  if (abilityBlank(state, unit, owner)) return [] // it can't gain abilities (CR 8.14.2)
   return [
     ...auraGrantedAbilityCards(state, unit, owner),
     ...(state.lastingEffects ?? []).flatMap(e => (e.targetInstanceId === unit.instanceId ? e.abilityCardIds ?? [] : [])),
@@ -886,7 +1186,7 @@ export function collectUnitTriggers(
   ctx?: TriggerContext,
 ): PendingTrigger[] {
   const out: PendingTrigger[] = []
-  const cardIds = [...abilityCardIds(unit), ...grantedAbilityCards(state, unit, owner)]
+  const cardIds = [...abilityCardIds(state, unit, owner), ...grantedAbilityCards(state, unit, owner)]
   for (const cardId of cardIds) {
     getAbilities(cardId).forEach((ability, abilityIndex) => {
       if (ability.trigger !== point || !hearsEvent(state, ability, owner, cardId, unit.instanceId, ctx)) return
@@ -943,7 +1243,7 @@ export function collectLeaderTriggers(
   ctx?: TriggerContext,
 ): PendingTrigger[] {
   const leader = state.players[owner].leader
-  if (leader.deployed) return []
+  if (leader.deployed || leaderAbilitiesBlanked(state, owner)) return []
   const out: PendingTrigger[] = []
   ;(registry.get(leader.cardId)?.leaderAbilities?.abilities ?? []).forEach((ability, abilityIndex) => {
     if (ability.trigger !== point || !hearsEvent(state, ability, owner, leader.cardId, undefined, ctx)) return

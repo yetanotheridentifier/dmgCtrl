@@ -1,5 +1,5 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
-import { registerCard, getCardDefinition, collectUnitTriggers, collectCardTriggers } from './abilities'
+import { registerCard, getCardDefinition, collectUnitTriggers, collectCardTriggers, abilityCardIds } from './abilities'
 import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
@@ -7,7 +7,7 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, indirectDamageDealtThisPhase, markAbilityUsed, updatePlayer, abilityCardIds } from './types'
+import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, indirectDamageDealtThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost, readyResourceCount } from './resources'
@@ -8077,9 +8077,9 @@ registerCard('JTL_039', allOf( // Chimaera
  * than the card it is printed on. `collectUnitTriggers` cannot say that, since it always sources a
  * trigger at the unit it read the ability off, which is what Chimaera above wants and this is not.
  */
-const whenPlayedOf = (u: UnitState, owner: PlayerId, sourceInstanceId: string): PendingTrigger[] =>
-  abilityCardIds(u).flatMap(id => collectCardTriggers('whenPlayed', id, owner, sourceInstanceId))
-const lendsWhenPlayed: Pick = (_s, u, ctx) => whenPlayedOf(u, ctx.owner, ctx.sourceInstanceId!).length > 0
+const whenPlayedOf = (s: GameState, u: UnitState, owner: PlayerId, sourceInstanceId: string): PendingTrigger[] =>
+  abilityCardIds(s, u).flatMap(id => collectCardTriggers('whenPlayed', id, owner, sourceInstanceId))
+const lendsWhenPlayed: Pick = (s, u, ctx) => whenPlayedOf(s, u, ctx.owner, ctx.sourceInstanceId!).length > 0
 registerCard('TS26_34', unitThenWp( // Fives
   'You may have this unit enter play with the "When Played" abilities of another unit in play.',
   // "Another unit in play", so either side's: a borrowed ability resolves for Fives' controller either way.
@@ -8088,7 +8088,7 @@ registerCard('TS26_34', unitThenWp( // Fives
   true,
   (s, ctx) => {
     const target = findUnit(s, ctx.targetInstanceId!)?.unit
-    return target ? fireBatch(s, whenPlayedOf(target, ctx.owner, ctx.sourceInstanceId!)) : s
+    return target ? fireBatch(s, whenPlayedOf(s, target, ctx.owner, ctx.sourceInstanceId!)) : s
   },
 ))
 registerCard('SEC_198', onAttack(mayDiscardThen('You may discard a card from your hand. If you do, create a Spy token.', (s, ctx) => create(s, ctx.owner, TOKEN_SPY)))) // Bail Organa
@@ -12813,3 +12813,141 @@ registerCard(GRANT_KRELL, {
 registerCard('SOR_105', { // General Krell
   grantsAbilities: (_s, source, target, sameController) => (sameController && target.instanceId !== source.instanceId ? [GRANT_KRELL] : []),
 })
+
+// ── Losing all abilities (CR 8.14.2) ──────────────────────────────────────────────────────────────
+// The primitive is the gate in abilities.ts (`abilityBlank`, `abilityCardIds`), which every ability
+// lookup goes through. A card reaches it one of four ways: a lasting `losesAllAbilities` for a
+// duration, an upgrade's `blanksHost`, a unit's `blanksCard` for cards wherever they are, and
+// `blanksPlayedEvent` for an event as it resolves. "Can't gain abilities" is part of losing them
+// (CR 8.14.2), so no card needs to say it separately.
+
+/** The units in `ids` lose all abilities for this phase, or for the duration given. */
+const loseAllAbilities = (s: GameState, ids: string[], duration: { untilRoundEnd?: boolean; untilEndOfAttack?: boolean } = {}): GameState =>
+  ids.reduce((acc, id) => (findUnit(acc, id) ? addLastingEffect(acc, { targetInstanceId: id, losesAllAbilities: true, ...duration }) : acc), s)
+
+registerCard('SOR_138', { // Force Lightning
+  ...unitThenWp('Choose a unit. It loses all abilities for this phase. Then, if you control a Force unit, pay any number of resources and deal 2 damage to the chosen unit for each resource paid this way.',
+    pickAny, 'choose a unit to lose all abilities for this phase', false, (s, ctx) => {
+      if (ctx.step === 'pay') {
+        const n = ctx.optionIndex ?? 0
+        const paid = payResources(s, ctx.owner, n)
+        return n > 0 && ctx.unitChosen && findUnit(paid, ctx.unitChosen) ? dealDamageToUnit(paid, ctx.unitChosen, 2 * n, srcOf(ctx)) : paid
+      }
+      const id = ctx.targetInstanceId!
+      const blanked = loseAllAbilities(s, [id])
+      return controlsTrait(blanked, ctx.owner, 'Force')
+        ? chooseNumberUpTo(blanked, ctx, readyResources(blanked, ctx.owner), 'choose how many resources to pay (2 damage each)', 'pay', id)
+        : blanked
+    }),
+})
+
+/** There Is No Escape: one more unit, up to 3, each losing its abilities as it is chosen. */
+const noEscapeOffer = (s: GameState, ctx: Resumable, chosen: string[]): GameState => {
+  const targets = allUnits(s).map(u => u.instanceId).filter(id => !chosen.includes(id))
+  return chosen.length < 3 && targets.length
+    ? pushChoice(s, {
+      kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true,
+      text: `choose a unit to lose all abilities for this round (${3 - chosen.length} left)`, then: resume(ctx, JSON.stringify(chosen)),
+    })
+    : s
+}
+registerCard('JTL_244', { // There Is No Escape
+  ...whenPlayed("Choose up to 3 units. Those units lose all abilities and can't gain abilities for this round.", (s, ctx) => noEscapeOffer(s, ctx, [])),
+  ifYouDo: (s, ctx) => {
+    const id = ctx.targetInstanceId!
+    return noEscapeOffer(loseAllAbilities(s, [id], { untilRoundEnd: true }), ctx, [...JSON.parse(ctx.step ?? '[]') as string[], id])
+  },
+})
+
+/**
+ * Mind Trick: one more unit that fits the power left, or Done. The picks are exhausted (and blanked)
+ * together at the end, so a pick that loses an aura cannot change what the rest of them add up to.
+ */
+type MindTrickStep = { left: number; chosen: string[] }
+const mindTrickFinish = (s: GameState, ctx: Resumable, chosen: string[]): GameState => {
+  const exhausted = chosen.reduce((acc, id) => exhaustUnit(acc, id), s)
+  return controlsTrait(exhausted, ctx.owner, 'Force') ? loseAllAbilities(exhausted, chosen) : exhausted
+}
+const mindTrickOffer = (s: GameState, ctx: Resumable, st: MindTrickStep): GameState => {
+  const targets = allUnits(s).filter(u => !st.chosen.includes(u.instanceId) && effectivePower(s, u) <= st.left).map(u => u.instanceId)
+  if (!targets.length) return mindTrickFinish(s, ctx, st.chosen)
+  return pushChoice(s, {
+    kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, hookOnDecline: true,
+    text: `exhaust a unit (combined power ${st.left} left)`, then: resume(ctx, JSON.stringify(st)),
+  })
+}
+registerCard('LOF_202', { // Mind Trick
+  ...whenPlayed("Exhaust any number of units with a combined power of 4 or less. If you control a Force unit, those units lose all abilities and can't gain abilities for this phase.",
+    (s, ctx) => mindTrickOffer(s, ctx, { left: 4, chosen: [] })),
+  ifYouDo: (s, ctx) => {
+    const st = JSON.parse(ctx.step ?? '{"left":4,"chosen":[]}') as MindTrickStep
+    if (!ctx.targetInstanceId) return mindTrickFinish(s, ctx, st.chosen)
+    const u = findUnit(s, ctx.targetInstanceId)?.unit
+    return mindTrickOffer(s, ctx, { left: st.left - (u ? effectivePower(s, u) : 0), chosen: [...st.chosen, ctx.targetInstanceId] })
+  },
+})
+
+registerCard('LAW_132', unitThenWp('An enemy unit loses all abilities for this phase. If it costs 3 or less, defeat it.', // The Tree Remembers
+  pickEnemy, 'choose an enemy unit to lose all abilities for this phase', false, (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!target) return s
+    // Blanked first, so the defeat that follows fires none of its When Defeated abilities.
+    const blanked = loseAllAbilities(s, [target.instanceId])
+    return (s.cards[target.cardId]?.cost ?? 0) <= 3 ? defeatUnit(blanked, target.instanceId) : blanked
+  }))
+
+const GRANT_ONE_WAY_OUT = 'GRANT_ONE_WAY_OUT'
+registerCard(GRANT_ONE_WAY_OUT, {
+  sourceCardId: 'SEC_157',
+  ...attackBonus(1),
+  conditionalKeywords: () => [{ name: 'Overwhelm' }],
+  // Read as the attack's On Attack window, so it is in place before the defender's On Defense.
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'If it attacks a unit, the defender loses all abilities for this attack.',
+    effect: (s, ctx) => (ctx.attackTarget?.kind === 'unit' ? loseAllAbilities(s, [ctx.attackTarget.instanceId], { untilEndOfAttack: true }) : s),
+  }],
+})
+registerCard('SEC_157', attackWithRider('Attack with a unit. It gets +1/+0 and gains Overwhelm for this attack. If it attacks a unit, the defender loses all abilities for this attack.', GRANT_ONE_WAY_OUT)) // One Way Out
+
+registerCard('SHD_072', { attachRestriction: nonLeaderHost, blanksHost: () => ({}) }) // Imprisoned
+
+registerCard('SEC_054', { // Exiled from the Force: its own "gains Grit" is the one ability kept
+  blanksHost: () => ({ keep: ['SEC_054'] }),
+  removedTraits: () => ['Force'],
+})
+
+registerCard('SEC_038', { // Condemn
+  blanksHost: (s, host) => (s.attackingInstanceId === host.instanceId ? { keep: ['SEC_038'] } : undefined),
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'While attached unit is attacking, it gains: "On Attack: The defending player may disclose Vigilance Villainy. If they do, this unit gets -6/-0 for this attack" and loses all other abilities.',
+    // The defending player makes the choice, so it is raised as theirs.
+    effect: (s, ctx) => discloseThen(s, { ...ctx, owner: opponentOf(ctx.owner) }, ['Vigilance', 'Villainy'], true, undefined, ctx.sourceInstanceId),
+  }],
+  ifYouDo: (s, ctx) => (ctx.unitChosen && findUnit(s, ctx.unitChosen) ? forThisAttack(s, ctx.unitChosen, -6) : s),
+})
+
+registerCard('TWI_255', { // Brain Invaders: every leader, deployed or not; the epic action is never asked
+  blanksCard: (s, _source, _side, cardId) => s.cards[cardId]?.type === 'leader',
+})
+
+registerCard('SOR_089', { // Relentless
+  // Asked after the event is recorded as played, so the first is the only event on the list.
+  blanksPlayedEvent: (s, _source, side, player) =>
+    player !== side && cardsPlayedThisPhase(s, player).filter(id => s.cards[id]?.type === 'event').length === 1,
+})
+
+registerCard('SEC_046', { // Galen Erso
+  ...whenPlayed("Name a card. While this unit is in play, each non-leader card an opponent owns with that name, including those not in play, loses all abilities (and can't gain abilities).",
+    (s, ctx) => pushChoice(s, { kind: 'nameCard', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, then: resume(ctx) })),
+  ifYouDo: (s, ctx) => {
+    const self = findUnit(s, ctx.sourceInstanceId!)
+    if (!self || !ctx.nameChosen) return s
+    return updatePlayer(s, self.owner, { units: s.players[self.owner].units.map(u => (u.instanceId === self.unit.instanceId ? { ...u, blanksNamedCard: ctx.nameChosen } : u)) })
+  },
+  blanksCard: (s, source, side, cardId, owner) => owner !== side && source.blanksNamedCard !== undefined
+    && s.cards[cardId]?.name === source.blanksNamedCard && s.cards[cardId]?.type !== 'leader',
+})
+
+registerCard('LAW_117', { suppressesEnemyCredits: () => true }) // Conveyex Security Captain

@@ -1,11 +1,11 @@
 import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef } from './types'
-import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds, isFortify, isPlot, recordBaseActionUsed } from './types'
+import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
-import { collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
+import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
@@ -537,10 +537,13 @@ function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string,
   if (!entered) return []
   const owed: PendingTrigger[] = []
   if (entered.upgrades.length > 0) owed.push(...collectUpgradeAttached(state, newUnitId))
-  owed.push(...collectCardTriggers('whenPlayed', cardId, owner, newUnitId))
-  for (const lent of borrowed) owed.push(...collectCardTriggers('whenPlayed', lent, owner, newUnitId))
-  // Ambush / Support: keyword-printed When Played abilities, ordered with the rest.
-  for (const kw of keywordAbilities) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId))
+  // A unit that arrives without its abilities (a name Galen Erso has named) has no When Played to fire.
+  if (!abilityBlank(state, entered, owner)) {
+    owed.push(...collectCardTriggers('whenPlayed', cardId, owner, newUnitId))
+    for (const lent of borrowed) owed.push(...collectCardTriggers('whenPlayed', lent, owner, newUnitId))
+    // Ambush / Support: keyword-printed When Played abilities, ordered with the rest.
+    for (const kw of keywordAbilities) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId))
+  }
   owed.push(...collectArrivalTriggers(state, 'whenPlayUnit', owner, newUnitId))
   owed.push(...collectPlayCard(state, owner, cardId, fromResources))
   return owed
@@ -747,9 +750,12 @@ function playEventCard(state: GameState, playerId: PlayerId, cardId: string, car
   next = recordCardPlayed(next, playerId, card.id)
   const sourceInstanceId = `ev${next.instanceCounter}`
   next = { ...next, instanceCounter: next.instanceCounter + 1 }
+  // An event that has lost all abilities (Relentless, Galen Erso) is still played and paid for, and
+  // still goes to the discard pile; it just does nothing. Other cards still hear it being played.
+  const blanked = playedEventBlanked(next, playerId, owner, card.id)
   next = fireBatch(next, [
     ...exploitOwed,
-    ...collectCardTriggers('whenPlayed', card.id, playerId, sourceInstanceId),
+    ...(blanked ? [] : collectCardTriggers('whenPlayed', card.id, playerId, sourceInstanceId)),
     ...collectPlayCard(next, playerId, card.id, fromResources),
   ])
   return checkWin(next)
@@ -922,15 +928,19 @@ function runPlayFromTail(state: GameState, choice: Extract<PendingChoice, { kind
 
 /**
  * Strip an attack's transient grants once the attack that used them is done: Support's lent keywords,
- * Improvised Identity's lent abilities, and any lasting effect made for that one attack ("+2/+0 for
- * this attack"). One expiry point for all three, so a card's text decides the duration and nothing
- * else has to remember to clean up.
+ * Improvised Identity's lent abilities, any lasting effect made for that one attack ("+2/+0 for
+ * this attack"), and the record of which unit is attacking. One expiry point for all of it, so a
+ * card's text decides the duration and nothing else has to remember to clean up.
  *
  * A unit that only an expiring +HP buff kept alive is defeated by the same state-based check the
  * regroup expiry runs, for the same reason.
  */
 function clearAttackGrants(state: GameState): GameState {
   let next = state
+  if (next.attackingInstanceId !== undefined) {
+    next = { ...next }
+    delete next.attackingInstanceId
+  }
   for (const id of ['player', 'opponent'] as PlayerId[]) {
     const units = next.players[id].units
     if (units.some(u => u.grantedKeywords || u.grantedAbilityCardIds)) {
@@ -1354,7 +1364,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       const preventer = findUnit(next, choice.preventerId)
       if (preventer) {
-        for (const cardId of abilityCardIds(preventer.unit)) {
+        for (const cardId of abilityCardIds(next, preventer.unit)) {
           const pay = getCardDefinition(cardId)?.payPreventionCost
           if (pay) { next = pay(next, preventer.unit, targetInstanceId); break }
         }
@@ -2499,7 +2509,7 @@ function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: strin
   // source is `<cardId>-base`, so a choice its When Played raises has a stable id.
   next = fireBatch(next, [
     ...(onBase ? [] : collectUpgradeAttached(next, targetInstanceId!, true, playerId)),
-    ...collectCardTriggers('whenPlayed', card.id, playerId, onBase ? baseSourceId(card.id) : targetInstanceId),
+    ...(cardAbilitiesBlanked(next, card.id, owner) ? [] : collectCardTriggers('whenPlayed', card.id, playerId, onBase ? baseSourceId(card.id) : targetInstanceId)),
     ...collectPlayUpgrade(next, playerId, card.id, onBase ? undefined : targetInstanceId),
     ...collectPlayCard(next, playerId, card.id, fromResources),
   ])
@@ -2605,7 +2615,7 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
 function useLeaderAbility(state: GameState, index: number, targetInstanceId?: string): GameState {
   const owner = state.activePlayer
   const p = state.players[owner]
-  if (p.leader.deployed || p.leader.exhausted) throw new Error('useLeaderAbility: leader unavailable')
+  if (p.leader.deployed || p.leader.exhausted || leaderAbilitiesBlanked(state, owner)) throw new Error('useLeaderAbility: leader unavailable')
   const ability = leaderActions(p.leader.cardId)[index]
   if (!ability) throw new Error(`useLeaderAbility: no leader action ${index}`)
 
@@ -2730,7 +2740,8 @@ function deployLeader(state: GameState, epicUsed = true): GameState {
  * the card's own printed cost: no `altCost`, unlike Smuggle.
  */
 function offerPlotPlays(state: GameState, playerId: PlayerId, sourceId: string): GameState {
-  const candidates = playFromCandidates(state, playerId, 'resources', {}, isPlot)
+  // Plot is a keyword ability, gone from a card that has lost its abilities (Galen Erso).
+  const candidates = playFromCandidates(state, playerId, 'resources', {}, card => isPlot(card) && !(card && cardAbilitiesBlanked(state, card.id, playerId)))
   if (candidates.length === 0) return state
   return pushChoice(state, {
     kind: 'playCardFrom', id: `${sourceId}-plot`, controller: playerId, zone: 'resources', candidates,
@@ -2889,8 +2900,9 @@ function attack(state: GameState, attackerId: string, target: AttackTarget, viaA
   if (!attacker) throw new Error(`attack: no friendly unit ${attackerId}`)
   if (attacker.exhausted && !mayBeExhausted) throw new Error(`attack: unit ${attackerId} is exhausted`)
 
-  // Attacking exhausts the attacker (CR 1.5.4d).
-  let next = updatePlayer(state, playerId, {
+  // Attacking exhausts the attacker (CR 1.5.4d). It is "attacking" from here to the end of the attack,
+  // before Restore and the On Attack abilities are read (Condemn blanks its host while it attacks).
+  let next = updatePlayer({ ...state, attackingInstanceId: attackerId }, playerId, {
     units: state.players[playerId].units.map(u =>
       u.instanceId === attackerId ? { ...u, exhausted: true } : u,
     ),
@@ -3372,7 +3384,7 @@ function readyEverything(state: GameState, id: PlayerId): GameState {
   // stays exhausted, and its "when this unit readies" abilities do not fire, because it did not.
   const readies = (u: UnitState) => !unitCannotReady(state, u)
     && !(state.lastingEffects ?? []).some(e => e.skipsRegroupReady && e.targetInstanceId === u.instanceId) // Carbonite Chamber
-    && abilityCardIds(u).every(cardId => getCardDefinition(cardId)?.readiesInRegroup?.(state, u) ?? true)
+    && abilityCardIds(state, u).every(cardId => getCardDefinition(cardId)?.readiesInRegroup?.(state, u) ?? true)
   const justReadied = p.units.filter(u => u.exhausted && readies(u)).map(u => u.instanceId)
   const next = updatePlayer(state, id, {
     resources: readied.resources,
