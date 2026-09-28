@@ -12623,6 +12623,18 @@ registerCard('LAW_077', { // Shadow of Stygeon Prime
   abilities: [{ trigger: 'whenRegroupStarts', description: 'Attached unit can\'t ready. It gains: "When the regroup phase starts: Deal 2 damage to your base."', effect: (s, ctx) =>
     dealDamageToBase(s, ctx.owner, 2, srcOf(ctx)) }],
 })
+const REX_DC17S_KEY = 'TS26_63#ready'
+registerCard('TS26_63', { // Rex's DC-17s
+  attachRestriction: nonVehicle,
+  abilities: [{
+    trigger: 'whenEnemyUnitReadies',
+    description: 'Attached unit gains: "When an enemy unit readies during the action phase: Ready this unit. Use this ability only once each round."',
+    effect: (s, ctx) => {
+      const u = selfOf(s, ctx)
+      return u && !(u.usedAbilities ?? []).includes(REX_DC17S_KEY) ? markAbilityUsed(readyUnit(s, u.instanceId), ctx.owner, u.instanceId, REX_DC17S_KEY) : s
+    },
+  }],
+})
 // TWI_068 Foresight is not registered: its "When the regroup phase starts (before drawing cards)" needs
 // the regroup draw to wait for that trigger's choices, and `enterRegroup` draws first.
 registerCard('SEC_052', { // Diplomatic Immunity

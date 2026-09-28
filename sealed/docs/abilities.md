@@ -136,7 +136,7 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 ### Trigger points
 
 `whenPlayed`, `onAttack`, `whenUnitAttacks`, `onAttackEnd`, `onDefense`, `whenHealed`, `whenDefeated`, `whenReadies`,
-`whenReadyStep`, `whenDrawn`, `whenUnitLeavesPlay`, `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
+`whenReadyStep`, `whenEnemyUnitReadies`, `whenDrawn`, `whenUnitLeavesPlay`, `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
 `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenDamageDealt`, `whenEnemyAttacksBase`,
@@ -174,6 +174,14 @@ ready step, raised on every unit they control whether or not it was exhausted, i
 `whenReadies` (which fires only on a unit that actually readied). Its `payOrExhaust` with `orReturn`
 returns the unit to its owner's hand on a decline, and resumes with the initiative holder as every
 ready-step choice does.
+
+`whenEnemyUnitReadies` ("when an enemy unit readies during the action phase", Rex's DC-17s) is raised
+by `readyUnit` (`effects.ts`), the single-unit ready primitive, rather than by a resolver call site: it
+fires for every route a unit readies through during the action phase, not only the ones the resolver
+names. It fires only for an actual readying (the unit was exhausted) and only while `state.phase` is
+`'action'`, so the regroup phase's mass ready (which sets `exhausted` directly rather than calling
+`readyUnit`) never raises it. It fires on the OTHER player's units, `ctx.targetInstanceId` naming the
+unit that readied, the mirror of `whenEnemyUnitDefeated`.
 
 `whenDrawn` ("when you draw this card", Rey) is an ability of a card in **hand**: `drawCards` collects it
 from each card it drew, once the draw's `whenDrawCards` batch is done, with `ctx.drawingPlayer`. The

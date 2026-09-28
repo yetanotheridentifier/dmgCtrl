@@ -344,10 +344,13 @@ Two phases:
   Kryze), a printed HP set for the phase, the attacker on the `onDefense` context, and the triage tool
   reading the quoted ability's own head instead of blocking on the lead-in. 51 cards shipped (recounted
   per card against the registry; the ticket's "43 sole" and "81 touched" had counted the pilots and
-  the other tickets' cards). Split to **#740**: Rex's DC-17s (no point raises an enemy unit readying in
-  the action phase) and Foresight (the regroup draw happens before "when the regroup phase starts").
-  Condemn shipped with #682; the 16 pilot cards and pilot leaders are on #465; Han's Golden Dice, Targeted For
-  Removal and Payroll Heist on #719; Leia Organa on #733; For The Republic on #730.
+  the other tickets' cards). Split to #740: Rex's DC-17s shipped (a new `whenEnemyUnitReadies` trigger
+  point, raised by the `readyUnit` primitive itself rather than a resolver call site so it hears every
+  route a unit readies through). Foresight split again to **#744**: it needs the regroup phase's draw
+  to wait on `whenRegroupStarts` choices, an engine-wide sequencing change rather than a card
+  registration. Condemn shipped with #682; the 16 pilot cards and pilot leaders are on #465; Han's
+  Golden Dice, Targeted For Removal and Payroll Heist on #719; Leia Organa on #733; For The Republic on
+  #730.
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
 (with the token units, #605), the Weakness-token cards (#649), the Fortify cards (#650), the When Played

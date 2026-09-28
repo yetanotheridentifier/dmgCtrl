@@ -365,6 +365,7 @@ describe('trigger heads', () => {
     ['SEC_156 Nemik\'s Manifesto', 'Attach to a non-Vehicle unit.\nAttached unit gains the Rebel trait and: “When Defeated: Deal 1 damage to each enemy base for each other friendly Rebel unit.”'],
     ['SEC_231 Implicate', 'Choose a unit. For this phase, it gains Sentinel and: “When this unit is attacked: Create a Spy token.”'],
     ['TWI_129 In Defense of Kamino', 'For this phase, each friendly Republic unit gains Restore 2 and: "When Defeated: Create a Clone Trooper token."'],
+    ['TS26_63 Rex\'s DC-17s', 'Attach to a non-Vehicle unit.\nAttached unit gains: “When an enemy unit readies during the action phase: Ready this unit. Use this ability only once each round.”'],
   ])('reads the lead-in on %s as no blocker, its quoted head being dispatched', (_card, text) => {
     expect(triage([card({ FrontText: text })]).triaged[0].blockers).toEqual([])
   })
@@ -377,8 +378,8 @@ describe('trigger heads', () => {
   })
 
   it('blocks a quoted ability on its own head when that point is not dispatched', () => {
-    // TS26_63 Rex's DC-17s: no point fires on an enemy unit readying during the action phase.
-    const r = triage([card({ FrontText: 'Attach to a non-Vehicle unit.\nAttached unit gains: “When an enemy unit readies during the action phase: Ready this unit. Use this ability only once each round.”' })])
+    // A synthetic point the engine has never dispatched, to prove the mechanism generically.
+    const r = triage([card({ FrontText: 'Attached unit gains: “When this unit teleports: Ready this unit.”' })])
     expect(r.triaged[0].blockers).toEqual(['trigger:one-off'])
   })
 

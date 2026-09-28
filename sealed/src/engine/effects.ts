@@ -982,7 +982,13 @@ export function readyUnit(state: GameState, instanceId: string): GameState {
     const unit = state.players[owner].units.find(u => u.instanceId === instanceId)
     if (unit) {
       if (unitCannotReady(state, unit)) return state
-      return updatePlayer(state, owner, { units: state.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, exhausted: false } : u)) })
+      const next = updatePlayer(state, owner, { units: state.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, exhausted: false } : u)) })
+      // "When an enemy unit readies during the action phase" (Rex's DC-17s): the other side's units
+      // react. Only for an actual readying (the unit was exhausted) and only during the action phase.
+      if (unit.exhausted && next.phase === 'action') {
+        return fireBatch(next, collectUnitsTrigger(next, 'whenEnemyUnitReadies', opponentOf(owner), { targetInstanceId: instanceId }))
+      }
+      return next
     }
   }
   return state

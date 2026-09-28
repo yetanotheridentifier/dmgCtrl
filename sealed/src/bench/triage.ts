@@ -38,6 +38,7 @@ export const IMPLEMENTED_KEYWORDS: ReadonlySet<string> = new Set([
 const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
   'when played', 'on attack', 'on attack end', 'when attack ends', 'on defense', 'when defeated',
   'when readies', 'when regroup starts', 'when the regroup phase starts', 'when take initiative',
+  'when an enemy unit readies during the action phase',
   'when play or create unit', 'when you play another unit', 'when upgrade attached',
   'when friendly upgrade defeated', 'when friendly unit defeated', 'when an enemy unit is defeated',
   'when enemy unit defeated', 'when friendly damaged survives', 'when enemy attacks base',
