@@ -38,15 +38,59 @@ back (Darth Vader's Raid 1). All three are `cardDataCorrections.ts` entries.
 
 ### Which cards supply a unit's abilities
 
-`abilityCardIds(unit)` is the single definition: the unit's own card, each attached upgrade, and any
-card lent for a single attack. **Every ability lookup routes through it.** The list used to be spelt
-out at each site and the spellings drifted, so an ability whose hook happened to live at a
-granted-blind site was silently never lent.
+`abilityCardIds(state, unit)` (abilities.ts) is the single definition: the unit's own card, each
+attached upgrade, and any card lent for a single attack, less whatever a "loses all abilities" effect
+has taken away (below). **Every ability lookup routes through it.** The list used to be spelt out at
+each site and the spellings drifted, so an ability whose hook happened to live at a granted-blind site
+was silently never lent. `carriedAbilityCardIds(unit)` (types.ts) is the raw set before any loss, read
+by the gate itself and by `unitTraits`, since a trait is not an ability.
 
 Duplicates are deliberate and must not be collapsed: two copies of the same upgrade on one host each
 contribute.
 
 Abilities travel; **printed traits do not**.
+
+### Losing all abilities
+
+CR 8.14.2: "the card ceases to have any abilities, including abilities given to it by other cards, for
+the duration of the 'lose' effect. The card cannot gain abilities for the duration of the effect."
+Keyword abilities are abilities (CR 7.1.2), so printed keywords go too. Power, HP and modifiers are
+not abilities and stay: an upgrade's +X/+Y, a "+2/+0 for this phase", another unit's aura's +1/+0.
+
+A unit that has lost its abilities keeps **only** the upgrades whose printed text does not say
+"gains" (CR 3.6.10: Entrenched's "attached unit can't attack bases" still binds a unit Force Lightning
+has blanked), plus whatever the loss itself keeps. It gains nothing from an aura (`grantsAbilities`,
+an aura's keywords), a lasting effect (`abilityCardIds`, `keywords`), or a lent card. An upgrade that
+prints both kinds is treated as a giver as a whole.
+
+| Source | Declared as | Cards |
+| --- | --- | --- |
+| a lasting effect for a phase, a round or an attack | `LastingEffect.losesAllAbilities` | Force Lightning, There Is No Escape, Mind Trick, The Tree Remembers, One Way Out |
+| an attached upgrade | `blanksHost(state, host)`, returning what it `keep`s | Imprisoned, Condemn (while its host attacks), Exiled from the Force (keeps its own Grit) |
+| a unit's constant ability over cards anywhere | `blanksCard(state, source, side, cardId, owner)` | Brain Invaders (each leader), Galen Erso (the named card an opponent owns) |
+| an event as it resolves | `blanksPlayedEvent` | Relentless (the first each opponent plays each round) |
+
+A card-level loss reaches a card wherever it is: a unit in play, an upgrade, an event being played
+(still paid for and discarded, it just does nothing), an undeployed leader (`leaderAbilitiesBlanked`:
+its actions, triggers, aura and aspect waiver; the epic action stays), and the cost hooks, Exploit,
+Smuggle and Plot of a card in hand or resources. A source that has itself lost its abilities projects
+nothing, read from its own direct loss only, so two card-level sources never ask each other.
+
+Everything is read live off the board, so a loss ends the moment its source does. An ability that has
+already triggered resolves regardless (CR 8.14.3 for one already resolving; a trigger already collected
+is treated the same way). A unit blanked before it is defeated has no When Defeated to fire.
+
+"While attached unit is attacking" (Condemn) reads `GameState.attackingInstanceId`, set as the attack is
+declared (before Restore and On Attack are read) and cleared with the other per-attack state.
+
+**The gate is on the hottest path in the engine** (tens of millions of reads a game), so its common
+case is memoised: a card pool with no `blanksHost` or `blanksCard` card, and a board with no lasting
+loss, cost one identity comparison. A beam self-play run measured about 5% slower than without the
+gate after that; a naive version was twice as slow and timed out two AI tests.
+
+Enemy Credit tokens losing their abilities (Conveyex Security Captain) is `suppressesEnemyCredits`,
+read where a Credit token is offered as a payment. Advantage tokens losing theirs (Eviscerator) is
+`suppressesFriendlyAdvantage`. Tokens that are not upgrades have no unit to blank.
 
 ### Granted ability blocks
 
@@ -66,7 +110,7 @@ that holds only while the host qualifies ("If attached unit is a Force unit, it 
 triggered ability with `hears`, so a host that does not qualify never has it, and gates a constant hook
 inside the hook.
 
-The aura and lasting routes need the state, so they are not part of `abilityCardIds`: a constant hook
+The aura and lasting routes are not part of `abilityCardIds`, which is what a unit carries: a constant hook
 (`statModifier`, `cannotBeTargetedByEnemyAbility` and the rest) reaches a unit only through what it
 carries. No printed card grants a constant ability by aura or for a phase; one that did would need
 those readers widened.
@@ -170,7 +214,7 @@ same guard since a pair of Kelleran Beqs blew the stack.
 GameState.lastingEffects?: LastingEffect[]
 // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, untilRoundEnd?, abilityCardIds?,
 //   cannotAttack?, cannotAttackBases?, cannotBeAttacked?, unlessSentinel?, removeKeywords?,
-//   noCombatDamage?, attackersPower?, cannotReady?, whileSourceInPlay?, preventNext?, preventEach?,
+//   losesAllAbilities?, noCombatDamage?, attackersPower?, cannotReady?, whileSourceInPlay?, preventNext?, preventEach?,
 //   survivesNoHp?, redirectDamageTo?, printedHp? }
 ```
 
@@ -766,8 +810,8 @@ with no bracket to parse).
   reaches), Vigil (SEC_050, needs constant damage-prevention/redirection primitives beyond the
   existing per-phase ones), Fully Armed and Operational (SEC_194, needs "as their immediately
   preceding action" sequencing, which the engine does not track), and Chancellor Palpatine's back,
-  above. Galen Erso (SEC_046, needs "loses all abilities") is commented directly on #682, which
-  already owns that primitive, rather than routed to #726.
+  above. Galen Erso (SEC_046) plays by Plot like any other card; his own ability is one of the
+  "loses all abilities" sources (Losing all abilities, above).
 
 ## Indirect damage
 
