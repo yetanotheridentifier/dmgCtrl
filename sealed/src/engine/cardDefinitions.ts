@@ -9182,8 +9182,10 @@ registerCard('HMW_114', { // Breach
     if (!from) return s
     const amount = effectivePower(s, from)
     const spill = unitHasKeyword(s, from, 'Overwhelm') ? excessOver(s, ctx.targetInstanceId!, amount) : 0
-    const dealt = dealDamageToUnit(s, ctx.targetInstanceId!, amount, dealtByUnit(from, ctx.owner))
-    return spill > 0 ? dealDamageToBase(dealt, opponentOf(ctx.owner), spill) : dealt
+    // The excess is the friendly unit's too, the way Overwhelm's is.
+    const source = dealtByUnit(from, ctx.owner)
+    const dealt = dealDamageToUnit(s, ctx.targetInstanceId!, amount, source)
+    return spill > 0 ? dealDamageToBase(dealt, opponentOf(ctx.owner), spill, source) : dealt
   },
 })
 
