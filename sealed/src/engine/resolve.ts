@@ -1705,7 +1705,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
         // A unit's first point carries any "plus 1" (Ty Yorrick), since the division is one instance per unit.
         const boosted = choice.boosted ?? []
-        next = dealDamageToUnit(next, targetInstanceId, 1, undefined, undefined, !boosted.includes(targetInstanceId))
+        // Named as the source, so a unit that deals the divided damage (Hold Them Off) is the dealer.
+        next = dealDamageToUnit(next, targetInstanceId, 1, choice.source, undefined, !boosted.includes(targetInstanceId))
         next = checkWin(next)
         if (next.winner !== null) return next
         const remaining = choice.remaining - 1
@@ -1930,7 +1931,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       const total = effectivePower(next, src.unit)
       const targets = inPlayUnits(next).filter(u => u.arena === src.unit.arena).map(u => u.instanceId)
       if (total > 0 && targets.length > 0) {
-        next = pushChoice(next, { kind: 'distributeDamage', id: `${choice.id}-dist`, controller: choice.controller, remaining: total, total, targets })
+        // "That unit deals damage": the pool is the chosen unit's damage, not the event's.
+        next = pushChoice(next, { kind: 'distributeDamage', id: `${choice.id}-dist`, controller: choice.controller, remaining: total, total, targets, source: { cardId: src.unit.cardId, controller: src.owner, instanceId: src.unit.instanceId } })
       }
       break
     }
