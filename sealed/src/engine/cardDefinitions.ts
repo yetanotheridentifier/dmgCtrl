@@ -1,7 +1,7 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, collectUnitTriggers, collectCardTriggers, abilityCardIds, usedAbilityOf } from './abilities'
 import { fireBatch, runAbilitiesAgain, thenAfterChoices,takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken } from './effects'
-import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage } from './combat'
+import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage, isDoomed } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
@@ -12699,6 +12699,10 @@ registerCard('SHD_155', { actionAbilities: [{ // Heroic Resolve
     const self = ctx.sourceInstanceId!
     const paid = upgradeOn(s, self, 'SHD_155')
     const next = paid ? defeatUpgradeAt(s, self, paid.upgradeIndex) : s
+    // The upgrade's own +1 HP leaves as the cost is paid, which can be lethal to a damaged host. A
+    // unit no longer in play cannot attack, so the effect does nothing; the state-based sweep defeats it.
+    const host = findUnit(next, self)?.unit
+    if (!host || isDoomed(next, host)) return next
     return offerAttack(next, ctx.owner, `${self}-attack`, { attacker: { only: [self] }, grantCardId: GRANT_HEROIC_RESOLVE })
   },
 }] })
