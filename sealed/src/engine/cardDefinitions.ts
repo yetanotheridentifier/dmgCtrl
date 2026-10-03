@@ -5200,19 +5200,26 @@ function causeFinish(s: GameState, ctx: Resumable, picks: number[]): GameState {
   const top = p.deck.slice(0, size)
   return updatePlayer(s, ctx.owner, { deck: [...top.filter((_, i) => !picks.includes(i)), ...p.deck.slice(size)], discard: [...p.discard, ...picks.map(i => top[i])] })
 }
+/**
+ * "Search the top `depth` cards of your deck for a <trait> unit and play it. It costs `discount` less
+ * and enters play ready", then a delayed effect about it at the regroup phase: the card registered as
+ * `delayCardId` says what (Triple Dark Raid returns it to hand, Maz Kanata puts it under the deck).
+ */
+const searchPlayReady = (s: GameState, ctx: EventCtx, depth: number, trait: string, discount: number, delayCardId: string): GameState => {
+  const p = s.players[ctx.owner]
+  const revealed = p.deck.slice(0, searchCount(s, ctx.owner, depth))
+  if (revealed.length === 0) return s
+  const ready = p.resources.filter(r => !r.exhausted).length
+  const eligibleIndices = revealed.flatMap((id, i) => {
+    const c = s.cards[id]
+    return printedUnit(c) && printedTrait(c, trait) && c && Math.max(0, effectiveCost(s, ctx.owner, c) - discount) <= ready ? [i] : []
+  })
+  const pulled = updatePlayer(s, ctx.owner, { deck: p.deck.slice(revealed.length) })
+  return pushChoice(pulled, { kind: 'searchPlayFree', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices, budget: 0, playOne: true, costDelta: -discount, entersReady: true, thenDelay: { cardId: delayCardId, when: 'regroupStart' } })
+}
 registerCard('SHD_194', { // Triple Dark Raid
-  ...whenPlayed('Search the top 7 cards of your deck for a Vehicle and play it. It costs 5 less and enters play ready. Return it to its owner\'s hand at the end of the phase.', (s, ctx) => {
-    const p = s.players[ctx.owner]
-    const revealed = p.deck.slice(0, searchCount(s, ctx.owner, 7))
-    if (revealed.length === 0) return s
-    const ready = p.resources.filter(r => !r.exhausted).length
-    const eligibleIndices = revealed.flatMap((id, i) => {
-      const c = s.cards[id]
-      return printedUnit(c) && printedTrait(c, 'Vehicle') && c && Math.max(0, effectiveCost(s, ctx.owner, c) - 5) <= ready ? [i] : []
-    })
-    const pulled = updatePlayer(s, ctx.owner, { deck: p.deck.slice(revealed.length) })
-    return pushChoice(pulled, { kind: 'searchPlayFree', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices, budget: 0, playOne: true, costDelta: -5, entersReady: true, thenDelay: { cardId: 'SHD_194', when: 'regroupStart' } })
-  }),
+  ...whenPlayed('Search the top 7 cards of your deck for a Vehicle and play it. It costs 5 less and enters play ready. Return it to its owner\'s hand at the end of the phase.', (s, ctx) =>
+    searchPlayReady(s, ctx, 7, 'Vehicle', 5, 'SHD_194')),
   // "At the end of the phase" is read as the start of the regroup phase that follows it.
   delayed: (s, e) => (e.unitId && findUnit(s, e.unitId) ? returnUnitToHand(s, e.unitId) : s),
 })
@@ -13083,4 +13090,178 @@ registerCard('LAW_256', { // Fire Across the Galaxy
     const next = thenAfterChoices(s, { ...resume(ctx, 'next'), taken: [...taken, picked.instanceId] })
     return fireBatch(next, whenPlayedOf(s, picked, ctx.owner, picked.instanceId))
   },
+})
+
+// ── Flagged cards that needed only writing ───────────────────────────────────────────────────────
+// Each reads a trigger point the engine already dispatches, over primitives that already exist.
+
+/** The unit a `whenPlayUnit` (or a unit's `whenPlayCard`) names, while it is still in play. */
+const playedUnitOf = (s: GameState, ctx: EffectContext): UnitState | undefined =>
+  (ctx.targetInstanceId ? findUnit(s, ctx.targetInstanceId)?.unit : undefined)
+/** "You may <text>. If you do", with the card's `ifYouDo` as the rest; `unit` rides along as `unitChosen`. */
+const mayThen = (s: GameState, ctx: Resumable, id: string, text: string, unit?: string): GameState =>
+  pushChoice(s, { kind: 'mayPayThen', id, controller: ctx.owner, cost: 0, text, then: resume(ctx, undefined, unit) })
+const usedThisRound = (s: GameState, ctx: EventCtx, key: string): boolean => selfOf(s, ctx)?.usedAbilities?.includes(key) === true
+
+registerCard('TWI_101', { // Mas Amedda
+  abilities: [{ trigger: 'whenPlayUnit', description: 'When you play another unit: You may exhaust this unit. If you do, search the top 4 cards of your deck for a unit, reveal it, and draw it.', effect: (s, ctx) => {
+    const self = selfOf(s, ctx)
+    return self && !self.exhausted && s.players[ctx.owner].deck.length > 0
+      ? mayThen(s, ctx, `${ctx.sourceInstanceId}-search`, 'exhaust Mas Amedda to search the top 4 cards of your deck for a unit')
+      : s
+  } }],
+  ifYouDo: (s, ctx) => searchDrawChoice(exhaustUnit(s, ctx.sourceInstanceId!), ctx, 4, printedUnit),
+})
+
+/** Quinlan Vos: the enemy units whose printed cost fits against the played unit's. */
+const quinlanTargets = (s: GameState, ctx: EffectContext, fits: (cost: number, played: number) => boolean): string[] => {
+  const played = playedUnitCard(s, ctx)?.cost
+  return played === undefined ? [] : s.players[opponentOf(ctx.owner)].units.filter(u => fits(printedCost(s, u), played)).map(u => u.instanceId)
+}
+registerCard('TWI_018', { // Quinlan Vos
+  leaderAbilities: {
+    abilities: [{ trigger: 'whenPlayUnit', description: 'When you play a unit: You may exhaust this leader. If you do, deal 1 damage to an enemy unit that costs the same as the played unit.', effect: (s, ctx) => {
+      const targets = quinlanTargets(s, ctx, (cost, played) => cost === played)
+      return leaderCanExhaust(s, ctx.owner) && targets.length
+        ? pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.cardId}-front`, controller: ctx.owner, targets, optional: true, text: 'exhaust Quinlan Vos (leader) to deal 1 damage to an enemy unit that costs the same as the played unit', then: resume(ctx, 'front') })
+        : s
+    } }],
+  },
+  abilities: [{ trigger: 'whenPlayUnit', description: 'When you play a unit: You may deal 1 damage to an enemy unit that costs the same as or less than the played unit.', effect: (s, ctx) =>
+    unitThen(s, ctx, quinlanTargets(s, ctx, (cost, played) => cost <= played), 'deal 1 damage to an enemy unit that costs the same as or less than the played unit', true, 'back') }],
+  ifYouDo: (s, ctx) => dealDamageToUnit(ctx.step === 'front' ? exhaustLeader(s, ctx.owner) : s, ctx.targetInstanceId!, 1),
+})
+
+const hasAKeyword: Holds = (s, u) => unitKeywords(s, u).length > 0
+registerCard('SHD_008', { // Boba Fett
+  leaderAbilities: {
+    abilities: [{ trigger: 'whenPlayUnit', description: 'When you play a unit that has 1 or more keywords: You may exhaust this leader. If you do, give a friendly unit +1/+0 for this phase.', effect: (s, ctx) => {
+      const played = playedUnitOf(s, ctx)
+      return played && hasAKeyword(s, played) && leaderCanExhaust(s, ctx.owner)
+        ? mayThen(s, ctx, `${ctx.cardId}-front`, 'exhaust Boba Fett (leader) to give a friendly unit +1/+0 for this phase')
+        : s
+    } }],
+  },
+  ...friendlyAura(hasAKeyword, { power: 1 }, true),
+  ifYouDo: (s, ctx) => {
+    const paid = exhaustLeader(s, ctx.owner)
+    return lastingBuffChoice(paid, { ...ctx, sourceInstanceId: `${ctx.cardId}-front` }, paid.players[ctx.owner].units.map(u => u.instanceId), { power: 1 })
+  },
+})
+
+registerCard('SOR_143', { abilities: [{ trigger: 'whenPlayCard', description: 'When you play another Aggression card: You may deal 1 damage to a base.', effect: (s, ctx) => // Fighters For Freedom
+  // A played unit names itself as `targetInstanceId`, so this one's own play is left out and a copy's is not.
+  (ctx.playingPlayer === ctx.owner && ctx.targetInstanceId !== ctx.sourceInstanceId && printedAspect(s.cards[ctx.playedCardId ?? ''], 'Aggression')
+    ? damageChoice(s, ctx, 1, [], ['player', 'opponent'], true)
+    : s) }] })
+
+const TORO_ROUND_KEY = 'SHD_239#round'
+registerCard('SHD_239', { // Toro Calican
+  abilities: [{ trigger: 'whenPlayUnit', description: 'When you play another Bounty Hunter unit: You may deal 1 damage to it. If you do, ready this unit. Use this ability only once each round.', effect: (s, ctx) => {
+    const played = playedUnitOf(s, ctx)
+    return played && unitHasTrait(s, played, 'Bounty Hunter') && !usedThisRound(s, ctx, TORO_ROUND_KEY)
+      ? mayThen(s, ctx, `${ctx.sourceInstanceId}-toro`, 'deal 1 damage to it to ready Toro Calican', played.instanceId)
+      : s
+  } }],
+  // Only a taken "may" uses up the once each round.
+  ifYouDo: (s, ctx) => markAbilityUsed(readyUnit(dealDamageToUnit(s, ctx.unitChosen!, 1), ctx.sourceInstanceId!), ctx.owner, ctx.sourceInstanceId!, TORO_ROUND_KEY),
+})
+
+const KALLUS_ROUND_KEY = 'SOR_115#round'
+const kallusDraw: Omit<AbilityDef, 'trigger'> = {
+  description: 'When another unique unit is defeated: You may draw a card. Use this ability only once each round.',
+  effect: (s, ctx) => {
+    const gone = ctx.defeatedUnit
+    return gone && gone.instanceId !== ctx.sourceInstanceId && s.cards[gone.cardId]?.unique && !usedThisRound(s, ctx, KALLUS_ROUND_KEY)
+      ? mayThen(s, ctx, `${ctx.sourceInstanceId}-draw`, 'draw a card')
+      : s
+  },
+}
+registerCard('SOR_115', { // Agent Kallus
+  abilities: (['whenFriendlyUnitDefeated', 'whenEnemyUnitDefeated'] as const).map(trigger => ({ ...kallusDraw, trigger })),
+  ifYouDo: (s, ctx) => drawCards(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, KALLUS_ROUND_KEY), ctx.owner, 1),
+})
+
+const PUNISHING_ONE_ROUND_KEY = 'SHD_137#round'
+registerCard('SHD_137', { // Punishing One
+  abilities: [{ trigger: 'whenEnemyUnitDefeated', description: 'When an upgraded enemy unit is defeated: You may ready this unit. Use this ability only once each round.', effect: (s, ctx) =>
+    // `defeatedUnit` is the unit as it last was, so its upgrades are still on it.
+    ((ctx.defeatedUnit?.upgrades.length ?? 0) > 0 && selfOf(s, ctx)?.exhausted && !usedThisRound(s, ctx, PUNISHING_ONE_ROUND_KEY)
+      ? mayThen(s, ctx, `${ctx.sourceInstanceId}-ready`, 'ready Punishing One')
+      : s) }],
+  ifYouDo: (s, ctx) => markAbilityUsed(readyUnit(s, ctx.sourceInstanceId!), ctx.owner, ctx.sourceInstanceId!, PUNISHING_ONE_ROUND_KEY),
+})
+
+/**
+ * Rogue One: "Look at the top 2 cards of your deck. Put any number of them on the bottom of your deck
+ * and the rest on top in any order." One card at a time goes to the bottom until the player stops;
+ * when both stay, the player picks which is on top.
+ */
+const rogueLook = (s: GameState, ctx: Resumable, left: number): GameState => {
+  const top = s.players[ctx.owner].deck.slice(0, left)
+  return top.length ? cardThen(s, ctx, top, 'put a card on the bottom of your deck', true, `bottom:${top.length}`) : s
+}
+registerCard('LAW_119', { // Rogue One
+  abilities: [{ trigger: 'whenFriendlyUnitDefeated', description: 'When a friendly unit is defeated: Look at the top 2 cards of your deck. Put any number of them on the bottom of your deck and the rest on top in any order.', effect: (s, ctx) => rogueLook(s, ctx, 2) }],
+  ifYouDo: (s, ctx) => {
+    const deck = s.players[ctx.owner].deck
+    if (ctx.step === 'top') return ctx.optionIndex === 1 ? updatePlayer(s, ctx.owner, { deck: [deck[1], deck[0], ...deck.slice(2)] }) : s
+    const left = Number(splitStep(ctx.step, 'bottom:')[0])
+    const i = ctx.optionIndex
+    if (i === undefined) return left === 2 ? cardThen(s, ctx, deck.slice(0, 2), 'choose the card to leave on top of your deck', false, 'top') : s
+    const moved = updatePlayer(s, ctx.owner, { deck: [...deck.slice(0, i), ...deck.slice(i + 1), deck[i]] })
+    return left > 1 ? rogueLook(moved, ctx, left - 1) : moved
+  },
+})
+
+registerCard('LAW_088', { // Anakin Skywalker
+  abilities: [{ trigger: 'whenFriendlyAttackEnds', description: "When a friendly unit's attack ends: If no other units have attacked this phase, you may return it to its owner's hand. If you do, heal 2 damage from your base.", effect: (s, ctx) => {
+    const attacker = s.players[ctx.owner].units.find(u => u.instanceId === ctx.attackerInstanceId)
+    return attacker && nonLeader(s, attacker) && attackedThisPhase(s).every(id => id === attacker.instanceId)
+      ? mayThen(s, ctx, `${ctx.sourceInstanceId}-return`, "return the attacker to its owner's hand to heal 2 damage from your base", attacker.instanceId)
+      : s
+  } }],
+  ifYouDo: (s, ctx) => healBase(returnUnitToHand(s, ctx.unitChosen!), ctx.owner, 2),
+})
+
+registerCard('LAW_033', { // Hound's Tooth
+  abilities: [{ trigger: 'onAttackEnd', description: 'If this unit survived, you may defeat a unit with less power than this unit.', effect: (s, ctx) => {
+    const self = selfOf(s, ctx)
+    if (!self) return s
+    const power = effectivePower(s, self)
+    return unitThen(s, ctx, allUnits(s).filter(u => effectivePower(s, u) < power).map(u => u.instanceId), 'defeat a unit with less power than this unit', true)
+  } }],
+  ifYouDo: (s, ctx) => defeatUnit(s, ctx.targetInstanceId!),
+})
+
+registerCard('LAW_054', { // Maul
+  abilities: [{ trigger: 'onAttackEnd', description: "If this unit dealt combat damage to a player's base, you may take control of a non-leader unit that player controls. When this unit leaves play, that unit's owner takes control of that unit.", effect: (s, ctx) =>
+    // Control lasts while Maul is in play, so a Maul the attack defeated takes nothing.
+    ((ctx.combatDamageToBase ?? 0) > 0 && selfOf(s, ctx)
+      ? unitThen(s, ctx, s.players[opponentOf(ctx.owner)].units.filter(u => nonLeader(s, u)).map(u => u.instanceId), 'take control of a non-leader unit that player controls', true)
+      : s) }],
+  ifYouDo: (s, ctx) => takeControlOfUnit(s, opponentOf(ctx.owner), ctx.owner, ctx.targetInstanceId!, ctx.sourceInstanceId),
+})
+
+registerCard('LAW_074', { // Maz Kanata
+  abilities: [{ trigger: 'onAttackEnd', description: 'If this unit survived, search the top 5 cards of your deck for an Underworld unit and play it. It costs 4 less and enters play ready. At the start of the regroup phase, put that unit on the bottom of your deck (if it is still in play).', effect: (s, ctx) =>
+    (selfOf(s, ctx) ? searchPlayReady(s, ctx, 5, 'Underworld', 4, 'LAW_074') : s) }],
+  delayed: (s, e) => (e.unitId && findUnit(s, e.unitId) ? unitToDeck(s, e.unitId, 'bottom') : s),
+})
+
+registerCard('TWI_102', { // Manufactured Soldiers
+  ...whenPlayed('Choose one: Create 2 Clone Trooper tokens. Create 3 Battle Droid tokens.', (s, ctx) =>
+    chooseModeThen(s, ctx, ctx.sourceInstanceId!, [['clones', 'Create 2 Clone Trooper tokens'], ['droids', 'Create 3 Battle Droid tokens']])),
+  ifYouDo: (s, ctx) => (ctx.step === 'clones' ? create(s, ctx.owner, TOKEN_CLONE_TROOPER, 2) : create(s, ctx.owner, TOKEN_BATTLE_DROID, 3)),
+})
+
+// Obi-Wan Kenobi does not print Sentinel: the source parses it out of this ability (cardDataCorrections).
+const obiWanSentinel = (s: GameState, ctx: EventCtx, played: UnitState | undefined): GameState =>
+  (played && unitHasTrait(s, played, 'Force') && selfOf(s, ctx) ? addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: [KW.sentinel] }) : s)
+const OBI_WAN_TEXT = 'When you play a Force unit (including this one): This unit gains Sentinel for this phase.'
+registerCard('LOF_096', { // Obi-Wan Kenobi
+  abilities: [
+    { trigger: 'whenPlayed', description: OBI_WAN_TEXT, effect: (s, ctx) => obiWanSentinel(s, ctx, selfOf(s, ctx)) },
+    { trigger: 'whenPlayUnit', description: OBI_WAN_TEXT, effect: (s, ctx) => obiWanSentinel(s, ctx, playedUnitOf(s, ctx)) },
+  ],
 })

@@ -545,7 +545,7 @@ function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string,
     for (const kw of keywordAbilities) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId))
   }
   owed.push(...collectArrivalTriggers(state, 'whenPlayUnit', owner, newUnitId))
-  owed.push(...collectPlayCard(state, owner, cardId, fromResources))
+  owed.push(...collectPlayCard(state, owner, cardId, fromResources, newUnitId))
   return owed
 }
 
@@ -554,9 +554,13 @@ function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string,
  * players' leaders, bases and units, the playing player's first, because the point is also printed
  * from the far side ("when an opponent plays an event", Saw Gerrera), exactly as `whenDrawCards` is.
  * Every registration therefore compares `ctx.playingPlayer` against `ctx.owner`.
+ *
+ * A played unit is already in play when this is collected, so it hears its own play; `targetInstanceId`
+ * names it, which is how "when you play another <kind of> card" leaves itself out (a copy of the same
+ * card is another card).
  */
-function collectPlayCard(state: GameState, playerId: PlayerId, cardId: string, fromResources = false): PendingTrigger[] {
-  const ctx = { playedCardId: cardId, playingPlayer: playerId, ...(fromResources ? { playedFromResources: true } : {}) }
+function collectPlayCard(state: GameState, playerId: PlayerId, cardId: string, fromResources = false, playedUnitId?: string): PendingTrigger[] {
+  const ctx = { playedCardId: cardId, playingPlayer: playerId, ...(fromResources ? { playedFromResources: true } : {}), ...(playedUnitId ? { targetInstanceId: playedUnitId } : {}) }
   return [playerId, opponentOf(playerId)].flatMap(p =>
     [...collectPlayerTriggers(state, 'whenPlayCard', p, ctx), ...collectUnitsTrigger(state, 'whenPlayCard', p, ctx)])
 }

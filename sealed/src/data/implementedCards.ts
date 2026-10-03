@@ -325,6 +325,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'LOF_014', name: 'Grand Inquisitor', front: true, back: true },
   { id: 'JTL_002', name: 'Grand Admiral Thrawn', front: true, back: true },
   { id: 'LAW_014', name: 'Enfys Nest', front: true, back: true },
+  { id: 'TWI_018', name: 'Quinlan Vos', front: true, back: true },
+  { id: 'SHD_008', name: 'Boba Fett', front: true, back: true },
 ]
 
 /**
@@ -1022,6 +1024,7 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SEC_157', name: 'One Way Out' },
   { id: 'LAW_132', name: 'The Tree Remembers' },
   { id: 'LAW_256', name: 'Fire Across the Galaxy' },
+  { id: 'TWI_102', name: 'Manufactured Soldiers' },
 ]
 
 /**
@@ -2226,6 +2229,18 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // Using an ability again (#704)
   { id: 'JTL_169', name: 'Shadow Caster' },
   { id: 'LOF_197', name: "Qui-Gon Jinn's Aethersprite" },
+  // Flagged cards that needed only writing
+  { id: 'TWI_101', name: 'Mas Amedda' },
+  { id: 'SOR_143', name: 'Fighters For Freedom' },
+  { id: 'SHD_239', name: 'Toro Calican' },
+  { id: 'SOR_115', name: 'Agent Kallus' },
+  { id: 'SHD_137', name: 'Punishing One' },
+  { id: 'LAW_119', name: 'Rogue One' },
+  { id: 'LAW_088', name: 'Anakin Skywalker' },
+  { id: 'LAW_033', name: "Hound's Tooth" },
+  { id: 'LAW_054', name: 'Maul' },
+  { id: 'LAW_074', name: 'Maz Kanata' },
+  { id: 'LOF_096', name: 'Obi-Wan Kenobi' },
 ]
 
 /**
