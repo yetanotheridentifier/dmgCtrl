@@ -2137,6 +2137,7 @@ registerCard(KEYWORD_AMBUSH, {
         id: ctx.sourceInstanceId!,
         controller: ctx.owner,
         unitId: ctx.sourceInstanceId!,
+        ...(ctx.ambushStaysReady ? { staysReady: true } : {}),
         source: { cardId: u.unit.cardId, controller: ctx.owner },
       })
     },

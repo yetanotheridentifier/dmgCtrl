@@ -17,6 +17,7 @@ import shieldedSentinelPing from '../fixtures/reports/shieldedSentinelPing.json'
 import triggerProbeOverflow from '../fixtures/reports/triggerProbeOverflow.json'
 import vaneFriendlyUpgrade from '../fixtures/reports/vaneFriendlyUpgrade.json'
 import vaneFriendlyUpgradeCards from '../fixtures/reports/vaneFriendlyUpgradeCards.json'
+import warriorAmbushDecline from '../fixtures/reports/warriorAmbushDecline.json'
 import { buildCardDb } from '../../engine/cardDb'
 import { resolve } from '../../engine/resolve'
 import '../../engine/cardDefinitions' // side-effect: registers every implemented card
@@ -51,7 +52,7 @@ const REPORTS: Record<string, unknown> = {
   exhaustedLeaderDraw, grassrootsHeal, haulcraftPrompt, minefieldArenaChoice,
   nestedDeployShieldTarget, rampResourceReady,
   shieldedSentinelLockout, shieldedSentinelPing, sloaneSelfSentinel, triggerOrderNotOffered,
-  triggerProbeOverflow, vaneFriendlyUpgrade,
+  triggerProbeOverflow, vaneFriendlyUpgrade, warriorAmbushDecline,
 }
 
 /**
