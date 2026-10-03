@@ -96,6 +96,8 @@ export interface SweepReport {
   /** Distinct leaders across the deck set, and how many of them actually deployed. */
   leaders: number
   leadersDeployed: number
+  /** Leaders that never deployed, named for the same reason as `uncovered`: only a deploy runs the back side. */
+  undeployed: string[]
   /** Distinct bases across the deck set. A base is in play from the first turn, so it is never
    *  "played"; it is reported for completeness rather than as coverage. */
   bases: number
@@ -196,6 +198,7 @@ export function runSweep(config: SweepConfig): SweepReport {
     uncovered: [...decked].filter(id => !played.has(id)).sort(compareCardIds),
     leaders: leaders.size,
     leadersDeployed: [...leaders].filter(id => deployed.has(id)).length,
+    undeployed: [...leaders].filter(id => !deployed.has(id)).sort(compareCardIds),
     bases: bases.size,
     failures,
     droppedGames,
