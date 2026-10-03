@@ -11522,8 +11522,8 @@ registerCard('JTL_047', { // Admiral Yularen
 // TS26_27 Fortune and Glory and SHD_006 Jabba the Hutt's back both need a CHOSEN guardian AND a
 // chosen target in one capture action, which #707 owns, not this ticket — commented there rather
 // than half-registered. SHD_010 Bossk's back ("When you collect a BOUNTY: you may collect that
-// BOUNTY again") needs a genuinely new primitive (react to a collection, re-run it, once a round)
-// that nothing else here needs; only his front is built, and a new ticket owns it.
+// BOUNTY again") is registered in the "Using an ability again" section below, alongside the
+// `whenAbilityUsed` idiom it reacts to.
 
 /** "If an enemy unit has a Bounty" (Krrsantan, Reputable Hunter, Trandoshan Hunters). */
 const enemyHasBounty = (s: GameState, owner: PlayerId): boolean => s.players[opponentOf(owner)].units.some(u => unitHasKeyword(s, u, 'Bounty'))
@@ -11636,17 +11636,6 @@ registerCard('SHD_139', { // Krrsantan — Muscle for Hire
     },
   ],
   ifYouDo: (s, ctx) => readyUnit(s, ctx.sourceInstanceId!),
-})
-
-// Bossk's leader front only — his back ("When you collect a BOUNTY: you may collect that BOUNTY
-// again. Use this ability only once each round.") is the new-primitive gap noted above.
-registerCard('SHD_010', { // Bossk — Hunting His Prey
-  ...leaderFront('Deal 1 damage to a unit with a Bounty. You may give it +1/+0 for this phase.', {
-    cost: 1,
-    usable: anyUnitPasses(hasBounty),
-    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, hasBounty), 'deal 1 damage to it', false),
-  }),
-  ifYouDo: (s, ctx) => lastingBuffChoice(dealDamageToUnit(s, ctx.targetInstanceId!, 1), ctx, [ctx.targetInstanceId!], { power: 1 }, true),
 })
 
 // "Can't be <capture/damage/defeat/exhaust/return-to-hand/take-control> by enemy card abilities":
@@ -13000,6 +12989,30 @@ const againLeader = (cardId: string, point: TriggerPoint, name: string, frontCos
 }
 registerCard('JTL_002', againLeader('JTL_002', 'whenDefeated', 'When Defeated', 0)) // Grand Admiral Thrawn
 registerCard('LAW_014', againLeader('LAW_014', 'onAttack', 'On Attack', 2)) // Enfys Nest
+
+// SHD_010 Bossk's back ("When you collect a BOUNTY: you may collect that BOUNTY again. Use this
+// ability only once each round.") reacts to a Bounty collection the same way: it is announced as a
+// `whenAbilityUsed` use at `point: 'bounty'` (resolve.ts's `mayCollectBounty` case), and "again" runs
+// through the same handle, which resolves as a fresh `mayCollectBounty` choice (Bounty is always
+// optional, CR 13), not a silent rerun. His front is unrelated (a leader Action, not a reaction), so
+// the single card-level `ifYouDo` tells the two apart by which of `ctx.targetInstanceId`/`ctx.again`
+// is set, same as any other leader whose front and back both resume through it.
+const BOSSK_ROUND_KEY = 'SHD_010#bountyAgain'
+registerCard('SHD_010', { // Bossk — Hunting His Prey
+  ...leaderFront('Deal 1 damage to a unit with a Bounty. You may give it +1/+0 for this phase.', {
+    cost: 1,
+    usable: anyUnitPasses(hasBounty),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, hasBounty), 'deal 1 damage to it', false),
+  }),
+  abilities: [{
+    trigger: 'whenAbilityUsed', hears: usesAt('bounty'),
+    description: 'When you collect a BOUNTY: You may collect that BOUNTY again. Use this ability only once each round.',
+    effect: (s, ctx) => (findUnit(s, ctx.sourceInstanceId!)?.unit.usedAbilities?.includes(BOSSK_ROUND_KEY) ? s : offerUseAgain(s, ctx, 'collect that BOUNTY again')),
+  }],
+  ifYouDo: (s, ctx) => (ctx.again
+    ? runAbilitiesAgain(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, BOSSK_ROUND_KEY), ctx.again)
+    : lastingBuffChoice(dealDamageToUnit(s, ctx.targetInstanceId!, 1), ctx, [ctx.targetInstanceId!], { power: 1 }, true)),
+})
 
 registerCard('JTL_169', { // Shadow Caster
   abilities: [{

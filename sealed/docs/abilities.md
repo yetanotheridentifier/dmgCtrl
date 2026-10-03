@@ -181,8 +181,11 @@ so every route an ability resolves through announces it. It is a nested batch li
 waits for the ability's own choices and any "Then, ..." those answers owe: "use that ability again"
 follows the whole first use. `ctx.usedAbility` is the ability's handle (`UsedAbility`: card, ability
 index, point, source and event context), and the hearing card checks the point in `hears`. It is not
-raised for an ability that changed nothing, for a "Then, ..." entry, or for Bounty, whose collection is
-the `mayCollectBounty` choice. Only the controller hears it: their leader, units, and the cards in
+raised for an ability that changed nothing or for a "Then, ..." entry. A Bounty collection announces it
+too, but from a different call site: `runOne` excludes `point === 'bounty'` (collecting one is a choice,
+not something it runs itself), so resolve.ts's `mayCollectBounty` case builds the same `UsedAbility`
+handle once `runBountyCollection` actually changes the state. Only the controller hears it: their
+leader, units, and the cards in
 `state.abilityUseHearers`, a per-phase list for a card that keeps listening after it has left play
 (Qui-Gon Jinn's Aethersprite, through the pseudo card `GRANT_QUI_GON_JINNS_AETHERSPRITE`). Hearers
 are indexed when registered, so a board with none skips the collection.
@@ -223,9 +226,12 @@ bounty.)", CR 13) is collected under the unit's own **opponent**, the reverse of
 at both a defeat (`finishDefeats`) and a capture (`attemptCapture`), with the unit's own snapshot in
 `ctx.bountyUnit`. It is never run directly: collecting a Bounty is always optional however its
 printed text reads, so `runPendingTrigger` raises a `mayCollectBounty` choice instead of the effect
-(see `choices.md`), and `runBountyCollection` answers it. See `keywords-effects.md` "Bounty" for the
-full shape, including how a card conditionally granted its own Bounty reads `ctx.bountyUnit` rather
-than an aura (the unit is already out of play by the time anything hears the trigger).
+(see `choices.md`), and `runBountyCollection` answers it, from where the collection is announced as a
+`whenAbilityUsed` use (SHD_010 Bossk's back: "you may collect that BOUNTY again", using the same
+handle, so "again" is itself a fresh `mayCollectBounty` choice rather than a silent rerun). See
+`keywords-effects.md` "Bounty" for the full shape, including how a card conditionally granted its own
+Bounty reads `ctx.bountyUnit` rather than an aura (the unit is already out of play by the time anything
+hears the trigger).
 
 **A unit entering play raises its arrival triggers through one function, `collectArrivalTriggers`**, and
 every route in goes through it: a play, a token being created, a leader deploying and a captured card

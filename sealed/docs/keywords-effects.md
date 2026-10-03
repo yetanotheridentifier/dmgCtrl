@@ -651,6 +651,14 @@ one is always optional whatever its printed wording says.
   `abilities.ts`. This is the dispatcher's job rather than each card's own `ifYouDo`, because a
   reward may need its own internal continuation (Rich Reward's `expUpTo`) that a card-level optional
   gate would collide with.
+- **Reacting to a collection.** Resolving `mayCollectBounty` announces the collection as a
+  `whenAbilityUsed` use at `point: 'bounty'` (`resolve.ts`, once `runBountyCollection` actually
+  changed something), the same announcement any other resolved ability gets from `runOne` (see
+  `abilities.md` "Trigger points" for why this one call site builds it rather than that one). SHD_010
+  Bossk's back ("When you collect a BOUNTY: you may collect that BOUNTY again. Use this ability only
+  once each round.") hears it and runs the identical handle again through `runAbilitiesAgain`, which
+  resolves as a fresh `mayCollectBounty` choice rather than an automatic second reward, since
+  collecting a Bounty is optional however it was raised.
 - **Independent per source.** An upgrade carrying its own Bounty (Wanted, Public Enemy, Rich Reward,
   Top Target, Guild Target, Price on Your Head, Death Mark) is collected through the same
   `abilityCardIds` sweep that reads any other attached-card ability, so it fires alongside the host's
