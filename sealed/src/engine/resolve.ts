@@ -484,8 +484,8 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
       // does see it.
       if (inPlay().exhausted) readyUp()
       keywordAbilities.push(KEYWORD_AMBUSH)
-    } else if (!inPlay().exhausted) {
-      exhaust() // no target → settle into a normal exhausted entry
+    } else if (ready !== true && !grantEntersReady && !inPlay().exhausted) {
+      exhaust() // no target → settle into a normal exhausted entry, unless an ability entered it ready
     }
   } else {
     // No (or aura-stripped) Ambush: it was constructed ready only if the card printed Ambush, so revert
@@ -500,7 +500,8 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // later see the board the earlier ones left: a leader deployed by the batch is a friendly unit by
   // the time a "give a Shield to another friendly unit" in the same batch picks its targets (#529).
   // The units exploited to pay for it trigger in this same batch (CR 7.5.16.d).
-  const arrivals = [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities, fromResources, exploited?.borrowed)]
+  const keywordCtx = ready === true || grantEntersReady ? { ambushStaysReady: true } : undefined
+  const arrivals = [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities, fromResources, exploited?.borrowed, keywordCtx)]
   if (defeatOnEntry) {
     // "Play a unit from your hand … Then, defeat it. (When Played abilities resolve after the unit is
     // defeated.)" (Maul). The defeat is part of the ability that played it, so it happens while the
@@ -531,7 +532,7 @@ interface Exploited { owed: PendingTrigger[]; powers: number[]; borrowed?: strin
  * in a borrowed ability means the borrower, and they join its own arrival batch: they triggered off
  * the same event, so the controller orders the lot (CR 7.6.9).
  */
-function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string, cardId: string, keywordAbilities: string[] = [], fromResources = false, borrowed: string[] = []): PendingTrigger[] {
+function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string, cardId: string, keywordAbilities: string[] = [], fromResources = false, borrowed: string[] = [], keywordCtx?: TriggerContext): PendingTrigger[] {
   const entered = state.players[owner].units.find(u => u.instanceId === newUnitId)
   if (!entered) return []
   const owed: PendingTrigger[] = []
@@ -541,7 +542,7 @@ function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string,
     owed.push(...collectCardTriggers('whenPlayed', cardId, owner, newUnitId))
     for (const lent of borrowed) owed.push(...collectCardTriggers('whenPlayed', lent, owner, newUnitId))
     // Ambush / Support: keyword-printed When Played abilities, ordered with the rest.
-    for (const kw of keywordAbilities) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId))
+    for (const kw of keywordAbilities) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId, keywordCtx))
   }
   owed.push(...collectArrivalTriggers(state, 'whenPlayUnit', owner, newUnitId))
   owed.push(...collectPlayCard(state, owner, cardId, fromResources, newUnitId))
@@ -1084,8 +1085,8 @@ function resumePendingAttack(state: GameState): GameState {
   return next.winner !== null || hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
 }
 
-/** Decline a pending choice. Ambush and pay-or-exhaust leave the unit
- *  exhausted; Support and may-play do nothing. `choiceId` picks one of several. */
+/** Decline a pending choice. Pay-or-exhaust leaves the unit exhausted, and so does Ambush unless the
+ *  unit enters ready on its own (`staysReady`); Support and may-play do nothing. `choiceId` picks one of several. */
 /**
  * Rhydonium Detonation: "Each player may return a non-leader unit to its owner's hand. Then, defeat
  * all non-leader units." Both saves are offered at once because they are independent, so the wipe
@@ -1103,7 +1104,7 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   let next = removeChoice(state, choice.id)
   if (choice.kind === 'payOrExhaust' && choice.orReturn) {
     next = returnUnitToHand(next, choice.unitId)
-  } else if (choice.kind === 'ambush' || choice.kind === 'payOrExhaust') {
+  } else if ((choice.kind === 'ambush' && !choice.staysReady) || choice.kind === 'payOrExhaust') {
     next = updatePlayer(next, choice.controller, {
       units: next.players[choice.controller].units.map(u => (u.instanceId === choice.unitId ? { ...u, exhausted: true } : u)),
     })
@@ -2815,7 +2816,7 @@ function applyDeployKeywords(state: GameState, owner: PlayerId, instanceId: stri
   let next = applyEntryKeywords(state, owner, instanceId)
   if (unitHasKeyword(next, unitNow(next), 'Ambush')) {
     if (ambushHasTarget(next, unitNow(next), owner)) {
-      next = pushChoice(next, { kind: 'ambush', id: instanceId, controller: owner, unitId: instanceId })
+      next = pushChoice(next, { kind: 'ambush', id: instanceId, controller: owner, unitId: instanceId, staysReady: true })
     }
   } else if (unitHasKeyword(next, unitNow(next), 'Support')) {
     next = openSupportChoice(next, owner, instanceId)

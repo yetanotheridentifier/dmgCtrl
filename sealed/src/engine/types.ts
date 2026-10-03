@@ -1016,6 +1016,8 @@ export interface TriggerContext {
    * defeated by the combat damage of its own attack ("when a friendly unit is defeated while attacking").
    */
   defeatedWhileAttacking?: boolean
+  /** Ambush's `whenPlayed`: the unit entered ready without Ambush, so a declined Ambush leaves it ready. */
+  ambushStaysReady?: boolean
   /** A unit the event is *about*: the one just played, readied, or chosen. */
   targetInstanceId?: string
   /** `whenUpgradeAttached`: the upgrade was played (from any zone) rather than created or moved by an ability. */
@@ -1138,7 +1140,9 @@ type WithChoiceSource<T> = T extends unknown ? T & { source?: DamageSource } : n
  * once the queue drains, play resumes with the initiative holder, not `advanceTurn`.
  */
 type ChoiceVariant =
-  | { kind: 'ambush'; id: string; controller: PlayerId; unitId: string }
+  // `staysReady`: the unit enters ready without Ambush (a deployed leader, an enters-ready grant), so
+  // declining leaves it ready instead of exhausting it.
+  | { kind: 'ambush'; id: string; controller: PlayerId; unitId: string; staysReady?: boolean }
   | { kind: 'support'; id: string; controller: PlayerId; unitId: string }
   // `orReturn`: declining returns the unit to its owner's hand instead of exhausting it (Millennium Falcon).
   | { kind: 'payOrExhaust'; id: string; controller: PlayerId; unitId: string; cost: number; resumeAtInitiative?: boolean; orReturn?: boolean }
