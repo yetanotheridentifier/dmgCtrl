@@ -192,7 +192,9 @@ units or bases until Done, then deals what it healed to `damageUnit` when there 
 Repairs has none), and `oneUnit` keeps every point on the first unit picked (Kashyyyk Defender).
 
 `lookAtHand` narrows a compelled discard with `discardFilter` (a non-unit card, or an event) or
-`discardAspects` (a card sharing an aspect with a unit, Hold For Questioning). `playUnitFromHand` can
+`discardAspects` (a card sharing an aspect with a unit, Hold For Questioning), and resumes the card's
+`ifYouDo` through `then` with the discarded card as `cardChosen`, after any `thenDraw` (Mother Talzin
+grants a discarded unit's play from that pile). `playUnitFromHand` can
 also damage its controller's base by the unit's cost (`thenDamageOwnBase`), give the unit a lasting
 effect (`thenLasting`), leave a delayed effect about it (`thenDelay`), and defeat a set of units once the
 play is settled whether it was played or declined (`thenDefeat`, Consolidation of Power). With `then` it

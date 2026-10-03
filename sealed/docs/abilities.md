@@ -155,7 +155,10 @@ players' leaders, bases and units, the playing player's first, with who played i
 `ctx.playingPlayer`, because the point is also printed from the far side ("when an opponent plays an
 event", Saw Gerrera). As with `whenDrawCards`, every registration at this point compares
 `ctx.playingPlayer` against `ctx.owner`. A card played out of a resource zone carries
-`ctx.playedFromResources` ("when you play a card from your resources", Bail Organa). `whenUnitEntersPlay`
+`ctx.playedFromResources` ("when you play a card from your resources", Bail Organa). A played unit is
+already in play when the point is collected, so it hears its own play; `ctx.targetInstanceId` names it,
+which is how "when you play **another** Aggression card" leaves itself out while a second copy of the
+same card still counts (Fighters For Freedom). `whenUnitEntersPlay`
 is collected from both players' bases and from every unit in play but the one arriving, for any unit
 either player brings into play (Trap Field, and Phee Genoa hearing an enemy leader deploy).
 

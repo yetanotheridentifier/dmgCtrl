@@ -185,8 +185,8 @@ Two phases:
   card from a discard pile" became a standing permission on the Play a Card action. 20 cards, the
   five HMW ones among them. Three cards need an "Action:" dispatched from a card sitting IN the
   discard pile, a site the engine does not have, and are on #678; L3-37 shipped with #477 and
-  Obi-Wan Kenobi with #474; Second Chance, Stolen Landspeeder,
-  Sifo-Dyas and Mother Talzin are on the ticket of their own other blocker.
+  Obi-Wan Kenobi with #474, Sifo-Dyas and Mother Talzin with #685; Second Chance and Stolen
+  Landspeeder are on the ticket of their own other blocker.
   **Exploit is finished** (#473), and now so is every TWI Exploit card: 22 of TWI's 23 shipped with it
   (seven play as printed, Count Dooku's leader gives it) with HMW's The Marauder on the same step, and
   Osi Sobeck shipped with #466 once capture existed for it to read. Exploit is not offered on a play
@@ -376,7 +376,7 @@ mechanic tickets above by comment, #680 for trigger heads no point raises, #678 
 record, and five new ones, #682 losing abilities (8, all shipped), #683 re-using abilities (7, of which the two that
 borrow another card's When Played abilities shipped and the five that re-run an ability already used
 moved to #704, all shipped), #684 replacement
-effects (5, all shipped), #685 cards that need only writing (22) and #686 the one-offs no other ticket owns (23).
+effects (5, all shipped), #685 cards that need only writing (22, all shipped) and #686 the one-offs no other ticket owns (23).
 **Homeworlds is complete: every HMW card is built.** Vernestra Rwoh, the last of them, shipped with
 #683. Jar Jar Binks, The First Legion, Zam Wesell and Maul's front shipped off #686; the rest of that
 ticket's one-offs moved to #701. Asajj Ventress shipped with #476.

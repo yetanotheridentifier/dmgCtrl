@@ -165,6 +165,9 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   // A keyword the source lists that the card does not print, alongside one it omits.
   LAW_081: { keywords: [{ name: 'Ambush' }, { name: 'Overwhelm' }] }, // Sullustan Sapper: the card prints Ambush and Overwhelm, not Shielded
 
+  // A keyword the source lists that the card only gains from its own ability.
+  LOF_096: { keywords: [] }, // Obi-Wan Kenobi: gains Sentinel for the phase when a Force unit is played
+
   // The literal word "Keyword"/"Keywords" parsed out of ability text into the card's own keyword
   // list, on the cards whose ability treats a keyword as a value. None of them is a keyword; each
   // card's real printed set is whatever is left once the ability's words are taken back out.

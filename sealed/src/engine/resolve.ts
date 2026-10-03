@@ -2,7 +2,7 @@ import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef, UsedAbility } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed } from './types'
-import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
+import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
 import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectAbilityUsed, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
@@ -456,8 +456,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   if (grants.length > 0) {
     if (grantKeywords.length > 0) next = addLastingEffect(next, { targetInstanceId: newUnit.instanceId, keywords: grantKeywords })
     // By identity, not by matching again: the unit is now on the board, and a filter that reads the board would see it.
-    const remaining = (next.players[owner].nextUnitGrants ?? []).filter(g => !grants.includes(g))
-    next = updatePlayer(next, owner, { nextUnitGrants: remaining.length > 0 ? remaining : undefined })
+    next = updatePlayer(next, owner, { nextUnitGrants: spendNextUnitGrants(next.players[owner].nextUnitGrants, grants) })
   }
 
   // Shielded and Hidden, from the live keywords, before anything reacts to the unit arriving: the
@@ -545,7 +544,7 @@ function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string,
     for (const kw of keywordAbilities) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId))
   }
   owed.push(...collectArrivalTriggers(state, 'whenPlayUnit', owner, newUnitId))
-  owed.push(...collectPlayCard(state, owner, cardId, fromResources))
+  owed.push(...collectPlayCard(state, owner, cardId, fromResources, newUnitId))
   return owed
 }
 
@@ -554,9 +553,13 @@ function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string,
  * players' leaders, bases and units, the playing player's first, because the point is also printed
  * from the far side ("when an opponent plays an event", Saw Gerrera), exactly as `whenDrawCards` is.
  * Every registration therefore compares `ctx.playingPlayer` against `ctx.owner`.
+ *
+ * A played unit is already in play when this is collected, so it hears its own play; `targetInstanceId`
+ * names it, which is how "when you play another <kind of> card" leaves itself out (a copy of the same
+ * card is another card).
  */
-function collectPlayCard(state: GameState, playerId: PlayerId, cardId: string, fromResources = false): PendingTrigger[] {
-  const ctx = { playedCardId: cardId, playingPlayer: playerId, ...(fromResources ? { playedFromResources: true } : {}) }
+function collectPlayCard(state: GameState, playerId: PlayerId, cardId: string, fromResources = false, playedUnitId?: string): PendingTrigger[] {
+  const ctx = { playedCardId: cardId, playingPlayer: playerId, ...(fromResources ? { playedFromResources: true } : {}), ...(playedUnitId ? { targetInstanceId: playedUnitId } : {}) }
   return [playerId, opponentOf(playerId)].flatMap(p =>
     [...collectPlayerTriggers(state, 'whenPlayCard', p, ctx), ...collectUnitsTrigger(state, 'whenPlayCard', p, ctx)])
 }
@@ -740,11 +743,10 @@ function playEventCard(state: GameState, playerId: PlayerId, cardId: string, car
   // "The next event you play this phase costs less" (Rex): priced into the cost already paid, so
   // spent now.
   const eventGrants = (p.nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g, state, playerId))
-  const grantsLeft = (p.nextUnitGrants ?? []).filter(g => !eventGrants.includes(g))
   // An event goes to its OWNER's discard pile (CR 1.5.2), which is the player it was played out of
   // when that was not the one playing it. The grants are still the player's own.
   const owner = cardOwner ?? playerId
-  let next = updatePlayer(state, playerId, eventGrants.length ? { nextUnitGrants: grantsLeft.length ? grantsLeft : undefined } : {})
+  let next = updatePlayer(state, playerId, eventGrants.length ? { nextUnitGrants: spendNextUnitGrants(p.nextUnitGrants, eventGrants) } : {})
   next = updatePlayer(next, owner, { discard: [...next.players[owner].discard, card.id] })
   // After the cost, so Peli Motto's "first non-unit card each phase" counts this one as the first.
   next = recordCardPlayed(next, playerId, card.id)
@@ -2031,8 +2033,11 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'lookAtHand': {
       // Remnant Lookouts: discard the chosen card from the target's hand; if `thenDraw`, they draw.
       if (choice.mayDiscard && handIndex !== undefined) {
+        const discarded = next.players[choice.target].hand[handIndex]
         next = discardFromHand(next, choice.target, handIndex)
         if (choice.thenDraw) next = drawCards(next, choice.target, 1)
+        // The rest of the ability, told which card went (Mother Talzin).
+        if (choice.then && discarded !== undefined) next = runIfYouDo(next, choice.then, { cardChosen: discarded })
       }
       // Qi'ra looks first and names afterwards, so the naming waits for the look to be answered.
       if (choice.thenNameCard) {

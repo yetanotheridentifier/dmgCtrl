@@ -326,6 +326,11 @@ function formatSweep(report: SweepReport, wallMs: number, aiName: string): strin
     if (report.uncovered.length > 40) lines.push(`    ... and ${report.uncovered.length - 40} more`)
     lines.push('')
   }
+  if (report.undeployed.length > 0) {
+    lines.push(`  ${report.undeployed.length} leader(s) never deployed:`)
+    for (const id of report.undeployed) lines.push(`    ${id}`)
+    lines.push('')
+  }
   if (report.dropped > 0) {
     lines.push(`  ⚠ ${report.dropped} game(s) dropped across the pool:`)
     for (const f of report.failures.slice(0, 40)) lines.push(`    ${f.deck}  seed ${f.seed}  ${f.reason}`)

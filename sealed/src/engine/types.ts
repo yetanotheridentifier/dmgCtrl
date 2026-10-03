@@ -382,6 +382,15 @@ export interface NextUnitGrant {
   anyCard?: boolean
   // The matching card gains Exploit this many (Count Dooku), read by `exploitTerms` as it is played.
   exploit?: number
+  // "Each of the next N <cards> you play": the grant applies to N matching cards, one at a time,
+  // instead of being spent by the first (Tranquility).
+  uses?: number
+}
+
+/** `all` once a played card has spent `spent` (each a grant from `all`): a counted grant loses one use, the rest go. */
+export function spendNextUnitGrants(all: NextUnitGrant[] | undefined, spent: NextUnitGrant[]): NextUnitGrant[] | undefined {
+  const left = (all ?? []).flatMap(g => (!spent.includes(g) ? [g] : (g.uses ?? 1) > 1 ? [{ ...g, uses: g.uses! - 1 }] : []))
+  return left.length > 0 ? left : undefined
 }
 
 /** True if `card` is a unit satisfying a grant's filter. `state` and `owner` are needed only by a board-reading filter. */
@@ -1490,7 +1499,7 @@ type ChoiceVariant =
   // (Hold For Questioning). A hand with nothing eligible keeps its Done even under `mustDiscard`, or
   // the choice would have no legal move.
   // `thenNameCard` raises a `nameCard` once the look is done (Qi'ra looks, then names).
-  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean; discardFilter?: 'nonUnit' | 'event' | 'unit'; discardAspects?: string[]; thenNameCard?: { unitId: string; surcharge: number } }
+  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean; discardFilter?: 'nonUnit' | 'event' | 'unit'; discardAspects?: string[]; thenNameCard?: { unitId: string; surcharge: number }; then?: IfYouDo }
   // Search the revealed top cards (Clan Wren Loyalist): pick one of the `eligibleIndices`
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.
