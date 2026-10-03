@@ -1,6 +1,6 @@
 import type { GameState, PendingTrigger, PlayerId } from './types'
 import { pushChoice, hasPendingChoices } from './types'
-import { runPendingTrigger } from './abilities'
+import { collectAbilityUsed, runPendingTrigger, usedAbilityOf } from './abilities'
 
 /**
  * Ordering a batch of triggered abilities (CR 7.6.9 - 7.6.12).
@@ -57,7 +57,14 @@ export function enqueueTriggers(state: GameState, triggers: PendingTrigger[], sa
 function runOne(state: GameState, trigger: PendingTrigger): GameState {
   const waiting = (state.pendingTriggers ?? []).filter(t => t.id !== trigger.id)
   // `activePlayer` follows the ability, so a choice it raises is offered to the right side.
-  return runPendingTrigger({ ...state, pendingTriggers: waiting, activePlayer: trigger.controller }, trigger)
+  const from: GameState = { ...state, pendingTriggers: waiting, activePlayer: trigger.controller }
+  const after = runPendingTrigger(from, trigger)
+  // Announced as a nested batch like any other, which the queue holds back until the ability's own
+  // choices are answered, so "use that ability again" follows the whole first use. A "Then, ..." the
+  // ability owes after a choice is enqueued later, from the answer, so it nests deeper still and
+  // resolves before the announcement too.
+  const used = usedAbilityOf(trigger, after !== from)
+  return used ? enqueueTriggers(after, collectAbilityUsed(after, used)) : after
 }
 
 /** The deepest layer still owed. Nested abilities resolve before the batch they interrupted. */

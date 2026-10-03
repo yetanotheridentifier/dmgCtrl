@@ -323,6 +323,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'LOF_007', name: 'Avar Kriss', front: true, back: true },
   { id: 'LOF_002', name: 'Mother Talzin', front: true, back: true },
   { id: 'LOF_014', name: 'Grand Inquisitor', front: true, back: true },
+  { id: 'JTL_002', name: 'Grand Admiral Thrawn', front: true, back: true },
+  { id: 'LAW_014', name: 'Enfys Nest', front: true, back: true },
 ]
 
 /**
@@ -1019,6 +1021,7 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LOF_202', name: 'Mind Trick' },
   { id: 'SEC_157', name: 'One Way Out' },
   { id: 'LAW_132', name: 'The Tree Remembers' },
+  { id: 'LAW_256', name: 'Fire Across the Galaxy' },
 ]
 
 /**
@@ -2220,6 +2223,9 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SEC_046', name: 'Galen Erso' },
   { id: 'SOR_089', name: 'Relentless' },
   { id: 'LAW_117', name: 'Conveyex Security Captain' },
+  // Using an ability again (#704)
+  { id: 'JTL_169', name: 'Shadow Caster' },
+  { id: 'LOF_197', name: "Qui-Gon Jinn's Aethersprite" },
 ]
 
 /**

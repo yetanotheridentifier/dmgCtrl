@@ -22,7 +22,7 @@ import type { EngineCard, GameState, LeaderState, PendingChoice, UnitState } fro
 
 const SHIPPED = ['JTL_002', 'LAW_014', 'JTL_169', 'LOF_197', 'LAW_256']
 /** The abilities being used again: draws, a damage choice, and Spectre units for Fire Across the Galaxy. */
-const USED = ['LOF_059', 'SHD_164', 'LAW_107', 'LAW_055', 'LAW_045']
+const USED = ['LOF_059', 'SHD_164', 'LAW_107', 'LAW_055', 'LAW_045', 'SOR_058']
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
 const real = (id: string): EngineCard => {
@@ -203,8 +203,21 @@ describe('LOF_197 Qui-Gon Jinn\'s Aethersprite: the next "When Played" this phas
     expect(exp(next, chopper)).toBe(4)
     noChoice(next)
     // Only the next time: a second "When Played" is not offered.
+    // (Chopper is unique, so the second copy asks which to keep, but nothing offers a second use.)
     const again = resolve({ ...next, activePlayer: 'player' }, { type: 'playUnit', handIndex: 0 })
-    noChoice(again)
+    expect((again.pendingChoices ?? []).some(c => c.kind === 'mayPayThen')).toBe(false)
+  })
+
+  it('is offered only once the whole ability has resolved, its "Then" half included', () => {
+    const s = board({ units: [unit('qg', 'LOF_197', { arena: 'space' })], hand: ['SOR_058'] }, { deck: Array(12).fill('A') })
+    let next = resolve({ ...attack(s, 'qg'), activePlayer: 'player' }, { type: 'playEvent', handIndex: 0 })
+    const mode = (st: GameState, m: string) => accept(st, { optionIndex: (choice(st) as { modes: string[] }).modes.indexOf(m) })
+    next = mode(next, '1:mill')
+    expect(choice(next).kind).toBe('chooseMode') // the second of "choose two" before any second use
+    next = accept(mode(next, '2:shield'), { targetInstanceId: 'qg' })
+    expect(choice(next)).toMatchObject({ kind: 'mayPayThen' })
+    next = accept(next)
+    expect(choice(next).kind).toBe('chooseMode') // the whole ability again, from its first choice
   })
 
   it('lasts only for the phase', () => {
@@ -230,13 +243,13 @@ describe('LAW_256 Fire Across the Galaxy: use any number of "When Played" abilit
     expect(choice(next)).toMatchObject({ kind: 'selectUnitThen', optional: true })
     expect([...(choice(next) as { targets: string[] }).targets].sort()).toEqual(['chop', 'zeb'])
     next = accept(next, { targetInstanceId: 'chop' })
-    expect(exp(next, 'chop')).toBe(1)
+    expect(exp(next, 'chop')).toBe(2) // Zeb is Vigilance, so Chopper gives himself 2
     expect((choice(next) as { targets: string[] }).targets).toEqual(['zeb'])
     next = accept(next, { targetInstanceId: 'zeb' })
     // Zeb's own "you may deal 3 damage to a ground unit" is asked, then nothing is left to offer.
     expect(choice(next).kind).not.toBe('selectUnitThen')
     next = accept(next, { targetInstanceId: 't' })
-    expect(U(next, 't')?.damage).toBe(3)
+    expect(U(next, 't')?.damage).toBe(5) // Chopper is Cunning, so Zeb deals 5
     noChoice(next)
   })
 

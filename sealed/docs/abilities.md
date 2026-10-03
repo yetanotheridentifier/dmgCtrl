@@ -141,7 +141,7 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenDamageDealt`, `whenEnemyAttacksBase`,
 `whenFriendlyAttackEnds`, `whenDeployed`, `whenPlayUpgrade`, `whenPlayCard`, `whenUnitEntersPlay`,
-`whenActionPhaseStarts`, `bounty`.
+`whenActionPhaseStarts`, `whenAbilityUsed`, `bounty`.
 
 `whenPlayUpgrade` ("when you play an upgrade") fires on the player's undeployed leader, base and units,
 with the card in `ctx.playedCardId` and, unless it went on a base, the unit it went on in
@@ -174,6 +174,27 @@ ready step, raised on every unit they control whether or not it was exhausted, i
 `whenReadies` (which fires only on a unit that actually readied). Its `payOrExhaust` with `orReturn`
 returns the unit to its owner's hand on a decline, and resumes with the initiative holder as every
 ready-step choice does.
+
+`whenAbilityUsed` ("when you use a 'When Defeated' ability", Grand Admiral Thrawn, Enfys Nest) is
+raised by the trigger queue itself (`runOne` in `triggerQueue.ts`) after a collected ability resolves,
+so every route an ability resolves through announces it. It is a nested batch like any other, so it
+waits for the ability's own choices and any "Then, ..." those answers owe: "use that ability again"
+follows the whole first use. `ctx.usedAbility` is the ability's handle (`UsedAbility`: card, ability
+index, point, source and event context), and the hearing card checks the point in `hears`. It is not
+raised for an ability that changed nothing, for a "Then, ..." entry, or for Bounty, whose collection is
+the `mayCollectBounty` choice. Only the controller hears it: their leader, units, and the cards in
+`state.abilityUseHearers`, a per-phase list for a card that keeps listening after it has left play
+(Qui-Gon Jinn's Aethersprite, through the pseudo card `GRANT_QUI_GON_JINNS_AETHERSPRITE`). Hearers
+are indexed when registered, so a board with none skips the collection.
+
+**Using an ability again** is `runAbilitiesAgain(state, handles)` (`effects.ts`): the handles go
+through the queue as a fresh batch, so the second run reads the board the first left, raises its own
+choices again, and is itself announced. A "you may" in front of it carries the handles across the
+choice in `IfYouDo.again`, and a card that hears uses stops itself before the second run (Thrawn's
+front exhausts the leader, his back marks the round). Shadow Caster builds its handles by collecting
+the defeated unit's `whenDefeated` abilities off the unit as it last was, and Fire Across the Galaxy
+from a Spectre unit's `whenPlayed` abilities, one unit at a time with `IfYouDo.taken` naming the ones
+already used.
 
 `whenEnemyUnitReadies` ("when an enemy unit readies during the action phase", Rex's DC-17s) is raised
 by `readyUnit` (`effects.ts`), the single-unit ready primitive, rather than by a resolver call site: it
