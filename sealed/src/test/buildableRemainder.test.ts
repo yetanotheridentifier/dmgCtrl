@@ -5,6 +5,7 @@ import { TOKEN_BATTLE_DROID, TOKEN_CLONE_TROOPER } from '../engine/tokenUnits'
 import { CARD_DATA_CORRECTIONS } from '../engine/cardDataCorrections'
 import { unitHasKeyword } from '../engine/keywords'
 import { effectivePower } from '../engine/stats'
+import { getCardDefinition } from '../engine/abilities'
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState } from '../engine/types'
 
@@ -28,7 +29,19 @@ const F: Record<string, EngineCard> = {
   LAW_119: card({ id: 'LAW_119', name: 'Rogue One', arena: 'space', cost: 3, power: 3, hp: 3, traits: ['Rebel', 'Vehicle', 'Transport'], unique: true }),
   TWI_102: card({ id: 'TWI_102', name: 'Manufactured Soldiers', type: 'event', cost: 3, aspects: ['Command', 'Command'], traits: ['Supply'] }),
   LOF_096: card({ id: 'LOF_096', name: 'Obi-Wan Kenobi', arena: 'ground', cost: 3, power: 3, hp: 5, traits: ['Force', 'Jedi', 'Republic'], unique: true }),
+  SHD_014: card({ id: 'SHD_014', name: 'Cad Bane', type: 'leader', arena: 'ground', cost: 6, power: 2, hp: 8, traits: ['Underworld', 'Bounty Hunter'] }),
+  SHD_205: card({ id: 'SHD_205', name: 'Let the Wookiee Win', type: 'event', cost: 2, aspects: ['Cunning', 'Heroism'], traits: ['Trick'] }),
+  TWI_246: card({ id: 'TWI_246', name: 'Tranquility', arena: 'space', cost: 7, power: 7, hp: 6, aspects: ['Heroism'], traits: ['Republic', 'Vehicle', 'Capital Ship'], unique: true }),
+  SOR_016: card({ id: 'SOR_016', name: 'Grand Admiral Thrawn', type: 'leader', arena: 'ground', cost: 6, power: 3, hp: 9, traits: ['Imperial', 'Official'] }),
+  LOF_117: card({ id: 'LOF_117', name: 'Sifo-Dyas', arena: 'ground', cost: 5, power: 4, hp: 4, traits: ['Force', 'Jedi', 'Republic'], unique: true }),
+  TS26_26: card({ id: 'TS26_26', name: 'Mother Talzin', arena: 'ground', cost: 5, power: 5, hp: 4, traits: ['Force', 'Night'], unique: true }),
   // Props
+  UWC: card({ id: 'UWC', arena: 'ground', cost: 1, power: 1, hp: 3, traits: ['Underworld'] }),
+  WOOK: card({ id: 'WOOK', arena: 'ground', cost: 2, power: 2, hp: 4, traits: ['Wookiee'] }),
+  REP: card({ id: 'REP', arena: 'ground', cost: 2, power: 2, hp: 2, traits: ['Republic'] }),
+  CL1: card({ id: 'CL1', arena: 'ground', cost: 1, power: 1, hp: 1, traits: ['Clone'] }),
+  CL2: card({ id: 'CL2', arena: 'ground', cost: 2, power: 2, hp: 2, traits: ['Clone'] }),
+  CL3: card({ id: 'CL3', arena: 'ground', cost: 3, power: 3, hp: 3, traits: ['Clone'] }),
   UPG: card({ id: 'UPG', type: 'upgrade', cost: 1, power: 1, hp: 1 }),
   GRD: card({ id: 'GRD', arena: 'ground', cost: 2, power: 2, hp: 6 }),
   SMALL: card({ id: 'SMALL', arena: 'ground', cost: 1, power: 1, hp: 1 }),
@@ -316,5 +329,140 @@ describe('LOF_096 Obi-Wan Kenobi', () => {
     expect(unitHasKeyword(playUnit(s), U(playUnit(s), 'o')!, 'Sentinel')).toBe(false)
     const forced = playUnit(s, 1)
     expect(unitHasKeyword(forced, U(forced, 'o')!, 'Sentinel')).toBe(true)
+  })
+})
+
+// ── An opponent chooses ──────────────────────────────────────────────────────────────────────────
+
+describe('SHD_014 Cad Bane', () => {
+  const theirs = { units: [unit('e', 'GRD'), unit('f', 'GRD')] }
+
+  it('front: playing an Underworld card may exhaust the leader; an opponent chooses one of their units to take 1 damage', () => {
+    const s = playUnit(board({ ...leader('SHD_014'), hand: ['UWC'] }, theirs))
+    expect(choice(s)).toMatchObject({ kind: 'mayPayThen', controller: 'player' })
+    const paid = accept(s)
+    expect(paid.players.player.leader.exhausted).toBe(true)
+    expect(choice(paid).controller).toBe('opponent')
+    expect(targetsOf(choice(paid))).toEqual(['e', 'f'])
+    expect(U(accept(paid, { targetInstanceId: 'f' }), 'f')!.damage).toBe(1)
+  })
+
+  it('front: a card without Underworld offers nothing', () => {
+    noChoice(playUnit(board({ ...leader('SHD_014'), hand: ['GRD'] }, theirs)))
+  })
+
+  it('back: deals 2 to the unit the opponent chooses, once each round', () => {
+    const s = playUnit(board({ ...leader('SHD_014', true), units: [unit('L', 'SHD_014', { isLeader: true })], hand: ['UWC', 'UWC'] }, theirs))
+    const dealt = accept(accept(s), { targetInstanceId: 'e' })
+    expect(U(dealt, 'e')!.damage).toBe(2)
+    expect(U(dealt, 'L')!.exhausted).toBe(false)
+    noChoice(playUnit(dealt))
+  })
+})
+
+describe('SHD_205 Let the Wookiee Win', () => {
+  const tired = [...ready(2), ...ready(6).map(r => ({ ...r, exhausted: true }))]
+
+  it('an opponent chooses: the player readies up to 6 resources', () => {
+    const s = playEvent(board({ hand: ['SHD_205'], resources: tired }))
+    expect(choice(s)).toMatchObject({ kind: 'chooseMode', controller: 'opponent' })
+    const readied = accept(s, { optionIndex: 0 })
+    expect(readied.players.player.resources.filter(r => !r.exhausted)).toHaveLength(6)
+  })
+
+  it('or the player readies a friendly unit, and a Wookiee attacks at +2/+0', () => {
+    const s = playEvent(board({ hand: ['SHD_205'], units: [unit('w', 'WOOK', { exhausted: true }), unit('g', 'GRD', { exhausted: true })] }))
+    const pick = accept(s, { optionIndex: 1 })
+    expect(choice(pick).controller).toBe('player')
+    expect(targetsOf(choice(pick))).toEqual(['g', 'w'])
+    const wook = accept(pick, { targetInstanceId: 'w' })
+    expect(U(wook, 'w')!.exhausted).toBe(false)
+    const offer = choice(wook)
+    expect(offer.kind).toBe('mayAttackAnyUnit')
+    const grant = offer.kind === 'mayAttackAnyUnit' ? offer.grantCardId : undefined
+    expect(getCardDefinition(grant!)!.statModifier!(wook, U(wook, 'w')!, { attacking: true })).toEqual({ power: 2 })
+    const plain = accept(pick, { targetInstanceId: 'g' })
+    expect(U(plain, 'g')!.exhausted).toBe(false)
+    noChoice(plain)
+  })
+})
+
+// ── The rest ─────────────────────────────────────────────────────────────────────────────────────
+
+describe('TWI_246 Tranquility', () => {
+  it('may return a Republic unit from the discard pile when played', () => {
+    const s = playUnit(board({ hand: ['TWI_246'], discard: ['GRD', 'REP'] }))
+    const c = choice(s)
+    expect(c.kind === 'selectFromDiscard' ? c.candidates : []).toEqual(['REP'])
+    expect(accept(s, { optionIndex: 0 }).players.player.hand).toEqual(['REP'])
+  })
+
+  it('on attack, each of the next 3 Republic cards played this phase costs 1 less', () => {
+    let s = attackBase(board({ units: [unit('t', 'TWI_246')], hand: ['REP', 'GRD', 'REP', 'REP', 'REP'] }), 't')
+    const spent = (before: GameState, after: GameState) =>
+      before.players.player.resources.filter(r => !r.exhausted).length - after.players.player.resources.filter(r => !r.exhausted).length
+    const costs: number[] = []
+    for (let i = 0; i < 5; i++) {
+      const next = playUnit(s, 0)
+      costs.push(spent(s, next))
+      s = next
+    }
+    expect(costs, 'Republic, non-Republic, then Republic until the three are spent').toEqual([1, 2, 1, 1, 2])
+  })
+})
+
+describe('SOR_016 Grand Admiral Thrawn', () => {
+  it('front action: reveal the top card of a deck and exhaust a unit that costs the same or less', () => {
+    const s = board({ ...leader('SOR_016'), units: [unit('g', 'GRD')] }, { deck: ['GRD'], units: [unit('m', 'SMALL'), unit('b', 'BIG')] })
+    const used = resolve(s, { type: 'useLeaderAbility', index: 0 })
+    expect(choice(used).kind).toBe('choosePlayerThen')
+    const revealed = accept(used, { optionIndex: 0 })
+    expect(targetsOf(choice(revealed)), 'costs 2 or less').toEqual(['g', 'm'])
+    const done = accept(revealed, { targetInstanceId: 'm' })
+    expect(U(done, 'm')!.exhausted).toBe(true)
+    expect(done.players.player.leader.exhausted).toBe(true)
+    expect(done.players.player.resources.filter(r => r.exhausted)).toHaveLength(1)
+  })
+
+  it('back: on attack may reveal the top card of a deck and exhaust a unit that costs the same or less', () => {
+    const s = board({ ...leader('SOR_016', true), units: [unit('L', 'SOR_016', { isLeader: true })], deck: ['SMALL'] }, { units: [unit('m', 'SMALL'), unit('g', 'GRD')] })
+    const swung = attackBase(s, 'L')
+    expect(choice(swung)).toMatchObject({ kind: 'choosePlayerThen', optional: true })
+    const revealed = accept(swung, { optionIndex: 1 })
+    expect(targetsOf(choice(revealed))).toEqual(['m'])
+  })
+})
+
+describe('LOF_117 Sifo-Dyas', () => {
+  it('when defeated, discards Clone units of combined cost 4 or less from the top 8, free to play from the discard this phase', () => {
+    const s = attackUnit(board({ units: [unit('s', 'LOF_117')], deck: ['CL1', 'GRD', 'CL3', 'CL2'], resources: ready(0) }, { units: [unit('b', 'BIG')] }), 's', 'b')
+    const first = choice(s)
+    expect(first.kind === 'selectCardThen' ? first.candidates : []).toEqual(['CL1', 'CL3', 'CL2'])
+    const picked = accept(s, { optionIndex: 1 })
+    const second = choice(picked)
+    expect(second.kind === 'selectCardThen' ? second.candidates : [], 'only what still fits under 4').toEqual(['CL1'])
+    const done = accept(picked, { optionIndex: 0 })
+    noChoice(done)
+    expect(done.players.player.discard).toEqual(expect.arrayContaining(['CL3', 'CL1']))
+    expect([...done.players.player.deck].sort()).toEqual(['CL2', 'GRD'])
+    expect(done.discardPlayGrants?.map(g => [g.cardId, g.free])).toEqual([['CL3', true], ['CL1', true]])
+    const played = resolve({ ...done, activePlayer: 'player' }, { type: 'playFromDiscard', grantIndex: 0 })
+    expect(played.players.player.units.map(u => u.cardId)).toContain('CL3')
+  })
+})
+
+describe('TS26_26 Mother Talzin', () => {
+  it("when defeated, discards a card from an opponent's hand; they draw; a unit may be played from their discard this phase", () => {
+    const s = attackUnit(board({ units: [unit('t', 'TS26_26')] }, { units: [unit('b', 'BIG')], hand: ['AGGEV', 'GRD'], deck: ['SMALL'] }), 't', 'b')
+    expect(choice(s)).toMatchObject({ kind: 'lookAtHand', target: 'opponent' })
+    const done = accept(s, { handIndex: 1 })
+    expect(done.players.opponent.discard).toContain('GRD')
+    expect(done.players.opponent.hand).toEqual(['AGGEV', 'SMALL'])
+    expect(done.discardPlayGrants).toEqual([expect.objectContaining({ player: 'player', owner: 'opponent', cardId: 'GRD', waive: { all: true } })])
+  })
+
+  it('an event discarded this way grants nothing', () => {
+    const s = attackUnit(board({ units: [unit('t', 'TS26_26')] }, { units: [unit('b', 'BIG')], hand: ['AGGEV'], deck: ['SMALL'] }), 't', 'b')
+    expect(accept(s, { handIndex: 0 }).discardPlayGrants ?? []).toEqual([])
   })
 })
