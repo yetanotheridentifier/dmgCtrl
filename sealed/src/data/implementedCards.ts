@@ -327,6 +327,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'LAW_014', name: 'Enfys Nest', front: true, back: true },
   { id: 'TWI_018', name: 'Quinlan Vos', front: true, back: true },
   { id: 'SHD_008', name: 'Boba Fett', front: true, back: true },
+  { id: 'SHD_014', name: 'Cad Bane', front: true, back: true },
+  { id: 'SOR_016', name: 'Grand Admiral Thrawn', front: true, back: true },
 ]
 
 /**
@@ -1025,6 +1027,7 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LAW_132', name: 'The Tree Remembers' },
   { id: 'LAW_256', name: 'Fire Across the Galaxy' },
   { id: 'TWI_102', name: 'Manufactured Soldiers' },
+  { id: 'SHD_205', name: 'Let the Wookiee Win' },
 ]
 
 /**
@@ -2241,6 +2244,9 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LAW_054', name: 'Maul' },
   { id: 'LAW_074', name: 'Maz Kanata' },
   { id: 'LOF_096', name: 'Obi-Wan Kenobi' },
+  { id: 'TWI_246', name: 'Tranquility' },
+  { id: 'LOF_117', name: 'Sifo-Dyas' },
+  { id: 'TS26_26', name: 'Mother Talzin' },
 ]
 
 /**

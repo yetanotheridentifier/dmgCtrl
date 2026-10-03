@@ -13265,3 +13265,113 @@ registerCard('LOF_096', { // Obi-Wan Kenobi
     { trigger: 'whenPlayUnit', description: OBI_WAN_TEXT, effect: (s, ctx) => obiWanSentinel(s, ctx, playedUnitOf(s, ctx)) },
   ],
 })
+
+const CAD_BANE_ROUND_KEY = 'SHD_014#round'
+const underworldPlayed = (s: GameState, ctx: EffectContext): boolean =>
+  ctx.playingPlayer === ctx.owner && printedTrait(s.cards[ctx.playedCardId ?? ''], 'Underworld') && s.players[opponentOf(ctx.owner)].units.length > 0
+/** "An opponent chooses a unit they control. Deal `amount` damage to it": the pick is theirs. */
+const opponentPicksDamage = (s: GameState, ctx: EventCtx, id: string, amount: number): GameState => {
+  const opp = opponentOf(ctx.owner)
+  return damageChoice(s, { ...ctx, owner: opp, sourceInstanceId: id }, amount, s.players[opp].units)
+}
+registerCard('SHD_014', { // Cad Bane
+  leaderAbilities: {
+    abilities: [{ trigger: 'whenPlayCard', description: 'When you play an Underworld card: You may exhaust this leader. If you do, an opponent chooses a unit they control. Deal 1 damage to it.', effect: (s, ctx) =>
+      (underworldPlayed(s, ctx) && leaderCanExhaust(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Cad Bane (leader): an opponent chooses a unit they control to take 1 damage', then: resume(ctx, 'front') })
+        : s) }],
+  },
+  abilities: [{ trigger: 'whenPlayCard', description: 'When you play an Underworld card: You may choose an opponent. They choose a unit they control. Deal 2 damage to it. Use this ability only once each round.', effect: (s, ctx) =>
+    (underworldPlayed(s, ctx) && !usedThisRound(s, ctx, CAD_BANE_ROUND_KEY)
+      ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-cad`, controller: ctx.owner, cost: 0, text: 'have an opponent choose a unit they control to take 2 damage', then: resume(ctx, 'back') })
+      : s) }],
+  ifYouDo: (s, ctx) => (ctx.step === 'front'
+    ? opponentPicksDamage(exhaustLeader(s, ctx.owner), ctx, `${ctx.cardId}-front`, 1)
+    : opponentPicksDamage(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, CAD_BANE_ROUND_KEY), ctx, `${ctx.sourceInstanceId}-cad`, 2)),
+})
+
+const GRANT_LET_THE_WOOKIEE_WIN = 'GRANT_LET_THE_WOOKIEE_WIN'
+registerCard(GRANT_LET_THE_WOOKIEE_WIN, { sourceCardId: 'SHD_205', ...attackBonus(2) })
+registerCard('SHD_205', { // Let the Wookiee Win
+  ...whenPlayed("An opponent chooses one: You ready up to 6 resources. You ready a friendly unit. If it's a Wookiee unit, attack with it. It gets +2/+0 for this attack.", (s, ctx) =>
+    pushChoice(s, { kind: 'chooseMode', id: ctx.sourceInstanceId!, controller: opponentOf(ctx.owner), modes: ['resources', 'unit'], labels: ['They ready up to 6 resources', 'They ready a friendly unit, and a Wookiee attacks at +2/+0'], then: resume(ctx) })),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'resources') return Array.from({ length: 6 }).reduce<GameState>(acc => readyResource(acc, ctx.owner), s)
+    if (ctx.step === 'unit') return unitThen(s, ctx, s.players[ctx.owner].units.map(u => u.instanceId), 'ready a friendly unit', false, 'readied')
+    const readied = readyUnit(s, ctx.targetInstanceId!)
+    const u = findUnit(readied, ctx.targetInstanceId!)?.unit
+    return u && unitHasTrait(readied, u, 'Wookiee')
+      ? offerAttack(readied, ctx.owner, `${ctx.sourceInstanceId}-attack`, { attacker: { only: [u.instanceId] }, grantCardId: GRANT_LET_THE_WOOKIEE_WIN })
+      : readied
+  },
+})
+
+registerCard('TWI_246', { // Tranquility
+  abilities: [
+    ...returnFromDiscardWp('You may return a Republic unit from your discard pile to your hand.', c => printedUnit(c) && printedTrait(c, 'Republic'), true).abilities,
+    // `anyCard` reaches units and events: a Republic upgrade takes no "next card" grant, so it pays in full and spends no use.
+    ...attacks('Each of the next 3 Republic cards you play this phase costs 1 less.', (s, ctx) =>
+      grantNextUnit(s, ctx.owner, { anyCard: true, trait: 'Republic', costDelta: -1, uses: 3 })).abilities!,
+  ],
+})
+
+/** Grand Admiral Thrawn: reveal the top card of the chosen player's deck, then exhaust a unit that costs that much or less. */
+const thrawnReveal = (s: GameState, ctx: Resumable & { playerChosen?: PlayerId }): GameState => {
+  const top = s.players[ctx.playerChosen ?? ctx.owner].deck[0]
+  if (top === undefined) return s
+  const cost = s.cards[top]?.cost ?? 0
+  const targets = allUnits(s).filter(u => printedCost(s, u) <= cost).map(u => u.instanceId)
+  return unitThen(s, ctx, targets, `exhaust a unit that costs ${cost} or less (revealed: ${s.cards[top]?.name ?? top})`, false, 'exhaust')
+}
+const THRAWN_REVEAL = "Reveal the top card of any player's deck. Exhaust a unit that costs the same as or less than the revealed card."
+registerCard('SOR_016', { // Grand Admiral Thrawn
+  // "When the action phase starts: Look at the top card of each player's deck" is information the engine does not model.
+  ...leaderFront(THRAWN_REVEAL, { cost: 1, effect: (s, ctx) => choosePlayer(s, ctx, 'reveal the top card of the deck of', 'reveal') }),
+  ...attacks(`You may ${THRAWN_REVEAL[0].toLowerCase()}${THRAWN_REVEAL.slice(1)}`, (s, ctx) =>
+    pushChoice(s, { kind: 'choosePlayerThen', id: ctx.sourceInstanceId!, controller: ctx.owner, text: 'reveal the top card of the deck of', optional: true, then: resume(ctx, 'reveal') })),
+  ifYouDo: (s, ctx) => (ctx.step === 'exhaust' ? exhaustUnit(s, ctx.targetInstanceId!) : thrawnReveal(s, ctx)),
+})
+
+// Sifo-Dyas: one Clone unit at a time from the top 8, while the combined cost stays 4 or less, until
+// the player stops or none fits. Then the picks are discarded and the rest go under the deck.
+const sifoWindow = (s: GameState, owner: PlayerId): string[] => s.players[owner].deck.slice(0, searchCount(s, owner, 8))
+const sifoFits = (s: GameState, window: string[], picks: number[]): number[] => {
+  const spent = picks.reduce((n, i) => n + (s.cards[window[i]]?.cost ?? 0), 0)
+  return window.flatMap((id, i) => {
+    const c = s.cards[id]
+    return !picks.includes(i) && printedUnit(c) && printedTrait(c, 'Clone') && spent + (c?.cost ?? 0) <= 4 ? [i] : []
+  })
+}
+const sifoFinish = (s: GameState, ctx: Resumable, picks: number[]): GameState => {
+  const p = s.players[ctx.owner]
+  const window = sifoWindow(s, ctx.owner)
+  if (window.length === 0) return s
+  const found = picks.map(i => window[i])
+  const rest = window.filter((_, i) => !picks.includes(i))
+  const settled = { ...updatePlayer(s, ctx.owner, { deck: [...p.deck.slice(window.length), ...seededShuffle(rest, s.rngSeed)], discard: [...p.discard, ...found] }), rngSeed: nextSeed(s.rngSeed) }
+  return found.reduce((acc, cardId) => addDiscardPlayGrant(acc, { player: ctx.owner, owner: ctx.owner, cardId, free: true }), settled)
+}
+const sifoPick = (s: GameState, ctx: Resumable, picks: number[]): GameState => {
+  const window = sifoWindow(s, ctx.owner)
+  const fits = sifoFits(s, window, picks)
+  return fits.length
+    ? cardThen(s, ctx, fits.map(i => window[i]), 'discard a Clone unit to play it for free this phase', true, `sifo:${picks.join(',')}`)
+    : sifoFinish(s, ctx, picks)
+}
+registerCard('LOF_117', { // Sifo-Dyas
+  abilities: [{ trigger: 'whenDefeated', description: 'When Defeated: Search the top 8 cards of your deck for any number of Clone units with combined cost 4 or less and discard them. For this phase, you may play those cards from your discard pile for free.', effect: (s, ctx) => sifoPick(s, ctx, []) }],
+  ifYouDo: (s, ctx) => {
+    const picks = splitStep(ctx.step, 'sifo:').map(Number)
+    if (ctx.optionIndex === undefined) return sifoFinish(s, ctx, picks)
+    return sifoPick(s, ctx, [...picks, sifoFits(s, sifoWindow(s, ctx.owner), picks)[ctx.optionIndex]])
+  },
+})
+
+registerCard('TS26_26', { // Mother Talzin
+  abilities: [{ trigger: 'whenDefeated', description: "When Defeated: Look at an opponent's hand and discard a card from it. If you do, they draw a card. If the discarded card is a unit, for this phase you may play it from their discard pile, ignoring its aspect penalties.", effect: (s, ctx) =>
+    (s.players[opponentOf(ctx.owner)].hand.length ? opponentHandDiscard(s, ctx, { thenDraw: true, then: resume(ctx) }) : s) }],
+  // The card stays the opponent's (CR 1.5.2): `owner` is theirs, `player` is who may play it.
+  ifYouDo: (s, ctx) => (printedUnit(s.cards[ctx.cardChosen ?? ''])
+    ? addDiscardPlayGrant(s, { player: ctx.owner, owner: opponentOf(ctx.owner), cardId: ctx.cardChosen!, waive: { all: true } })
+    : s),
+})

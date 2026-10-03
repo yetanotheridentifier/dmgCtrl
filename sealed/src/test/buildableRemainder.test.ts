@@ -70,7 +70,7 @@ const choice = (s: GameState): PendingChoice => {
   return s.pendingChoices![0]
 }
 const noChoice = (s: GameState) => expect(s.pendingChoices ?? [], 'no choice is raised').toHaveLength(0)
-type Extra = { targetInstanceId?: string; optionIndex?: number; deckIndex?: number; baseTarget?: PlayerId }
+type Extra = { targetInstanceId?: string; optionIndex?: number; deckIndex?: number; baseTarget?: PlayerId; handIndex?: number }
 const accept = (s: GameState, extra: Extra = {}) => resolve(s, { type: 'acceptChoice', choiceId: choice(s).id, ...extra })
 const skip = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: choice(s).id })
 const targetsOf = (c: PendingChoice): string[] => ('targets' in c ? [...(c.targets as string[])] : 'unitTargets' in c ? [...(c.unitTargets as string[])] : []).sort()
@@ -361,7 +361,8 @@ describe('SHD_014 Cad Bane', () => {
 })
 
 describe('SHD_205 Let the Wookiee Win', () => {
-  const tired = [...ready(2), ...ready(6).map(r => ({ ...r, exhausted: true }))]
+  // 4 ready pay for the event (2, and 2 for the Cunning penalty); none are left ready.
+  const tired = [...ready(4), ...ready(6).map(r => ({ ...r, exhausted: true }))]
 
   it('an opponent chooses: the player readies up to 6 resources', () => {
     const s = playEvent(board({ hand: ['SHD_205'], resources: tired }))
