@@ -148,11 +148,10 @@ Two phases:
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
   shared with another trigger point ("When Played/When Defeated") is built on the compound-head framework
 (#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
-  (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 17 not built are on the ticket of what
+  (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 16 not built are on the ticket of what
   blocks them, #465 pilots (7),
-  #467 Bounty (Bossk's front is built; his back needs a new "react to a Bounty collection" primitive
-  and is its own ticket, #710; Jabba the Hutt's back reads capture too, but #707 already built its
-  chosen-guardian-and-target shape — what's left blocking the whole leader is an unbuilt "grant a
+  #467 Bounty (Bossk is fully shipped; Jabba the Hutt's back reads capture too, but #707 already built
+  its chosen-guardian-and-target shape — what's left blocking the whole leader is an unbuilt "grant a
   chosen unit a temporary keyword ability" primitive his Action needs, on #715),
   #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #686 (defeat by an enemy card ability, and Chancellor Palpatine,
@@ -179,9 +178,7 @@ Two phases:
   among them (its own Experience token is conditional on reading one). TS26_27 Fortune and Glory was a
   chosen-guardian-and-target capture and shipped with #707; Jabba the Hutt's leader waits on #715 for
   an unbuilt keyword-grant primitive his Action needs, beyond the capture shape #707 already built for
-  his back. Bossk's back ("collect that Bounty again, once each round") is on #710: using an ability
-  again (`whenAbilityUsed`, `runAbilitiesAgain`) is built, and a Bounty collection is not yet announced
-  as a use.
+  his back. Bossk's leader is fully shipped, both sides.
   **Playing a card out of a discard pile is finished**
   (#471): the discard piles became zones on the existing `playCardFrom` door, the unit-only
   `mayPlayUnitFromDiscard` it duplicated was retired onto it, and "for this phase you may play that

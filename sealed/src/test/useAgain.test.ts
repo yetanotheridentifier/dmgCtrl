@@ -20,9 +20,9 @@ import type { EngineCard, GameState, LeaderState, PendingChoice, UnitState } fro
  * second Experience token stacks), and a replayed ability that asks something asks it again.
  */
 
-const SHIPPED = ['JTL_002', 'LAW_014', 'JTL_169', 'LOF_197', 'LAW_256']
+const SHIPPED = ['JTL_002', 'LAW_014', 'JTL_169', 'LOF_197', 'LAW_256', 'SHD_010']
 /** The abilities being used again: draws, a damage choice, and Spectre units for Fire Across the Galaxy. */
-const USED = ['LOF_059', 'SHD_164', 'LAW_107', 'LAW_055', 'LAW_045', 'SOR_058']
+const USED = ['LOF_059', 'SHD_164', 'LAW_107', 'LAW_055', 'LAW_045', 'SOR_058', 'SHD_027']
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
 const real = (id: string): EngineCard => {
@@ -159,6 +159,47 @@ describe('LAW_014 Enfys Nest: use an "On Attack" ability again', () => {
     const second = attack({ ...again, activePlayer: 'player' }, 'me2')
     expect(second.players.player.hand).toEqual(['A', 'B', 'C'])
     noChoice(second)
+  })
+})
+
+describe('SHD_010 Bossk: use a Bounty collection again', () => {
+  it('back: after collecting a Bounty, may collect it again (itself optional) once each round', () => {
+    const s = board({ leader: deployed('SHD_010'), units: [leaderUnit('SHD_010')] }, { units: [unit('wd', 'SHD_027'), unit('wd2', 'SHD_027')] })
+    const killed = defeatUnit(s, 'wd')
+    expect(choice(killed)).toMatchObject({ kind: 'mayCollectBounty', controller: 'player' })
+    const collected = accept(killed)
+    expect(collected.players.player.hand).toEqual(['A']) // the first collection resolved before the offer
+    expect(choice(collected)).toMatchObject({ kind: 'mayPayThen', controller: 'player', cost: 0 })
+    const offeredAgain = accept(collected)
+    // Collecting the same Bounty again is still a Bounty collection, so it is its own choice, not an
+    // automatic rerun (CR 13 is optional whichever ability raises it).
+    expect(choice(offeredAgain)).toMatchObject({ kind: 'mayCollectBounty', controller: 'player' })
+    const again = accept(offeredAgain)
+    expect(again.players.player.hand).toEqual(['A', 'B'])
+    noChoice(again)
+
+    const second = defeatUnit(again, 'wd2')
+    const collectedSecond = accept(second)
+    expect(collectedSecond.players.player.hand).toEqual(['A', 'B', 'C'])
+    noChoice(collectedSecond) // already used this round
+  })
+
+  it('back: declining the offer leaves the Bounty collected once', () => {
+    const s = board({ leader: deployed('SHD_010'), units: [leaderUnit('SHD_010')] }, { units: [unit('wd', 'SHD_027')] })
+    const collected = accept(defeatUnit(s, 'wd'))
+    const declined = skip(collected)
+    expect(declined.players.player.hand).toEqual(['A'])
+    noChoice(declined)
+  })
+
+  it('back: does not react to the opponent\'s own Bounty collection, nor while undeployed', () => {
+    const theirs = accept(defeatUnit(board({ leader: deployed('SHD_010'), units: [leaderUnit('SHD_010'), unit('wd', 'SHD_027')] }), 'wd'))
+    expect(theirs.players.opponent.hand).toEqual(['A'])
+    noChoice(theirs)
+
+    const undeployed = accept(defeatUnit(board({ leader: front('SHD_010') }, { units: [unit('wd', 'SHD_027')] }), 'wd'))
+    expect(undeployed.players.player.hand).toEqual(['A'])
+    noChoice(undeployed)
   })
 })
 

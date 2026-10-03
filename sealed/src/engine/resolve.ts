@@ -1,11 +1,11 @@
 import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
-import type { DelayedEffect, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef } from './types'
+import type { DelayedEffect, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef, UsedAbility } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
-import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
+import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectAbilityUsed, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
@@ -1830,11 +1830,28 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (choice.damageSelf && choice.then.sourceInstanceId) next = dealDamageToUnit(next, choice.then.sourceInstanceId, choice.damageSelf)
       next = runIfYouDo(next, choice.then)
       break
-    case 'mayCollectBounty':
+    case 'mayCollectBounty': {
+      const before = next
       next = runBountyCollection(next, choice.cardId, choice.abilityIndex, choice.controller, choice.sourceInstanceId, choice.ctx)
       next = checkWin(next)
       if (next.winner !== null) return next
+      // Announce the collection like any other resolved ability (#710), so SHD_010 Bossk's back can
+      // hear it and run the SAME Bounty again through `runAbilitiesAgain` — reusing #704's
+      // `whenAbilityUsed`/`usesAt`/`offerUseAgain` idiom rather than a parallel mechanism. Built here
+      // rather than in `usedAbilityOf` because collecting a Bounty is answered as a choice, not run
+      // through `runOne`, which is exactly why that generic path excludes `point === 'bounty'`.
+      if (next !== before) {
+        const used: UsedAbility = {
+          controller: choice.controller, point: 'bounty', cardId: choice.cardId, abilityIndex: choice.abilityIndex,
+          ...(choice.sourceInstanceId ? { sourceInstanceId: choice.sourceInstanceId } : {}),
+          ...(choice.ctx ? { ctx: choice.ctx } : {}),
+        }
+        next = fireBatch(next, collectAbilityUsed(next, used))
+        next = checkWin(next)
+        if (next.winner !== null) return next
+      }
       break
+    }
     case 'selectUnitThen':
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) next = runIfYouDo(next, choice.then, { targetInstanceId })
       break
