@@ -1,4 +1,4 @@
-import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment } from './types'
+import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment, UsedAbility } from './types'
 import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
@@ -19,6 +19,15 @@ import { enqueueTriggers, drainTriggers } from './triggerQueue'
  */
 export function fireBatch(state: GameState, owed: PendingTrigger[], sameEvent = false): GameState {
   return owed.length === 0 ? state : drainTriggers(enqueueTriggers(state, owed, sameEvent))
+}
+
+/**
+ * "Use that ability again": run each handle `whenAbilityUsed` gave (`UsedAbility`) as a fresh batch, so
+ * the ability reads the board as it now is and raises its own choices again. Going through the queue
+ * also makes the second run a use in its own right, which a card that limits itself has to allow for.
+ */
+export function runAbilitiesAgain(state: GameState, used: UsedAbility[]): GameState {
+  return fireBatch(state, used.map((u, i) => ({ ...u, id: `again${i}-${u.sourceInstanceId ?? u.cardId}-${u.cardId}-${u.abilityIndex}`, layer: 0 })))
 }
 
 /**

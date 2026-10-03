@@ -1,4 +1,4 @@
-import type { Arena, CardDb, DelayedEffect, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeAttachment, UpgradeRef } from './types'
+import type { Arena, CardDb, DelayedEffect, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeAttachment, UpgradeRef, UsedAbility } from './types'
 import { carriedAbilityCardIds, baseAbilityCardIds, pushChoice } from './types'
 
 /**
@@ -79,6 +79,11 @@ export type TriggerPoint =
   // damage application, where raising a choice would interrupt a half-applied combat.
   | 'whenFriendlyUpgradeDefeated'
   | 'onDefense'
+  // "When you use a <point> ability" (Grand Admiral Thrawn, Enfys Nest): raised by the trigger queue
+  // once a collected ability has resolved, including any "Then, ..." it owed, and heard by its
+  // controller's leader and units. `ctx.usedAbility` is the ability's handle, which
+  // `runAbilitiesAgain` runs a second time. Reading which point it was is the hearing card's job.
+  | 'whenAbilityUsed'
   // "When you play a unit" (Maz Kanata, Poggle the Lesser): a unit arriving through a play. Fires on the
   // player's undeployed leader and their OTHER units, with `ctx.targetInstanceId` the played unit.
   | 'whenPlayUnit'
@@ -185,6 +190,10 @@ export interface IfYouDoContext extends EffectContext {
   arenaChosen?: Arena
   /** The unit an earlier stage chose (`IfYouDo.unit`). */
   unitChosen?: string
+  /** Abilities this stage uses again (`IfYouDo.again`). */
+  again?: UsedAbility[]
+  /** Units an earlier stage has already taken (`IfYouDo.taken`). */
+  taken?: string[]
   /** The card name a `nameCard` with `then` settled. */
   nameChosen?: string
   /** The card ids a finished `disclose` (#603) revealed. */
@@ -773,11 +782,17 @@ const hostBlankers = new Set<string>()
 const cardBlankers = new Set<string>()
 /** Bumped whenever either set grows, so the gate's memos notice a card registered after they were made. */
 const blankerRegistry = { version: 0 }
+/**
+ * Card ids with a `whenAbilityUsed` ability. Every resolved ability is announced, so this is what
+ * keeps the announcement to a set lookup on the many boards where nobody is listening.
+ */
+const useHearers = new Set<string>()
 
 /** Register (merging) a card's definition — abilities append, static hooks overwrite. */
 export function registerCard(cardId: string, def: CardDefinition): void {
   if (def.blanksHost) { hostBlankers.add(cardId); blankerRegistry.version++ }
   if (def.blanksCard) { cardBlankers.add(cardId); blankerRegistry.version++ }
+  if ([...(def.abilities ?? []), ...(def.leaderAbilities?.abilities ?? [])].some(a => a.trigger === 'whenAbilityUsed')) useHearers.add(cardId)
   const existing = registry.get(cardId)
   registry.set(cardId, {
     ...existing,
@@ -865,7 +880,7 @@ export function resumeAbility(state: GameState, then: IfYouDo, settled: Partial<
   const hook = registry.get(then.cardId)?.ifYouDo
   if (!hook) return state
   const source: DamageSource = { cardId: then.cardId, controller: then.owner, ...(then.sourceInstanceId ? { instanceId: then.sourceInstanceId } : {}) }
-  return runAttributed(state, source, s => hook(s, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, unitChosen: then.unit, ...settled }))
+  return runAttributed(state, source, s => hook(s, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, unitChosen: then.unit, again: then.again, taken: then.taken, ...settled }))
 }
 
 /** Run one ability effect, attributing whatever choices it raises (and damage it deals) to its card. */
@@ -1335,6 +1350,42 @@ export function collectArrivalTriggers(
       ...collectBaseTriggers(state, 'whenUnitEntersPlay', p, ctx),
       ...state.players[p].units.flatMap(u => (u.instanceId === arrivedId ? [] : collectUnitTriggers(state, 'whenUnitEntersPlay', u, p, ctx))),
     ]),
+  ]
+}
+
+/**
+ * The handle a resolved trigger leaves behind for `whenAbilityUsed`, or undefined when resolving it was
+ * not a use: a "Then, ..." entry (the rest of an ability already announced), a Bounty (collecting it
+ * is the `mayCollectBounty` choice, not this), or an ability that changed nothing.
+ */
+export function usedAbilityOf(trigger: PendingTrigger, changed: boolean): UsedAbility | undefined {
+  if (trigger.resume || !changed || trigger.point === 'bounty') return undefined
+  const { controller, point, cardId, abilityIndex, sourceInstanceId, fromLeader, ctx } = trigger
+  return {
+    controller, point, cardId, abilityIndex,
+    ...(sourceInstanceId ? { sourceInstanceId } : {}),
+    ...(fromLeader ? { fromLeader } : {}),
+    ...(ctx ? { ctx } : {}),
+  }
+}
+
+/**
+ * "When you use an ability": everything its controller has listening, told which ability in
+ * `ctx.usedAbility`. Only the controller hears it, since every card that reads it says "you". Besides
+ * the leader and units, a player hears the cards in `abilityUseHearers` for the phase.
+ */
+export function collectAbilityUsed(state: GameState, used: UsedAbility): PendingTrigger[] {
+  const owner = used.controller
+  const p = state.players[owner]
+  const borrowed = (state.abilityUseHearers ?? []).filter(h => h.owner === owner)
+  if (borrowed.length === 0 && !useHearers.has(p.leader.cardId) && !p.units.some(u => useHearers.has(u.cardId))) return []
+  const ctx: TriggerContext = { usedAbility: used }
+  return [
+    ...collectPlayerTriggers(state, 'whenAbilityUsed', owner, ctx),
+    ...p.units.flatMap(u => collectUnitTriggers(state, 'whenAbilityUsed', u, owner, ctx)),
+    ...[...new Set(borrowed.map(h => h.cardId))]
+      .flatMap(cardId => collectCardTriggers('whenAbilityUsed', cardId, owner, undefined, ctx))
+      .filter(t => hearsEvent(state, triggerAbility(t)!, owner, t.cardId, undefined, ctx)),
   ]
 }
 

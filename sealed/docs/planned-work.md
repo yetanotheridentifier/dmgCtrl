@@ -179,8 +179,9 @@ Two phases:
   among them (its own Experience token is conditional on reading one). TS26_27 Fortune and Glory was a
   chosen-guardian-and-target capture and shipped with #707; Jabba the Hutt's leader waits on #715 for
   an unbuilt keyword-grant primitive his Action needs, beyond the capture shape #707 already built for
-  his back. Bossk's back ("collect that Bounty again, once each round") needs its own new primitive
-  and is on #710.
+  his back. Bossk's back ("collect that Bounty again, once each round") is on #710: using an ability
+  again (`whenAbilityUsed`, `runAbilitiesAgain`) is built, and a Bounty collection is not yet announced
+  as a use.
   **Playing a card out of a discard pile is finished**
   (#471): the discard piles became zones on the existing `playCardFrom` door, the unit-only
   `mayPlayUnitFromDiscard` it duplicated was retired onto it, and "for this phase you may play that
@@ -377,7 +378,7 @@ registration (six HMW among them, and "when an opponent plays" now read from the
 mechanic tickets above by comment, #680 for trigger heads no point raises, #678 for the discard
 record, and five new ones, #682 losing abilities (8, all shipped), #683 re-using abilities (7, of which the two that
 borrow another card's When Played abilities shipped and the five that re-run an ability already used
-moved to #704), #684 replacement
+moved to #704, all shipped), #684 replacement
 effects (5, all shipped), #685 cards that need only writing (22) and #686 the one-offs no other ticket owns (23).
 **Homeworlds is complete: every HMW card is built.** Vernestra Rwoh, the last of them, shipped with
 #683. Jar Jar Binks, The First Legion, Zam Wesell and Maul's front shipped off #686; the rest of that

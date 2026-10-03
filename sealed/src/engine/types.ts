@@ -580,6 +580,13 @@ export interface GameState {
    * (per controller). Reset whenever the phase changes.
    */
   phaseEvents?: PhaseEvents
+  /**
+   * Cards whose `whenAbilityUsed` abilities a player hears for this phase without the card being in
+   * play: "The next time you use a 'When Played' ability this phase" (Qui-Gon Jinn's Aethersprite).
+   * Each entry is collected by `collectAbilityUsed` and removes itself once it acts. Cleared as the
+   * regroup phase starts.
+   */
+  abilityUseHearers?: { owner: PlayerId; cardId: string }[]
 }
 
 /**
@@ -631,6 +638,10 @@ export interface IfYouDo {
   upgrade?: UpgradeRef
   /** A unit an earlier stage chose, carried to the next (Strike True's friendly unit, then its target). */
   unit?: string
+  /** Abilities the next stage uses again ("If you do, use that ability again"). */
+  again?: UsedAbility[]
+  /** Units an earlier stage has already taken, so a repeated pick offers fewer (Fire Across the Galaxy). */
+  taken?: string[]
 }
 
 export interface HandCardRef {
@@ -966,6 +977,8 @@ export interface PhaseEvents {
  * Every member must stay JSON-serialisable, since the queue lives on the game state.
  */
 export interface TriggerContext {
+  /** `whenAbilityUsed`: the ability that was just used, as the handle to use it again. */
+  usedAbility?: UsedAbility
   /** `onAttackEnd`: the target of the attack that just ended. */
   attackTarget?: AttackTarget
   /** `onAttackEnd` / `whenEnemyAttacksBase`: the unit that made the attack. */
@@ -1086,6 +1099,14 @@ export interface PendingTrigger {
   /** The event details the ability triggered with, replayed into its effect when it resolves. */
   ctx?: TriggerContext
 }
+
+/**
+ * A triggered ability that has been used, as the handle to use it **again**: the collected trigger
+ * without its place in the queue. Card, ability index and point address the ability, and the source
+ * and event context are what it ran with, so running it again (`runAbilitiesAgain`) resolves the same
+ * ability against the board as it now is, raising its own choices afresh.
+ */
+export type UsedAbility = Pick<PendingTrigger, 'controller' | 'point' | 'cardId' | 'abilityIndex' | 'sourceInstanceId' | 'fromLeader' | 'ctx'>
 
 /**
  * Every pending choice also carries `source`: the card that RAISED it, so a prompt can say why the
@@ -1661,12 +1682,12 @@ export function addLastingEffect(state: GameState, effect: LastingEffect): GameS
  * until `clearRoundEffects`.
  */
 export function clearLastingEffects(state: GameState): GameState {
-  if (!state.lastingEffects && !state.bannedNames && !state.eventsBanned && !state.shieldedBases && !state.basesUnhealable && !state.discardPlayGrants && !state.traitsRemoved) return state
+  if (!state.lastingEffects && !state.bannedNames && !state.eventsBanned && !state.shieldedBases && !state.basesUnhealable && !state.discardPlayGrants && !state.traitsRemoved && !state.abilityUseHearers) return state
   const kept = (state.lastingEffects ?? []).filter(e => e.untilRoundEnd || e.whileSourceInPlay)
   return {
     ...state, lastingEffects: kept.length > 0 ? kept : undefined,
     bannedNames: undefined, eventsBanned: undefined, shieldedBases: undefined, basesUnhealable: undefined, discardPlayGrants: undefined,
-    traitsRemoved: undefined,
+    traitsRemoved: undefined, abilityUseHearers: undefined,
   }
 }
 

@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
-import { registerCard, getCardDefinition, collectUnitTriggers, collectCardTriggers, abilityCardIds } from './abilities'
-import { fireBatch, thenAfterChoices, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken } from './effects'
+import { registerCard, getCardDefinition, collectUnitTriggers, collectCardTriggers, abilityCardIds, usedAbilityOf } from './abilities'
+import { fireBatch, runAbilitiesAgain, thenAfterChoices,takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -12963,3 +12963,107 @@ registerCard('SEC_046', { // Galen Erso
 })
 
 registerCard('LAW_117', { suppressesEnemyCredits: () => true }) // Conveyex Security Captain
+
+// ── Using an ability again ──────────────────────────────────────────────────────────────────────────
+// "Use that ability again" runs the handle `whenAbilityUsed` announced (`ctx.usedAbility`) through
+// `runAbilitiesAgain`, carried across the "you may" in `IfYouDo.again`. The second run is a use too,
+// so a card that hears uses has to stop itself: the fronts by exhausting the leader, the backs by
+// once each round.
+
+/** "When you use a '<point>' ability": the use was of an ability at `point`. */
+const usesAt = (point: TriggerPoint) => (_s: GameState, ctx: EffectContext): boolean => ctx.usedAbility?.point === point
+/** "You may [pay `cost` to] use that ability again", with `step` telling the hook which side asked. */
+const offerUseAgain = (s: GameState, ctx: EffectContext, text: string, cost = 0, step?: string): GameState =>
+  pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId ?? ctx.cardId}-again`, controller: ctx.owner, cost, text, then: { ...resume(ctx, step), again: [ctx.usedAbility!] } })
+
+/** Grand Admiral Thrawn and Enfys Nest: the same leader at two points, the front paying `frontCost` too. */
+const againLeader = (cardId: string, point: TriggerPoint, name: string, frontCost: number): CardDefinition => {
+  const roundKey = `${cardId}#useAgain`
+  const text = `use that "${name}" ability again`
+  return {
+    leaderAbilities: {
+      abilities: [{
+        trigger: 'whenAbilityUsed', hears: usesAt(point),
+        description: `When you use a "${name}" ability: You may ${frontCost > 0 ? `pay ${frontCost} and ` : ''}exhaust this leader. If you do, use that ability again.`,
+        effect: (s, ctx) => (s.players[ctx.owner].leader.exhausted || !canAfford(s.players[ctx.owner], frontCost) ? s
+          : offerUseAgain(s, ctx, `exhaust this leader and ${text}`, frontCost, 'front')),
+      }],
+    },
+    abilities: [{
+      trigger: 'whenAbilityUsed', hears: usesAt(point),
+      description: `When you use a "${name}" ability: You may use that ability again. Use this ability only once each round.`,
+      effect: (s, ctx) => (findUnit(s, ctx.sourceInstanceId!)?.unit.usedAbilities?.includes(roundKey) ? s : offerUseAgain(s, ctx, text)),
+    }],
+    // Paid before the second run, so that run's own announcement finds this leader already spent.
+    ifYouDo: (s, ctx) => runAbilitiesAgain(ctx.step === 'front' ? exhaustLeader(s, ctx.owner) : markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, roundKey), ctx.again ?? []),
+  }
+}
+registerCard('JTL_002', againLeader('JTL_002', 'whenDefeated', 'When Defeated', 0)) // Grand Admiral Thrawn
+registerCard('LAW_014', againLeader('LAW_014', 'onAttack', 'On Attack', 2)) // Enfys Nest
+
+registerCard('JTL_169', { // Shadow Caster
+  abilities: [{
+    trigger: 'whenFriendlyUnitDefeated',
+    description: 'When a friendly unit is defeated: You may use all of its "When Defeated" abilities again.',
+    effect: (s, ctx) => {
+      const dead = ctx.defeatedUnit
+      // Read off the unit as it last was, upgrades included, as its own When Defeated was collected.
+      const again = dead ? collectUnitTriggers(s, 'whenDefeated', dead, ctx.owner, { defeatedUnit: dead }).flatMap(t => usedAbilityOf(t, true) ?? []) : []
+      return again.length === 0 ? s : pushChoice(s, {
+        kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-again`, controller: ctx.owner, cost: 0,
+        text: 'use all of its "When Defeated" abilities again', then: { ...resume(ctx), again },
+      })
+    },
+  }],
+  ifYouDo: (s, ctx) => runAbilitiesAgain(s, ctx.again ?? []),
+})
+
+// Qui-Gon Jinn's Aethersprite outlasts its own attack, and may not be in play by the time the "When
+// Played" comes, so the listening is lent to its controller for the phase (`abilityUseHearers`) under
+// a pseudo card that no unit carries.
+const GRANT_AETHERSPRITE = 'GRANT_QUI_GON_JINNS_AETHERSPRITE'
+const AETHERSPRITE_TEXT = 'The next time you use a "When Played" ability this phase, you may use that ability again.'
+registerCard('LOF_197', onAttack(whenPlayed(AETHERSPRITE_TEXT, (s, ctx) => // Qui-Gon Jinn's Aethersprite
+  ({ ...s, abilityUseHearers: [...(s.abilityUseHearers ?? []), { owner: ctx.owner, cardId: GRANT_AETHERSPRITE }] }))))
+registerCard(GRANT_AETHERSPRITE, {
+  sourceCardId: 'LOF_197',
+  abilities: [{
+    trigger: 'whenAbilityUsed', hears: usesAt('whenPlayed'), description: AETHERSPRITE_TEXT,
+    effect: (s, ctx) => {
+      // "The next time": the first use spends it, taken up or not.
+      const hearers = s.abilityUseHearers ?? []
+      const at = hearers.findIndex(h => h.owner === ctx.owner && h.cardId === ctx.cardId)
+      if (at < 0) return s
+      const left = hearers.filter((_, i) => i !== at)
+      return offerUseAgain({ ...s, abilityUseHearers: left.length > 0 ? left : undefined }, ctx, 'use that "When Played" ability again')
+    },
+  }],
+  ifYouDo: (s, ctx) => runAbilitiesAgain(s, ctx.again ?? []),
+})
+
+// Fire Across the Galaxy: one friendly Spectre unit at a time, each taken only once, until the player
+// stops or none is left. A unit is taken whole, so one with two "When Played" abilities uses both: no
+// Spectre unit prints two.
+const spectresToUse = (s: GameState, owner: PlayerId, taken: string[]): string[] =>
+  s.players[owner].units
+    .filter(u => !taken.includes(u.instanceId) && unitHasTrait(s, u, 'Spectre') && whenPlayedOf(s, u, owner, u.instanceId).length > 0)
+    .map(u => u.instanceId)
+const offerSpectre = (s: GameState, ctx: Resumable, taken: string[]): GameState => {
+  const targets = spectresToUse(s, ctx.owner, taken)
+  return targets.length === 0 ? s : pushChoice(s, {
+    kind: 'selectUnitThen', id: `${ctx.cardId}-use-${taken.length}`, controller: ctx.owner, targets, optional: true,
+    text: 'use its "When Played" abilities', then: { ...resume(ctx, 'use'), taken },
+  })
+}
+registerCard('LAW_256', { // Fire Across the Galaxy
+  ...whenPlayed('Use any number of "When Played" abilities on friendly Spectre units.', (s, ctx) => offerSpectre(s, ctx, [])),
+  ifYouDo: (s, ctx) => {
+    const taken = ctx.taken ?? []
+    if (ctx.step === 'next') return offerSpectre(s, ctx, taken)
+    const picked = ctx.targetInstanceId ? findUnit(s, ctx.targetInstanceId)?.unit : undefined
+    if (!picked) return s
+    // The next offer is owed first so the abilities nest above it: it waits for them, choices and all.
+    const next = thenAfterChoices(s, { ...resume(ctx, 'next'), taken: [...taken, picked.instanceId] })
+    return fireBatch(next, whenPlayedOf(s, picked, ctx.owner, picked.instanceId))
+  },
+})

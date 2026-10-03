@@ -49,8 +49,11 @@ const SHIPPED = [
   // Bounty (#467) and covered in bountyCards.test.ts.
   'SHD_216', 'SHD_139',
 ]
-/** Scoped by the triage but lifted out to the ticket that owns their blocker. */
-const LIFTED = ['LOF_197', 'SHD_153', 'SOR_056']
+/**
+ * Scoped by the triage but lifted out to the ticket that owns their blocker. `LOF_197` Qui-Gon Jinn's
+ * Aethersprite has since shipped with using an ability again, and is tested in `useAgain.test.ts`.
+ */
+const LIFTED = ['SHD_153', 'SOR_056']
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
 const real = (id: string): EngineCard => {
