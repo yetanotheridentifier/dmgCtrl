@@ -479,6 +479,15 @@ describe('Constant and Action abilities, handed to the attached unit', () => {
     expect(done.players.opponent.base.damage).toBe(2 + 4 - 1)
   })
 
+  it('SHD_155 Heroic Resolve: a host its own +1 HP was keeping alive is defeated paying the cost, and no attack is raised', () => {
+    // 5 damage on 5 + 1 HP: defeating the upgrade as the cost leaves the host at 5 damage on 5 HP.
+    const s = board({ units: [host('h', 'GRD', ['SHD_155'], { damage: 5 })], resources: ready(2) }, { units: [unit('e', 'WEAK')] })
+    const used = useAbility(s, 'h', 'SHD_155')
+    expect(U(used, 'h')).toBeUndefined()
+    expect(used.pendingChoices?.some(c => c.kind === 'mayAttackAnyUnit') ?? false).toBe(false)
+    expect(legalMoves(used).length).toBeGreaterThan(0)
+  })
+
   it('JTL_260 Death Star Plans: the first unit you play each round costs 2 less; the attacker takes it when attacked', () => {
     const s = board({ units: [host('h', 'GRD', ['JTL_260'])], hand: ['DEAR'] }, { units: [unit('e', 'BIG'), unit('e2', 'GRD2')] })
     expect(effectiveCost(s, 'player', F.DEAR)).toBe(F.DEAR.cost - 2)
