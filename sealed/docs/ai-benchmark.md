@@ -1389,6 +1389,18 @@ Two things to hold onto when reading it:
 - **"They could finish" is not "the bot blundered".** Many such positions are already lost. The rate
   bounds how often a risk gate is *live*, not how often it would *help*.
 
+### Decided positions
+
+The same run reports when each seat's game was **decided**: the first action-phase decision where
+every legal move hands the opponent a one-action kill on **their turn** (`tallyDecided`). It reports
+how many seat-games reach one, how many of those the seat then lost, whether the opponent acted next
+and finished, and the share of all actions played after the loser was decided.
+
+It is deliberately stricter than an `unavoidable` exposure, which asks only whether the opponent could
+finish and so also counts a move after which the phase ends or we act again. That reading is right for
+exposure headroom and wrong for "the game is over": see [experiments.md](experiments.md) for both
+measured side by side.
+
 ### Half-resolved scoring
 
 The same run reports how often a candidate move is scored **before its action has finished**. Some
