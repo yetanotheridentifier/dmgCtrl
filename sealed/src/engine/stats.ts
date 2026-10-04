@@ -1,5 +1,5 @@
 import type { Arena, GameState, UnitState, CombatContext, PlayerId } from './types'
-import { lastingEffectTotals } from './types'
+import { lastingEffectTotals, upgradeModifier } from './types'
 import { unitHasKeyword, unitKeywordValue, auraContributions } from './keywords'
 import { abilityCardIds, getCardDefinition } from './abilities'
 
@@ -50,9 +50,7 @@ function withUpgrades(state: GameState, unit: UnitState, stat: 'power' | 'hp'): 
   // Matters Not's 5/5): the card says "printed power is considered to be N", so an upgrade's +X
   // still applies on top of N.
   let total = printedStatOverride(state, unit)?.[stat] ?? state.cards[unit.cardId]?.[stat] ?? 0
-  for (const { cardId } of unit.upgrades) {
-    total += state.cards[cardId]?.[stat] ?? 0
-  }
+  for (const up of unit.upgrades) total += upgradeModifier(state.cards, up, stat)
   return total
 }
 

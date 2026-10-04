@@ -25,7 +25,11 @@ describe('implemented-cards manifest', () => {
   })
 
   it('registers nothing else but pseudo cards, so a mistyped card id cannot escape the check above', () => {
-    for (const id of registeredCardIds().filter(id => !isCardId(id))) expect(id).toMatch(/^(GRANT|KEYWORD)_[A-Z_]+$/)
+    for (const id of registeredCardIds().filter(id => !isCardId(id))) expect(id).toMatch(/^(GRANT|KEYWORD)_[A-Z_]+$|^PILOT_[A-Z0-9]+_\d+$/)
+  })
+
+  it("registers a Pilot's upgrade side only beside the card itself", () => {
+    for (const id of registeredCardIds().filter(id => id.startsWith('PILOT_'))) expect(registeredCards, id).toContain(id.slice('PILOT_'.length))
   })
 
   it('every registered card belongs to a set the panel lists', () => {

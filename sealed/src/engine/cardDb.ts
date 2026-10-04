@@ -3,7 +3,7 @@ import { cardId } from '../data/cards'
 import type { CardDb, CardType, EngineCard, Arena, KeywordInstance } from './types'
 import { TOKEN_CARDS } from './tokenUpgrades'
 import { TOKEN_UNIT_CARDS } from './tokenUnits'
-import { UPGRADE_STAT_OVERRIDES } from './upgradeStatOverrides'
+import { PILOT_UPGRADE_STATS, UPGRADE_STAT_OVERRIDES } from './upgradeStatOverrides'
 import { CARD_DATA_CORRECTIONS } from './cardDataCorrections'
 
 function toInt(value: string | undefined): number {
@@ -52,10 +52,11 @@ function toKeywords(card: SwuCard): KeywordInstance[] {
  * aspect list, either or both wrapped in the source's own icon-markup braces ("Smuggle [C=4
  * Cunning]", "Smuggle [{C=7} {Cunning} {Cunning}]"), and once (First Light) a trailing comma-led
  * additional cost this parser does not resolve, kept as `extra` so a reader can see the card was not
- * silently dropped rather than silently miss it.
+ * silently dropped rather than silently miss it. Piloting prints the same bracket ("Piloting [C=2
+ * Vigilance]"), so it is read the same way.
  */
-function parseSmuggle(card: SwuCard): { cost: number; aspects: string[]; extra?: string } | undefined {
-  const match = cardText(card).match(/Smuggle\s*\[\{?C=(\d+)\}?\s*((?:\{?[A-Za-z]+\}?\s*)*)(?:,\s*([^\]]+))?\]/)
+function parseBracket(card: SwuCard, keyword: 'Smuggle' | 'Piloting'): { cost: number; aspects: string[]; extra?: string } | undefined {
+  const match = cardText(card).match(new RegExp(`${keyword}\\s*\\[\\{?C=(\\d+)\\}?\\s*((?:\\{?[A-Za-z]+\\}?\\s*)*)(?:,\\s*([^\\]]+))?\\]`))
   if (!match) return undefined
   const aspects = match[2].match(/[A-Za-z]+/g) ?? []
   return { cost: parseInt(match[1], 10), aspects, ...(match[3] !== undefined ? { extra: match[3].trim() } : {}) }
@@ -69,7 +70,10 @@ export function normaliseCard(card: SwuCard): EngineCard {
   // in the printed modifier from a lookup. Applied only when the source omits
   // both fields, so it auto-drops once the data is fixed.
   const override = card.Power === undefined && card.HP === undefined ? UPGRADE_STAT_OVERRIDES[id] : undefined
-  const smuggle = parseSmuggle(card)
+  const smuggle = parseBracket(card, 'Smuggle')
+  const pilotBracket = parseBracket(card, 'Piloting')
+  const piloting = pilotBracket && { cost: pilotBracket.cost, aspects: pilotBracket.aspects }
+  const asUpgrade = PILOT_UPGRADE_STATS[id]
   const normalised: EngineCard = {
     id,
     name: card.Name,
@@ -90,6 +94,8 @@ export function normaliseCard(card: SwuCard): EngineCard {
     // SWUDB payload and normalises on read, so already-cached sets pick this up with no migration.
     ...(card.Rarity !== undefined && { rarity: card.Rarity }),
     ...(smuggle !== undefined && { smuggle }),
+    ...(piloting !== undefined && { piloting }),
+    ...(asUpgrade !== undefined && { upgradePower: asUpgrade.power, upgradeHp: asUpgrade.hp }),
   }
   // Last: override any values the source data gets wrong (read off the printed card).
   return { ...normalised, ...CARD_DATA_CORRECTIONS[id] }

@@ -1,8 +1,8 @@
 import type { Action } from './actions'
 import type { AspectWaiver, AttackerFilter, DiscardPlayGrant, EngineCard, GameState, HandCardRef, PendingChoice, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
-import { opponentOf, hasPendingChoices, nextUnitGrantMatches, pushChoice, isFortify } from './types'
+import { opponentOf, hasPendingChoices, nextUnitGrantMatches, pushChoice, isFortify, upgradeSideId } from './types'
 import { canAfford, readyResourceCount } from './resources'
-import { keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
+import { cardHasTrait, keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
 import { abilityCardIds, cardAbilitiesBlanked, getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, leaderAbilitiesBlanked, baseEpicAction, usableBaseActions } from './abilities'
 import { friendlyCreditTokens, discloseRemaining, hasForceToken } from './effects'
 import './cardDefinitions' // side effect: registers all real card behaviours
@@ -141,6 +141,20 @@ function attackMoves(
   const moves = targets.map(e => move({ kind: 'unit', instanceId: e.instanceId }))
   if (includeBase && canAttackBase) moves.push(move({ kind: 'base' }))
   return moves
+}
+
+/**
+ * Whether the Pilot card `cardId` may be attached to `host` as an upgrade: the host is a Vehicle with
+ * room for a Pilot. A Vehicle takes one Pilot, plus one for each `extraPilots` among its abilities
+ * (Millennium Falcon); a card whose upgrade side `ignoresPilotLimit` goes on regardless (R2-D2).
+ * "Friendly" is the caller's to check, since a few cards attach a Pilot to an enemy Vehicle.
+ */
+export function canTakePilot(state: GameState, host: UnitState, cardId: string): boolean {
+  if (!unitHasTrait(state, host, 'Vehicle')) return false
+  if (getCardDefinition(upgradeSideId(cardId))?.ignoresPilotLimit) return true
+  const pilots = host.upgrades.filter(up => cardHasTrait(state, up.cardId, 'Pilot')).length
+  const room = 1 + abilityCardIds(state, host).reduce((n, id) => n + (getCardDefinition(id)?.extraPilots ?? 0), 0)
+  return pilots < room
 }
 
 /**
@@ -663,6 +677,18 @@ function actionPhaseMoves(state: GameState): Action[] {
       if (restriction && !restriction(state, target, playerId)) continue
       if (!canAfford(p, effectiveCost(state, playerId, card, target))) continue
       moves.push({ type: 'playUpgrade', handIndex, targetInstanceId: target.instanceId })
+    }
+  })
+
+  // Piloting: a Pilot unit may instead be played as an upgrade on a friendly Vehicle without a Pilot,
+  // for its own bracket's cost and aspects.
+  p.hand.forEach((cardId, handIndex) => {
+    const card = state.cards[cardId]
+    if (!card?.piloting || forbiddenNames.has(card.name)) return
+    for (const target of p.units) {
+      if (!canTakePilot(state, target, card.id)) continue
+      if (!canAfford(p, effectiveCost(state, playerId, card, target, undefined, card.piloting))) continue
+      moves.push({ type: 'playUpgrade', handIndex, targetInstanceId: target.instanceId, piloting: true })
     }
   })
 

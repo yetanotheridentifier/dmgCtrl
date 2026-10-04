@@ -767,6 +767,42 @@ smuggles as Cunning.
   `fromResources`-shaped boolean, which is not precise enough to tell "from hand" apart from a deck-top
   or discard-pile play).
 
+## Piloting
+
+"Piloting \<cost\> \<aspects\> (You may play this as an upgrade on a friendly Vehicle without a Pilot.)"
+is JTL's set mechanic: a Pilot unit card has a second way to be played, as an upgrade, and what it is
+depends on how it was played.
+
+- **The bracket is parsed like Smuggle's.** `EngineCard.piloting?: { cost, aspects }` comes off the
+  text by the same parser (`parseBracket`, `cardDb.ts`), and the play prices it through
+  `effectiveCost`'s `altCost`, so every other modifier still applies on top. The +X/+Y a unit card adds
+  as an upgrade is printed beside its own power and HP and is not in the card source at all, so it
+  comes from `PILOT_UPGRADE_STATS` (`upgradeStatOverrides.ts`, the publisher's `upgradePower`/
+  `upgradeHp`) as `EngineCard.upgradePower`/`upgradeHp`, and `upgradeModifier` reads it for a
+  `unitCard` attachment where an upgrade card's own `power`/`hp` is read otherwise.
+- **The play is `playUpgrade` with `piloting`.** `legalMoves` offers one per friendly host
+  `canTakePilot` accepts: a Vehicle with fewer Pilot upgrades than its room, which is one plus each
+  `extraPilots` among its abilities (Millennium Falcon, and R2-D2's granted ability), unless the card's
+  upgrade side `ignoresPilotLimit` (R2-D2, who still counts as one of the Pilots on it). The card goes
+  through the one upgrade door, `playUpgradeCardOnto`, attached as `{ cardId, owner, unitCard: true }`.
+  A move of an attached upgrade checks the same rule (`canMoveOnto`), so a Pilot moves only onto a
+  Vehicle with room.
+- **Two sides, two registry keys.** The unit side is the card's own definition; the upgrade side is
+  registered under `upgradeSideId(cardId)` (`PILOT_<id>`, with `sourceCardId` naming the card), and
+  `carriedAbilityCardIds` lists that key for a `unitCard` attachment. So "When played as an upgrade" is
+  the upgrade side's `whenPlayed`, "When played as a unit" the unit side's, an "Attached unit gains"
+  block fires for the host, and a card printed the same way on both sides registers one definition
+  twice. The key has no database entry, which is what keeps the unit side's printed keywords (Biggs's
+  Grit and Overwhelm, Academy Graduate's Sentinel) off the host: the upgrade side grants what its text
+  says through `conditionalKeywords`.
+- **"When a Pilot attaches"** is the host's `whenUpgradeAttached`, told the attaching card in
+  `ctx.attachedCardId` by the play and by `moveUpgrade` (Red Leader, Razor Crest, Iden Versio's "when
+  this upgrade attaches").
+- **Not built:** a card changing between unit and upgrade once in play (a unit attaching itself as an
+  upgrade, a Pilot upgrade moving to the ground arena as a unit), and leaders whose deployed side is a
+  Pilot. A Pilot played as an upgrade is recorded as played like any card, so a "unit you played this
+  phase" count that reads the card's type still sees a unit.
+
 ## Plot
 
 "Plot. (When you deploy a leader, you may play this card from your resources, paying its cost.

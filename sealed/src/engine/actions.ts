@@ -12,8 +12,9 @@ export type AttackTarget = { kind: 'base' } | { kind: 'unit'; instanceId: string
 export type Action =
   | { type: 'playUnit'; handIndex: number }
   // Play an upgrade card, attaching it to a unit in play. Any unit is a valid
-  // target by default; a card narrows that with its `attachRestriction`.
-  | { type: 'playUpgrade'; handIndex: number; targetInstanceId: string }
+  // target by default; a card narrows that with its `attachRestriction`. With `piloting` the card is a
+  // Pilot unit played as an upgrade for its Piloting bracket, onto a friendly Vehicle without a Pilot.
+  | { type: 'playUpgrade'; handIndex: number; targetInstanceId: string; piloting?: true }
   // Play a Fortify upgrade: it attaches to the player's own base, never a unit, so it names no target.
   | { type: 'playBaseUpgrade'; handIndex: number }
   // Play an event: it never enters play — pay its cost, put it in the discard, then resolve it.

@@ -384,6 +384,8 @@ Card-type-agnostic, all on `CardDefinition`:
 | `waivesAspectPenalty` | a unit in play zeroing the aspect penalty |
 | `ignoresOwnAspectPenalty` | the aspect icons whose penalty a card ignores while it is played (Rey with Kylo Ren), told the unit an upgrade is played on (The Darksaber on a Mandalorian) |
 | `attachRestriction` | may this upgrade attach to that unit, when this player plays it ("a friendly unit") |
+| `extraPilots` | Pilots this unit takes beyond the one ("you may play or deploy 1 additional Pilot on this unit"); see `keywords-effects.md` "Piloting" |
+| `ignoresPilotLimit` | on a Pilot's upgrade side: it may go onto a Vehicle that already has its Pilots (R2-D2) |
 | `conditionalKeywords` | extra keywords, folded into `unitKeywords` |
 | `suppressedKeywords` | keywords removed while a condition holds |
 | `swappedKeywords` | pairs of keyword names traded for one another, renamed over the finished list (Asajj Ventress); see `keywords-effects.md` |
@@ -449,6 +451,14 @@ do not search: players do. So every search that player makes is doubled while th
 whichever card is doing the searching, and `searchCount` takes the owner rather than a unit. Scoped to
 the searching unit it would do nothing except when the upgrade happened to sit on the very unit that
 searched.
+
+## Pilots
+
+A Pilot card registers each side on its own key with `registerPilot(id, { unit, upgrade })`: the unit
+side under the card id, the upgrade side under `upgradeSideId(id)`, which is what the host's
+`abilityCardIds` lists while the card is attached as an upgrade. On the upgrade side
+`ctx.sourceInstanceId` is the host, as for any upgrade, and `ctx.cardId` is the side's key. A vanilla
+Pilot (nothing but the keyword) registers nothing. See `keywords-effects.md` "Piloting".
 
 ## Leaders
 

@@ -1,10 +1,10 @@
 import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef, UsedAbility } from './types'
-import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed } from './types'
+import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed, upgradeSideId } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
+import { canTakePilot, effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, type PlayFromTerms } from './legalMoves'
 import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectAbilityUsed, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
@@ -145,7 +145,7 @@ function resolveAction(state: GameState, action: Action): GameState {
       })
     case 'playUpgrade':
       return requirePhase(state, 'action', () => {
-        const played = playUpgrade(state, action.handIndex, action.targetInstanceId)
+        const played = playUpgrade(state, action.handIndex, action.targetInstanceId, action.piloting === true)
         // A raised choice (Camtono's look-at, the unique-rule defeat) keeps the turn.
         if (played.winner === null && activeChoice(played)) return resetPasses(played)
         return played.winner !== null ? played : advanceTurn(resetPasses(played))
@@ -2474,14 +2474,23 @@ function uniqueUnitCheck(state: GameState, owner: PlayerId): GameState {
  * valid target by default; a card narrows that with its `attachRestriction`. Cost + aspect penalty
  * apply as for units; the upgrade's power/HP and keywords then modify the unit
  * (via the stats/keyword helpers).
+ *
+ * With `piloting` the card is a Pilot unit played as an upgrade (CR Piloting): its bracket's cost and
+ * aspects price it, and it goes only on a friendly Vehicle with room for a Pilot.
  */
-function playUpgrade(state: GameState, handIndex: number, targetInstanceId: string): GameState {
+function playUpgrade(state: GameState, handIndex: number, targetInstanceId: string, piloting = false): GameState {
   const playerId = state.activePlayer
   const p = state.players[playerId]
   const cardId = p.hand[handIndex]
   const card = cardId ? state.cards[cardId] : undefined
-  if (!card || card.type !== 'upgrade') {
+  if (!card || (piloting ? !card.piloting : card.type !== 'upgrade')) {
     throw new Error(`playUpgrade: hand index ${handIndex} is not a playable upgrade`)
+  }
+  if (piloting) {
+    const host = p.units.find(u => u.instanceId === targetInstanceId)
+    if (!host || !canTakePilot(state, host, card.id)) throw new Error(`playUpgrade: ${targetInstanceId} cannot take ${card.id} as a Pilot`)
+    const paid = updatePlayer(state, playerId, payCost(p, effectiveCost(state, playerId, card, host, undefined, card.piloting)))
+    return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId, true)
   }
 
   const targetOwner = (['player', 'opponent'] as PlayerId[]).find(id =>
@@ -2500,11 +2509,11 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
  * Play the upgrade at `handIndex` of `playerId`'s hand onto `targetInstanceId`, its cost already dealt
  * with. The ordinary play pays first; an ability that plays one for free (Cin Drallig) calls this directly.
  */
-export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex: number, targetInstanceId: string): GameState {
+export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex: number, targetInstanceId: string, unitCard = false): GameState {
   const cardId = state.players[playerId].hand[handIndex]
-  if (state.cards[cardId]?.type !== 'upgrade' || !findUnit(state, targetInstanceId)) return state
+  if ((unitCard ? !state.cards[cardId]?.piloting : state.cards[cardId]?.type !== 'upgrade') || !findUnit(state, targetInstanceId)) return state
   const next = updatePlayer(state, playerId, { hand: state.players[playerId].hand.filter((_, i) => i !== handIndex) })
-  return playUpgradeCardOnto(next, playerId, cardId, targetInstanceId)
+  return playUpgradeCardOnto(next, playerId, cardId, targetInstanceId, undefined, false, false, unitCard)
 }
 
 /**
@@ -2514,16 +2523,16 @@ export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex:
  * from the resource zone and Camtono from the top of the deck. `upgradeAttachSites.test.ts` fails on a new
  * hand-built attach, so a further zone comes through here too.
  */
-function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: string, targetInstanceId?: string, cardOwner?: PlayerId, fromResources = false, usingSmuggle = false): GameState {
+function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: string, targetInstanceId?: string, cardOwner?: PlayerId, fromResources = false, usingSmuggle = false, unitCard = false): GameState {
   const card = state.cards[cardId]
-  if (!card || card.type !== 'upgrade') return state
+  if (!card || (card.type !== 'upgrade' && !unitCard)) return state
   // Fortify: "Attach this to your base, not a unit", whatever unit the play named.
   const onBase = isFortify(card)
   if (!onBase && (targetInstanceId === undefined || !findUnit(state, targetInstanceId))) return state
   // An upgrade played out of another player's discard pile stays theirs (CR 1.5.2), so the
   // attachment records them and the card goes back to their pile when it is defeated.
   const owner = cardOwner ?? playerId
-  let next = onBase ? attachToBase(state, playerId, card.id) : attachUpgrades(state, targetInstanceId!, [{ cardId: card.id, owner, ...(usingSmuggle ? { usingSmuggle: true } : {}) }], true)
+  let next = onBase ? attachToBase(state, playerId, card.id) : attachUpgrades(state, targetInstanceId!, [{ cardId: card.id, owner, ...(usingSmuggle ? { usingSmuggle: true } : {}), ...(unitCard ? { unitCard: true } : {}) }], true)
   next = recordCardPlayed(next, playerId, card.id) // after the cost ("the first upgrade you play each phase")
 
   // One upgrade arriving is one event: the host reacting to it attaching (Sabine Wren, and since this
@@ -2531,8 +2540,9 @@ function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: strin
   // upgrade's own "When Played" (CR 6.2.0f) are simultaneous, so they are one batch. A base upgrade's
   // source is `<cardId>-base`, so a choice its When Played raises has a stable id.
   next = fireBatch(next, [
-    ...(onBase ? [] : collectUpgradeAttached(next, targetInstanceId!, true, playerId)),
-    ...(cardAbilitiesBlanked(next, card.id, owner) ? [] : collectCardTriggers('whenPlayed', card.id, playerId, onBase ? baseSourceId(card.id) : targetInstanceId)),
+    ...(onBase ? [] : collectUpgradeAttached(next, targetInstanceId!, true, playerId, card.id)),
+    // A Pilot's "When played as an upgrade" is its upgrade side's When Played.
+    ...(cardAbilitiesBlanked(next, card.id, owner) ? [] : collectCardTriggers('whenPlayed', unitCard ? upgradeSideId(card.id) : card.id, playerId, onBase ? baseSourceId(card.id) : targetInstanceId)),
     ...collectPlayUpgrade(next, playerId, card.id, onBase ? undefined : targetInstanceId),
     ...collectPlayCard(next, playerId, card.id, fromResources),
   ])

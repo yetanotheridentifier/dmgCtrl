@@ -58,6 +58,18 @@ export interface EngineCard {
    * damage to a friendly unit"), kept only so a reader can see the card was not silently dropped.
    */
   smuggle?: { cost: number; aspects: string[]; extra?: string }
+  /**
+   * Piloting's printed bracket ("Piloting [C=2 Vigilance]"), parsed off the text like `smuggle`: the
+   * cost and aspect icons this card is played for as an upgrade on a friendly Vehicle without a Pilot.
+   */
+  piloting?: { cost: number; aspects: string[] }
+  /**
+   * The +X/+Y a unit or leader card adds when it is attached as an upgrade (a Pilot, Phantom II).
+   * Printed on the card beside its own power and HP, and absent from the card source, so it comes from
+   * `PILOT_UPGRADE_STATS` (upgradeStatOverrides.ts). An `upgrade` card's modifier is its `power`/`hp`.
+   */
+  upgradePower?: number
+  upgradeHp?: number
 }
 
 export type CardDb = Readonly<Record<string, EngineCard>>
@@ -72,6 +84,39 @@ export interface UpgradeAttachment {
   owner: PlayerId
   /** This upgrade was played for its Smuggle cost, read by its own "When played using Smuggle" (Hotshot DL-44 Blaster). */
   usingSmuggle?: boolean
+  /**
+   * A unit or leader card attached as an upgrade (a Pilot played with Piloting). Its upgrade side
+   * answers for it: `upgradeSideId(cardId)` is what `carriedAbilityCardIds` lists, its modifier is
+   * the card's `upgradePower`/`upgradeHp`, and its printed keywords, which are the unit side's, stay
+   * behind.
+   */
+  unitCard?: boolean
+}
+
+/**
+ * The registry key of a unit card's upgrade side: the abilities it gives the unit it is attached to
+ * (`UpgradeAttachment.unitCard`). A pseudo card with no database entry, like the `GRANT_*` carriers,
+ * so its printed keywords and stats are not read off it.
+ */
+export function upgradeSideId(cardId: string): string {
+  return `PILOT_${cardId}`
+}
+
+/** The card an ability id names: the card itself, or the unit card an upgrade side belongs to. */
+export function cardOfAbilityId(id: string): string {
+  return id.startsWith('PILOT_') ? id.slice(6) : id
+}
+
+/** The id an attachment's abilities answer to: its card, or that card's upgrade side. */
+export function attachmentAbilityId(up: UpgradeAttachment): string {
+  return up.unitCard ? upgradeSideId(up.cardId) : up.cardId
+}
+
+/** An attached upgrade's printed modifier: an upgrade card's power/HP, a unit card's upgrade +X/+Y. */
+export function upgradeModifier(cards: CardDb, up: UpgradeAttachment, stat: 'power' | 'hp'): number {
+  const card = cards[up.cardId]
+  if (!card) return 0
+  return (up.unitCard ? (stat === 'power' ? card.upgradePower : card.upgradeHp) : card[stat]) ?? 0
 }
 
 /** A unit in play. instanceId keeps duplicate copies of a card distinct. */
@@ -435,7 +480,7 @@ export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUn
  * and a trait is not an ability. Only a `grantedTraits` hook lends traits.
  */
 export function carriedAbilityCardIds(unit: UnitState): string[] {
-  return [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]
+  return [unit.cardId, ...unit.upgrades.map(attachmentAbilityId), ...(unit.grantedAbilityCardIds ?? [])]
 }
 
 export interface GameState {
@@ -1022,6 +1067,8 @@ export interface TriggerContext {
   targetInstanceId?: string
   /** `whenUpgradeAttached`: the upgrade was played (from any zone) rather than created or moved by an ability. */
   upgradePlayed?: boolean
+  /** `whenUpgradeAttached`: the card that attached, where the caller knows it ("when a Pilot attaches to this unit"). */
+  attachedCardId?: string
   /** `whenPlayUpgrade`: the upgrade card just played. */
   playedCardId?: string
   /**

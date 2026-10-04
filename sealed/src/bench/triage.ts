@@ -31,7 +31,7 @@ export const TRIAGE_API_BASE = 'https://worker.dmgctrl.app'
 /** Keywords the engine dispatches today. */
 export const IMPLEMENTED_KEYWORDS: ReadonlySet<string> = new Set([
   'Ambush', 'Grit', 'Overwhelm', 'Raid', 'Restore', 'Saboteur', 'Sentinel', 'Shielded', 'Hidden', 'Support', 'Fortify', 'Exploit',
-  'Bounty', 'Smuggle', 'Plot', 'Coordinate',
+  'Bounty', 'Smuggle', 'Plot', 'Coordinate', 'Piloting',
 ])
 
 /** Trigger points the ability framework dispatches today (see `docs/abilities.md`). */
@@ -69,6 +69,11 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
   // filtered to `DamageDealt.indirect`, the same treatment as "dealt damage and survives" above, not a
   // point of its own.
   'when indirect damage is dealt to a unit',
+  // A Pilot's two sides: "When played as an upgrade" is its upgrade side's `whenPlayed`, "as a unit" its
+  // unit side's. An attach is `whenUpgradeAttached`, told which card attached; "completes an attack"
+  // is `onAttackEnd` read from the host.
+  'when played as an upgrade', 'when played as a unit', 'when this upgrade attaches to a unit',
+  'when a pilot attaches to this unit', 'when a pilot upgrade attaches to this unit', 'when attached unit completes an attack',
 ])
 
 /**
@@ -104,8 +109,9 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
   ['indirect-damage', /\bindirect damage\b/i],
   // `releaseCaptured` exists; capturing does not.
   ['capture', /\bcaptures?\b|\bcaptured\b/i],
-  // A card that is both a unit and an upgrade.
-  ['pilot', /\bPilot(ing)?\b|\bpilot\b/i],
+  // A card moving between unit and upgrade once in play, or a leader deployed or played as a Pilot.
+  // Playing a Pilot from hand as an upgrade (Piloting) is built; these moves are not.
+  ['pilot', /\battach\b[^.]*\bas an upgrade\b|\bto the ground arena as a unit\b|\battach a friendly Pilot\b|\busing Piloting\b/i],
   // A granted ability block is not a blocker: its quoted head is judged instead (GRANTED_ABILITY_QUOTE).
   // Resources are defeated, returned to hand, and put into play from any zone, including another
   // player's card (`ResourceState.owner`). Taking control of a resource already in play is not.

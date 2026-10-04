@@ -85,6 +85,8 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   JTL_081: { keywords: [] }, // First Order TIE Fighter: Raid 1 while you control a token unit
   JTL_257: { keywords: [] }, // Flanking Fang Fighter: Raid 2 while you control another Fighter unit
   JTL_113: { keywords: [] }, // Homestead Militia: Sentinel while you control 6 or more resources
+  JTL_150: { keywords: [{ name: 'Piloting' }] }, // Biggs Darklighter: Grit and Overwhelm are his upgrade side's, by host trait
+  JTL_109: { keywords: [{ name: 'Piloting' }] }, // Jarek Yeager: Sentinel is his upgrade side's, while you control both arenas
   TWI_062: { keywords: [] }, // Daughter of Dathomir: Restore 2 while undamaged
   TWI_081: { keywords: [] }, // Droid Commando: Ambush while you control another Separatist unit
   TWI_180: { keywords: [] }, // Separatist Commando: Raid 2 while you control another Separatist unit
