@@ -2502,6 +2502,16 @@ export function sumCounts(counts: TypeCounts): number {
   return CARD_TYPES.reduce((n, t) => n + counts[t], 0)
 }
 
+/**
+ * How many printed cards a set has, tokens aside, or `undefined` for a set the manifest does not list.
+ * A whole-set import caches exactly these, so a cache holding fewer has only the cards a deck list
+ * looked up one at a time and is not a set the generator can build from.
+ */
+export function printedCardCount(code: string): number | undefined {
+  const set = SET_PROGRESS.find(s => s.code === code.toUpperCase())
+  return set && sumCounts({ ...set.total, tokens: 0 })
+}
+
 /** Every set combined — the headline progress figure. */
 export const TOTAL_PROGRESS = {
   done: SET_PROGRESS.reduce((n, s) => n + sumCounts(s.done), 0),
