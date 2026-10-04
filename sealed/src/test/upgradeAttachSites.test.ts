@@ -35,7 +35,9 @@ const EXPECTED_ATTACHES: Record<string, number> = {
   // Experience token and a Shield token to it"): token upgrades given by an effect, each attaching its
   // whole grant in one call so the attach reaction fires once, and neither is a play.
   'effects.ts': 2,
-  'resolve.ts': 2, // playUpgradeCardOnto (the door, the one "played"), and applyEntryKeywords' Shield on a Shielded unit entering
+  // playUpgradeCardOnto (the door, the one "played"), applyEntryKeywords' Shield on a Shielded unit entering, and
+  // deployLeaderAsPilot: a leader deploying as a Pilot upgrade is deployed, not played (fires the attach reaction, not "played")
+  'resolve.ts': 3,
   'cardDefinitions.ts': 1, // moveUpgrade: Jocasta Nu and Evidence of the Crime moving an upgrade (fires the attach reaction, not "played")
 }
 

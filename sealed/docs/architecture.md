@@ -83,6 +83,8 @@ Rules verified against the full Comprehensive Rules v7.0: setup (§5.2 incl.
 mulligan), action phase/initiative (§1.15, §5.4), regroup (§5.5), attack timing
 (§6.3), empty deck (§8.6), Sealed deckbuilding (§10.2). `checkWin` evaluates both
 bases so a single action that defeats both is a **draw** (`winner: 'draw'`, §5.6.3).
+Every action hands the turn over through `advanceTurn`, which keeps it once for a player holding
+`extraActionBy` ("Take an extra action after this one", Kazuda Xiono).
 
 **Card behaviour**: the ability framework (`engine/abilities.ts`, see
 [abilities.md](abilities.md)) registers per-card effects by id, and unregistered cards play vanilla. A `CardDefinition` carries **triggered abilities**
@@ -159,9 +161,10 @@ card database (`cards: CardDb`) hangs off the state but is **shared by reference
 between successive states, keeping cloning cheap for future tree search. Card zones
 (`hand`/`deck`/`discard`) hold card **ids**, resolved against `cards`. An
 `UpgradeAttachment` (`{ cardId, owner }`) records who owns each attached upgrade so it
-routes to the right discard on defeat, and `unitCard` marks a unit card attached as an upgrade (a
-Pilot played with Piloting), whose abilities answer to its upgrade side (`upgradeSideId`) and whose
-modifier is the card's `upgradePower`/`upgradeHp`; a unit holds them in `upgrades`, and a base holds its Fortify
+routes to the right discard on defeat, and `unitCard` marks a unit or leader card attached as an
+upgrade (a Pilot played with Piloting, or a leader deployed as one), whose abilities answer to its
+upgrade side (`upgradeSideId`) and whose modifier is the card's `upgradePower`/`upgradeHp`. A leader
+card leaving play this way goes back to its base zone rather than to a pile (`sendAttachmentFromPlay`); a unit holds them in `upgrades`, and a base holds its Fortify
 upgrades in `BaseState.upgrades`. A unit controlled by someone other than its owner records the
 owner in `UnitState.owner`, and how long that lasts in `controlUntil`: absent is until the regroup
 phase starts, `'permanent'` never ends (C-3P0, Galen Erso), and an instance id ends once that unit is

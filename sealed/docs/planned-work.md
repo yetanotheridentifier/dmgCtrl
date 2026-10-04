@@ -149,7 +149,7 @@ Two phases:
   shared with another trigger point ("When Played/When Defeated") is built on the compound-head framework
 (#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
   (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 16 not built are on the ticket of what
-  blocks them, #754 pilot leaders (7),
+  blocks them, #756 Boba Fett's front ("When you deal non-combat damage"; his Pilot back is built),
   #467 Bounty (Bossk is fully shipped; Jabba the Hutt's back reads capture too, but #707 already built
   its chosen-guardian-and-target shape — what's left blocking the whole leader is an unbuilt "grant a
   chosen unit a temporary keyword ability" primitive his Action needs, on #715),
@@ -261,8 +261,7 @@ Two phases:
   with Plot, #470), Arquitens Assault
   Cruiser (an opponent-owned resource) shipped with #475, and
   Traitorous, Nabat Village and Lux Bonteri are on #686.
-  Darth Vader, Victor Squadron Leader waits on #754 (his
-  back is a Pilot), Queen Amidala (defeat a unit to prevent damage) shipped with the replacement effects (#684), and Roger Roger (an
+  Darth Vader, Victor Squadron Leader shipped with the Pilot leaders (#754), Queen Amidala (defeat a unit to prevent damage) shipped with the replacement effects (#684), and Roger Roger (an
   upgrade's own When Defeated) and the flipping Chancellor Palpatine are on #686. **Weakness tokens are finished**
   (#649), HMW's -1/-1 token: its 18 cards and five more it touched (Beast-token cards, Inferno Squad's
   "When Played/When Defeated" and Nuvo Vindi's one-off trigger), with Tireless Magnaguard shipping on
@@ -346,7 +345,7 @@ Two phases:
   point, raised by the `readyUnit` primitive itself rather than a resolver call site so it hears every
   route a unit readies through). Foresight split again to **#744**: it needs the regroup phase's draw
   to wait on `whenRegroupStarts` choices, an engine-wide sequencing change rather than a card
-  registration. Condemn shipped with #682; the pilot cards shipped with Piloting, and the pilot leaders are on #754; Han's
+  registration. Condemn shipped with #682; the pilot cards shipped with Piloting and the pilot leaders with #754, Boba Fett's front split to #756; Han's
   Golden Dice, Targeted For Removal and Payroll Heist on #719; Leia Organa on #733; For The Republic on
   #730.
 

@@ -7,7 +7,7 @@ import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { abilityCardIds, collectPlayerTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
-import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay, abilityDamageBonus, protectedFromEnemyAbility, indirectDamageBonus, indirectDamageAssignedByDealer } from './effects'
+import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay, abilityDamageBonus, protectedFromEnemyAbility, indirectDamageBonus, indirectDamageAssignedByDealer, sendAttachmentFromPlay } from './effects'
 
 /**
  * How much of an instance of damage the cards in play stop before it lands (Cassian Andor, Boba
@@ -182,7 +182,9 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
 function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[], defeated: UnitState[], byCombat = false, spentShieldOwners: PlayerId[] = [], sameEvent = false, whileAttacking = false): GameState {
   // Always write `survivors` back — they carry the damage just applied (defeated may be empty).
   const p = state.players[owner]
-  const defeatedUpgrades = defeated.flatMap(u => u.upgrades).filter(a => state.cards[a.cardId]?.type !== 'token')
+  // A leader deployed as a Pilot upgrade goes home to its base zone, not to a discard pile.
+  const leaderUpgrades = defeated.flatMap(u => u.upgrades).filter(a => state.cards[a.cardId]?.type === 'leader')
+  const defeatedUpgrades = defeated.flatMap(u => u.upgrades).filter(a => state.cards[a.cardId]?.type !== 'token' && !leaderUpgrades.includes(a))
 
   // A defeated card goes to its OWNER's discard, which is not always its controller's: a unit
   // taken with Rehabilitation is defeated back to the player it was stolen from.
@@ -209,6 +211,7 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
     const owner2 = result.players[owner]
     result = updatePlayer(result, owner, { leader: { ...owner2.leader, deployed: false, exhausted: true } })
   }
+  for (const up of leaderUpgrades) result = sendAttachmentFromPlay(result, up, 'discard')
 
   // A captor leaving play frees what it held, back into play rather than to the discard.
   const released = defeated.flatMap(u => u.captured ?? [])
