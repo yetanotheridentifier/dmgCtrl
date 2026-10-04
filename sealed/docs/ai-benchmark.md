@@ -1392,9 +1392,16 @@ Two things to hold onto when reading it:
 ### Decided positions
 
 The same run reports when each seat's game was **decided**: the first action-phase decision where
-every legal move hands the opponent a one-action kill on **their turn** (`tallyDecided`). It reports
-how many seat-games reach one, how many of those the seat then lost, whether the opponent acted next
-and finished, and the share of all actions played after the loser was decided.
+every legal move hands the opponent a one-action kill on **their turn** (`lossIsCertain`, tallied by
+`tallyDecided`). It reports how many seat-games reach one, how many of those the seat then lost,
+whether the opponent acted next and finished, and the share of all actions played after the loser
+was decided. This readout plays every game out, so it can see what follows the decided point.
+
+**Every mode that plays through `playGame` concedes there instead**: the decided seat offers and the
+other accepts, which changes no winner and saves the few actions spent finishing the kill (about
+0.5% under greedy, none measured under beam: see [experiments.md](experiments.md)). A record of
+such a game ends `offerConcession`, `acceptConcession`. The coverage sweep plays games out
+(`concede: false`), since the kill is play it exercises.
 
 It is deliberately stricter than an `unavoidable` exposure, which asks only whether the opponent could
 finish and so also counts a move after which the phase ends or we act again. That reading is right for
@@ -1744,7 +1751,8 @@ eight of eighteen modules were missing.
   can follow and the pre-flight checks. Also owns the heartbeat a running shard writes: the throttled
   writer, where the file lives, and the rule that decides hung from slow. Pure reading and formatting
   apart from the heartbeat file itself, so `shard.ts` depends on it and not the reverse.
-- `bench/selfPlay.ts` `playGame`: one full game, seeded, with the drop classification.
+- `bench/selfPlay.ts` `playGame`: one full game, seeded, with the drop classification, conceded
+  once a seat's loss is certain.
 - `bench/runBench.ts` `runBench`: N games, alternating seat and first player, aggregated into a report.
 - `bench/seating.ts` seat and first-player alternation on independent axes, so four games cover all
   four combinations once and neither advantage settles on one side. `movedFirstForA` is the one place

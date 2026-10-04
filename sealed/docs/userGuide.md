@@ -93,6 +93,8 @@ A card with **Smuggle** offers this same play on its own, with no picker needed:
 
 Deal damage to the opponent's base until it reaches its health before they do the same to you. Each base shows a **large number over the card**: by default the **damage it has taken**, counting up to its printed health (which varies from base to base), or the **health remaining** counting down if you've switched **Base health** in **Settings**. If a single action defeats **both** bases at once, the game is a **draw**. If your deck runs out, drawing deals 3 damage to your own base per missed card, so don't dawdle.
 
+**Conceding.** On your turn, **Concede** at the foot of the **Action** column ends the game as your loss, after asking you to confirm. The opponent can concede too, but it **offers** rather than walking away: when its loss is certain, meaning every move it could make leaves you able to finish its base with a single attack on your next action, it offers to concede, once a game. **Accept** to take the win, or **Decline** to play it out; it won't ask again that game. The game-over screen says when a game ended by concession.
+
 ### Keywords, upgrades & card abilities
 
 The rules engine runs the cards, not just the board:

@@ -16,7 +16,7 @@ import { makeQuiescent, lastSearchTrace, clearSearchTrace } from '../ai/search'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { resolveAi } from '../ai/registry'
 import { setupAi } from '../ai/setupAi'
-import { role, reachSteady, canFinishNow, canFinishThisAction, lockedLanes, type Role } from '../ai/race'
+import { role, reachSteady, canFinishNow, canFinishThisAction, lockedLanes, lossIsCertain, type Role } from '../ai/race'
 import { benchDeckSet, type DeckSource } from './decks'
 import { firstPlayerFor } from './seating'
 
@@ -1593,12 +1593,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           // before we act again. The aggregate reading counts lines needing several of their actions
           // with several of ours in between, which is a threat rather than a kill, and it inflated
           // this measurement threefold.
-          // `handsThemLethal` is the stricter "decided" reading (#537): the kill is there AND it is
-          // their action next, in the action phase. Exposure alone also counts a move after which the
-          // phase ends or we act again, and half of those were never followed by their action at all.
-          const exposed = canFinishThisAction(next, foe)
-          const handsThemLethal = exposed && next.winner === null && next.phase === 'action' && next.activePlayer === foe
-          return { m, v: score(next, me, asRole), r: classifyResolution(next, me), exposed, handsThemLethal }
+          return { m, v: score(next, me, asRole), r: classifyResolution(next, me), exposed: canFinishThisAction(next, foe) }
         })
         const record = (tally: Tally, subset: Array<(typeof scored)[number] & { sv: number }>): void => {
           if (subset.length < 2) return
@@ -1900,8 +1895,8 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           if (verdict !== 'safe') exposure.exposed++
           if (verdict === 'avoidable') { exposure.avoidable++; avoidableBy[me] = true }
           if (verdict === 'unavoidable') exposure.unavoidable++
-          // Decided: in the action phase, every legal move hands them a one-action kill on their turn.
-          if (s.phase === 'action' && scored.every(x => x.handsThemLethal)) {
+          // Decided: the same `lossIsCertain` the bots concede on, so this measures what they act on.
+          if (lossIsCertain(s, me)) {
             if (decidedAt[me] === null) {
               decidedAt[me] = actionsThisGame
               finishWatch = { foe, at: actionsThisGame }

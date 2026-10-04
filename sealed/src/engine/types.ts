@@ -543,6 +543,12 @@ export interface GameState {
   setupStage: 'mulligan' | 'resource'
   /** Terminal outcome: a winning player, `'draw'` (both bases fall at once), or null while live. */
   winner: PlayerId | 'draw' | null
+  /** Who conceded, when the game ended that way rather than on a base. */
+  concededBy?: PlayerId
+  /** A player offering to concede, while the other answers. `activePlayer` is the answerer meanwhile. */
+  concessionOffer?: PlayerId
+  /** Players whose offer was declined: they are not asked again this game. */
+  concessionDeclined?: PlayerId[]
   /**
    * Queue of pending mid-resolution choices. While the head is set, the
    * only legal moves are that choice's options (or `skipTrigger` to decline), and

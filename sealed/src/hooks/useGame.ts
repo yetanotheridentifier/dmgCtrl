@@ -12,7 +12,7 @@ import type { GameState, PlayerId } from '../engine/types'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { opponentAi } from '../config'
-import { setupAi } from '../ai/setupAi'
+import { driverAction } from '../ai/concession'
 import { describeActionParts, partsText } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
 import { saveGameRecord } from '../data/gameRecords'
@@ -130,9 +130,9 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       let current = state
       let steps = 0
       while (current.winner === null && current.activePlayer === AI && steps < MAX_AI_STEPS) {
-        // Setup decisions (mulligan/resourcing) use the dedicated heuristic —
-        // random choices there are game-ruiningly bad. See ai/setupAi.ts.
-        const action = setupAi(current) ?? ai(current)
+        // The step the bench takes too: offer to concede a certain loss, else the setup heuristic, else
+        // the AI. An offer hands the turn to the player, which is what ends this loop to ask them.
+        const action = driverAction(current, ai)
         if (!action) break
         historyRef.current.push({
           by: AI,

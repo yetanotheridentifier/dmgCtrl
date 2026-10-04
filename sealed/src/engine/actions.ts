@@ -47,6 +47,15 @@ export type Action =
   | { type: 'useBaseAbility'; cardId?: string; index?: number }
   | { type: 'takeInitiative' }
   | { type: 'pass' }
+  // Conceding. `concede` ends the game at once as the acting player's loss, the player's own button.
+  // `offerConcession` asks the other player instead, handing them the turn to `acceptConcession` (they
+  // win) or `declineConcession` (play resumes, and that player is not asked again). None of these is
+  // ever listed by `legalMoves` as an ordinary move, so no search weighs giving up; only the offer's
+  // answers are, while an offer stands.
+  | { type: 'concede' }
+  | { type: 'offerConcession' }
+  | { type: 'acceptConcession' }
+  | { type: 'declineConcession' }
   // Decline a pending choice (Ambush/Support/pay-or-exhaust/may-play …). With no
   // `choiceId` it declines the head; a `choiceId` declines that specific one when
   // several are pending simultaneously.

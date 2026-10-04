@@ -5,7 +5,7 @@ import type { Ai } from '../ai/types'
 import { initGame } from '../engine/initGame'
 import { resolve } from '../engine/resolve'
 import { seededShuffle, nextSeed } from '../engine/rng'
-import { setupAi } from '../ai/setupAi'
+import { driverAction } from '../ai/concession'
 import { newCoverage, observeAction, observeState } from './playCoverage'
 
 /** Why a game was abandoned instead of counted. Each is a distinct engine-defect signature. */
@@ -79,6 +79,15 @@ export interface PlayGameOptions {
    * sweep turns it on.
    */
   trackCoverage?: boolean
+  /**
+   * End a game the moment one seat's loss is certain, the seat offering and the other accepting
+   * (`concessionOffer`). On by default: no seat in that position has gone on to win, so it changes no
+   * result. It saves little: most decided points fall while the loser is answering a choice of its
+   * own, where no offer is made, so greedy self-play concedes about 0.5% of its actions and 48 beam
+   * games conceded none, at no measurable cost either way. The coverage sweep turns it off, since
+   * playing the kill out is play it exercises.
+   */
+  concede?: boolean
 }
 
 /**
@@ -126,6 +135,7 @@ function makeSeededShuffle(seed: number): <T>(arr: T[]) => T[] {
  */
 export function playGame(opts: PlayGameOptions): GameResult {
   const stepCeiling = opts.stepCeiling ?? DEFAULT_STEP_CEILING
+  const concede = opts.concede ?? true
   const shuffle = makeSeededShuffle(opts.seed)
 
   let state = initGame(opts.deckPlayer, opts.deckOpponent, opts.cardDb, {
@@ -153,8 +163,11 @@ export function playGame(opts: PlayGameOptions): GameResult {
       }
       if (coverage) observeState(coverage, state)
       const active = state.activePlayer
-      const ai = active === 'player' ? opts.aiPlayer : opts.aiOpponent
-      const action = setupAi(state) ?? ai(state)
+      // An offer standing to a bot is accepted: it is a certain win, and the bench has no one to ask.
+      const ai: Ai = state.concessionOffer !== undefined
+        ? () => ({ type: 'acceptConcession' })
+        : active === 'player' ? opts.aiPlayer : opts.aiOpponent
+      const action = driverAction(state, ai, { concede })
       if (!action) {
         status = 'dropped'
         dropReason = 'stuck'

@@ -1,6 +1,7 @@
 import type { GameState, PlayerId, UnitState } from '../engine/types'
-import { opponentOf } from '../engine/types'
-import { enemyAttackTargets } from '../engine/legalMoves'
+import { opponentOf, hasPendingChoices } from '../engine/types'
+import { enemyAttackTargets, legalMoves } from '../engine/legalMoves'
+import { resolve } from '../engine/resolve'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword, unitKeywordValue, unitCannotAttackBases, unitNegatesOverwhelm } from '../engine/keywords'
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
@@ -285,6 +286,30 @@ export function canFinishThisAction(state: GameState, seat: PlayerId): boolean {
   const remaining = remainingBase(state, seat)
   if (remaining <= 0) return false
   return state.players[seat].units.some(u => !u.exhausted && unitReach(state, seat, u) >= remaining)
+}
+
+/**
+ * Whether `seat`'s loss is certain: it is the one to act in the action phase, nothing is pending, and
+ * every legal move hands the opponent a one-action kill on **their** turn.
+ *
+ * Measured before it was used: no seat in this position has gone on to win (101 of 101 under
+ * greedy, 21 of 21 under beam). The looser reading, that they *could* finish after our move, also
+ * counts moves after which the phase ends or we act again, and 23% of seats it flags survive.
+ *
+ * Gated on the opponent already holding a one-action kill. The gate is exact rather than a shortcut:
+ * passing is always among our moves and leaves the board as it is, so without a kill now there is a
+ * move that does not hand them one. It saves resolving every move in the ~98% of positions without.
+ */
+export function lossIsCertain(state: GameState, seat: PlayerId): boolean {
+  if (state.winner !== null || state.phase !== 'action' || state.activePlayer !== seat) return false
+  if (hasPendingChoices(state) || state.concessionOffer !== undefined) return false
+  const foe = opponentOf(seat)
+  if (!canFinishThisAction(state, foe)) return false
+  const moves = legalMoves(state)
+  return moves.length > 0 && moves.every(m => {
+    const next = resolve(state, m)
+    return next.winner === null && next.phase === 'action' && next.activePlayer === foe && canFinishThisAction(next, foe)
+  })
 }
 
 /**
