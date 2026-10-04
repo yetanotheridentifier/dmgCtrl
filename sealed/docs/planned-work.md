@@ -439,6 +439,10 @@ the day it ships. #553 already has to work that way for a different reason.
   sits in the search's hot path, so landing it needs a bench run against a matched control rather
   than a green suite.
 - **Token-unit art**, and a permanent set for ASH tokens.
+- **Concession accept and decline rates, once live records arrive** (#407). The bot offers to concede a
+  certain loss and the player chooses. When games are transmitted back, measure how often each answer
+  is chosen, and how often players concede on their own; if one answer dominates, the offer may be
+  replaced by that behaviour outright.
 - **#591 decks across sets**, for Premier (the default format), Eternal and chaos sealed. The sweep and
   the deck generator build one set per deck, because they model sealed. Mixing sets needs copy limits
   by card rather than by id, a coverage report that maps one engine id back to several printings,

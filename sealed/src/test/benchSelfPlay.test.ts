@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { playGame, DEFAULT_STEP_CEILING } from '../bench/selfPlay'
 import { benchInputs } from '../bench/decks'
 import { randomAi } from '../ai/randomAi'
+import { greedyAi } from '../ai/greedyAi'
 import type { Ai } from '../ai/types'
 import type { GameResult, DropReason } from '../bench/selfPlay'
 
@@ -132,5 +133,35 @@ describe('playGame', () => {
     const r = playGame({ ...base, seed: 5, stepCeiling: 3 })
     expect(r.status).toBe('dropped')
     expect(r.dropReason).toBe('nonterminating')
+  })
+})
+
+/**
+ * Conceding a certain loss (#537) ends a game early, and must not change who won it: a decided seat
+ * has never won, so a concession only removes the actions spent finishing the kill. Played with the
+ * greedy AI, since a certain loss assumes an opponent that takes the kill, which a random one does not.
+ */
+describe('playGame with concession', () => {
+  const greedy = { ...base, aiPlayer: greedyAi, aiOpponent: greedyAi }
+  const SEEDS = Array.from({ length: 12 }, (_, i) => i + 1)
+  const pairs = SEEDS.map(seed => ({
+    seed,
+    on: playGame({ ...greedy, seed }),
+    off: playGame({ ...greedy, seed, concede: false }),
+  }))
+
+  it('leaves every winner as it was', () => {
+    for (const { seed, on, off } of pairs) expect(on.winner, `seed ${seed}`).toBe(off.winner)
+  })
+
+  it('never makes a game longer, and shortens some', () => {
+    for (const { seed, on, off } of pairs) expect(on.moveCount, `seed ${seed}`).toBeLessThanOrEqual(off.moveCount)
+    expect(pairs.some(p => p.on.moveCount < p.off.moveCount)).toBe(true)
+  })
+
+  /** The record shows the concession as moves, offer then acceptance, so a replay ends the same way. */
+  it('records a concession as an offer and its acceptance', () => {
+    const conceded = pairs.find(p => p.on.moveCount < p.off.moveCount)!.on
+    expect(conceded.moves.slice(-2).map(m => m.action.type)).toEqual(['offerConcession', 'acceptConcession'])
   })
 })

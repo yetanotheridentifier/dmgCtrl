@@ -958,6 +958,10 @@ const SETUP_RESOURCES = 2
  */
 function setupPrompt(state: GameState): DescribePart[] | undefined {
   if (state.activePlayer !== 'player' || state.winner !== null) return undefined
+  // The bot's offer to concede a certain loss: answered from the Action column like the mulligan.
+  if (state.concessionOffer === 'opponent') {
+    return ['Your opponent offers to concede: accept, or play it out, in the Action column']
+  }
   if (state.phase === 'setup' && state.setupStage === 'mulligan') {
     return ['Mulligan or keep your opening hand, choose in the Action column']
   }
@@ -1129,6 +1133,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // the clipboard refused it, so the report is shown to copy by hand rather than lost.
   const [reporting, setReporting] = useState(false)
   const [fallbackReport, setFallbackReport] = useState<string | undefined>(undefined)
+  // Conceding asks once more before it ends the game: a stray click on it is not undoable in play.
+  const [confirmingConcede, setConfirmingConcede] = useState(false)
   // Settings (#539): an overlay over the board, not a screen. Routing away would unmount this
   // component and the game with it (#541).
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -1570,6 +1576,35 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             Undo
           </button>
         )}
+        {/* Conceding, the player's own (#537): not a game action the menu lists, and muted like Undo
+            so it never reads as a move. On the player's turn only, and confirmed before it ends the game. */}
+        {gameState.winner === null && gameState.activePlayer === 'player' && (confirmingConcede ? (
+          <div className="mt-1.5 flex flex-col gap-1.5 text-center text-xs text-ink-dim">
+            <span>Concede the game?</span>
+            <button
+              data-testid="concede-confirm-btn"
+              onClick={() => { setConfirmingConcede(false); clearSelections(); act({ type: 'concede' }) }}
+              className="rounded-xl border-2 border-red px-3 py-1.5 text-xs text-red hover:bg-red/10"
+            >
+              Concede
+            </button>
+            <button
+              data-testid="concede-cancel-btn"
+              onClick={() => setConfirmingConcede(false)}
+              className="rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-faint hover:text-ink"
+            >
+              Keep playing
+            </button>
+          </div>
+        ) : (
+          <button
+            data-testid="concede-btn"
+            onClick={() => setConfirmingConcede(true)}
+            className="mt-1.5 rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-faint hover:text-ink"
+          >
+            Concede
+          </button>
+        ))}
       </div>
     )
 
@@ -1903,6 +1938,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             <p className={`text-2xl font-semibold ${outcomeBanner(gameState.winner).tone}`}>
               {outcomeBanner(gameState.winner).title}
             </p>
+            {outcomeBanner(gameState.winner, gameState.concededBy).detail && (
+              <p data-testid="outcome-detail" className="mt-1 text-sm text-ink-dim">
+                {outcomeBanner(gameState.winner, gameState.concededBy).detail}
+              </p>
+            )}
             <div className="mt-6 flex justify-center gap-3">
               <button data-testid="rematch-btn" onClick={rematch} className="px-5 py-2 text-sm border-2 border-green text-green rounded-xl shadow-[0_0_12px_rgba(34,197,94,0.3)] hover:bg-green/10">
                 Rematch

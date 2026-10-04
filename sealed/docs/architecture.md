@@ -197,9 +197,10 @@ per-phase event log (`phaseEvents`) all live on the state, JSON-serialisable. Ab
 2. `buildCardDb` → `initGame` → store state; snapshot the initial state for the record.
 3. Human acts by clicking cards/units, the action-menu buttons, or a pending-choice
    prompt (pay/play/discard, the "look at a card" / search overlays) → `resolve`.
-4. `driveAi` loop: while the AI is active and the game is live, `randomAi` picks from
-   `legalMoves`, resolves, and logs, through action *and* regroup phases (capped at
-   500 steps as a hang guard).
+4. `driveAi` loop: while the AI is active and the game is live, `driverAction` picks the
+   AI's move, resolves, and logs, through action *and* regroup phases (capped at 500 steps as
+   a hang guard). `driverAction` is the step the bench's `playGame` takes too: offer to concede
+   a certain loss, else the setup heuristic, else the AI.
 5. When `winner` is set, the game record persists once to IndexedDB.
 
 `useGame` reads live state from a ref inside `act` (not a setState updater) so that
@@ -236,6 +237,22 @@ provenance unknown rather than zero, and it cannot be backfilled.
 
 The per-action granularity is finer than `undo` currently needs; it is the substrate for
 stepping through history from the log.
+
+**Conceding** is four engine actions, so an offer and its answer are ordinary recorded moves that
+replay, undo and reach the saved record like any other:
+
+- `concede` ends the game at once as the acting player's loss (the player's Concede button).
+- `offerConcession` asks the other player, handing them the turn; while it stands `legalMoves`
+  offers only `acceptConcession` (they win) and `declineConcession` (play resumes and the offerer
+  may not offer again that game, which `resolve` enforces).
+- None of them is listed as an ordinary move, so no search weighs giving up. Whether to offer is a
+  driver's policy, `concessionOffer`: on the bot's own action-phase turn, once a game, when
+  `lossIsCertain` holds (every legal move hands the opponent a one-action kill on their turn).
+- A game ended this way records `concededBy`, which the game-over banner reads.
+
+In the bench, `playGame` offers on the same rule and accepts on the other bot's behalf, which ends a
+game the moment it is decided without changing who wins it. The coverage sweep turns it off
+(`concede: false`), since playing the kill out is play it exists to exercise.
 
 ## User settings
 

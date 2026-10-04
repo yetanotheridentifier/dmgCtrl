@@ -325,6 +325,63 @@ describe('GameScreen', () => {
    * whoever is signed in there, and no token lives in the app) with the full report on the
    * clipboard, because the replay payload is far too large for a URL.
    */
+  /**
+   * Conceding (#537). The player may concede on their turn, after confirming, and the bot offers to
+   * concede when its loss is certain, which the player accepts or declines. These inject a bot that
+   * offers on its first action-phase turn: the screen path is the same whatever made it offer.
+   */
+  describe('conceding', () => {
+    it('concedes the game after the player confirms', async () => {
+      const user = userEvent.setup()
+      await renderBoard()
+      await user.click(screen.getByTestId('concede-btn'))
+      await user.click(screen.getByTestId('concede-confirm-btn'))
+      expect(await screen.findByText('You lost')).toBeInTheDocument()
+      expect(screen.getByTestId('outcome-detail')).toHaveTextContent('You conceded')
+    })
+
+    it('keeps playing when the player thinks better of it', async () => {
+      const user = userEvent.setup()
+      await renderBoard()
+      await user.click(screen.getByTestId('concede-btn'))
+      await user.click(screen.getByTestId('concede-cancel-btn'))
+      expect(screen.queryByText('You lost')).toBeNull()
+      expect(screen.getByTestId('concede-btn')).toBeInTheDocument()
+    })
+
+    const offering: UseGameOptions = {
+      ...OPTS,
+      // Offers until declined, as the real bot does once: the engine refuses a second offer.
+      ai: s => (s.phase === 'action' && !(s.concessionDeclined ?? []).includes('opponent') ? { type: 'offerConcession' } : OPTS.ai!(s)),
+    }
+    const renderOffered = async () => {
+      renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={offering} />)
+      await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: /keep hand/i }))
+      await user.click(screen.getByTestId('hand-card-0'))
+      await user.click(screen.getByTestId('hand-card-0'))
+      // The player acts first; the bot's first action-phase turn is its offer.
+      await user.click(screen.getByRole('button', { name: /^pass$/i }))
+      return user
+    }
+
+    it('asks the player to answer the bot\'s offer, and ends the game as a win when accepted', async () => {
+      const user = await renderOffered()
+      expect(screen.getByText(/your opponent offers to concede/i)).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /accept the concession/i }))
+      expect(await screen.findByText('You won')).toBeInTheDocument()
+      expect(screen.getByTestId('outcome-detail')).toHaveTextContent('Your opponent conceded')
+    })
+
+    it('plays on when the player declines the offer', async () => {
+      const user = await renderOffered()
+      await user.click(screen.getByRole('button', { name: /decline the concession/i }))
+      expect(screen.queryByText('You won')).toBeNull()
+      expect(screen.queryByText(/your opponent offers to concede/i)).toBeNull()
+    })
+  })
+
   describe('bug report', () => {
     // The button is a setting now, so seed it rather than depending on the build's default.
     beforeEach(() => seedSettings({ showBugReport: true }))

@@ -100,9 +100,19 @@ function answeredAs(state: GameState, choice: PendingChoice | undefined, answer:
   return choice?.source && choice.kind !== 'mayPreventDamage' ? whileResolving(state, choice.source, answer) : answer(state)
 }
 
+/** The state with any standing concession offer removed, as an absent field rather than an undefined one. */
+function withoutOffer(state: GameState): GameState {
+  const next = { ...state }
+  delete next.concessionOffer
+  return next
+}
+
 function resolveAction(state: GameState, action: Action): GameState {
   if (state.winner !== null) {
     throw new Error('Cannot resolve actions: the game is over')
+  }
+  if (state.concessionOffer !== undefined && !['acceptConcession', 'declineConcession', 'concede'].includes(action.type)) {
+    throw new Error(`Cannot ${action.type}: a concession offer is waiting for an answer`)
   }
 
   switch (action.type) {
@@ -223,6 +233,25 @@ function resolveAction(state: GameState, action: Action): GameState {
       return requirePhase(state, 'action', () => takeInitiative(state))
     case 'pass':
       return requirePhase(state, 'action', () => pass(state))
+    // Conceding is outside the turn structure: the acting player loses at once.
+    case 'concede':
+      return { ...withoutOffer(state), winner: opponentOf(state.activePlayer), concededBy: state.activePlayer }
+    case 'offerConcession':
+      return requirePhase(state, 'action', () => {
+        if (hasPendingChoices(state)) throw new Error('Cannot offer to concede while a choice is pending')
+        if ((state.concessionDeclined ?? []).includes(state.activePlayer)) throw new Error('Cannot offer to concede again: the offer was declined')
+        return { ...state, concessionOffer: state.activePlayer, activePlayer: opponentOf(state.activePlayer) }
+      })
+    case 'acceptConcession': {
+      const offerer = state.concessionOffer
+      if (offerer === undefined) throw new Error('Cannot accept a concession: none was offered')
+      return { ...withoutOffer(state), winner: opponentOf(offerer), concededBy: offerer }
+    }
+    case 'declineConcession': {
+      const offerer = state.concessionOffer
+      if (offerer === undefined) throw new Error('Cannot decline a concession: none was offered')
+      return { ...withoutOffer(state), activePlayer: offerer, concessionDeclined: [...(state.concessionDeclined ?? []), offerer] }
+    }
     // Choices are not action-phase-only: `whenReadies` raises them at round start and
     // `whenRegroupStarts` during regroup (Alphabet Squadron U-Wing). Gating them on the
     // action phase would deadlock those — there'd be no legal move.

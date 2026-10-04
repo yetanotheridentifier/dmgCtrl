@@ -302,7 +302,9 @@ rather than to a belief model.
 ### A decided game is lost every time, and stopping it early saves almost nothing
 
 A seat is **decided** when, in the action phase, every legal move hands the opponent a one-action kill
-on their turn (`--decisions`, "decided positions"). Measured over the coverage decks:
+on their turn. Measured over the coverage decks with that reading, pending choices included (the
+`--decisions` readout now reports the narrower `lossIsCertain`, which leaves them out, so it reads
+lower: 14 of 144 seat-games over the same 72 greedy games, all lost):
 
 | | greedy, 240 games | beam, 72 games |
 | --- | --- | --- |
@@ -311,12 +313,22 @@ on their turn (`--decisions`, "decided positions"). Measured over the coverage d
 | ...whose opponent finished on its very next action | 86.1% | 66.7% |
 | Actions played after the loser was decided | **1.2%** | **0.9%** |
 
-**Stopping a decided bench game early is not worth building.** About 1% of all actions follow the
-decided point, which is the whole saving, and the games are over in a round or two anyway.
+**Stopping a decided bench game early is not worth building for the time.** About 1% of all actions
+follow the decided point, which is the whole saving, and the games are over in a round or two anyway.
+The bench concedes regardless, because it shares one driver step with the app, where the offer is
+the point.
 
 **The predicate is safe to concede on.** No decided seat has won, under either AI. The opponent does
 not always finish on its next action (a third of the time under `beam`, which takes another winning
 line first), but it always finishes.
+
+**Conceding there saves the bench almost nothing either.** The bots concede on `lossIsCertain`, which
+also requires that no choice is pending, since an offer cannot be made mid-ability. Three quarters of
+decided points fall while the loser is answering a choice of its own (16 of 21 over 48 greedy games),
+so self-play concedes at a quarter to a half of them: about 0.5% of actions under greedy, and **none
+in 48 beam games**, whose wall clock moved by 0.1% with concession on, which is noise. Offering
+mid-choice would reach the rest, at the cost of handing over the turn with a choice still open; at a
+ceiling near 1% it was not built.
 
 **The looser `unavoidable` exposure is not a decided position, and conceding on it would throw games
 away.** It asks only whether the opponent *could* finish, so it also counts moves after which the phase

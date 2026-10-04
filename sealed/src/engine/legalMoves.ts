@@ -616,6 +616,9 @@ export function playFromCandidates(state: GameState, controller: PlayerId, zone:
  */
 export function legalMoves(state: GameState): Action[] {
   if (state.winner !== null) return []
+  // An offer to concede is answered before anything else. Conceding itself is never listed: it is a
+  // player's button and a driver's policy, and no search should weigh giving up as a move.
+  if (state.concessionOffer !== undefined) return [{ type: 'acceptConcession' }, { type: 'declineConcession' }]
 
   switch (state.phase) {
     case 'setup':

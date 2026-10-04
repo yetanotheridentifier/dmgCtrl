@@ -162,6 +162,8 @@ export function runSweep(config: SweepConfig): SweepReport {
           firstPlayer: firstPlayerFor(gameIndex),
           stepCeiling: config.stepCeiling,
           trackCoverage: true,
+          // The sweep exercises cards, and the kill a concession would skip is play like any other.
+          concede: false,
         })
         for (const id of result.cardsDrawn) drawn.add(printed(id))
         for (const id of result.cardsPlayed) played.add(printed(id))

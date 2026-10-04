@@ -179,6 +179,14 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       return 'Take the initiative'
     case 'pass':
       return 'Pass'
+    case 'concede':
+      return 'Concede'
+    case 'offerConcession':
+      return 'Offer to concede'
+    case 'acceptConcession':
+      return 'Accept the concession'
+    case 'declineConcession':
+      return 'Decline the concession and play on'
     case 'skipTrigger': {
       const choice = action.choiceId ? findChoice(state, action.choiceId) : activeChoice(state)
       if (!choice) return 'Skip'

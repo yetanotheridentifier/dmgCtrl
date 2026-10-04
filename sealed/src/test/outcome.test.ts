@@ -14,6 +14,13 @@ describe('outcomeBanner', () => {
     expect(outcomeBanner('draw').title).toBe('Draw')
   })
 
+  /** A conceded game says so, since no base fell to explain the result. */
+  it('says who conceded', () => {
+    expect(outcomeBanner('player', 'opponent').detail).toBe('Your opponent conceded')
+    expect(outcomeBanner('opponent', 'player').detail).toBe('You conceded')
+    expect(outcomeBanner('player').detail).toBeUndefined()
+  })
+
   it('gives each outcome a distinct tone class', () => {
     const tones = new Set([
       outcomeBanner('player').tone,
