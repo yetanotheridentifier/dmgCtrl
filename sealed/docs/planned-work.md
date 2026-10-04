@@ -143,13 +143,13 @@ Two phases:
   **When Played units and upgrades are finished**, and so are **constant abilities on units and
   upgrades**: the ones existing primitives expressed shipped first, and the hooks and choices the rest
   needed followed, group by group. Vult Skerris's Defender (needs "discarded a card this phase") is
-  on #678, and the 14 other constant-ability cards lifted out shipped with #682 (losing abilities) or are on #465
+  on #678, and the 14 other constant-ability cards lifted out shipped with #682 (losing abilities) or are on #753
   (Phantom II) and #686; Fives, borrowing another unit's When Played abilities, shipped with #683. **When Defeated units are
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
   shared with another trigger point ("When Played/When Defeated") is built on the compound-head framework
 (#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
   (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 16 not built are on the ticket of what
-  blocks them, #465 pilots (7),
+  blocks them, #754 pilot leaders (7),
   #467 Bounty (Bossk is fully shipped; Jabba the Hutt's back reads capture too, but #707 already built
   its chosen-guardian-and-target shape — what's left blocking the whole leader is an unbuilt "grant a
   chosen unit a temporary keyword ability" primitive his Action needs, on #715),
@@ -255,13 +255,13 @@ Two phases:
   already fired; the damage points became one both-sides event (`whenDamageDealt`), and the heads no
   point raised got their own (a unit attacking, healing, the ready step, a card being drawn, a unit
   leaving play). "Choose two, in any order" is `chooseMode` with a queued continuation. The cards
-  whose other blocker is a keyword are on that keyword's ticket (the Force #462, Pilot #465,
+  whose other blocker is a keyword are on that keyword's ticket (the Force #462, Pilot moves #753,
   capture #466; Jango Fett, Krrsantan and Chain Code Collector shipped with Bounty, #467;
   Ahsoka Tano, Captain Typho and Chancellor Valorum shipped with Disclose, #603; First Light shipped
   with Plot, #470), Arquitens Assault
   Cruiser (an opponent-owned resource) shipped with #475, and
   Traitorous, Nabat Village and Lux Bonteri are on #686.
-  Darth Vader, Victor Squadron Leader waits on #465 (his
+  Darth Vader, Victor Squadron Leader waits on #754 (his
   back is a Pilot), Queen Amidala (defeat a unit to prevent damage) shipped with the replacement effects (#684), and Roger Roger (an
   upgrade's own When Defeated) and the flipping Chancellor Palpatine are on #686. **Weakness tokens are finished**
   (#649), HMW's -1/-1 token: its 18 cards and five more it touched (Beast-token cards, Inferno Squad's
@@ -305,7 +305,7 @@ Two phases:
   Allegiant General Pryde's "when indirect damage is dealt to a unit" reuses the existing
   `whenDamageDealt` point, filtered on a new flag, rather than a trigger point of its own. 18 of the
   22 candidate cards shipped (recounted; the ticket's stale "unlocks 15" undercounted). Left out: Boba
-  Fett's leader (a further, unrelated trigger point, noted on #680) and Dengar (needs Piloting, #465).
+  Fett's leader (a further, unrelated trigger point, noted on #680) and Dengar (shipped with Piloting).
   Targeting Computer and Superheavy Ion Cannon shipped with the granted ability blocks (#464).
   **Coordinate is finished** (#472): "Gain this ability while you control 3 or more units" is a
   live board-state condition (`hasCoordinate`/`unitHasCoordinate`, read fresh everywhere it's asked,
@@ -346,7 +346,7 @@ Two phases:
   point, raised by the `readyUnit` primitive itself rather than a resolver call site so it hears every
   route a unit readies through). Foresight split again to **#744**: it needs the regroup phase's draw
   to wait on `whenRegroupStarts` choices, an engine-wide sequencing change rather than a card
-  registration. Condemn shipped with #682; the 16 pilot cards and pilot leaders are on #465; Han's
+  registration. Condemn shipped with #682; the pilot cards shipped with Piloting, and the pilot leaders are on #754; Han's
   Golden Dice, Targeted For Removal and Payroll Heist on #719; Leia Organa on #733; For The Republic on
   #730.
 

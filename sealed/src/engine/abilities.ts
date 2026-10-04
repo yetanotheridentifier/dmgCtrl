@@ -1,5 +1,5 @@
 import type { Arena, CardDb, DelayedEffect, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeAttachment, UpgradeRef, UsedAbility } from './types'
-import { carriedAbilityCardIds, baseAbilityCardIds, pushChoice } from './types'
+import { attachmentAbilityId, carriedAbilityCardIds, baseAbilityCardIds, pushChoice } from './types'
 
 /**
  * Card ability framework. Card-type-agnostic: units, leaders, events and upgrades
@@ -219,6 +219,10 @@ export interface CardDefinition {
    * unit. `player` is what "attach to a friendly unit" is read against (Darth Maul's Lightsaber).
    */
   attachRestriction?: (state: GameState, target: UnitState, player: PlayerId) => boolean
+  /** "You may play or deploy 1 additional Pilot on this unit": Pilots this unit takes beyond the one (`canTakePilot`). */
+  extraPilots?: number
+  /** A Pilot's upgrade side only: it may be played on a Vehicle that already has its Pilots (R2-D2). */
+  ignoresPilotLimit?: boolean
   /**
    * "This card can't be played from your hand" (SEC_053 One in a Million): the Play a Card action's
    * hand scan skips it, so its only route into play is an alternate one (Plot, Smuggle, a discard
@@ -1139,7 +1143,7 @@ function remainingAbilityCardIds(state: GameState, unit: UnitState, controller: 
     && (!blank || blank.keep!.includes(up.cardId) || !upgradeGivesAbilities(state.cards[up.cardId]))
   return [
     ...(blank ? [] : [unit.cardId]),
-    ...unit.upgrades.filter(keepUpgrade).map(u => u.cardId),
+    ...unit.upgrades.filter(keepUpgrade).map(attachmentAbilityId),
     ...(blank ? [] : unit.grantedAbilityCardIds ?? []),
   ]
 }

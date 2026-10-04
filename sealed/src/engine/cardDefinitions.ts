@@ -7,8 +7,8 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, indirectDamageDealtThisPhase, markAbilityUsed, updatePlayer } from './types'
-import { affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
+import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, indirectDamageDealtThisPhase, markAbilityUsed, updatePlayer, upgradeSideId } from './types'
+import { canTakePilot, affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost, readyResourceCount } from './resources'
 import { cardHasTrait, cardTraits, unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywords, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
@@ -3884,10 +3884,8 @@ registerCard('LAW_078', whenPlayed('You may defeat a non-unique upgrade. If you 
 }))
 
 /** The units other than its host that `up` could be attached to by `owner`. */
-const moveTargets = (s: GameState, up: UpgradeRef, owner: PlayerId): string[] => {
-  const restriction = getCardDefinition(up.cardId)?.attachRestriction
-  return allUnits(s).filter(u => u.instanceId !== up.unitId && (!restriction || restriction(s, u, owner))).map(u => u.instanceId)
-}
+const moveTargets = (s: GameState, up: UpgradeRef, owner: PlayerId): string[] =>
+  allUnits(s).filter(u => u.instanceId !== up.unitId && canMoveOnto(s, up, u, owner)).map(u => u.instanceId)
 registerCard('LOF_248', { // Jocasta Nu
   ...whenPlayed('You may attach a friendly upgrade on a friendly unit to a different eligible unit.', (s, ctx) => {
     const candidates = upgradeCandidates(s, { owner: ctx.owner, hostController: ctx.owner }).filter(up => moveTargets(s, up, ctx.owner).length > 0)
@@ -3919,7 +3917,16 @@ function moveUpgrade(s: GameState, up: UpgradeRef, targetId: string, newOwner?: 
     units: s.players[from.owner].units.map(u => (u.instanceId === up.unitId ? { ...u, upgrades: u.upgrades.filter((_, i) => i !== up.upgradeIndex) } : u)),
   })
   if (!findUnit(detached, targetId)) return s
-  return fireUpgradeAttached(attachUpgrades(detached, targetId, [newOwner ? { ...moving, owner: newOwner } : moving]), targetId)
+  return fireUpgradeAttached(attachUpgrades(detached, targetId, [newOwner ? { ...moving, owner: newOwner } : moving]), targetId, false, moving.cardId)
+}
+/**
+ * Whether `up` may be moved onto `target` by `owner`: its card's `attachRestriction`, and for a unit card
+ * attached as an upgrade (a Pilot), a Vehicle with room for it.
+ */
+function canMoveOnto(s: GameState, up: UpgradeRef, target: UnitState, owner: PlayerId): boolean {
+  const restriction = getCardDefinition(up.cardId)?.attachRestriction
+  if (restriction && !restriction(s, target, owner)) return false
+  return !findUnit(s, up.unitId)?.unit.upgrades[up.upgradeIndex]?.unitCard || canTakePilot(s, target, up.cardId)
 }
 registerCard('LOF_150', { // Cin Drallig
   ...whenPlayed('You may play a Lightsaber upgrade from your hand for free on this unit. If you do, ready him.', (s, ctx) => {
@@ -5280,8 +5287,7 @@ registerCard('SHD_077', { // Evidence of the Crime
 })
 /** Every unit the taken upgrade may attach to, its current host included. */
 function evidenceTargets(s: GameState, up: UpgradeRef, owner: PlayerId): string[] {
-  const restriction = getCardDefinition(up.cardId)?.attachRestriction
-  return allUnits(s).filter(u => !restriction || restriction(s, u, owner)).map(u => u.instanceId)
+  return allUnits(s).filter(u => u.instanceId === up.unitId || canMoveOnto(s, up, u, owner)).map(u => u.instanceId)
 }
 registerCard('JTL_232', { // Jump to Lightspeed
   ...whenPlayed("Return a friendly space unit and any number of non-leader upgrades on it to their owners' hands. The next time you play a copy of that unit this phase, you may play it for free.", (s, ctx) =>
@@ -13376,3 +13382,168 @@ registerCard('TS26_26', { // Mother Talzin
     ? addDiscardPlayGrant(s, { player: ctx.owner, owner: opponentOf(ctx.owner), cardId: ctx.cardChosen!, waive: { all: true } })
     : s),
 })
+
+// ── Pilots ─────────────────────────────────────────────────────────────────────────────────────────
+// A Pilot card has two sides. Its unit side is registered under its own id as usual; its upgrade side,
+// what it gives the Vehicle it is played onto with Piloting, under `upgradeSideId`, which is what the
+// host's `abilityCardIds` lists for it. So "When played as an upgrade" is the upgrade side's When
+// Played, "When played as a unit" the unit side's, and an "Attached unit gains" block fires for the
+// host. `ctx.sourceInstanceId` on the upgrade side is the host, as for any upgrade.
+
+/** Register both sides of a Pilot. A side with nothing printed on it is left empty. */
+function registerPilot(id: string, sides: { unit?: CardDefinition; upgrade?: CardDefinition }): void {
+  registerCard(id, sides.unit ?? {})
+  registerCard(upgradeSideId(id), { ...sides.upgrade, sourceCardId: id })
+}
+/** A side printed the same way on both: "This unit ..." as a unit, "Attached unit gains: 'This unit ...'" as an upgrade. */
+const bothSides = (def: CardDefinition) => ({ unit: def, upgrade: def })
+/** How many Pilot units and Pilot upgrades `owner` controls. */
+const friendlyPilots = (s: GameState, owner: PlayerId): number =>
+  s.players[owner].units.filter(u => unitHasTrait(s, u, 'Pilot')).length
+  + allUnits(s).reduce((n, u) => n + u.upgrades.filter(up => up.owner === owner && cardHasTrait(s, up.cardId, 'Pilot')).length, 0)
+const pilotsOn = (s: GameState, u: UnitState): number => u.upgrades.filter(up => cardHasTrait(s, up.cardId, 'Pilot')).length
+/** "When a Pilot (upgrade) attaches to this unit". */
+const pilotAttached = (s: GameState, ctx: EffectContext): boolean => ctx.attachedCardId !== undefined && cardHasTrait(s, ctx.attachedCardId, 'Pilot')
+const atAttach = (description: string, hears: AbilityDef['hears'], effect: AbilityDef['effect']): AbilityDef => ({ trigger: 'whenUpgradeAttached', description, hears, effect })
+
+// "Attached unit gains <keyword>"
+registerPilot('JTL_058', { upgrade: gains(() => true, KW.sentinel) }) // Academy Graduate
+registerPilot('JTL_034', { upgrade: gains(() => true, KW.grit) }) // Interceptor Ace
+registerPilot('JTL_045', { upgrade: gains(() => true, KW.restore(1)) }) // Hera Syndulla
+registerPilot('JTL_211', { upgrade: gains(() => true, KW.raid(1)) }) // Independent Smuggler
+registerPilot('JTL_150', { upgrade: { // Biggs Darklighter
+  conditionalKeywords: (s, u) => [...(isTrait('Fighter')(s, u) ? [KW.overwhelm] : []), ...(isTrait('Speeder')(s, u) ? [KW.grit] : [])],
+  statModifier: (s, u) => (isTrait('Transport')(s, u) ? { hp: 1 } : {}),
+} })
+registerPilot('JTL_109', { upgrade: gains((s, u) => { // Jarek Yeager
+  const mine = s.players[controllerOf(s, u)].units
+  return mine.some(x => x.arena === 'ground') && mine.some(x => x.arena === 'space')
+}, KW.sentinel) })
+
+// "When played as an upgrade"
+registerPilot('JTL_084', { upgrade: createWp('Create a TIE Fighter token.', TOKEN_TIE_FIGHTER) }) // Wingman Victor Two
+registerPilot('JTL_086', { upgrade: expWp('You may give an Experience token to another unit.', pickOther, 1, true) }) // Wingman Victor Three
+registerPilot('JTL_057', { upgrade: whenPlayed('You may heal 2 damage from a unit.', (s, ctx) => healChoice(s, ctx, 2, pickedIds(s, ctx, pickAny), [], true)) }) // Astromech Pilot
+registerPilot('JTL_148', { upgrade: mayDefeatUpgradeWp('You may defeat an upgrade that costs 2 or less.', (s, up) => (s.cards[up.cardId]?.cost ?? 0) <= 2) }) // Frisk
+registerPilot('JTL_189', { upgrade: damageWp('You may deal 1 damage to a unit. If attached unit is a Transport, you may deal 2 damage instead.', pickAny, // Boba Fett
+  (s, ctx) => (hostPasses(s, ctx, isTrait('Transport')) ? 2 : 1), true) })
+registerPilot('JTL_145', { upgrade: mayPayWp('You may pay 2. If you do, ready a Resistance unit.', 2, 'ready a Resistance unit', (s, ctx) => // BB-8
+  targetChoice(s, ctx, 'selectUnitToReady', pickedIds(s, ctx, pickTrait('Resistance')))) })
+registerPilot('JTL_215', { upgrade: whenPlayed('Discard 2 cards from your deck. Return each of those cards with an odd cost to your hand.', (s, ctx) => { // BoShek
+  const [next, milled] = millTop(s, ctx.owner, 2)
+  const odd = milled.filter(id => (next.cards[id]?.cost ?? 0) % 2 === 1)
+  return odd.reduce((acc, id) => returnCardFromDiscardToHand(acc, ctx.owner, id), next)
+}) })
+registerPilot('JTL_210', { // The Mandalorian
+  unit: whenPlayed('When played as a unit: Exhaust up to 2 ground units.', (s, ctx) => {
+    const targets = pickedIds(s, ctx, pickGround)
+    return targets.length ? pushChoice(s, { kind: 'multiPick', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, spec: { mode: 'exhaust', remaining: 2 } }) : s
+  }),
+  upgrade: whenPlayed('Exhaust an enemy unit in this arena.', (s, ctx) =>
+    targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, pickAll(pickEnemy, (st, u) => u.arena === findUnit(st, ctx.sourceInstanceId!)?.unit.arena)))),
+})
+const snapDiscount: CardDefinition = whenPlayed('The next Resistance card you play this phase costs 1 less.', (s, ctx) => grantNextUnit(s, ctx.owner, { anyCard: true, trait: 'Resistance', costDelta: -1 }))
+registerPilot('JTL_098', { // Snap Wexley
+  unit: alsoAt(snapDiscount, 'onAttack'),
+  upgrade: searchDrawWp('Search the top 5 cards of your deck for a Resistance card, reveal it, and draw it.', 5, c => printedTrait(c, 'Resistance')),
+})
+const GRANT_FALCON_FIRST = 'GRANT_FALCON_FIRST'
+registerCard(GRANT_FALCON_FIRST, { sourceCardId: 'JTL_203', dealsDamageFirst: () => true })
+registerPilot('JTL_203', { upgrade: whenPlayed("You may attack with attached unit. If it's the Millennium Falcon, it deals its combat damage before the defender.", (s, ctx) => { // Han Solo
+  const host = findUnit(s, ctx.sourceInstanceId!)
+  if (!host || host.owner !== ctx.owner || !eligibleAttacker(s, host.unit) || !canAttackSomething(s, host.unit)) return s
+  const falcon = s.cards[host.unit.cardId]?.name === 'Millennium Falcon'
+  return pushChoice(s, { kind: 'mayAttack', id: `${ctx.sourceInstanceId}-han`, controller: ctx.owner, unitId: host.unit.instanceId, ...(falcon ? { grantCardId: GRANT_FALCON_FIRST } : {}) })
+}) })
+
+// "When this upgrade attaches" and "when attached unit completes an attack"
+registerPilot('JTL_036', { upgrade: { abilities: [atAttach('When this upgrade attaches to a unit: Give a Shield token to that unit.', // Iden Versio
+  (_s, ctx) => ctx.attachedCardId === 'JTL_036', (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD))] } })
+registerPilot('JTL_197', { upgrade: { // Anakin Skywalker
+  abilities: [{ trigger: 'onAttackEnd', description: "When attached unit completes an attack (and survives): You may return this upgrade to its owner's hand.", effect: (s, ctx) =>
+    (survivedAttack(s, ctx) ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-anakin`, controller: ctx.owner, cost: 0, text: "return Anakin Skywalker to its owner's hand", then: resume(ctx) }) : s) }],
+  ifYouDo: (s, ctx) => {
+    const host = findUnit(s, ctx.sourceInstanceId!)?.unit
+    const index = host?.upgrades.findIndex(up => up.cardId === 'JTL_197' && up.unitCard) ?? -1
+    return host && index >= 0 ? returnUpgradeToHand(s, host.instanceId, index) : s
+  },
+} })
+
+// "Attached unit gains: ..." blocks
+registerPilot('JTL_035', { upgrade: onAttack(buffWp('Attached unit gains: "On Attack: Give an enemy unit in this arena -1/-1 for this phase."', // Tam Ryvora
+  (s, u, ctx) => pickEnemy(s, u, ctx) && u.arena === findUnit(s, ctx.sourceInstanceId!)?.unit.arena, () => ({ power: -1, hp: -1 }), false)) })
+registerPilot('JTL_046', { upgrade: attacks('Attached unit gains: "On Attack: Give an Experience token to this unit, then deal 1 damage to it."', (s, ctx) => // Paige Tico
+  dealDamageToUnit(expSelf(s, ctx), ctx.sourceInstanceId!, 1)) })
+registerPilot('JTL_048', { upgrade: attacks('Attached unit gains: "On Attack: Discard a card from the defending player\'s deck. If that card costs 3 or less, draw a card."', (s, ctx) => { // Cassian Andor
+  const [next, milled] = millTop(s, opponentOf(ctx.owner), 1)
+  return milled.length && (next.cards[milled[0]]?.cost ?? 0) <= 3 ? drawCards(next, ctx.owner, 1) : next
+}) })
+registerPilot('JTL_066', { upgrade: attacks('Attached unit gains: "On Attack: You may heal 2 total damage from any number of units."', (s, ctx) => { // Trace Martez
+  const unitTargets = allUnits(s).filter(u => u.damage > 0).map(u => u.instanceId)
+  return unitTargets.length ? pushChoice(s, { kind: 'distributeHealing', id: `${ctx.sourceInstanceId}-trace`, controller: ctx.owner, remaining: 2, healed: 0, unitTargets, baseTargets: [] }) : s
+}) })
+registerPilot('JTL_142', { upgrade: onAttack(unitThenWp('Attached unit gains: "On Attack: You may deal 1 damage to a unit. If a unit is defeated this way, you may deal 1 damage to a unit or base."', pickAny, 'deal 1 damage to a unit', true, // Darth Vader
+  (s, ctx) => {
+    const next = dealDamageToUnit(s, ctx.targetInstanceId!, 1)
+    const pending = (next.pendingChoices?.length ?? 0) > (s.pendingChoices?.length ?? 0)
+    return !pending && !findUnit(next, ctx.targetInstanceId!) ? damageChoice(next, ctx, 1, allUnits(next), BOTH_BASES, true) : next
+  })) })
+registerPilot('JTL_139', { upgrade: onAttack(indirectDamageToChosenPlayer('Attached unit gains: "On Attack: Deal 2 indirect damage to a player. If this unit is an Underworld unit, deal 3 indirect damage instead."', // Dengar
+  (s, ctx) => (hostPasses(s, ctx, isTrait('Underworld')) ? 3 : 2))) })
+registerPilot('JTL_187', bothSides(attacks('On Attack: Exhaust the defender and deal 1 damage to it (if it\'s a unit).', (s, ctx) => { // Bossk
+  const d = defenderOf(s, ctx)
+  return d ? dealDamageToUnit(exhaustUnit(s, d.instanceId), d.instanceId, 1) : s
+})))
+registerPilot('JTL_141', bothSides({ statModifier: (s, u) => (s.players[opponentOf(controllerOf(s, u))].units.some(e => e.damage > 0) ? { power: 3 } : {}) })) // IG-88
+registerPilot('JTL_103', bothSides({ cannotBeTargetedByEnemyAbility: (_s, _u, action) => action === 'defeat' || action === 'return' })) // Chewbacca
+// "Each OTHER friendly Pilot unit and upgrade": as a unit he is one of the Pilot units, as an upgrade one of the upgrades.
+registerPilot('JTL_093', bothSides({ statModifier: (s, u) => ({ power: friendlyPilots(s, controllerOf(s, u)) - 1 }) })) // Nien Nunb
+registerPilot('JTL_245', { upgrade: { ignoresPilotLimit: true, extraPilots: 1 } }) // R2-D2
+
+// Vehicles that read their Pilots
+registerCard('JTL_249', { extraPilots: 1, statModifier: (s, u) => ({ power: pilotsOn(s, u) }) }) // Millennium Falcon
+registerCard('JTL_247', { statModifier: (s, u) => (pilotsOn(s, u) > 0 ? { power: 1, hp: 1 } : {}) }) // Resistance X-Wing
+registerCard('JTL_101', { // Red Leader
+  costModifier: (s, owner) => -friendlyPilots(s, owner),
+  abilities: [atAttach('When a Pilot upgrade attaches to this unit: Create an X-Wing token.', pilotAttached, (s, ctx) => create(s, ctx.owner, TOKEN_X_WING))],
+})
+registerCard('JTL_223', { // Razor Crest
+  abilities: [atAttach("When a Pilot attaches to this unit: You may return a non-leader unit that costs 2 or less or an exhausted non-leader unit that costs 4 or less to its owner's hand.", pilotAttached, (s, ctx) =>
+    targetChoice(s, ctx, 'selectUnitToReturn', pickedIds(s, ctx, (st, u) => nonLeader(st, u) && (st.cards[u.cardId]?.cost ?? 0) <= (u.exhausted ? 4 : 2)), true))],
+})
+const GRANT_LEIA_PILOT = 'GRANT_LEIA_PILOT'
+registerCard(GRANT_LEIA_PILOT, { sourceCardId: 'JTL_097', statModifier: (_s, _u, ctx) => (ctx.attacking ? { power: 1 } : {}), conditionalKeywords: () => [KW.restore(1)] })
+registerCard('JTL_097', whenPlayed('You may attack with a Pilot unit or a unit with a Pilot on it. It gets +1/+0 and gains Restore 1 for this attack.', (s, ctx) => // Leia Organa
+  offerAttack(s, ctx.owner, ctx.sourceInstanceId!, {
+    attacker: { only: s.players[ctx.owner].units.filter(u => unitHasTrait(s, u, 'Pilot') || pilotsOn(s, u) > 0).map(u => u.instanceId) },
+    grantCardId: GRANT_LEIA_PILOT, optional: true,
+  })))
+registerCard('JTL_056', { // Hondo Ohnaka
+  ...onAttack(whenPlayed('You may take control of a non-Pilot upgrade on a unit and attach it to a different eligible unit.', (s, ctx) => {
+    const candidates = upgradeCandidates(s, { on: 'unit' }).filter(up => !cardHasTrait(s, up.cardId, 'Pilot') && s.cards[up.cardId]?.type !== 'leader' && moveTargets(s, up, ctx.owner).length > 0)
+    return candidates.length ? pushChoice(s, { kind: 'selectUpgradeThen', id: `${ctx.sourceInstanceId}-hondo`, controller: ctx.owner, candidates, optional: true, text: 'take control of a non-Pilot upgrade', then: resume(ctx) }) : s
+  })),
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    if (!up) return s
+    if (!ctx.targetInstanceId) {
+      return pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-hondo`, controller: ctx.owner, targets: moveTargets(s, up, ctx.owner), text: `attach ${s.cards[up.cardId]?.name ?? 'the upgrade'} to a different unit`, then: { ...resume(ctx), upgrade: up } })
+    }
+    return moveUpgrade(s, up, ctx.targetInstanceId, ctx.owner)
+  },
+})
+registerCard('JTL_235', { // Commandeer
+  ...unitThenWp('Take control of a non-leader Vehicle unit that costs 6 or less without a Pilot on it. If you do, ready it. At the start of the next regroup phase, return that unit to its owner\'s hand.',
+    (s, u) => nonLeader(s, u) && unitHasTrait(s, u, 'Vehicle') && (s.cards[u.cardId]?.cost ?? 0) <= 6 && pilotsOn(s, u) === 0, 'take control of a Vehicle unit', false,
+    (s, ctx) => {
+      const id = ctx.targetInstanceId!
+      const taken = stealTo(s, ctx.owner, id)
+      if (findUnit(taken, id)?.owner !== ctx.owner) return taken
+      return addDelayedEffect(readyUnit(taken, id), { cardId: 'JTL_235', owner: ctx.owner, when: 'regroupStart', unitId: id })
+    }),
+  delayed: (s, e) => (e.unitId && findUnit(s, e.unitId) ? returnUnitToHand(s, e.unitId) : s),
+})
+registerCard('JTL_186', onAttack(whenPlayed('If you played a Bounty Hunter or Pilot card this phase, you may draw a card.', (s, ctx) => // Mist Hunter
+  (cardsPlayedThisPhase(s, ctx.owner).some(id => printedTrait(s.cards[id], 'Bounty Hunter') || printedTrait(s.cards[id], 'Pilot'))
+    ? pushChoice(s, { kind: 'mayPayToDraw', id: `${ctx.sourceInstanceId}-mist`, controller: ctx.owner, cost: 0, draw: 1 })
+    : s))))

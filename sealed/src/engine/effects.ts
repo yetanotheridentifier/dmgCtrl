@@ -336,8 +336,8 @@ export function moveUnitToArena(state: GameState, instanceId: string, arena: Uni
  * Batching is {@link giveTokens}' job: this fires once per call, so callers granting several tokens
  * must attach them together rather than in a loop.
  */
-export function fireUpgradeAttached(state: GameState, instanceId: string, upgradePlayed = false): GameState {
-  return fireBatch(state, collectUpgradeAttached(state, instanceId, upgradePlayed))
+export function fireUpgradeAttached(state: GameState, instanceId: string, upgradePlayed = false, attachedCardId?: string): GameState {
+  return fireBatch(state, collectUpgradeAttached(state, instanceId, upgradePlayed, undefined, attachedCardId))
 }
 
 /**
@@ -361,10 +361,10 @@ export function openSupportChoice(state: GameState, owner: PlayerId, sourceInsta
 }
 
 /** {@link fireUpgradeAttached} as data, for a caller folding it into a wider batch (a unit entering). */
-export function collectUpgradeAttached(state: GameState, instanceId: string, upgradePlayed = false, playingPlayer?: PlayerId): PendingTrigger[] {
+export function collectUpgradeAttached(state: GameState, instanceId: string, upgradePlayed = false, playingPlayer?: PlayerId, attachedCardId?: string): PendingTrigger[] {
   const found = findUnit(state, instanceId)
   // Who played it, since an opponent can play an upgrade on your unit ("when YOU play an upgrade on this unit").
-  return found ? collectUnitTriggers(state, 'whenUpgradeAttached', found.unit, found.owner, { upgradePlayed, ...(playingPlayer ? { playingPlayer } : {}) }) : []
+  return found ? collectUnitTriggers(state, 'whenUpgradeAttached', found.unit, found.owner, { upgradePlayed, ...(playingPlayer ? { playingPlayer } : {}), ...(attachedCardId ? { attachedCardId } : {}) }) : []
 }
 
 /**

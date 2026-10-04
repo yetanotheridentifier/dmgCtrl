@@ -1230,7 +1230,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // Placing an upgrade: which hand cards are upgrades, and — once one is
     // selected — which units it may attach to. While placing, unit clicks attach
     // the upgrade rather than driving an attack.
-    const upgradeMoves = legal.filter(a => a.type === 'playUpgrade')
+    // A Pilot played as an upgrade is a menu button instead: clicking the card plays it as a unit.
+    const upgradeMoves = legal.filter((a): a is Extract<Action, { type: 'playUpgrade' }> => a.type === 'playUpgrade' && !a.piloting)
     const upgradeHandIndices = new Set(upgradeMoves.map(a => a.handIndex))
     const upgradeTargetIds = new Set(
       selectedUpgrade !== null ? upgradeMoves.filter(a => a.handIndex === selectedUpgrade).map(a => a.targetInstanceId) : [],
@@ -1509,8 +1510,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     const choiceBoardActions = targetChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === targetChoice.id) : []
     // "Play a unit from hand" accepts are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
+    const isPilotPlay = (a: Action) => a.type === 'playUpgrade' && a.piloting === true
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !discardTopActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !searchUpgradeActions.includes(a) && !nameCardActions.includes(a) && !nameTraitActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !playFromActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
+      ? legal.filter(a => (!CLICK_HANDLED.includes(a.type) || isPilotPlay(a)) && !lookActions.includes(a) && !discardTopActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !searchUpgradeActions.includes(a) && !nameCardActions.includes(a) && !nameTraitActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !playFromActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
       : []
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".

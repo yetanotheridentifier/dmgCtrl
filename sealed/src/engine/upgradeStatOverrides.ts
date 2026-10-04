@@ -117,3 +117,63 @@ export const UPGRADE_STAT_OVERRIDES: Record<string, { power: number; hp: number 
   TS26_63: { power: 3, hp: 2 }, // Rex's DC-17s
   TS26_79: { power: 2, hp: 1 }, // Underestimated
 }
+
+/**
+ * The +X/+Y a unit or leader card adds when attached as an upgrade (a Pilot played with Piloting, a
+ * pilot leader deployed as an upgrade). Printed beside the card's own power and HP, and not in the
+ * card source at all, so unlike the table above it is applied unconditionally, as
+ * `EngineCard.upgradePower`/`upgradeHp`. Same publisher source (`upgradePower`/`upgradeHp`).
+ */
+export const PILOT_UPGRADE_STATS: Record<string, { power: number; hp: number }> = {
+  JTL_001: { power: 3, hp: 4 }, // Asajj Ventress
+  JTL_003: { power: 5, hp: 5 }, // Lando Calrissian
+  JTL_006: { power: 5, hp: 5 }, // Darth Vader
+  JTL_008: { power: 3, hp: 4 }, // Wedge Antilles
+  JTL_009: { power: 4, hp: 4 }, // Boba Fett
+  JTL_011: { power: 3, hp: 3 }, // Major Vonreg
+  JTL_012: { power: 4, hp: 5 }, // Luke Skywalker
+  JTL_013: { power: 2, hp: 1 }, // Poe Dameron
+  JTL_015: { power: 3, hp: 5 }, // Rio Durant
+  JTL_017: { power: 3, hp: 4 }, // Han Solo
+  JTL_018: { power: 3, hp: 3 }, // Kazuda Xiono
+  JTL_034: { power: 2, hp: 3 }, // Interceptor Ace
+  JTL_035: { power: 2, hp: 2 }, // Tam Ryvora
+  JTL_036: { power: 3, hp: 3 }, // Iden Versio
+  JTL_045: { power: 2, hp: 3 }, // Hera Syndulla
+  JTL_046: { power: 2, hp: 2 }, // Paige Tico
+  JTL_048: { power: 1, hp: 3 }, // Cassian Andor
+  JTL_049: { power: 3, hp: 3 }, // L3-37
+  JTL_057: { power: 1, hp: 3 }, // Astromech Pilot
+  JTL_058: { power: 1, hp: 2 }, // Academy Graduate
+  JTL_066: { power: 1, hp: 2 }, // Trace Martez
+  JTL_083: { power: 0, hp: 0 }, // Pantoran Starship Thief
+  JTL_084: { power: 1, hp: 1 }, // Wingman Victor Two
+  JTL_086: { power: 1, hp: 1 }, // Wingman Victor Three
+  JTL_093: { power: 1, hp: 2 }, // Nien Nunb
+  JTL_094: { power: 3, hp: 2 }, // Luke Skywalker
+  JTL_098: { power: 2, hp: 2 }, // Snap Wexley
+  JTL_100: { power: 2, hp: 3 }, // Poe Dameron
+  JTL_103: { power: 3, hp: 3 }, // Chewbacca
+  JTL_108: { power: 2, hp: 2 }, // Clone Pilot
+  JTL_109: { power: 2, hp: 2 }, // Jarek Yeager
+  JTL_139: { power: 1, hp: 2 }, // Dengar
+  JTL_141: { power: 0, hp: 3 }, // IG-88
+  JTL_142: { power: 3, hp: 3 }, // Darth Vader
+  JTL_145: { power: 1, hp: 2 }, // BB-8
+  JTL_148: { power: 2, hp: 2 }, // Frisk
+  JTL_150: { power: 2, hp: 1 }, // Biggs Darklighter
+  JTL_159: { power: 3, hp: 1 }, // Determined Recruit
+  JTL_187: { power: 2, hp: 2 }, // Bossk
+  JTL_189: { power: 2, hp: 3 }, // Boba Fett
+  JTL_196: { power: 2, hp: 1 }, // Dagger Squadron Pilot
+  JTL_197: { power: 2, hp: 3 }, // Anakin Skywalker
+  JTL_203: { power: 2, hp: 3 }, // Han Solo
+  JTL_210: { power: 3, hp: 1 }, // The Mandalorian
+  JTL_211: { power: 1, hp: 1 }, // Independent Smuggler
+  JTL_213: { power: -2, hp: -2 }, // Sidon Ithano
+  JTL_215: { power: 1, hp: 2 }, // BoShek
+  JTL_236: { power: 1, hp: 2 }, // Indoctrinated Conscript
+  JTL_245: { power: 1, hp: 1 }, // R2-D2
+  JTL_246: { power: 1, hp: 3 }, // Hopeful Volunteer
+  JTL_255: { power: 1, hp: 1 }, // Sullustan Spacer
+}

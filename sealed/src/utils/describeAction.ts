@@ -69,7 +69,8 @@ export function describeActionParts(state: GameState, by: PlayerId, action: Acti
       if (!ref || !card) return plain()
       const targetUnit = [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === action.targetInstanceId)
       const target = unitRef(state, action.targetInstanceId)
-      return ['Play ', ref, ` (${effectiveCost(state, by, card, targetUnit)})`, ...(target ? [' on ', target] : [])]
+      const cost = effectiveCost(state, by, card, targetUnit, undefined, action.piloting ? card.piloting : undefined)
+      return ['Play ', ref, action.piloting ? ` as a Pilot (${cost})` : ` (${cost})`, ...(target ? [' on ', target] : [])]
     }
     case 'playBaseUpgrade': {
       const ref = handCardRef(state, by, action.handIndex)
@@ -136,7 +137,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (!card) return 'Play an upgrade'
       const targetUnit = [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === action.targetInstanceId)
       const target = anyUnitName(state, action.targetInstanceId)
-      return `Play ${card.name} (${effectiveCost(state, by, card, targetUnit)})${target ? ` on ${target}` : ''}`
+      const cost = effectiveCost(state, by, card, targetUnit, undefined, action.piloting ? card.piloting : undefined)
+      return `Play ${card.name}${action.piloting ? ' as a Pilot' : ''} (${cost})${target ? ` on ${target}` : ''}`
     }
     case 'smuggle': {
       const cardId = state.players[by].resources[action.resourceIndex]?.cardId
