@@ -68,7 +68,7 @@ const choice = (s: GameState): PendingChoice => {
   return s.pendingChoices![0]
 }
 const noChoice = (s: GameState) => expect(s.pendingChoices ?? [], 'no choice is raised').toHaveLength(0)
-type Extra = { targetInstanceId?: string; optionIndex?: number; handIndex?: number; deckIndex?: number }
+type Extra = { targetInstanceId?: string; optionIndex?: number; handIndex?: number; deckIndex?: number; baseTarget?: PlayerId }
 const accept = (s: GameState, extra: Extra = {}) => resolve(s, { type: 'acceptChoice', choiceId: choice(s).id, ...extra })
 const skip = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: choice(s).id })
 const optional = (c: PendingChoice): boolean => 'optional' in c && c.optional === true
@@ -852,6 +852,7 @@ describe('the damage-dealt group', () => {
     ...P,
     HMW_011: card({ id: 'HMW_011', name: 'Darth Sidious', type: 'leader', arena: 'ground', cost: 6, power: 4, hp: 5, traits: ['Force', 'Sith'] }),
     HMW_013: card({ id: 'HMW_013', name: 'Cham Syndulla', type: 'leader', arena: 'ground', cost: 6, power: 3, hp: 8, traits: ["Twi'lek"] }),
+    JTL_009: card({ id: 'JTL_009', name: 'Boba Fett', type: 'leader', arena: 'ground', cost: 5, power: 4, hp: 6, traits: ['Underworld', 'Bounty Hunter', 'Pilot'] }),
     HMW_045: card({ id: 'HMW_045', name: 'Logray', type: 'unit', arena: 'ground', cost: 2, power: 1, hp: 5, traits: ['Ewok'] }),
     HMW_156: card({ id: 'HMW_156', name: 'Arena Acklay', type: 'unit', arena: 'ground', cost: 5, power: 5, hp: 7 }),
     TWI_016: card({ id: 'TWI_016', name: 'Jango Fett', type: 'leader', arena: 'ground', cost: 5, power: 3, hp: 7, traits: ['Underworld', 'Bounty Hunter'] }),
@@ -895,6 +896,49 @@ describe('the damage-dealt group', () => {
       expect(choice(pinged)).toMatchObject({ kind: 'selectDamageTarget', amount: 1 })
       expect(optional(choice(pinged))).toBe(true)
       expect(targetsOf(choice(pinged))).toEqual(['ds', 'o'])
+    })
+  })
+
+  /**
+   * "When you deal non-combat damage: You may exhaust this leader. If you do, deal 1 indirect damage to a
+   * player." His own indirect damage is non-combat damage he deals, so it hears itself; he is exhausted
+   * by then and cannot pay again, which is the whole loop guard.
+   */
+  describe('JTL_009 Boba Fett', () => {
+    it('front: when you deal non-combat damage, may exhaust himself to deal 1 indirect damage to a player', () => {
+      const pinged = dealDamageToBase(wBoard({ leader: front('JTL_009') }), 'opponent', 2, byPlayer)
+      expect(choice(pinged)).toMatchObject({ kind: 'mayPayThen', controller: 'player' })
+      const paid = accept(pinged)
+      expect(paid.players.player.leader.exhausted).toBe(true)
+      expect(choice(paid)).toMatchObject({ kind: 'choosePlayerThen', controller: 'player' })
+      // Indirect damage is assigned by the player taking it; with no units, theirs goes on their base.
+      const aimed = accept(paid, { optionIndex: 0 })
+      expect(choice(aimed)).toMatchObject({ kind: 'distributeIndirectDamage', controller: 'opponent', remaining: 1 })
+      const done = accept(aimed, { baseTarget: 'opponent' })
+      expect(done.players.opponent.base.damage).toBe(3)
+      // That 1 is non-combat damage he dealt, so he hears it, and being exhausted, offers nothing.
+      noChoice(done)
+    })
+
+    it('front: hears ability damage to a unit too', () => {
+      expect(choice(dealDamageToUnit(wBoard({ leader: front('JTL_009') }, { units: [unit('e', 'TOUGH')] }), 'e', 1, byPlayer)))
+        .toMatchObject({ kind: 'mayPayThen' })
+    })
+
+    it('front: declining leaves him ready', () => {
+      const declined = skip(dealDamageToBase(wBoard({ leader: front('JTL_009') }), 'opponent', 2, byPlayer))
+      expect(declined.players.player.leader.exhausted).toBe(false)
+      noChoice(declined)
+    })
+
+    it('front: not for combat damage, nor for damage the opponent deals', () => {
+      noChoice(attackBase(wBoard({ leader: front('JTL_009'), units: [unit('g', 'GRD')] }), 'g'))
+      noChoice(dealDamageToUnit(wBoard({ leader: front('JTL_009'), units: [unit('t', 'TOUGH')] }), 't', 1, byOpponent))
+    })
+
+    it('front: not while he is exhausted or deployed', () => {
+      noChoice(dealDamageToBase(wBoard({ leader: { ...front('JTL_009'), exhausted: true } }), 'opponent', 2, byPlayer))
+      noChoice(dealDamageToBase(wBoard({ leader: back('JTL_009'), units: [unit('bf', 'JTL_009', { isLeader: true })] }), 'opponent', 2, byPlayer))
     })
   })
 

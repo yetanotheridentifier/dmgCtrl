@@ -936,8 +936,8 @@ where it lands, one point at a time, and it ignores Shields and every base-damag
   mean the opponent. A card whose text instead names "the defending player" or "each opponent" deals it
   to a fixed target and raises no such choice.
 - **18 of the 22 candidate cards need nothing else** (recounted against `registeredCardIds()`; the
-  ticket's stale count read 15). Left out: Boba Fett's leader (JTL_009, needs a further, unrelated
-  trigger point for "when you deal non-combat damage"), Targeting Computer and Superheavy Ion Cannon
+  ticket's stale count read 15). Boba Fett's leader front (JTL_009, "when you deal non-combat damage") reads
+  the shared `whenDamageDealt` point rather than one of its own. Left out: Targeting Computer and Superheavy Ion Cannon
   (JTL_171/JTL_227, both need a granted-ability block), and Dengar (JTL_139, needs Piloting) — each
   noted on the ticket that already owns its remaining blocker.
 
