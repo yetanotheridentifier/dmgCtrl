@@ -299,6 +299,30 @@ are unavoidable**: every legal move leads there and no policy recovers them.
 All of that was measured from **public** information, so the headroom belongs to evaluation and search
 rather than to a belief model.
 
+### A decided game is lost every time, and stopping it early saves almost nothing
+
+A seat is **decided** when, in the action phase, every legal move hands the opponent a one-action kill
+on their turn (`--decisions`, "decided positions"). Measured over the coverage decks:
+
+| | greedy, 240 games | beam, 72 games |
+| --- | --- | --- |
+| Seat-games that reach it | 21.0% | 14.6% |
+| ...that then lost | **101 of 101** | **21 of 21** |
+| ...whose opponent finished on its very next action | 86.1% | 66.7% |
+| Actions played after the loser was decided | **1.2%** | **0.9%** |
+
+**Stopping a decided bench game early is not worth building.** About 1% of all actions follow the
+decided point, which is the whole saving, and the games are over in a round or two anyway.
+
+**The predicate is safe to concede on.** No decided seat has won, under either AI. The opponent does
+not always finish on its next action (a third of the time under `beam`, which takes another winning
+line first), but it always finishes.
+
+**The looser `unavoidable` exposure is not a decided position, and conceding on it would throw games
+away.** It asks only whether the opponent *could* finish, so it also counts moves after which the phase
+ends or we act again. Over 72 greedy games, 58% of seat-games reached it, the opponent took the very
+next action after only 48% of them, and **only 77% of those seats lost**.
+
 ### A real lethal solver is worth very little
 
 A one-ply lethal check reads only damage already on the board, so an event finisher, a pump or a

@@ -352,6 +352,42 @@ export function classifyExposure(chosenExposed: boolean, anyCandidateSafe: boole
 }
 
 /**
+ * One game's share of play after it was decided (#537). A seat is **decided** at the first action-phase
+ * decision where every legal move hands the opponent a one-action kill on their turn, the action index
+ * given per seat (null when it never was).
+ *
+ * Stricter than an `unavoidable` exposure on purpose. That one asks only whether they *could* finish,
+ * and counts moves after which the phase ends or we act again: over 72 greedy games, half its decided
+ * points were never followed by the opponent's action and only 77% of those seats lost, against 97%
+ * on this reading.
+ *
+ * `decided` counts seats; `lostAfter` those that then lost, which is whether conceding there would
+ * ever throw a game away; `actionsAfter` the actions from the loser's decided point to the end, which
+ * is what stopping the game there would save. A seat decided that did not lose saves nothing, and an
+ * unfinished or drawn game has no loser to concede.
+ */
+export function tallyDecided(
+  firstUnavoidable: Record<PlayerId, number | null>,
+  actions: number,
+  winner: PlayerId | 'draw' | null,
+): { decided: number; lostAfter: number; actionsAfter: number } {
+  const loser = winner === 'player' ? 'opponent' : winner === 'opponent' ? 'player' : null
+  let decided = 0
+  let lostAfter = 0
+  let actionsAfter = 0
+  for (const seat of ['player', 'opponent'] as PlayerId[]) {
+    const at = firstUnavoidable[seat]
+    if (at === null) continue
+    decided++
+    if (seat === loser) {
+      lostAfter++
+      actionsAfter += actions - at
+    }
+  }
+  return { decided, lostAfter, actionsAfter }
+}
+
+/**
  * Headroom for a tap-out risk gate (#432): not how often the opponent *could* finish, but how often
  * the AI **chose** to let them when it had a legal alternative, and what that cost.
  *
@@ -379,6 +415,22 @@ export interface ExposureStat {
   /** Of those, how many that seat lost. The gap against `lostAfterAvoidable` is the whole finding,
    *  because "39% of losses followed one" means nothing without knowing the base rate. */
   lostWithoutAvoidable: number
+  /** Every action played, the denominator for how much play follows a decided position. */
+  actions: number
+  /** Seat-games that reached a decided position. See {@link tallyDecided} for the definition. */
+  decidedSeats: number
+  /** Of those, how many that seat lost: below all of them, conceding there would throw games away. */
+  lostAfterDecided: number
+  /** Actions from the loser's decided point to the end: what stopping a decided game would save. */
+  actionsAfterDecided: number
+  /**
+   * What followed each decided point, which is what separates a predicate that over-claims from an
+   * opponent that missed: `foeNext` the opponent took the very next action, `foeFinished` that action
+   * won it. A decided seat whose opponent did not act next (the phase ended, or a choice of its own was
+   * owed) is `decidedSeats - foeNext`.
+   */
+  decidedFoeNext: number
+  decidedFoeFinished: number
 }
 
 /**
@@ -1439,6 +1491,8 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   const exposure = {
     decisions: 0, exposed: 0, avoidable: 0, unavoidable: 0, games: 0, losses: 0,
     gamesWithAvoidable: 0, lostAfterAvoidable: 0, gamesWithoutAvoidable: 0, lostWithoutAvoidable: 0,
+    actions: 0, decidedSeats: 0, lostAfterDecided: 0, actionsAfterDecided: 0,
+    decidedFoeNext: 0, decidedFoeFinished: 0,
   }
 
   decks.forEach((deck, d) => {
@@ -1461,6 +1515,12 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       const playedThisGame = new Set<string>()
       // Per seat, so an exposure can be charged to whoever made it when the game is decided.
       const avoidableBy: Record<PlayerId, boolean> = { player: false, opponent: false }
+      // Per seat, the action index of its first unavoidable exposure: the point its game was decided.
+      const decidedAt: Record<PlayerId, number | null> = { player: null, opponent: null }
+      let actionsThisGame = 0
+      // A decided point waiting to see whether the opponent's next action finished it. Opened at the
+      // decided action's index, read after the next action whoever takes it, so it never spans two.
+      let finishWatch: { foe: PlayerId; at: number } | null = null
       /**
        * Leaders inside their "did it survive arriving" window. **Per game.** Declared alongside the
        * other accumulators once, and a watch left open when a game ended carried into the next one,
@@ -1533,7 +1593,12 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           // before we act again. The aggregate reading counts lines needing several of their actions
           // with several of ours in between, which is a threat rather than a kill, and it inflated
           // this measurement threefold.
-          return { m, v: score(next, me, asRole), r: classifyResolution(next, me), exposed: canFinishThisAction(next, foe) }
+          // `handsThemLethal` is the stricter "decided" reading (#537): the kill is there AND it is
+          // their action next, in the action phase. Exposure alone also counts a move after which the
+          // phase ends or we act again, and half of those were never followed by their action at all.
+          const exposed = canFinishThisAction(next, foe)
+          const handsThemLethal = exposed && next.winner === null && next.phase === 'action' && next.activePlayer === foe
+          return { m, v: score(next, me, asRole), r: classifyResolution(next, me), exposed, handsThemLethal }
         })
         const record = (tally: Tally, subset: Array<(typeof scored)[number] & { sv: number }>): void => {
           if (subset.length < 2) return
@@ -1835,6 +1900,13 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           if (verdict !== 'safe') exposure.exposed++
           if (verdict === 'avoidable') { exposure.avoidable++; avoidableBy[me] = true }
           if (verdict === 'unavoidable') exposure.unavoidable++
+          // Decided: in the action phase, every legal move hands them a one-action kill on their turn.
+          if (s.phase === 'action' && scored.every(x => x.handsThemLethal)) {
+            if (decidedAt[me] === null) {
+              decidedAt[me] = actionsThisGame
+              finishWatch = { foe, at: actionsThisGame }
+            }
+          }
         }
         // Pool size BEFORE the decision, so "skipped at 8" means it already held 8. Skipping with
         // an empty hand is forced, not chosen, so it is not counted. Hand size is read here for the
@@ -1949,7 +2021,15 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         // Read BEFORE the resolve: an answer is a decision the card handed the player, not an action
         // they chose to take, and the funnel's "their first action" stage must not fire on one.
         const wasAnswer = hasPendingChoices(beforeAction)
+        // Only a watch opened by an EARLIER action: one opened by this action, above, waits for the next.
+        const watched = finishWatch && finishWatch.at < actionsThisGame ? finishWatch : null
+        if (watched) finishWatch = null
         s = resolve(s, action)
+        actionsThisGame++
+        if (watched && me === watched.foe) {
+          exposure.decidedFoeNext++
+          if (s.winner === watched.foe) exposure.decidedFoeFinished++
+        }
         if (passWasChosen && beforeAction.phase === 'action' && s.phase !== 'action') {
           passes.endedPhase++
         }
@@ -2030,6 +2110,11 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           if (seat === loser) exposure.lostWithoutAvoidable++
         }
       }
+      const decided = tallyDecided(decidedAt, actionsThisGame, s.winner)
+      exposure.actions += actionsThisGame
+      exposure.decidedSeats += decided.decided
+      exposure.lostAfterDecided += decided.lostAfter
+      exposure.actionsAfterDecided += decided.actionsAfter
     }
   })
 

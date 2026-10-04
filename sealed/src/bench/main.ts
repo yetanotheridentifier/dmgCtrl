@@ -813,6 +813,15 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     '  finding; the raw rate on its own says nothing without the base rate beside it.',
     row('loss rate, made one', rate(ex.lostAfterAvoidable, ex.gamesWithAvoidable)),
     row('loss rate, made none', rate(ex.lostWithoutAvoidable, ex.gamesWithoutAvoidable)),
+    '',
+    '  decided positions: a seat is decided when, in the action phase, every legal move hands the',
+    '  opponent a one-action kill on their turn. Whether it then lost says whether conceding there',
+    '  could throw a game away; the actions after it are what stopping a decided game would save.',
+    row('seat-games decided', rate(ex.decidedSeats, ex.games * 2)),
+    row('  of which lost', rate(ex.lostAfterDecided, ex.decidedSeats)),
+    row('  opponent acted next', rate(ex.decidedFoeNext, ex.decidedSeats)),
+    row('    and finished it', rate(ex.decidedFoeFinished, ex.decidedFoeNext)),
+    row('actions after decided', rate(ex.actionsAfterDecided, ex.actions)),
   )
   lines.push('', row('wall clock', `${(wallMs / 1000).toFixed(1)}s`), '')
   return lines.join('\n')
