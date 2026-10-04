@@ -229,8 +229,11 @@ export interface UnitState {
    * regroup phase starts (Change of Heart, Rehabilitation), which is the common case. `'permanent'` is a
    * change of control with no end (C-3P0, Galen Erso). An instance id is "when that unit leaves play,
    * the owner takes control" (Grand Moff Tarkin): control goes back once it is no longer in play.
+   * `whileAttached` names an upgrade card: control goes back once no copy of it is attached to this
+   * unit (Pantoran Starship Thief: "When this upgrade detaches from a unit: That unit's owner takes
+   * control of it").
    */
-  controlUntil?: 'permanent' | string
+  controlUntil?: 'permanent' | string | { whileAttached: string }
   /**
    * Another unit this one chose as it was played, for an effect that lasts while this unit is in play
    * (BD-1, Huyang). Read by the card's own aura, so the effect ends when either unit leaves play.

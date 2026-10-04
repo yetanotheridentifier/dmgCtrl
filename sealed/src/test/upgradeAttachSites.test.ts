@@ -33,8 +33,10 @@ const ATTACH = /(?<!function )\battachUpgrades\(/g
 const EXPECTED_ATTACHES: Record<string, number> = {
   // giveTokens (many of one kind) and giveMixedTokens (one each of several kinds, for "give an
   // Experience token and a Shield token to it"): token upgrades given by an effect, each attaching its
-  // whole grant in one call so the attach reaction fires once, and neither is a play.
-  'effects.ts': 2,
+  // whole grant in one call so the attach reaction fires once, and neither is a play. And
+  // attachCardAsUnitUpgrade: a unit card already in play becoming an upgrade (Poe Dameron, L3-37),
+  // which fires the attach reaction and is not "played".
+  'effects.ts': 3,
   // playUpgradeCardOnto (the door, the one "played"), applyEntryKeywords' Shield on a Shielded unit entering, and
   // deployLeaderAsPilot: a leader deploying as a Pilot upgrade is deployed, not played (fires the attach reaction, not "played")
   'resolve.ts': 3,

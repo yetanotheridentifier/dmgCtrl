@@ -813,9 +813,32 @@ depends on how it was played.
   `PlayFromTerms`) prices the card at its bracket and sends it to the attach step with the friendly
   Vehicles that can take it as targets, then through `playUpgradeCardOnto` as a `unitCard` (Wedge
   Antilles' front).
-- **Not built:** a card changing between unit and upgrade once in play (a unit attaching itself as an
-  upgrade, a Pilot upgrade moving to the ground arena as a unit). A Pilot played as an upgrade is
-  recorded as played like any card, so a "unit you played this phase" count that reads the card's type
+- **A unit can become an upgrade in play.** `attachUnitAsUpgrade` (effects.ts) takes a unit off the
+  board and attaches its card to a host as a `unitCard` under the unit's controller (Poe Dameron and
+  Sidon Ithano "when played as a unit", Phantom II onto The Ghost, Corvus taking a friendly Pilot unit,
+  Pantoran Starship Thief). Its upgrades are defeated, its damage goes with it and anything it captured
+  is released; it is not defeated and does not leave play, and the host's attach reactions fire. A
+  card that is not a Pilot gets its upgrade side's stats from its printed text (Phantom II's +3/+3), so
+  its `upgradePower`/`upgradeHp` stay empty.
+- **A Pilot upgrade can become a unit in play.** `moveAttachmentToGround` detaches a `unitCard`
+  attachment and puts it in the ground arena exhausted under the attachment's owner (Eject); a leader
+  card becomes that player's leader unit, still deployed. It is neither played nor entering play.
+- **Defeats a Pilot replaces.** An upgrade side with `defeatedMovesToGround` (Luke Skywalker) goes to
+  the ground arena instead whenever `sendAttachmentFromPlay` would send it to the discard, which covers
+  its own defeat and its host's; it is not a defeated upgrade, so "when a friendly upgrade is defeated"
+  does not hear it, and the engine always takes the "may". A unit with `insteadOfDefeat` (L3-37) is
+  taken off the board undefeated in `finishDefeats` when it names a host, with its upgrades defeated as
+  usual, and its controller picks the host or declines (`selectUnitThen` with `hookOnDecline`). A
+  decline puts her in the discard pile counted as a defeat, but nothing that reacts to a unit being
+  defeated hears it.
+- **A control change can last while an upgrade is attached.** `controlUntil: { whileAttached }` hands
+  the unit back once no copy of that card is attached to it (Pantoran Starship Thief: "When this upgrade
+  detaches from a unit: That unit's owner takes control of it"), checked after every action by
+  `returnControlledUnits`.
+- **Corvus asks once.** Its pick lists the friendly Pilot units and the units carrying a friendly Pilot
+  upgrade it has room for; a friendly Pilot unit attaches itself, any other unit hands over that Pilot
+  upgrade (`moveUpgrade`).
+- **Limits.** A Pilot played as an upgrade is recorded as played like any card, so a "unit you played this phase" count that reads the card's type
   still sees a unit. A leader deployed as a Pilot is not a leader *unit* leaving play when it goes, so
   "a leader unit left play this phase" does not hear it.
 

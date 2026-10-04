@@ -109,9 +109,6 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
   ['indirect-damage', /\bindirect damage\b/i],
   // `releaseCaptured` exists; capturing does not.
   ['capture', /\bcaptures?\b|\bcaptured\b/i],
-  // A card moving between unit and upgrade once in play, or a leader deployed or played as a Pilot.
-  // Playing a Pilot from hand as an upgrade (Piloting) is built; these moves are not.
-  ['pilot', /\battach\b[^.]*\bas an upgrade\b|\bto the ground arena as a unit\b|\battach a friendly Pilot\b|\busing Piloting\b/i],
   // A granted ability block is not a blocker: its quoted head is judged instead (GRANTED_ABILITY_QUOTE).
   // Resources are defeated, returned to hand, and put into play from any zone, including another
   // player's card (`ResourceState.owner`). Taking control of a resource already in play is not.
@@ -152,14 +149,11 @@ const GRANTED_ABILITY_QUOTE = /^([^\n]*?\bgains(?:\s[^:\n]*\sand)?)\s*[:,]\s*["â
 const splitGrantedAbilities = (text: string): string => text.replace(GRANTED_ABILITY_QUOTE, '$1\n')
 
 /**
- * Blockers that are one engine change wearing two hats. The Piloting keyword and the pilot text
- * always co-occur. Left separate, every such card counts as multi-blocked and the mechanic's
+ * Blockers that are one engine change wearing two hats: a trigger head that only the mechanic's
+ * cards print. Left separate, every such card counts as multi-blocked and the mechanic's
  * sole-unlock reads zero, which orders the work wrongly.
  */
 const CANONICAL_BLOCKERS: ReadonlyMap<string, string> = new Map([
-  ['kw:Piloting', 'pilot'],
-  ['trigger:When played as an upgrade', 'pilot'],
-  ['trigger:When played as a unit', 'pilot'],
   ['trigger:When a friendly Force unit attacks', 'force-token'],
 ])
 

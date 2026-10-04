@@ -143,8 +143,8 @@ Two phases:
   **When Played units and upgrades are finished**, and so are **constant abilities on units and
   upgrades**: the ones existing primitives expressed shipped first, and the hooks and choices the rest
   needed followed, group by group. Vult Skerris's Defender (needs "discarded a card this phase") is
-  on #678, and the 14 other constant-ability cards lifted out shipped with #682 (losing abilities) or are on #753
-  (Phantom II) and #686; Fives, borrowing another unit's When Played abilities, shipped with #683. **When Defeated units are
+  on #678, and the 14 other constant-ability cards lifted out shipped with #682 (losing abilities) or #753
+  (Phantom II) or are on #686; Fives, borrowing another unit's When Played abilities, shipped with #683. **When Defeated units are
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
   shared with another trigger point ("When Played/When Defeated") is built on the compound-head framework
 (#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
@@ -255,7 +255,7 @@ Two phases:
   already fired; the damage points became one both-sides event (`whenDamageDealt`), and the heads no
   point raised got their own (a unit attacking, healing, the ready step, a card being drawn, a unit
   leaving play). "Choose two, in any order" is `chooseMode` with a queued continuation. The cards
-  whose other blocker is a keyword are on that keyword's ticket (the Force #462, Pilot moves #753,
+  whose other blocker is a keyword are on that keyword's ticket (the Force #462, Pilot moves shipped with #753,
   capture #466; Jango Fett, Krrsantan and Chain Code Collector shipped with Bounty, #467;
   Ahsoka Tano, Captain Typho and Chancellor Valorum shipped with Disclose, #603; First Light shipped
   with Plot, #470), Arquitens Assault

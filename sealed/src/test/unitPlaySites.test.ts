@@ -27,7 +27,9 @@ const RECORD = /(?<!function )\brecordCardPlayed\(/g
 
 /** Every unit append, named, so a change of count names what to look at. */
 const EXPECTED_APPENDS: Record<string, number> = {
-  'effects.ts': 3, // takeControlOfUnit, createTokenUnit, enterCapturedCard: none of them a play
+  // takeControlOfUnit, createTokenUnit, enterCapturedCard, and putAttachmentInGround (a Pilot upgrade
+  // becoming a unit, Eject): none of them a play
+  'effects.ts': 4,
   'resolve.ts': 2, // playUnitCard (the door, the one "played"), and deploying a leader
 }
 
@@ -81,5 +83,7 @@ describe('unit play sites', () => {
       expect(body(file, fn), `${fn} collects the arrival triggers`).toContain('collectArrivalTriggers(')
     }
     expect(body('effects.ts', 'takeControlOfUnit')).not.toContain('collectArrivalTriggers(')
+    // A Pilot upgrade becoming a unit was in play all along, so it does not enter play either.
+    expect(body('effects.ts', 'putAttachmentInGround')).not.toContain('collectArrivalTriggers(')
   })
 })

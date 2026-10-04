@@ -224,6 +224,19 @@ export interface CardDefinition {
   /** A Pilot's upgrade side only: it may be played on a Vehicle that already has its Pilots (R2-D2). */
   ignoresPilotLimit?: boolean
   /**
+   * An upgrade side only: "If this upgrade would be defeated, you may instead move him to the ground
+   * arena as a unit and exhaust him" (Luke Skywalker). Read by `sendAttachmentFromPlay`; the engine
+   * always takes the "may", since the unit is strictly more than the card in a discard pile.
+   */
+  defeatedMovesToGround?: boolean
+  /**
+   * "If this unit would be defeated, you may instead attach her as an upgrade to ..." (L3-37): the
+   * units she may attach to instead, read on the board without the units being defeated. Non-empty,
+   * `finishDefeats` takes her off the board undefeated and asks her controller which, through a
+   * `selectUnitThen` whose answer reaches this card's `ifYouDo` at step `insteadOfDefeat`.
+   */
+  insteadOfDefeat?: (state: GameState, unit: UnitState, controller: PlayerId) => string[]
+  /**
    * "This card can't be played from your hand" (SEC_053 One in a Million): the Play a Card action's
    * hand scan skips it, so its only route into play is an alternate one (Plot, Smuggle, a discard
    * grant, …), which do not go through the hand at all.
