@@ -153,7 +153,7 @@ function resolveAction(state: GameState, action: Action): GameState {
     case 'deployLeader':
       return requirePhase(state, 'action', () => {
         // Deploying a Support leader opens a support attack — hold the turn to resolve it.
-        const deployed = deployLeader(state)
+        const deployed = action.targetInstanceId === undefined ? deployLeader(state) : deployLeaderAsPilot(state, state.activePlayer, action.targetInstanceId)
         // A When Deployed an opponent answers (Admiral Trench) hands control to them first.
         return activeChoice(deployed) ? resetPasses(handOffOpponentChoice(deployed, deployed.activePlayer)) : advanceTurn(resetPasses(deployed))
       })
@@ -316,6 +316,8 @@ function resetPasses(state: GameState): GameState {
  * consecutive-pass pair.
  */
 function advanceTurn(state: GameState): GameState {
+  // "Take an extra action after this one": the turn stays, once.
+  if (state.extraActionBy === state.activePlayer) return { ...state, extraActionBy: undefined }
   const next = opponentOf(state.activePlayer)
   if (state.initiativeTakenBy === next) {
     const passes = state.consecutivePasses + 1
@@ -821,6 +823,8 @@ function playFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone
   // replacement in facedown and exhausted.
   if (tail?.resourceTop) next = resourceTopOfDeck(next, tail.resourceTop)
 
+  // A Pilot played using Piloting is played as an upgrade, through the same door as one from hand.
+  if (terms.piloting) return playUpgradeCardOnto(next, controller, card.id, targetInstanceId, cardOwner, fromResources, false, true)
   if (card.type === 'unit') {
     // `playUnitCard` names the new unit from the counter it is about to consume, so this is its id,
     // and the tail's "it" (damage, tokens, the delayed defeat) needs no target pick.
@@ -926,6 +930,7 @@ function runPlayFromTail(state: GameState, choice: Extract<PendingChoice, { kind
       })
     }
   }
+  if (tail.ifYouDo) next = resumeAbility(next, tail.ifYouDo)
   return next
 }
 
@@ -2333,10 +2338,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       const card = pick ? next.cards[pick.cardId] : undefined
       if (pick && card) {
         if (choice.markUsed) next = markAbilityUsed(next, choice.controller, choice.markUsed.instanceId, choice.markUsed.key)
-        if (card.type === 'upgrade' && !isFortify(card)) {
+        if (choice.piloting || (card.type === 'upgrade' && !isFortify(card))) {
           const targets = validPlayTargets(next, choice.controller, choice.zone, pick.index, pick.cardId, choice, choice.targetUnits)
           if (targets.length > 0) {
-            next = pushChoice(next, { kind: 'attachPlayedCard', id: `${choice.id}-attach`, controller: choice.controller, zone: choice.zone, index: pick.index, cardId: pick.cardId, targets, candidates: choice.candidates, targetUnits: choice.targetUnits, free: choice.free, costDelta: choice.costDelta, waive: choice.waive, then: choice.then })
+            next = pushChoice(next, { kind: 'attachPlayedCard', id: `${choice.id}-attach`, controller: choice.controller, zone: choice.zone, index: pick.index, cardId: pick.cardId, targets, candidates: choice.candidates, targetUnits: choice.targetUnits, free: choice.free, costDelta: choice.costDelta, waive: choice.waive, ...(choice.piloting ? { piloting: true } : {}), then: choice.then })
           }
         } else {
           next = playFromZone(next, choice.controller, choice.zone, pick, choice, undefined, choice.then)
@@ -2761,6 +2766,32 @@ function deployLeader(state: GameState, epicUsed = true): GameState {
     ])
     : next
   return offerPlotPlays(next, playerId, leaderUnit.instanceId)
+}
+
+/**
+ * Deploy `playerId`'s leader as a Pilot upgrade on the friendly Vehicle `hostId` (CR Piloting): the
+ * leader card attaches as a unit-card attachment, so the host gets its printed upgrade +X/+Y and its
+ * upgrade side's abilities (`upgradeSideId`, which makes the host a leader unit). It is the epic action
+ * unless `epicUsed` is false, which is how Poe Dameron's front ("Flip this leader and attach him")
+ * arrives. What reacts is the host's attach reactions together with the upgrade side's own "When
+ * deployed as an upgrade" (its `whenDeployed`), and the Plot plays a deploy offers. Leaving play is
+ * `sendAttachmentFromPlay`.
+ */
+export function deployLeaderAsPilot(state: GameState, playerId: PlayerId, hostId: string, epicUsed = true): GameState {
+  const p = state.players[playerId]
+  const host = p.units.find(u => u.instanceId === hostId)
+  if (p.leader.deployed || (epicUsed && p.leader.epicActionUsed) || !host || !canTakePilot(state, host, p.leader.cardId)) {
+    throw new Error(`deployLeaderAsPilot: ${p.leader.cardId} cannot deploy onto ${hostId}`)
+  }
+  let next = updatePlayer(state, playerId, { leader: { ...p.leader, deployed: true, epicActionUsed: epicUsed ? true : p.leader.epicActionUsed } })
+  next = attachUpgrades(next, hostId, [{ cardId: p.leader.cardId, owner: playerId, unitCard: true }])
+  const side = upgradeSideId(p.leader.cardId)
+  const onHost = findUnit(next, hostId)!.unit
+  next = fireBatch(next, [
+    ...collectUpgradeAttached(next, hostId, false, playerId, p.leader.cardId),
+    ...collectUnitTriggers(next, 'whenDeployed', onHost, playerId).filter(t => t.cardId === side),
+  ])
+  return offerPlotPlays(next, playerId, hostId)
 }
 
 /**

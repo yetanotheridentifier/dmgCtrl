@@ -460,6 +460,11 @@ side under the card id, the upgrade side under `upgradeSideId(id)`, which is wha
 `ctx.sourceInstanceId` is the host, as for any upgrade, and `ctx.cardId` is the side's key. A vanilla
 Pilot (nothing but the keyword) registers nothing. See `keywords-effects.md` "Piloting".
 
+A leader whose deployed side is a Pilot registers with `registerPilotLeader(id, { front, unit, upgrade })`:
+the front and the unit side merged under the card id like any leader's, the upgrade side under
+`upgradeSideId(id)` with `makesLeaderUnit` added, since "Attached unit is a leader unit" is printed on
+every one. "When deployed as an upgrade" is the upgrade side's `whenDeployed`.
+
 ## Leaders
 
 A leader has two sides and they register separately on one card id:

@@ -798,10 +798,26 @@ depends on how it was played.
 - **"When a Pilot attaches"** is the host's `whenUpgradeAttached`, told the attaching card in
   `ctx.attachedCardId` by the play and by `moveUpgrade` (Red Leader, Razor Crest, Iden Versio's "when
   this upgrade attaches").
+- **A Pilot leader deploys either way.** A leader with a printed upgrade +X/+Y is offered a
+  `deployLeader` with a `targetInstanceId` for each friendly Vehicle `canTakePilot` accepts, beside the
+  deploy as a unit. `deployLeaderAsPilot` (resolve.ts) attaches the leader card as a `unitCard`
+  attachment, marks the leader deployed, and fires the host's attach reactions with the upgrade side's
+  own `whenDeployed` ("When deployed as an upgrade") as one batch; a deploy as a unit fires only the unit
+  side's. Poe Dameron's front arrives through the same function without spending the epic action.
+- **A leader card is never put in a pile.** Every site that takes an upgrade off a unit (a defeat of
+  the upgrade or its host, a bounce of either, a capture) hands it to `sendAttachmentFromPlay`
+  (effects.ts), which sends a token nowhere, a leader back to its owner's base zone exhausted and not
+  deployed, and anything else to the owner's discard or hand. The epic action stays spent, so it does
+  not deploy again.
+- **A Pilot can be played out of a zone using Piloting.** `piloting` on a `playCardFrom` choice (and
+  `PlayFromTerms`) prices the card at its bracket and sends it to the attach step with the friendly
+  Vehicles that can take it as targets, then through `playUpgradeCardOnto` as a `unitCard` (Wedge
+  Antilles' front).
 - **Not built:** a card changing between unit and upgrade once in play (a unit attaching itself as an
-  upgrade, a Pilot upgrade moving to the ground arena as a unit), and leaders whose deployed side is a
-  Pilot. A Pilot played as an upgrade is recorded as played like any card, so a "unit you played this
-  phase" count that reads the card's type still sees a unit.
+  upgrade, a Pilot upgrade moving to the ground arena as a unit). A Pilot played as an upgrade is
+  recorded as played like any card, so a "unit you played this phase" count that reads the card's type
+  still sees a unit. A leader deployed as a Pilot is not a leader *unit* leaving play when it goes, so
+  "a leader unit left play this phase" does not hear it.
 
 ## Plot
 

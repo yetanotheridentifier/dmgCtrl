@@ -33,7 +33,8 @@ export type Action =
   // "you may attack"). Without it the resolver had to guess which choice the attack belonged to,
   // and guessed the queue head, consuming the wrong one when several were outstanding.
   | { type: 'attack'; attackerId: string; target: AttackTarget; choiceId?: string }
-  | { type: 'deployLeader' }
+  /** With `targetInstanceId`, a leader whose deployed side is a Pilot deploys as an upgrade on that Vehicle. */
+  | { type: 'deployLeader'; targetInstanceId?: string }
   // Use a unit's activated "Action:" ability. `cardId`+`index` address the
   // ability among the unit's own and its upgrades' action abilities.
   | { type: 'useAbility'; instanceId: string; cardId: string; index: number }

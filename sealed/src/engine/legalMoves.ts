@@ -534,6 +534,8 @@ export interface PlayFromTerms {
   waive?: AspectWaiver
   /** Smuggle: `card.smuggle`, the card's own alternate cost and aspect list, in place of its printed ones. */
   altCost?: { cost: number; aspects: string[] }
+  /** Play a Pilot as an upgrade, for its Piloting bracket, onto a friendly Vehicle with room (Wedge Antilles). */
+  piloting?: boolean
 }
 
 /**
@@ -543,7 +545,7 @@ export interface PlayFromTerms {
  */
 export function playFromCost(state: GameState, controller: PlayerId, card: EngineCard, terms: PlayFromTerms, target?: UnitState): number {
   if (terms.free) return 0
-  return Math.max(0, effectiveCost(state, controller, card, target, terms.waive, terms.altCost) + (terms.costDelta ?? 0))
+  return Math.max(0, effectiveCost(state, controller, card, target, terms.waive, terms.piloting ? card.piloting : terms.altCost) + (terms.costDelta ?? 0))
 }
 
 /**
@@ -564,8 +566,15 @@ export function playFromBudget(state: GameState, controller: PlayerId, extraCost
  */
 export function validPlayTargets(state: GameState, controller: PlayerId, zone: PlayFromZone, index: number, cardId: string, terms: PlayFromTerms, targetUnits?: string[], extraCost = 0): string[] {
   const card = state.cards[cardId]
-  if (zoneCards(state, controller, zone)[index] !== cardId || card?.type !== 'upgrade') return []
+  if (zoneCards(state, controller, zone)[index] !== cardId || !card) return []
   const budget = playFromBudget(state, controller, extraCost)
+  if (terms.piloting) {
+    if (!card.piloting) return []
+    return state.players[controller].units
+      .filter(u => (targetUnits ?? [u.instanceId]).includes(u.instanceId) && canTakePilot(state, u, cardId) && playFromCost(state, controller, card, terms, u) <= budget)
+      .map(u => u.instanceId)
+  }
+  if (card.type !== 'upgrade') return []
   const restriction = getCardDefinition(cardId)?.attachRestriction
   const inPlay = [...state.players.player.units, ...state.players.opponent.units]
   const ids = targetUnits ?? inPlay.map(u => u.instanceId)
@@ -583,7 +592,7 @@ export function validPlayTargets(state: GameState, controller: PlayerId, zone: P
 export function canPlayFrom(state: GameState, controller: PlayerId, zone: PlayFromZone, ref: PlayFromRef, terms: PlayFromTerms, targetUnits?: string[], extraCost = 0): boolean {
   const card = state.cards[ref.cardId]
   if (!card || zoneCards(state, controller, zone)[ref.index] !== ref.cardId) return false
-  if (card.type === 'upgrade' && !isFortify(card)) return validPlayTargets(state, controller, zone, ref.index, ref.cardId, terms, targetUnits, extraCost).length > 0
+  if (terms.piloting || (card.type === 'upgrade' && !isFortify(card))) return validPlayTargets(state, controller, zone, ref.index, ref.cardId, terms, targetUnits, extraCost).length > 0
   return playFromCost(state, controller, card, terms) <= playFromBudget(state, controller, extraCost)
 }
 
@@ -708,6 +717,13 @@ function actionPhaseMoves(state: GameState): Action[] {
     const condition = getCardDefinition(p.leader.cardId)?.deployCondition
     const canDeploy = condition ? condition(state, playerId) : p.resources.length >= leaderCard.cost
     if (canDeploy) moves.push({ type: 'deployLeader' })
+    // A leader whose deployed side is a Pilot may deploy as an upgrade instead, on a friendly Vehicle
+    // with room for a Pilot. Its printed upgrade +X/+Y is what marks it as one.
+    if (canDeploy && leaderCard.upgradePower !== undefined) {
+      for (const host of p.units) {
+        if (canTakePilot(state, host, leaderCard.id)) moves.push({ type: 'deployLeader', targetInstanceId: host.instanceId })
+      }
+    }
   }
 
   // Use a unit's activated "Action:" ability — e.g. Improvised Identity. Each

@@ -75,8 +75,9 @@ export function observeState(cov: PlayCoverage, state: GameState): void {
       // here rather than needing the deployLeader action.
       if (u.isLeader) cov.leadersDeployed.add(u.cardId)
       else cov.played.add(u.cardId)
-      // Upgrades count either way, including those attached to a deployed leader.
-      for (const up of u.upgrades) cov.played.add(up.cardId)
+      // Upgrades count either way, including those attached to a deployed leader. A leader card among
+      // them is one deployed as a Pilot upgrade.
+      for (const up of u.upgrades) (state.cards[up.cardId]?.type === 'leader' ? cov.leadersDeployed : cov.played).add(up.cardId)
     }
     // And so do those on a base (Fortify).
     for (const up of p.base.upgrades ?? []) cov.played.add(up.cardId)

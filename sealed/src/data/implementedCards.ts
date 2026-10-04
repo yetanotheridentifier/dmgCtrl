@@ -329,6 +329,19 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SHD_008', name: 'Boba Fett', front: true, back: true },
   { id: 'SHD_014', name: 'Cad Bane', front: true, back: true },
   { id: 'SOR_016', name: 'Grand Admiral Thrawn', front: true, back: true },
+  // Pilot leaders: the back deploys as a unit or as a Pilot upgrade (`deployLeaderAsPilot`).
+  { id: 'JTL_001', name: 'Asajj Ventress', front: true, back: true },
+  { id: 'JTL_003', name: 'Lando Calrissian', front: true, back: true },
+  { id: 'JTL_006', name: 'Darth Vader', front: true, back: true },
+  { id: 'JTL_008', name: 'Wedge Antilles', front: true, back: true },
+  // Back only. Front ("When you deal non-combat damage") needs a trigger point no card has yet (#756).
+  { id: 'JTL_009', name: 'Boba Fett', front: false, back: true },
+  { id: 'JTL_011', name: 'Major Vonreg', front: true, back: true },
+  { id: 'JTL_012', name: 'Luke Skywalker', front: true, back: true },
+  { id: 'JTL_013', name: 'Poe Dameron', front: true, back: true },
+  { id: 'JTL_015', name: 'Rio Durant', front: true, back: true },
+  { id: 'JTL_017', name: 'Han Solo', front: true, back: true },
+  { id: 'JTL_018', name: 'Kazuda Xiono', front: true, back: true },
 ]
 
 /**

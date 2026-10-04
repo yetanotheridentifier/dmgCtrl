@@ -554,11 +554,13 @@ resolves. A unit whose owner and controller differ this way is `controlUntil: 'p
 nothing hands the card back.
 
 An upgrade cannot be priced until its host is known, so it goes on to **`attachPlayedCard`** and pays
-there. `then` is how the play differs from a plain one and what follows it: the replacement resource
+there, as does a Pilot played with `piloting` (for its Piloting bracket, onto a friendly Vehicle with
+room). `then` is how the play differs from a plain one and what follows it: the replacement resource
 (`resourceTop`), Osha's "you may resource a card from your hand" (`mayResourceFromHand`, its own
 choice), Endless Legions' "one at a time" (`again`, re-offering the rest re-indexed against the
 shortened zone, capped by `againLimit` where the card reads "up to N"), Improvise's "if you don't,
-you may discard it" (`elseMayDiscardTop`, offered only on the decline), and, about the card just put
+you may discard it" (`elseMayDiscardTop`, offered only on the decline), the raising card's own "if you
+do, ..." (`ifYouDo`, resumed once the card is played: Lando Calrissian, Major Vonreg), and, about the card just put
 into play, `entersReady`, `delay` ("at the start of the next regroup phase, defeat it"), `damageIt`
 and `tokens`. The `again` re-offer fires from **either** step, since a unit's or an event's play
 finishes at the pick and an upgrade's at the attach. `always` raises the choice even with nothing

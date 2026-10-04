@@ -68,9 +68,9 @@ const SHIPPED = [
  * card you play using Plot this phase costs 3 less") needs a new `NextUnitGrant` restriction plus
  * play-route context threaded into `effectiveCost`, so he too is neither SHIPPED nor LIFTED.
  */
+// The JTL Pilot leaders lifted from here have shipped and are covered in `pilotLeaders.test.ts`.
 const LIFTED = [
-  'JTL_001', 'JTL_003', 'JTL_011', 'JTL_012', 'JTL_015', 'JTL_017', 'JTL_018', 'TWI_017',
-  'SHD_006', 'LAW_017',
+  'TWI_017', 'SHD_006', 'LAW_017',
 ]
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])

@@ -88,7 +88,9 @@ export function describeActionParts(state: GameState, by: PlayerId, action: Acti
     case 'deployLeader': {
       const cardId = state.players[by].leader.cardId
       const name = state.cards[cardId]?.name
-      return name ? ['Deploy ', { cardId, controller: by, text: name }] : plain()
+      if (!name) return plain()
+      const host = action.targetInstanceId ? unitRef(state, action.targetInstanceId) : undefined
+      return host ? ['Deploy ', { cardId, controller: by, text: name }, ' as a Pilot on ', host] : ['Deploy ', { cardId, controller: by, text: name }]
     }
     case 'resourceCard':
     case 'setupResource': {
@@ -159,7 +161,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
     }
     case 'deployLeader': {
       const name = state.cards[state.players[by].leader.cardId]?.name ?? 'leader'
-      return `Deploy ${name}`
+      return action.targetInstanceId ? `Deploy ${name} as a Pilot on ${unitName(state, by, action.targetInstanceId)}` : `Deploy ${name}`
     }
     case 'useAbility':
       return `Use ${state.cards[action.cardId]?.name ?? 'ability'}`

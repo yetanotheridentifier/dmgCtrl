@@ -500,6 +500,11 @@ export interface GameState {
   round: number
   /** Action phase ends when both players pass consecutively. */
   consecutivePasses: number
+  /**
+   * "Take an extra action after this one" (Kazuda Xiono): the player keeps the turn when the action
+   * that set it hands over, once. Spent by `advanceTurn`.
+   */
+  extraActionBy?: PlayerId
   /** Regroup: whether each player has made their resource-1-card choice yet. */
   regroupResourced: Record<PlayerId, boolean>
   /**
@@ -783,6 +788,8 @@ export interface PlayFromTail {
    * `whenPlayed`'s ctx carries no notion of the zone a play came from.
    */
   usingSmuggle?: boolean
+  /** "If you do, ..." after the play (Lando Calrissian, Major Vonreg): the raising card's `ifYouDo`, resumed once the card is played. */
+  ifYouDo?: IfYouDo
 }
 
 /** A follow-up "deal N damage to a unit or a base" selection. */
@@ -1385,12 +1392,14 @@ type ChoiceVariant =
   // upgrade cannot be priced until its host is known, so it goes on to `attachPlayedCard`.
   // `markUsed` spends a limited triggered ability on acceptance, before the play, so the play's own
   // triggers already see it spent (L3-37 replaying an event does not offer a third play).
-  | { kind: 'playCardFrom'; id: string; controller: PlayerId; zone: PlayFromZone; candidates: PlayFromRef[]; optional?: boolean; free?: boolean; costDelta?: number; waive?: AspectWaiver; targetUnits?: string[]; then?: PlayFromTail; markUsed?: { instanceId: string; key: string } }
+  // `piloting` plays a Pilot as an upgrade for its Piloting cost (Wedge Antilles), so it goes on to the
+  // attach step too.
+  | { kind: 'playCardFrom'; id: string; controller: PlayerId; zone: PlayFromZone; candidates: PlayFromRef[]; optional?: boolean; free?: boolean; costDelta?: number; waive?: AspectWaiver; piloting?: boolean; targetUnits?: string[]; then?: PlayFromTail; markUsed?: { instanceId: string; key: string } }
   // Follow-up: attach the upgrade picked above to one of `targets`, paying for it there. Mandatory.
   // `candidates` is the list the `playCardFrom` above offered, carried through so a `then.again`
   // re-offer can re-index what is left: an upgrade's play finishes HERE, not at the pick, so the
   // re-offer has to be able to fire from this step too (Kylo Ren's "any number of upgrades").
-  | { kind: 'attachPlayedCard'; id: string; controller: PlayerId; zone: PlayFromZone; index: number; cardId: string; targets: string[]; candidates?: PlayFromRef[]; targetUnits?: string[]; free?: boolean; costDelta?: number; waive?: AspectWaiver; then?: PlayFromTail }
+  | { kind: 'attachPlayedCard'; id: string; controller: PlayerId; zone: PlayFromZone; index: number; cardId: string; targets: string[]; candidates?: PlayFromRef[]; targetUnits?: string[]; free?: boolean; costDelta?: number; waive?: AspectWaiver; piloting?: boolean; then?: PlayFromTail }
   // "You may resource a card from your hand" (Osha), answered by `handIndex`. Always a may.
   | { kind: 'mayResourceFromHand'; id: string; controller: PlayerId }
   // Optionally pay `cost` to draw `draw` cards (Mandalorian). `cost` 0 = a free "may draw".
