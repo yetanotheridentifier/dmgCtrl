@@ -7,7 +7,7 @@ import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { abilityCardIds, collectPlayerTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
-import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay, abilityDamageBonus, protectedFromEnemyAbility, indirectDamageBonus, indirectDamageAssignedByDealer, sendAttachmentFromPlay } from './effects'
+import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay, abilityDamageBonus, protectedFromEnemyAbility, indirectDamageBonus, indirectDamageAssignedByDealer, sendAttachmentFromPlay, escapesDefeat } from './effects'
 
 /**
  * How much of an instance of damage the cards in play stop before it lands (Cassian Andor, Boba
@@ -182,14 +182,24 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
 function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[], defeated: UnitState[], byCombat = false, spentShieldOwners: PlayerId[] = [], sameEvent = false, whileAttacking = false): GameState {
   // Always write `survivors` back — they carry the damage just applied (defeated may be empty).
   const p = state.players[owner]
-  // A leader deployed as a Pilot upgrade goes home to its base zone, not to a discard pile.
-  const leaderUpgrades = defeated.flatMap(u => u.upgrades).filter(a => state.cards[a.cardId]?.type === 'leader')
-  const defeatedUpgrades = defeated.flatMap(u => u.upgrades).filter(a => state.cards[a.cardId]?.type !== 'token' && !leaderUpgrades.includes(a))
+  // A leader deployed as a Pilot upgrade goes home to its base zone, not to a discard pile, and a
+  // Pilot whose defeat is replaced (Luke Skywalker) goes to the ground arena: both route through
+  // `sendAttachmentFromPlay`.
+  const routedUpgrades = defeated.flatMap(u => u.upgrades).filter(a => state.cards[a.cardId]?.type === 'leader' || escapesDefeat(a))
+  const defeatedUpgrades = defeated.flatMap(u => u.upgrades).filter(a => state.cards[a.cardId]?.type !== 'token' && !routedUpgrades.includes(a))
+  // "If this unit would be defeated, you may instead attach her ..." (L3-37): off the board undefeated,
+  // her upgrades defeated with the rest, and her controller asked where she goes.
+  const onBoardAfter = updatePlayer(state, owner, { units: survivors })
+  const replacements = defeated.flatMap(u => {
+    const targets = isTokenCard(u.cardId) ? [] : getCardDefinition(u.cardId)?.insteadOfDefeat?.(onBoardAfter, u, owner) ?? []
+    return targets.length > 0 ? [{ unit: u, targets }] : []
+  })
+  const replaced = new Set(replacements.map(r => r.unit))
 
   // A defeated card goes to its OWNER's discard, which is not always its controller's: a unit
   // taken with Rehabilitation is defeated back to the player it was stolen from.
   const cardsFor = (side: PlayerId) => defeated
-    .filter(u => !u.isLeader && !isTokenCard(u.cardId) && (u.owner ?? owner) === side)
+    .filter(u => !u.isLeader && !isTokenCard(u.cardId) && !replaced.has(u) && (u.owner ?? owner) === side)
     .map(u => u.cardId)
 
   let result = updatePlayer(state, owner, {
@@ -211,7 +221,7 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
     const owner2 = result.players[owner]
     result = updatePlayer(result, owner, { leader: { ...owner2.leader, deployed: false, exhausted: true } })
   }
-  for (const up of leaderUpgrades) result = sendAttachmentFromPlay(result, up, 'discard')
+  for (const up of routedUpgrades) result = sendAttachmentFromPlay(result, up, 'discard')
 
   // A captor leaving play frees what it held, back into play rather than to the discard.
   const released = defeated.flatMap(u => u.captured ?? [])
@@ -219,14 +229,22 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
 
   // Upgrades go down with their host, and a shield is defeated by soaking the hit:
   // "when a friendly upgrade is defeated" (Zeb Orrelios) covers both.
-  const lostUpgradeOwners = [...defeated.flatMap(u => u.upgrades).map(a => a.owner), ...spentShieldOwners]
+  const lostUpgradeOwners = [...defeated.flatMap(u => u.upgrades).filter(a => !escapesDefeat(a)).map(a => a.owner), ...spentShieldOwners]
   if (lostUpgradeOwners.length > 0) result = fireUpgradesDefeated(result, lostUpgradeOwners)
+
+  for (const { unit, targets } of replacements) {
+    result = pushChoice(result, {
+      kind: 'selectUnitThen', id: `instead-${unit.instanceId}`, controller: owner, targets, optional: true, hookOnDecline: true,
+      text: `attach ${result.cards[unit.cardId]?.name ?? 'this unit'} as an upgrade instead of defeating her`,
+      then: { cardId: unit.cardId, owner, step: 'insteadOfDefeat' },
+    })
+  }
 
   // Collected rather than fired. This is the only trigger point that can leave abilities owed on BOTH
   // sides at once, so it is where CR 7.6.10 lives; running them here would settle the order before
   // anyone could be asked for it. `drainTriggers` resolves the batch once the action completes.
   const owed: PendingTrigger[] = []
-  for (const dead of defeated) {
+  for (const dead of defeated.filter(u => !replaced.has(u))) {
     result = recordUnitDefeated(result, owner, dead.cardId) // "defeated this phase" tracking
     result = recordUnitLeftPlay(result, owner, dead.cardId, dead.isLeader)
     if (whileAttacking) result = recordDefeatedWhileAttacking(result, owner)

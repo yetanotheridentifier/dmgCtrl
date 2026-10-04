@@ -799,6 +799,7 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LAW_103', name: 'Display Piece' },
   { id: 'JTL_043', name: 'No Glory, Only Results' },
   { id: 'JTL_175', name: 'System Shock' },
+  { id: 'JTL_126', name: 'Eject' },
   { id: 'SOR_170', name: 'Power Failure' },
   { id: 'JTL_180', name: 'Piercing Shot' },
   { id: 'SOR_139', name: 'Force Choke' },
@@ -2298,6 +2299,14 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'JTL_186', name: 'Mist Hunter' },
   { id: 'JTL_097', name: 'Leia Organa' },
   { id: 'JTL_056', name: 'Hondo Ohnaka' },
+  // Cards that move between unit and upgrade in play
+  { id: 'JTL_100', name: 'Poe Dameron' },
+  { id: 'JTL_213', name: 'Sidon Ithano' },
+  { id: 'JTL_049', name: 'L3-37' },
+  { id: 'JTL_050', name: 'Phantom II' },
+  { id: 'JTL_038', name: 'Corvus' },
+  { id: 'JTL_083', name: 'Pantoran Starship Thief' },
+  { id: 'JTL_094', name: 'Luke Skywalker' },
 ]
 
 /**

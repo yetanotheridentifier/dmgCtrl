@@ -1,5 +1,5 @@
 import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment, UsedAbility } from './types'
-import { baseHostId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, baseAbilityCardIds } from './types'
+import { baseHostId, upgradeSideId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint, ProtectedAction } from './abilities'
@@ -172,8 +172,12 @@ export function takeControlOfUnit(state: GameState, from: PlayerId, to: PlayerId
  */
 export function returnControlledUnits(state: GameState, atRegroup: boolean): GameState {
   const inPlay = new Set([...state.players.player.units, ...state.players.opponent.units].map(u => u.instanceId))
-  const ended = (u: UnitState): boolean =>
-    u.controlUntil === undefined ? atRegroup : u.controlUntil !== 'permanent' && !inPlay.has(u.controlUntil)
+  const ended = (u: UnitState): boolean => {
+    const until = u.controlUntil
+    if (until === undefined) return atRegroup
+    if (typeof until === 'object') return !u.upgrades.some(up => up.cardId === until.whileAttached)
+    return until !== 'permanent' && !inPlay.has(until)
+  }
   let next = state
   for (const controller of ['player', 'opponent'] as PlayerId[]) {
     for (const u of next.players[controller].units.filter(x => x.owner !== undefined && x.owner !== controller && ended(x))) {
@@ -253,9 +257,85 @@ export function attachUpgrades(state: GameState, instanceId: string, upgrades: U
 export function sendAttachmentFromPlay(state: GameState, up: UpgradeAttachment, zone: 'discard' | 'hand'): GameState {
   const type = state.cards[up.cardId]?.type
   if (type === 'token') return state
+  if (zone === 'discard' && escapesDefeat(up)) return putAttachmentInGround(state, up)
   const p = state.players[up.owner]
   if (type === 'leader') return updatePlayer(state, up.owner, { leader: { ...p.leader, deployed: false, exhausted: true } })
   return updatePlayer(state, up.owner, zone === 'hand' ? { hand: [...p.hand, up.cardId] } : { discard: [...p.discard, up.cardId] })
+}
+
+/**
+ * Whether a defeat of `up` is replaced by it moving to the ground arena as a unit (Luke Skywalker's
+ * upgrade side, `defeatedMovesToGround`). Such an upgrade is not defeated, so the sites that fire
+ * "when a friendly upgrade is defeated" leave its owner out.
+ */
+export function escapesDefeat(up: UpgradeAttachment): boolean {
+  return up.unitCard === true && getCardDefinition(upgradeSideId(up.cardId))?.defeatedMovesToGround === true
+}
+
+/**
+ * Put a unit card attached as an upgrade, already off its host, into the ground arena as an exhausted
+ * unit under its owner (Eject, Luke Skywalker). A leader card becomes that player's leader unit, still
+ * deployed. It was in play all along, so nothing reads it as entering play or as played.
+ */
+function putAttachmentInGround(state: GameState, up: UpgradeAttachment): GameState {
+  const moved: UnitState = {
+    instanceId: `u${state.instanceCounter}`,
+    cardId: up.cardId,
+    arena: 'ground',
+    damage: 0,
+    exhausted: true,
+    isLeader: state.cards[up.cardId]?.type === 'leader',
+    upgrades: [],
+  }
+  const next = { ...state, instanceCounter: state.instanceCounter + 1 }
+  return updatePlayer(next, up.owner, { units: [...next.players[up.owner].units, moved] })
+}
+
+/**
+ * "Detach a Pilot upgrade, move it to the ground arena as a unit, and exhaust it" (Eject): the unit
+ * card attached at `index` on `hostId` leaves it for the ground arena. Detaching is not a defeat, so
+ * nothing on the old host fires. A no-op unless that attachment is a unit card.
+ */
+export function moveAttachmentToGround(state: GameState, hostId: string, index: number): GameState {
+  const found = findUnit(state, hostId)
+  const up = found?.unit.upgrades[index]
+  if (!found || !up?.unitCard) return state
+  const detached = patchUnit(state, found.owner, hostId, u => ({ ...u, upgrades: u.upgrades.filter((_, i) => i !== index) }))
+  return putAttachmentInGround(detached, up)
+}
+
+/**
+ * Attach `cardId`, a unit card that is off the board, to `hostId` as an upgrade under `owner`
+ * (`unitCard`), and fire the host's attach reactions. It attaches, it is not played. With the host
+ * gone the card is defeated instead.
+ */
+export function attachCardAsUnitUpgrade(state: GameState, cardId: string, owner: PlayerId, hostId: string): GameState {
+  if (!findUnit(state, hostId)) return sendAttachmentFromPlay(state, { cardId, owner, unitCard: true }, 'discard')
+  return fireUpgradeAttached(attachUpgrades(state, hostId, [{ cardId, owner, unitCard: true }]), hostId, false, cardId)
+}
+
+/**
+ * "Attach this unit as an upgrade to ..." (Poe Dameron, Sidon Ithano, Phantom II, Corvus): the unit
+ * stops being a unit and attaches to `hostId` under its controller. "Defeat all upgrades on it and
+ * remove all damage from it": its upgrades are defeated, its damage goes with the unit, and anything it
+ * had captured is released. It does not leave play, so nothing reads it as defeated or leaving.
+ */
+export function attachUnitAsUpgrade(state: GameState, unitId: string, hostId: string): GameState {
+  const found = findUnit(state, unitId)
+  if (!found || unitId === hostId || !findUnit(state, hostId)) return state
+  const { owner: controller, unit } = found
+  let next = updatePlayer(state, controller, { units: state.players[controller].units.filter(u => u.instanceId !== unitId) })
+  for (const up of unit.upgrades) next = sendAttachmentFromPlay(next, up, 'discard')
+  const upgradeOwners = unit.upgrades.filter(up => state.cards[up.cardId]?.type !== 'token' && !escapesDefeat(up)).map(up => up.owner)
+  if (upgradeOwners.length > 0) next = fireUpgradesDefeated(next, upgradeOwners)
+  next = releaseCaptured(next, unit.captured ?? [])
+  return attachCardAsUnitUpgrade(next, unit.cardId, controller, hostId)
+}
+
+/** Defeat one upgrade already off its host: where it goes, then "when a friendly upgrade is defeated" unless it escaped. */
+function defeatAttachment(state: GameState, up: UpgradeAttachment): GameState {
+  const next = sendAttachmentFromPlay(state, up, 'discard')
+  return escapesDefeat(up) ? next : fireUpgradesDefeated(next, [up.owner])
 }
 
 /** Attach a single token upgrade. See {@link giveTokens} for why the count-many form exists. */
@@ -957,7 +1037,7 @@ function attemptCapture(state: GameState, targetInstanceId: string, guardianOwne
   }
   let next = updatePlayer(state, controller, { units: state.players[controller].units.filter(u => u.instanceId !== targetInstanceId) })
   for (const up of target.upgrades) next = sendAttachmentFromPlay(next, up, 'discard')
-  const upgradeOwners = target.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token').map(u => u.owner)
+  const upgradeOwners = target.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token' && !escapesDefeat(u)).map(u => u.owner)
   if (upgradeOwners.length > 0) next = fireUpgradesDefeated(next, upgradeOwners)
   next = recordUnitLeftPlay(next, controller, target.cardId, target.isLeader)
   next = releaseCaptured(next, target.captured ?? [])
@@ -1084,7 +1164,7 @@ export function defeatUpgrade(state: GameState, instanceId: string, cardId: stri
   const removed = found.unit.upgrades[idx]
 
   const next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: u.upgrades.filter((_, i) => i !== idx) }))
-  return fireUpgradesDefeated(sendAttachmentFromPlay(next, removed, 'discard'), [removed.owner])
+  return defeatAttachment(next, removed)
 }
 
 /**
@@ -1140,14 +1220,14 @@ export function defeatUpgradeAt(state: GameState, instanceId: string, index: num
     if (!removed) return state
     const instead = replaceable ? offerDefeatInstead(state, baseOwner, removed.cardId) : undefined
     if (instead) return instead
-    return fireUpgradesDefeated(sendAttachmentFromPlay(next, removed, 'discard'), [removed.owner])
+    return defeatAttachment(next, removed)
   }
   const found = findUnit(state, instanceId)
   const removed = found?.unit.upgrades[index]
   if (!found || !removed) return state
   if (upgradeProtectedFromEnemyAbility(state, instanceId, index, state.resolvingSource?.controller, 'defeat')) return state
   const next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: u.upgrades.filter((_, i) => i !== index) }))
-  return fireUpgradesDefeated(sendAttachmentFromPlay(next, removed, 'discard'), [removed.owner])
+  return defeatAttachment(next, removed)
 }
 
 /**

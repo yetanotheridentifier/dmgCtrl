@@ -1,13 +1,13 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, actionAbilityKey, collectUnitTriggers, collectCardTriggers, abilityCardIds, usedAbilityOf } from './abilities'
-import { fireBatch, runAbilitiesAgain, thenAfterChoices,takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken } from './effects'
+import { fireBatch, runAbilitiesAgain, thenAfterChoices,takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage, isDoomed } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { deployLeaderAsPilot, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, indirectDamageDealtThisPhase, markAbilityUsed, updatePlayer, upgradeSideId } from './types'
+import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, indirectDamageDealtThisPhase, markAbilityUsed, updatePlayer, upgradeSideId, recordUnitDefeated } from './types'
 import { canTakePilot, affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost, readyResourceCount } from './resources'
@@ -13750,4 +13750,100 @@ registerPilotLeader('JTL_018', { // Kazuda Xiono
   }),
   unit: { ...kazudaAttack, ifYouDo: kazudaThen },
   upgrade: { ...kazudaAttack, ifYouDo: kazudaThen },
+})
+
+// ── Cards that move between unit and upgrade in play ────────────────────────────────────────────────
+// A unit attaching as an upgrade is `attachUnitAsUpgrade` (its upgrades defeated, its damage gone, the
+// card attached as a `unitCard`), and a Pilot upgrade leaving for the ground arena is
+// `moveAttachmentToGround`. Neither is the card leaving or entering play.
+
+/** "Attach this unit as an upgrade to" the unit chosen. */
+const attachSelf: NonNullable<CardDefinition['ifYouDo']> = (s, ctx) => attachUnitAsUpgrade(s, ctx.sourceInstanceId!, ctx.targetInstanceId!)
+const withoutPilot: Pick = (s, u) => unitHasTrait(s, u, 'Vehicle') && pilotsOn(s, u) === 0
+
+registerPilot('JTL_100', { unit: { // Poe Dameron
+  ...whenPlayed('When played as a unit: Create an X-Wing token. You may attach this unit as an upgrade to a friendly Vehicle unit without a Pilot on it.', (s, ctx) => {
+    const next = create(s, ctx.owner, TOKEN_X_WING)
+    return unitThen(next, ctx, pickedIds(next, ctx, vehicleWithoutPilot), 'attach Poe Dameron to a friendly Vehicle without a Pilot', true)
+  }),
+  ifYouDo: attachSelf,
+} })
+registerPilot('JTL_213', { unit: unitThenWp('When played as a unit: You may attach this unit as an upgrade to an enemy Vehicle unit without a Pilot on it.', // Sidon Ithano
+  pickAll(pickEnemy, withoutPilot), 'attach Sidon Ithano to an enemy Vehicle without a Pilot', true, attachSelf) })
+
+registerPilot('JTL_049', { unit: { // L3-37
+  insteadOfDefeat: (s, u, controller) => s.players[controller].units.filter(v => v.instanceId !== u.instanceId && withoutPilot(s, v, { owner: controller })).map(v => v.instanceId),
+  // Declined, she is defeated after all: to the discard pile, counted as a defeat.
+  ifYouDo: (s, ctx) => (ctx.targetInstanceId
+    ? attachCardAsUnitUpgrade(s, ctx.cardId, ctx.owner, ctx.targetInstanceId)
+    : recordUnitDefeated(updatePlayer(s, ctx.owner, { discard: [...s.players[ctx.owner].discard, ctx.cardId] }), ctx.owner, ctx.cardId)),
+} })
+
+const theGhost: Pick = (s, u) => s.cards[u.cardId]?.name === 'The Ghost'
+registerPilot('JTL_050', { // Phantom II (Grit as a unit, from its keywords)
+  unit: {
+    actionAbilities: [{
+      description: 'If this card is a unit, attach it as an upgrade to The Ghost.',
+      cost: 1,
+      usable: (s, self) => picked(s, { owner: controllerOf(s, self) }, theGhost).length > 0,
+      effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, theGhost), 'attach Phantom II to The Ghost', false),
+    }],
+    ifYouDo: attachSelf,
+  },
+  // Not a Pilot: its +3/+3 is printed text, not an upgrade stat line.
+  upgrade: { ...gains(() => true, KW.grit), statModifier: () => ({ power: 3, hp: 3 }) },
+})
+
+/** Where on `host` a friendly Pilot upgrade sits that `onto` has room for, or -1. */
+const movablePilotAt = (s: GameState, host: UnitState, owner: PlayerId, onto: UnitState): number =>
+  host.upgrades.findIndex(up => up.owner === owner && cardHasTrait(s, up.cardId, 'Pilot') && canTakePilot(s, onto, up.cardId))
+registerCard('JTL_038', { // Corvus
+  // One pick over both: a friendly Pilot unit attaches itself, any other unit hands over the friendly Pilot upgrade on it.
+  ...whenPlayed('When Played: You may attach a friendly Pilot unit or upgrade to this unit.', (s, ctx) => {
+    const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+    if (!self) return s
+    const pilotUnits = s.players[ctx.owner].units.filter(u => u !== self && unitHasTrait(s, u, 'Pilot') && canTakePilot(s, self, u.cardId))
+    const hosts = allUnits(s).filter(u => u !== self && !pilotUnits.includes(u) && movablePilotAt(s, u, ctx.owner, self) >= 0)
+    return unitThen(s, ctx, [...pilotUnits, ...hosts].map(u => u.instanceId), 'attach a friendly Pilot unit, or the friendly Pilot upgrade on a unit, to Corvus', true)
+  }),
+  ifYouDo: (s, ctx) => {
+    const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+    const chosen = findUnit(s, ctx.targetInstanceId!)
+    if (!self || !chosen) return s
+    if (chosen.owner === ctx.owner && unitHasTrait(s, chosen.unit, 'Pilot')) return attachUnitAsUpgrade(s, chosen.unit.instanceId, self.instanceId)
+    const index = movablePilotAt(s, chosen.unit, ctx.owner, self)
+    return index >= 0 ? moveUpgrade(s, { unitId: chosen.unit.instanceId, upgradeIndex: index, cardId: chosen.unit.upgrades[index].cardId }, self.instanceId) : s
+  },
+})
+
+const thiefHost: Pick = (s, u) => (unitHasTrait(s, u, 'Fighter') || unitHasTrait(s, u, 'Transport')) && pilotsOn(s, u) === 0
+registerPilot('JTL_083', { unit: { // Pantoran Starship Thief
+  ...whenPlayed('When Played: You may pay 3. If you do, attach this unit as an upgrade to a Fighter or Transport unit without a Pilot on it. Take control of that unit.', (s, ctx) =>
+    (canAfford(s.players[ctx.owner], 3) && pickedIds(s, ctx, thiefHost).length > 0
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 3, text: 'attach Pantoran Starship Thief to a Fighter or Transport and take control of it', then: resume(ctx) })
+      : s)),
+  ifYouDo: (s, ctx) => {
+    if (!ctx.targetInstanceId) return unitThen(s, ctx, pickedIds(s, ctx, thiefHost), 'attach Pantoran Starship Thief to a Fighter or Transport without a Pilot', false, 'attach')
+    const attached = attachUnitAsUpgrade(s, ctx.sourceInstanceId!, ctx.targetInstanceId)
+    const host = findUnit(attached, ctx.targetInstanceId)
+    // "When this upgrade detaches from a unit: That unit's owner takes control of it": the control lasts while it is attached.
+    return host?.unit.upgrades.some(up => up.cardId === 'JTL_083')
+      ? takeControlOfUnit(attached, host.owner, ctx.owner, host.unit.instanceId, { whileAttached: 'JTL_083' })
+      : attached
+  },
+} })
+
+registerPilot('JTL_094', { upgrade: { defeatedMovesToGround: true } }) // Luke Skywalker
+
+registerCard('JTL_126', { // Eject
+  ...whenPlayed('Detach a Pilot upgrade, move it to the ground arena as a unit, and exhaust it. Draw a card.', (s, ctx) => {
+    const candidates = upgradeCandidates(s, { on: 'unit' }).filter(up => cardHasTrait(s, up.cardId, 'Pilot') && upgradeAt(s, up.unitId, up.upgradeIndex)?.unitCard)
+    return candidates.length
+      ? pushChoice(s, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, text: 'move a Pilot upgrade to the ground arena', then: resume(ctx) })
+      : drawCards(s, ctx.owner, 1)
+  }),
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    return drawCards(up ? moveAttachmentToGround(s, up.unitId, up.upgradeIndex) : s, ctx.owner, 1)
+  },
 })

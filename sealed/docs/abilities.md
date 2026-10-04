@@ -386,6 +386,8 @@ Card-type-agnostic, all on `CardDefinition`:
 | `attachRestriction` | may this upgrade attach to that unit, when this player plays it ("a friendly unit") |
 | `extraPilots` | Pilots this unit takes beyond the one ("you may play or deploy 1 additional Pilot on this unit"); see `keywords-effects.md` "Piloting" |
 | `ignoresPilotLimit` | on a Pilot's upgrade side: it may go onto a Vehicle that already has its Pilots (R2-D2) |
+| `defeatedMovesToGround` | on a Pilot's upgrade side: a defeat sends it to the ground arena as an exhausted unit instead (Luke Skywalker) |
+| `insteadOfDefeat` | the hosts a unit may attach to instead of being defeated, its controller choosing (L3-37); see `keywords-effects.md` "Piloting" |
 | `conditionalKeywords` | extra keywords, folded into `unitKeywords` |
 | `suppressedKeywords` | keywords removed while a condition holds |
 | `swappedKeywords` | pairs of keyword names traded for one another, renamed over the finished list (Asajj Ventress); see `keywords-effects.md` |
