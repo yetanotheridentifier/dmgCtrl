@@ -13624,8 +13624,32 @@ registerPilotLeader('JTL_008', { // Wedge Antilles
     grantNextUnit(s, ctx.owner, { anyCard: true, trait: 'Pilot', costDelta: -1 })),
 })
 
-// Boba Fett's front ("When you deal non-combat damage") needs a trigger point no other card has yet.
+/**
+ * "When you deal non-combat damage" (Boba Fett): damage you dealt that landed, other than in combat.
+ * Damage prevented in full was never dealt. His own indirect damage is non-combat damage he deals, so
+ * it hears itself; by then he is exhausted and cannot pay again, which is the whole loop guard.
+ */
+const hearsNonCombatByYou = (_s: GameState, ctx: EffectContext): boolean => {
+  const event = ctx.damageDealt
+  return !!event && dealtByYou(ctx) && !event.byCombat && (event.units.some(d => d.amount > 0) || (event.base ?? 0) > 0)
+}
 registerPilotLeader('JTL_009', { // Boba Fett
+  front: {
+    leaderAbilities: {
+      abilities: [{
+        trigger: 'whenDamageDealt',
+        hears: hearsNonCombatByYou,
+        description: 'When you deal non-combat damage: You may exhaust this leader. If you do, deal 1 indirect damage to a player.',
+        effect: (s, ctx) => (leaderCanExhaust(s, ctx.owner)
+          ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Boba Fett (leader) to deal 1 indirect damage to a player', then: resume(ctx) })
+          : s),
+      }],
+    },
+    // Two steps: paying exhausts him and asks which player; the answer deals the damage.
+    ifYouDo: (s, ctx) => (ctx.playerChosen === undefined
+      ? choosePlayer(exhaustLeader(s, ctx.owner), { ...ctx, sourceInstanceId: `${ctx.cardId}-front` }, 'deal 1 indirect damage to a player')
+      : dealIndirectDamage(s, ctx.playerChosen, 1, { cardId: ctx.cardId, controller: ctx.owner })),
+  },
   upgrade: whenDeployed('When deployed as an upgrade: Deal up to 4 damage divided as you choose among any number of units.', (s, ctx) => {
     const targets = allUnits(s).map(u => u.instanceId)
     return targets.length ? pushChoice(s, { kind: 'distributeDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: 4, total: 4, targets }) : s

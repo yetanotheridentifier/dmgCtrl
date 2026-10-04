@@ -148,9 +148,8 @@ Two phases:
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
   shared with another trigger point ("When Played/When Defeated") is built on the compound-head framework
 (#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
-  (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 16 not built are on the ticket of what
-  blocks them, #756 Boba Fett's front ("When you deal non-combat damage"; his Pilot back is built),
-  #467 Bounty (Bossk is fully shipped; Jabba the Hutt's back reads capture too, but #707 already built
+  (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 26 not built across all sets (19 in
+  rotation, as `SET_PROGRESS` counts them) are on the ticket of what blocks them, #467 Bounty (Bossk is fully shipped; Jabba the Hutt's back reads capture too, but #707 already built
   its chosen-guardian-and-target shape — what's left blocking the whole leader is an unbuilt "grant a
   chosen unit a temporary keyword ability" primitive his Action needs, on #715),
   #468 playing any card type, #602 Credit
@@ -286,8 +285,7 @@ Two phases:
   only for time, two cards where an opponent decides a friendly When Played, a reveal-then-play-for-free
   chain, and an "exchange control of two units" primitive Double-Cross needs) are on #719. Conveyex
   Security Captain shipped with #682; Han's Golden Dice, Targeted For Removal and Payroll Heist are
-  no longer held by the granted ability block (#464, shipped) and wait only on #719;
-  Boba Fett and Dengar need a one-off trigger head with no ticket of its own yet.
+  no longer held by the granted ability block (#464, shipped) and wait only on #719.
   **Disclose is finished** (#603, #721): "reveal cards from your hand with these aspect icons among
   them" is a flat aspect multiset (`need`) matched against each hand card's own `aspects`, which can
   itself repeat an entry (a double-icon card counts twice on its own). All 33 cards it unlocked
@@ -304,7 +302,7 @@ Two phases:
   Allegiant General Pryde's "when indirect damage is dealt to a unit" reuses the existing
   `whenDamageDealt` point, filtered on a new flag, rather than a trigger point of its own. 18 of the
   22 candidate cards shipped (recounted; the ticket's stale "unlocks 15" undercounted). Left out: Boba
-  Fett's leader (a further, unrelated trigger point, noted on #680) and Dengar (shipped with Piloting).
+  Fett's leader (shipped with #756) and Dengar (shipped with Piloting).
   Targeting Computer and Superheavy Ion Cannon shipped with the granted ability blocks (#464).
   **Coordinate is finished** (#472): "Gain this ability while you control 3 or more units" is a
   live board-state condition (`hasCoordinate`/`unitHasCoordinate`, read fresh everywhere it's asked,
