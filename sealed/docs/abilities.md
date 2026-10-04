@@ -525,8 +525,8 @@ belongs to the player whose base zone holds it:
 - **`startingHandDelta`** changes how many cards its controller draws to start (Colossus: one fewer),
   read by `initGame`.
 - **`deckMinimumDelta`** changes the smallest legal deck (Data Vault: +10), read by `minimumDeckSize`
-  where a decklist is checked. It is a deck-building rule, so the rules engine never consults it, and
-  the bench's deck generator builds 30 cards whatever the base.
+  where a decklist is checked and by the deck generator, which builds to it. It is a deck-building
+  rule, so the rules engine never consults it.
 
 Epic Actions are written through `baseEpic` in `cardDefinitions.ts`, with `basePlay` for the ones that
 play a unit from hand. The effect's source is `<cardId>-base`, so every choice it raises has a stable

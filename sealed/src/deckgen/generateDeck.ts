@@ -1,10 +1,10 @@
 import type { SwuCard } from '../data/cards'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { seededUnit } from '../engine/rng'
+import { colourBases, settleBase } from './bases'
 import {
-  coveredAspects, deckReport, isAlignment, type DeckReport,
-  DECK_SIZE, MAX_COPIES, MAX_COPIES_BY_RARITY, DUPLICATE_CHANCE, CHEAP_COST_MAX, CHEAP_UNITS, BOMB_COST_MIN, BOMB_UNITS,
-  MAX_EVENTS, MAX_UPGRADES, RARITY_MIX,
+  deckReport, deckShape, isAlignment, unpaidAspects, type DeckReport,
+  MAX_COPIES, MAX_COPIES_BY_RARITY, DUPLICATE_CHANCE, CHEAP_COST_MAX, BOMB_COST_MIN,
 } from './rules'
 
 /**
@@ -13,7 +13,7 @@ import {
  * `buildDeckForLeader` chooses the best base itself. Reusable by the coverage sweep and by a future
  * "play a random representative deck" setup feature.
  *
- * Construction is a scored greedy: fill 30 slots one at a time, each slot taking the eligible card
+ * Construction is a scored greedy: fill the base's deck size (30 unless the base changes it) one slot at a time, each slot taking the eligible card
  * that best serves the still-unmet quotas (curve, type caps, rarity mix, alignment balance), with a
  * seeded jitter for deterministic variety. `prefer` biases toward specific cards, which is how the
  * coverage sweep steers the pool toward not-yet-covered cards.
@@ -23,7 +23,8 @@ const id = (c: SwuCard): string => `${c.Set}_${c.Number}`
 const cost = (c: SwuCard): number => Number(c.Cost ?? 0)
 
 /**
- * What the build aims for, as a range rather than a number. Mid-cost units fill the remainder.
+ * What the build aims for in a 30-card deck, as a range rather than a number, scaled with the rules
+ * for a base that changes the size. Mid-cost units fill the remainder.
  *
  * A fixed target is a quota every deck hits exactly, which describes the constant rather than a
  * deck: before this, every deck had precisely 4 events and 3 upgrades, because the score's +60 for
@@ -91,19 +92,22 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
   const { leader, base, pool, seed } = opts
   const prefer = opts.prefer ?? new Set<string>()
   const require = opts.require ?? new Map<string, number>()
-  const covered = coveredAspects(leader, base)
   const alignment = (leader.Aspects ?? []).find(isAlignment)
+  const shape = deckShape(base, leader)
+  const scaled = (t: { base: number; spread: number }) => ({ ...t, base: shape.scale(t.base) })
 
   // Resolved once per deck, so the shape varies between decks but is fixed while one is being built.
-  const cheapTarget = resolveTarget(seed, 1, CHEAP_TARGET)
-  const bombTarget = resolveTarget(seed, 2, BOMB_TARGET)
-  const eventTarget = resolveTarget(seed, 3, EVENT_TARGET)
-  const upgradeTarget = resolveTarget(seed, 4, UPGRADE_TARGET)
-  const alignTarget = resolveTarget(seed, 5, ALIGN_TARGET)
+  const cheapTarget = resolveTarget(seed, 1, scaled(CHEAP_TARGET))
+  const bombTarget = resolveTarget(seed, 2, scaled(BOMB_TARGET))
+  const eventTarget = resolveTarget(seed, 3, scaled(EVENT_TARGET))
+  const upgradeTarget = resolveTarget(seed, 4, scaled(UPGRADE_TARGET))
+  // Rounded down rather than to nearest: the score admits `alignTarget + 2`, and 11 of 25 rounded up
+  // would admit 13, which is over half.
+  const alignTarget = resolveTarget(seed, 5, { ...ALIGN_TARGET, base: Math.floor((ALIGN_TARGET.base * shape.size) / 30) })
 
   const eligible = pool.filter(c =>
     (c.Type === 'Unit' || c.Type === 'Event' || c.Type === 'Upgrade') &&
-    (c.Aspects ?? []).every(a => covered.has(a)),
+    unpaidAspects(c, leader, base).length === 0,
   )
 
   const counts: Counts = {
@@ -114,12 +118,12 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
 
   const rarityAtMax = (c: SwuCard): boolean => {
     const r = c.Rarity ?? 'Common'
-    const cap = RARITY_MIX[r as keyof typeof RARITY_MIX]?.max ?? DECK_SIZE
+    const cap = shape.rarity[r]?.max ?? shape.size
     return (counts.rarity[r] ?? 0) >= cap
   }
   const rarityBelowMin = (c: SwuCard): boolean => {
     const r = c.Rarity ?? 'Common'
-    const min = RARITY_MIX[r as keyof typeof RARITY_MIX]?.min ?? 0
+    const min = shape.rarity[r]?.min ?? 0
     return (counts.rarity[r] ?? 0) < min
   }
 
@@ -142,10 +146,10 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
     if (copiesAtMax(c)) return false
     if (rarityAtMax(c)) return false
     const isUnit = c.Type === 'Unit'
-    if (isUnit && cost(c) <= CHEAP_COST_MAX && counts.cheap >= CHEAP_UNITS.max) return false
-    if (isUnit && cost(c) >= BOMB_COST_MIN && counts.bomb >= BOMB_UNITS.max) return false
-    if (c.Type === 'Event' && counts.events >= MAX_EVENTS) return false
-    if (c.Type === 'Upgrade' && counts.upgrades >= MAX_UPGRADES) return false
+    if (isUnit && cost(c) <= CHEAP_COST_MAX && counts.cheap >= shape.cheapUnits.max) return false
+    if (isUnit && cost(c) >= BOMB_COST_MIN && counts.bomb >= shape.bombUnits.max) return false
+    if (c.Type === 'Event' && counts.events >= shape.maxEvents) return false
+    if (c.Type === 'Upgrade' && counts.upgrades >= shape.maxUpgrades) return false
     return true
   }
 
@@ -188,10 +192,10 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
     // Unique limits the board, not the deck: several copies are legal, and only one can be in play at a
     // time. So a Unique is bounded by `MAX_COPIES` like any other card.
     const want = Math.min(require.get(id(c)) ?? 0, MAX_COPIES)
-    while ((counts.copies.get(id(c)) ?? 0) < want && counts.size < DECK_SIZE) add(c)
+    while ((counts.copies.get(id(c)) ?? 0) < want && counts.size < shape.size) add(c)
   }
 
-  while (counts.size < DECK_SIZE) {
+  while (counts.size < shape.size) {
     let best: SwuCard | undefined
     let bestScore = -Infinity
     for (const c of eligible) {
@@ -214,42 +218,36 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
 }
 
 /**
- * Build a deck for a leader, choosing the base that yields the best (fewest violations) deck. Tries
- * each distinct base aspect; deterministic. This is the entry point a single-deck consumer uses.
- * `baseAspect` restricts it to that aspect, including one the leader already carries.
+ * Build a deck for a leader, choosing its base. Deterministic. This is the entry point a single-deck
+ * consumer uses. `baseAspect` restricts it to that aspect, including one the leader already carries.
+ *
+ * Each colour offers one base to build on ({@link colourBases}: common, or rare on a rare roll), the
+ * colours are tried in a seeded order, and the first clean deck wins. The built deck is then settled
+ * on the base its cards want among those that build the same deck ({@link settleBase}).
  */
 export function buildDeckForLeader(leader: SwuCard, pool: SwuCard[], seed: number, prefer?: Set<string>, baseAspect?: string): { deck: ParsedDeck; report: DeckReport } {
-  const bases = pool.filter(c => c.Type === 'Base')
-  // One representative base per distinct aspect (bases are mechanically identical, aspect aside).
-  const byAspect = new Map<string, SwuCard>()
-  for (const b of bases) {
-    const key = (b.Aspects ?? []).join(',')
-    if (!byAspect.has(key)) byAspect.set(key, b)
-  }
+  const all = pool.filter(c => c.Type === 'Base')
 
   /**
-   * **Never double an aspect the leader already supplies.** This set has no card with a doubled
-   * aspect, so the overlap buys nothing and one colour cannot fill a deck. Kept as a filter with a
-   * fallback rather than an assumption: a leader carrying every base aspect would otherwise have no
-   * base at all.
+   * **A random base never doubles an aspect the leader already supplies**: one colour rarely fills a
+   * deck. A named aspect wins, even one the leader carries, since that is a player asking for the
+   * doubled cards rather than the generator stumbling into it. Kept as a filter with a fallback: a
+   * leader carrying every base aspect would otherwise have no base at all.
    */
   const leaderAspects = new Set(leader.Aspects ?? [])
-  const all = [...byAspect.values()]
   const usable = all.filter(b => !(b.Aspects ?? []).some(a => leaderAspects.has(a)))
-  // A base aspect the caller names wins, even one the leader already carries: the rule above stops the
-  // generator doubling an aspect by accident, not a player asking for it.
   const named = baseAspect === undefined ? [] : all.filter(b => (b.Aspects ?? []).includes(baseAspect))
-  const candidates = named.length > 0 ? named : usable.length > 0 ? usable : all
+  const allowed = named.length > 0 ? named : usable.length > 0 ? usable : all
 
-  // Rotated by seed rather than always tried in pool order, which made the first legal base the
-  // answer for almost every leader: two leaders sharing no aspect were landing on the same base.
+  const candidates = colourBases(allowed, seed)
+  // Rotated by seed rather than always tried in pool order, which made the first legal colour the
+  // answer for almost every leader.
   const start = Math.floor(seededUnit(((seed * 40503) ^ 0x9e37) >>> 0 || 1) * candidates.length)
   let best: { deck: ParsedDeck; report: DeckReport } | undefined
   for (let i = 0; i < candidates.length; i++) {
-    const base = candidates[(start + i) % candidates.length]
-    const result = generateDeck({ leader, base, pool, seed, prefer })
+    const result = generateDeck({ leader, base: candidates[(start + i) % candidates.length], pool, seed, prefer })
     if (!best || result.report.violations.length < best.report.violations.length) best = result
     if (best.report.ok) break
   }
-  return best!
+  return { deck: settleBase(best!.deck, pool, seed), report: best!.report }
 }

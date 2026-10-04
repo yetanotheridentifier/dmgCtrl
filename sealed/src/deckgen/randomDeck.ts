@@ -2,7 +2,8 @@ import type { SwuCard } from '../data/cards'
 import type { SavedDeck } from '../data/deckStore'
 import { seededUnit } from '../engine/rng'
 import { buildDeckForLeader } from './generateDeck'
-import { DECK_SIZE, deckReport } from './rules'
+import { deckReport } from './rules'
+import { minimumDeckSize } from '../utils/parseProtectThePod'
 import type { DeckReport } from './rules'
 
 /**
@@ -94,7 +95,7 @@ export function generateRandomDeck(pool: SwuCard[], seed: number, choice: Genera
   const from = avoiding.length > 0 ? avoiding : leaders
   const leader = named ?? from[Math.floor(seededUnit(seed || 1) * from.length) % from.length]
   const { deck } = buildDeckForLeader(leader, pool, seed, undefined, baseAspect)
-  if (deck.cards.reduce((n, c) => n + c.count, 0) < DECK_SIZE) return null
+  if (deck.cards.reduce((n, c) => n + c.count, 0) < minimumDeckSize(deck.base)) return null
   const byId = new Map(pool.map(c => [`${c.Set}_${c.Number}`, c]))
 
   const entries: GeneratedDeckEntry[] = deck.cards.map(c => {

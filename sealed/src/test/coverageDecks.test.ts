@@ -46,11 +46,13 @@ describe('buildCoverageDecks', () => {
   /**
    * Pinned, because every coverage run, sweep, generalisation and lethal sizing plays this deck set, and
    * a change to it moves all of their numbers at once. It is sensitive to the fixture as well as the
-   * generator: correcting one printed cost (Moff Gideon, ASH_097, from 8 to 3) changed it. A change here
-   * should be deliberate, and the benches that play the set re-read afterwards.
+   * generator: correcting one printed cost (Moff Gideon, ASH_097, from 8 to 3) changed it, and so did
+   * choosing among every base of a colour rather than the first, which moved 11 of the 24 decks onto
+   * their colour's other common base with every card unchanged. A change here should be deliberate,
+   * and the benches that play the set re-read afterwards.
    */
   it('builds the pinned ASH deck set', () => {
-    expect(fingerprint(result.decks)).toBe('5a180363')
+    expect(fingerprint(result.decks)).toBe('69aa70c4')
   })
 })
 

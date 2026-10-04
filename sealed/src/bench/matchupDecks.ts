@@ -3,6 +3,7 @@ import '../engine/cardDefinitions' // side effect: registers every implemented c
 import type { SwuCard } from '../data/cards'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { generateDeck } from '../deckgen/generateDeck'
+import { colourBases, settleBase } from '../deckgen/bases'
 
 /**
  * The EVEN matchup deck set (#392 follow-up): each of the 18 leaders paired with each of the 4 base
@@ -23,15 +24,13 @@ export interface MatchupDeck {
   baseAspect: string
 }
 
-/** One representative base per distinct aspect (bases are mechanically identical, aspect aside). */
-function distinctBases(pool: SwuCard[]): SwuCard[] {
-  const byAspect = new Map<string, SwuCard>()
-  for (const b of pool.filter(c => c.Type === 'Base')) {
-    const key = (b.Aspects ?? [])[0] ?? '?'
-    if (!byAspect.has(key)) byAspect.set(key, b)
-  }
-  // Stable order so deck indices (and the matrix) are reproducible.
-  return [...byAspect.values()].sort((a, b) => (a.Aspects?.[0] ?? '').localeCompare(b.Aspects?.[0] ?? ''))
+/**
+ * One base to build on per colour, chosen as a generated deck's is (`colourBases`), in aspect order so
+ * deck indices (and the matrix) are reproducible. Each deck is settled on its base after it is built.
+ */
+function basesByAspect(pool: SwuCard[], seed: number): SwuCard[] {
+  return colourBases(pool.filter(c => c.Type === 'Base'), seed)
+    .sort((a, b) => (a.Aspects?.[0] ?? '').localeCompare(b.Aspects?.[0] ?? ''))
 }
 
 /**
@@ -45,14 +44,13 @@ function distinctBases(pool: SwuCard[]): SwuCard[] {
  */
 export function buildMatchupDecks(pool: SwuCard[] = POOL, basesPerLeader = 4, seed = 1): MatchupDeck[] {
   const leaders = pool.filter(c => c.Type === 'Leader').sort((a, b) => Number(a.Number) - Number(b.Number))
-  const allBases = distinctBases(pool)
+  const allBases = basesByAspect(pool, seed)
   const out: MatchupDeck[] = []
   leaders.forEach((leader, i) => {
     /**
-     * A base must not double an aspect the leader already supplies. No card in this set carries a
-     * doubled aspect, so the overlap buys nothing, and a single colour does not yield enough
-     * playables to fill a deck. That takes the full set from 72 to 52: most leaders lose one base,
-     * and the two carrying two colour aspects lose two.
+     * A base must not double an aspect the leader already supplies: a single colour rarely yields
+     * enough playables to fill a deck. In ASH that takes the full set from 72 to 52: most leaders lose
+     * one base, and the two carrying two colour aspects lose two.
      *
      * Kept as a filter with a fallback rather than an assumption, so a leader covering every aspect
      * would still get a deck instead of vanishing from the grid.
@@ -67,7 +65,7 @@ export function buildMatchupDecks(pool: SwuCard[] = POOL, basesPerLeader = 4, se
     for (const base of bases) {
       const baseAspect = base.Aspects?.[0] ?? '?'
       const label = `${leader.Name} (${baseAspect})`
-      const { deck } = generateDeck({ leader, base, pool, seed })
+      const deck = settleBase(generateDeck({ leader, base, pool, seed }).deck, pool, seed)
       out.push({ deck: { ...deck, name: label }, label, leaderName: leader.Name, baseAspect })
     }
   })

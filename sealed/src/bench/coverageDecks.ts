@@ -1,7 +1,8 @@
 import type { SwuCard } from '../data/cards'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { generateDeck } from '../deckgen/generateDeck'
-import { coveredAspects } from '../deckgen/rules'
+import { unpaidAspects } from '../deckgen/rules'
+import { colourBases, settleBase } from '../deckgen/bases'
 
 /**
  * Whole-pool coverage (#408): a set of legal, realistic decks whose union exercises every card in the
@@ -26,26 +27,9 @@ export interface CoverageResult {
   uncovered: string[]
 }
 
-/** One representative base per distinct aspect (bases are mechanically identical, aspect aside). */
-export function distinctBases(pool: SwuCard[]): SwuCard[] {
-  const byAspect = new Map<string, SwuCard>()
-  for (const b of pool.filter(c => c.Type === 'Base')) {
-    const key = (b.Aspects ?? []).join(',')
-    if (!byAspect.has(key)) byAspect.set(key, b)
-  }
-  return [...byAspect.values()]
-}
-
-/** A leader + base whose covered aspects include the card's aspects, or null if none exists. */
-function comboFor(card: SwuCard, leaders: SwuCard[], bases: SwuCard[]): { leader: SwuCard; base: SwuCard } | null {
-  const need = card.Aspects ?? []
-  for (const leader of leaders) {
-    for (const base of bases) {
-      const covered = coveredAspects(leader, base)
-      if (need.every(a => covered.has(a))) return { leader, base }
-    }
-  }
-  return null
+/** Every leader + base that pay each aspect icon on the card, in pool order. */
+function combosFor(card: SwuCard, leaders: SwuCard[], bases: SwuCard[]): { leader: SwuCard; base: SwuCard }[] {
+  return leaders.flatMap(leader => bases.filter(base => unpaidAspects(card, leader, base).length === 0).map(base => ({ leader, base })))
 }
 
 export function buildCoverageDecks(pool: SwuCard[], seed = 1): CoverageResult {
@@ -67,7 +51,8 @@ export function buildCoverageDecks(pool: SwuCard[], seed = 1): CoverageResult {
 
 function coverOneSet(pool: SwuCard[], seed: number): CoverageResult {
   const leaders = pool.filter(c => c.Type === 'Leader')
-  const bases = distinctBases(pool)
+  // One base to build on per colour, chosen as a generated deck's is; each deck is settled on its base after.
+  const bases = colourBases(pool.filter(c => c.Type === 'Base'), seed)
   const deckable = pool.filter(c => c.Type === 'Unit' || c.Type === 'Event' || c.Type === 'Upgrade')
 
   const covered = new Set<string>()
@@ -91,6 +76,7 @@ function coverOneSet(pool: SwuCard[], seed: number): CoverageResult {
     }
     // Fall back to any base if none produced a clean deck (keeps the leader represented).
     if (!best) best = generateDeck({ leader, base: bases[0], pool, seed, prefer }).deck
+    best = settleBase(best, pool, seed)
     decks.push(best)
     mark(best)
   }
@@ -101,14 +87,22 @@ function coverOneSet(pool: SwuCard[], seed: number): CoverageResult {
     const remaining = deckable.filter(c => !covered.has(id(c)) && !unreachable.has(id(c)))
     if (remaining.length === 0) break
     const target = remaining[0]
-    const combo = comboFor(target, leaders, bases)
-    if (!combo) { unreachable.add(id(target)); continue }
+    const combos = combosFor(target, leaders, bases)
+    if (combos.length === 0) { unreachable.add(id(target)); continue }
     const prefer = new Set(remaining.map(id))
     // Force the target in so this deck definitely covers it (Rare / bomb stragglers otherwise get
     // squeezed out by the caps). The rest of the deck still steers toward the other stragglers.
-    const { deck } = generateDeck({ leader: combo.leader, base: combo.base, pool, seed: seed + guard + 1, prefer, require: new Map([[id(target), 1]]) })
-    decks.push(deck)
-    mark(deck)
+    // The first pairing that builds a clean deck wins: a card with a doubled aspect is paid only by a
+    // leader and base of one colour, and the first such pair can be too thin to fill the curve.
+    let best: { deck: ParsedDeck; violations: number } | undefined
+    for (const { leader, base } of combos) {
+      const { deck, report } = generateDeck({ leader, base, pool, seed: seed + guard + 1, prefer, require: new Map([[id(target), 1]]) })
+      if (!best || report.violations.length < best.violations) best = { deck, violations: report.violations.length }
+      if (report.ok) break
+    }
+    const settled = settleBase(best!.deck, pool, seed)
+    decks.push(settled)
+    mark(settled)
   }
 
   const uncovered = deckable.filter(c => !covered.has(id(c))).map(id)
