@@ -38,6 +38,11 @@ function withCache(sets: Record<string, SwuCard[]>) {
   vi.mocked(cachedSetCount).mockImplementation(code => Promise.resolve((sets[code.toUpperCase()] ?? []).length))
 }
 
+/** Let the opponent build from a set of its own, which is a deliberate choice: the two start linked. */
+async function unlinkSets(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByTestId('link-sets-checkbox'))
+}
+
 function validDeckJson(name = 'Vader Aggro') {
   return JSON.stringify({
     metadata: { name },
@@ -179,7 +184,7 @@ describe('DeckSelectScreen', () => {
     const row = within(screen.getByTestId('deck-list')).getByText('Ready Deck').closest('li')!
     await user.click(within(row).getByRole('button', { name: /play/i }))
 
-    expect(onPlay).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(onPlay).toHaveBeenCalledTimes(1))
     expect(onPlay.mock.calls[0][0].id).toBe(saved.id)
     // only one deck saved, so the random opponent pick must be that deck
     expect(onPlay.mock.calls[0][1].id).toBe(saved.id)
@@ -383,6 +388,7 @@ describe('DeckSelectScreen', () => {
       const row = within(screen.getByTestId('deck-list')).getByText('Ready Deck').closest('li')!
       await user.click(within(row).getByRole('button', { name: /play/i }))
 
+      await waitFor(() => expect(onPlay).toHaveBeenCalled())
       expect(onPlay.mock.calls[0][1].id).toBe(saved.id)
     })
 
@@ -418,13 +424,14 @@ describe('DeckSelectScreen', () => {
       withPool()
       const user = userEvent.setup()
       const onPlay = vi.fn()
-      const mine = saveDeck({ name: 'Mine', leader: 'SOR_010', base: 'SOR_029', cards: [] })
+      const mine = saveDeck({ name: 'Mine', leader: 'HMW_001', base: 'HMW_019', cards: [] })
       render(<DeckSelectScreen onPlay={onPlay} />)
 
       await user.selectOptions(await screen.findByTestId('opponent-deck-select'), 'generated')
       const row = within(screen.getByTestId('deck-list')).getByText('Mine').closest('li')!
       await user.click(within(row).getByRole('button', { name: /play/i }))
 
+      await waitFor(() => expect(onPlay).toHaveBeenCalled())
       expect(onPlay.mock.calls[0][0].id).toBe(mine.id)
       expect(onPlay.mock.calls[0][1].id).toBe('generated')
       expect(onPlay.mock.calls[0][1].cards.length).toBeGreaterThan(0)
@@ -467,7 +474,7 @@ describe('DeckSelectScreen', () => {
         withPool()
         const user = userEvent.setup()
         const onPlay = vi.fn()
-        saveDeck({ name: 'Mine', leader: 'SOR_010', base: 'SOR_029', cards: [] })
+        saveDeck({ name: 'Mine', leader: 'HMW_001', base: 'HMW_019', cards: [] })
         render(<DeckSelectScreen onPlay={onPlay} />)
         const panel = await screen.findByTestId('opponent-generation-panel')
 
@@ -476,6 +483,7 @@ describe('DeckSelectScreen', () => {
         const row = within(screen.getByTestId('deck-list')).getByText('Mine').closest('li')!
         await user.click(within(row).getByRole('button', { name: /play/i }))
 
+        await waitFor(() => expect(onPlay).toHaveBeenCalled())
         const opponent = onPlay.mock.calls[0][1]
         expect(opponent.id).toBe('generated')
         expect(opponent.leader).toBe(mazKanataId)
@@ -499,8 +507,8 @@ describe('DeckSelectScreen', () => {
   })
 
   /**
-   * Which pool each generator builds from. The two are chosen independently, so "an HMW deck against
-   * an ASH opponent" is something you can ask for, and both start on the newest set rather than on
+   * Which pool each generator builds from. Once unlinked the two are chosen independently, so "an HMW
+   * deck against an ASH opponent" is something you can ask for, and both start on the newest set rather than on
    * whichever set happens to have the most cards cached.
    */
   describe('choosing the set each generator builds from', () => {
@@ -524,10 +532,11 @@ describe('DeckSelectScreen', () => {
       expect(screen.getByTestId('opponent-pool-summary')).toHaveTextContent('Caching HMW')
     })
 
-    it('picks the player and opponent sets independently, each line naming its own set', async () => {
+    it('picks the player and opponent sets independently once unlinked, each line naming its own set', async () => {
       withCache(SETS)
       const user = userEvent.setup()
       render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await unlinkSets(user)
       await user.selectOptions(await screen.findByTestId('player-set-select'), 'ASH')
 
       expect((screen.getByTestId('player-set-select') as HTMLSelectElement).value).toBe('ASH')
@@ -538,16 +547,18 @@ describe('DeckSelectScreen', () => {
         .toHaveTextContent(`Built from HMW (${SETS.HMW.length} cards cached)`)
     })
 
-    it('builds each side from its own set at play time', async () => {
+    it('builds each side from its own set at play time once unlinked', async () => {
       withCache(SETS)
       const user = userEvent.setup()
       const onPlay = vi.fn()
       render(<DeckSelectScreen onPlay={onPlay} />)
+      await unlinkSets(user)
       await user.selectOptions(await screen.findByTestId('opponent-set-select'), 'ASH')
       await waitFor(() => expect(screen.getByTestId('opponent-pool-summary')).toHaveTextContent('Built from ASH'))
 
       await user.click(screen.getByTestId('generate-deck-button'))
       await user.click(screen.getByTestId('play-generated-button'))
+      await waitFor(() => expect(onPlay).toHaveBeenCalled())
 
       const [mine, theirs] = onPlay.mock.calls[0]
       const ids = (deck: { cards: { id: string }[] }) => deck.cards.map(c => c.id)
@@ -564,6 +575,7 @@ describe('DeckSelectScreen', () => {
       withCache(SETS)
       const user = userEvent.setup()
       render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await unlinkSets(user)
       await user.selectOptions(await screen.findByTestId('opponent-set-select'), 'LOF')
 
       expect(importSet).toHaveBeenCalledWith('LOF', expect.anything())
@@ -577,6 +589,7 @@ describe('DeckSelectScreen', () => {
       vi.mocked(importSet).mockImplementationOnce(() => new Promise(() => { /* still caching */ }))
       const user = userEvent.setup()
       render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await unlinkSets(user)
       await user.selectOptions(await screen.findByTestId('opponent-set-select'), 'LOF')
 
       expect(screen.getByTestId('opponent-pool-summary')).toHaveTextContent('Caching LOF…')
@@ -609,6 +622,7 @@ describe('DeckSelectScreen', () => {
       await user.selectOptions(leaderSelect, 'HMW_002')
       expect(leaderSelect.value).toBe('HMW_002')
 
+      await unlinkSets(user)
       await user.selectOptions(within(panel).getByTestId('opponent-set-select'), 'ASH')
 
       await waitFor(() => expect(leaderSelect.value).toBe(''))
@@ -660,6 +674,168 @@ describe('DeckSelectScreen', () => {
   })
 
   /**
+   * A generated opponent plays from the same set as you unless you say otherwise: a sealed game is two
+   * decks from one set, so a different set for the opponent is a choice, never an accident.
+   */
+  describe('linking the opponent\'s set to yours', () => {
+    const ahsoka = 'ASH_009'
+
+    it('starts linked, with the opponent\'s set showing yours and not separately choosable', async () => {
+      withCache(SETS)
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      const link = await screen.findByTestId('link-sets-checkbox') as HTMLInputElement
+      expect(link.checked).toBe(true)
+      const opponent = screen.getByTestId('opponent-set-select') as HTMLSelectElement
+      expect(opponent.value).toBe('HMW')
+      expect(opponent).toBeDisabled()
+    })
+
+    it('follows the player\'s set when it changes', async () => {
+      withCache(SETS)
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await user.selectOptions(await screen.findByTestId('player-set-select'), 'ASH')
+
+      expect((screen.getByTestId('opponent-set-select') as HTMLSelectElement).value).toBe('ASH')
+      await waitFor(() => expect(screen.getByTestId('opponent-pool-summary')).toHaveTextContent('Built from ASH'))
+    })
+
+    it('builds a generated opponent from the set of the generated deck you play', async () => {
+      withCache(SETS)
+      const user = userEvent.setup()
+      const onPlay = vi.fn()
+      render(<DeckSelectScreen onPlay={onPlay} />)
+      await user.selectOptions(await screen.findByTestId('player-set-select'), 'ASH')
+      await waitFor(() => expect(screen.getByTestId('generated-deck-subtitle')).toHaveTextContent('Built from ASH'))
+
+      await user.click(screen.getByTestId('generate-deck-button'))
+      await user.click(screen.getByTestId('play-generated-button'))
+
+      await waitFor(() => expect(onPlay).toHaveBeenCalled())
+      expect(onPlay.mock.calls[0][1].id).toBe('generated')
+      expect(onPlay.mock.calls[0][1].leader).toMatch(/^ASH_/)
+    })
+
+    /**
+     * An imported deck carries no set of its own, so its leader's set stands in for it. A deck mixing
+     * sets is matched to its leader's only, which is the limitation this accepts.
+     */
+    it('builds a generated opponent from an imported deck\'s leader\'s set', async () => {
+      withCache(SETS)
+      const user = userEvent.setup()
+      const onPlay = vi.fn()
+      saveDeck({ name: 'Ahsoka', leader: ahsoka, base: 'ASH_023', cards: [] })
+      render(<DeckSelectScreen onPlay={onPlay} />)
+      await waitFor(() => expect(screen.getByTestId('opponent-pool-summary')).toHaveTextContent('Built from HMW'))
+
+      const row = within(screen.getByTestId('deck-list')).getByText('Ahsoka').closest('li')!
+      await user.click(within(row).getByRole('button', { name: /play/i }))
+
+      await waitFor(() => expect(onPlay).toHaveBeenCalled())
+      expect(onPlay.mock.calls[0][1].id).toBe('generated')
+      expect(onPlay.mock.calls[0][1].leader).toMatch(/^ASH_/)
+    })
+
+    it('caches an imported deck\'s set before building its opponent', async () => {
+      withCache(SETS)
+      const user = userEvent.setup()
+      const onPlay = vi.fn()
+      saveDeck({ name: 'Vader', leader: 'SOR_010', base: 'SOR_029', cards: [] })
+      render(<DeckSelectScreen onPlay={onPlay} />)
+      await waitFor(() => expect(screen.getByTestId('opponent-pool-summary')).toHaveTextContent('Built from HMW'))
+      // SOR arrives in the cache once its fetch has run, as it would for real.
+      vi.mocked(importSet).mockImplementationOnce(async () => {
+        withCache({ ...SETS, SOR: SETS.ASH.map(c => ({ ...c, Set: 'SOR' })) })
+        return { cached: 264, total: 264 }
+      })
+
+      const row = within(screen.getByTestId('deck-list')).getByText('Vader').closest('li')!
+      await user.click(within(row).getByRole('button', { name: /play/i }))
+
+      await waitFor(() => expect(onPlay).toHaveBeenCalled())
+      expect(importSet).toHaveBeenCalledWith('SOR', expect.anything())
+      expect(onPlay.mock.calls[0][1].leader).toMatch(/^SOR_/)
+    })
+
+    it('builds an imported deck\'s opponent from the opponent\'s own set once unlinked', async () => {
+      withCache(SETS)
+      const user = userEvent.setup()
+      const onPlay = vi.fn()
+      saveDeck({ name: 'Ahsoka', leader: ahsoka, base: 'ASH_023', cards: [] })
+      render(<DeckSelectScreen onPlay={onPlay} />)
+      await unlinkSets(user)
+      await waitFor(() => expect(screen.getByTestId('opponent-pool-summary')).toHaveTextContent('Built from HMW'))
+
+      const row = within(screen.getByTestId('deck-list')).getByText('Ahsoka').closest('li')!
+      await user.click(within(row).getByRole('button', { name: /play/i }))
+
+      await waitFor(() => expect(onPlay).toHaveBeenCalled())
+      expect(onPlay.mock.calls[0][1].leader).toMatch(/^HMW_/)
+    })
+
+    /** Unlinking starts from the set you are on, so the choice is made from there rather than from a stale one. */
+    it('starts an unlinked opponent on the player\'s current set', async () => {
+      withCache(SETS)
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await user.selectOptions(await screen.findByTestId('player-set-select'), 'ASH')
+      await unlinkSets(user)
+
+      const opponent = screen.getByTestId('opponent-set-select') as HTMLSelectElement
+      expect(opponent).toBeEnabled()
+      expect(opponent.value).toBe('ASH')
+    })
+  })
+
+  /** The screen comes back as it was left, across a game and across a reload. */
+  describe('remembering the setup', () => {
+    it('restores the sets, the link and the opponent choices', async () => {
+      withCache(SETS)
+      const user = userEvent.setup()
+      const first = render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await unlinkSets(user)
+      await user.selectOptions(screen.getByTestId('player-set-select'), 'ASH')
+      await waitFor(() => expect(within(screen.getByTestId('opponent-leader-select')).getAllByRole('option').length).toBe(19))
+      await user.selectOptions(screen.getByTestId('opponent-leader-select'), 'HMW_002')
+      await user.selectOptions(screen.getByTestId('opponent-aspect-select'), 'Cunning')
+      first.unmount()
+
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      expect((screen.getByTestId('link-sets-checkbox') as HTMLInputElement).checked).toBe(false)
+      expect((screen.getByTestId('player-set-select') as HTMLSelectElement).value).toBe('ASH')
+      expect((screen.getByTestId('opponent-set-select') as HTMLSelectElement).value).toBe('HMW')
+      await waitFor(() => expect((screen.getByTestId('opponent-leader-select') as HTMLSelectElement).value).toBe('HMW_002'))
+      expect((screen.getByTestId('opponent-aspect-select') as HTMLSelectElement).value).toBe('Cunning')
+    })
+
+    it('restores a chosen opponent deck', async () => {
+      const user = userEvent.setup()
+      const theirs = saveDeck({ name: 'Theirs', leader: 'SOR_011', base: 'SOR_029', cards: [] })
+      const first = render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await user.selectOptions(screen.getByTestId('opponent-deck-select'), theirs.id)
+      first.unmount()
+
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      expect((screen.getByTestId('opponent-deck-select') as HTMLSelectElement).value).toBe(theirs.id)
+    })
+
+    /** A deck removed since is not a choice: the default stands in, and plays as the default. */
+    it('falls back to a random generated opponent when the remembered deck is gone', async () => {
+      const user = userEvent.setup()
+      const theirs = saveDeck({ name: 'Theirs', leader: 'SOR_011', base: 'SOR_029', cards: [] })
+      saveDeck({ name: 'Mine', leader: 'SOR_010', base: 'SOR_029', cards: [] })
+      const first = render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await user.selectOptions(screen.getByTestId('opponent-deck-select'), theirs.id)
+      const row = within(screen.getByTestId('deck-list')).getByText('Theirs').closest('li')!
+      await user.click(within(row).getByRole('button', { name: /remove|delete/i }))
+      first.unmount()
+
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      expect((screen.getByTestId('opponent-deck-select') as HTMLSelectElement).value).toBe('generated')
+    })
+  })
+
+  /**
    * Caching follows what is on the screen. There is no set-code box: each generator caches the set
    * it is pointed at, and each deck list caches the cards it names, so a completely cold cache
    * reaches a playable deck with nothing asked of the player.
@@ -688,10 +864,21 @@ describe('DeckSelectScreen', () => {
       render(<DeckSelectScreen onPlay={vi.fn()} />)
       await waitFor(() => expect(importSet).toHaveBeenCalledWith('HMW', expect.anything()))
 
+      await unlinkSets(user)
       await user.selectOptions(screen.getByTestId('opponent-set-select'), 'ASH')
 
       await waitFor(() => expect(importSet).toHaveBeenCalledWith('ASH', expect.anything()))
       expect(vi.mocked(importSet).mock.calls.map(c => c[0])).toEqual(['HMW', 'ASH'])
+    })
+
+    /**
+     * A deck's cards are cached one by one as its list is viewed, so a set can hold a handful of cards
+     * without ever having been imported. That is not a cached set: the generator cannot build from it.
+     */
+    it('fetches a set that holds only a few of its cards', async () => {
+      withCache({ HMW: SETS.HMW.slice(0, 4) })
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await waitFor(() => expect(importSet).toHaveBeenCalledWith('HMW', expect.anything()))
     })
 
     it('fetches nothing when the set both generators are on is already cached', async () => {

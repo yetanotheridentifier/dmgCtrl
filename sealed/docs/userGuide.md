@@ -18,7 +18,7 @@ Alongside the deck selection, an **Implemented cards** panel lists which card ab
 
 Caching follows the decks: there is nothing to fetch by hand.
 
-A generator needs a whole set to build from, so each **Set** picker caches the set it names, the first time it names it. That happens when you open the deck screen as well as when you change the picker, so a device with an empty cache fetches the set the generators start on and goes straight to a playable deck. Fetching a set stores every card in it, which also covers the handful of base cards whose individual lookups are unreliable upstream.
+A generator needs a whole set to build from, so each **Set** picker caches the set it names until every printed card of it is here. A set holding only the few cards your decks named, or one whose download was interrupted, is fetched in full. That happens when you open the deck screen as well as when you change the picker, so a device with an empty cache fetches the set the generators start on and goes straight to a playable deck. Fetching a set stores every card in it, which also covers the handful of base cards whose individual lookups are unreliable upstream.
 
 Each generator panel reports its own fetch on its summary line: **Caching HMW…** with a running count while it downloads, the number of cards once it lands, and the reason if it fails. Both generators starting on the same set is one download, not two.
 
@@ -30,13 +30,15 @@ The deck screen has three columns: **your deck** on the left, **the opponent** i
 
 The **Opponent** selector controls which deck the AI plays:
 
-- **Random generated deck** (the default): a fresh deck built from the opponent's chosen set for every game. Until that set holds enough cards to fill a whole deck, a random built deck is used instead, and **Generate** says the set cannot fill a deck.
+- **Random generated deck** (the default): a fresh deck built for every game, from the set of the deck you play unless you choose another (see below). Until that set holds enough cards to fill a whole deck, a random built deck is used instead, and **Generate** says the set cannot fill a deck.
 - **Random built deck**: one of your imported decks at random (it may pick the same deck you're playing).
 - **A specific deck**: choose any imported deck by name.
 
-Each generator has its own **Set** picker: one in the **Random generated deck** panel for the deck you play, one in the **Generated opponent** panel for the deck the AI plays. Both start on the newest set, and the two are chosen independently, so you can play a deck from one set against an opponent from another. Each panel names the set it builds from and how many of its cards are cached, and caches that set itself if it isn't cached yet (see **Caching a full set** above). A deck is built from a single set, so the two pools are never mixed.
+Each generator has its own **Set** picker: one in the **Random generated deck** panel for the deck you play, one in the **Generated opponent** panel for the deck the AI plays. Both start on the newest set. **Same set as my deck** (on by default) builds the generated opponent from the set of whichever deck you play: your generated deck's set, or for an imported deck the set of its leader (a deck mixing sets is matched to its leader's set only). An imported deck's set is cached first if it isn't already, so the game can take a moment to start. Untick it to choose the opponent's set yourself and play a deck from one set against an opponent from another. Each panel names the set it builds from and how many of its cards are cached, and caches that set itself if it isn't cached yet (see **Caching a full set** above). A deck is built from a single set, so the two pools are never mixed.
 
 Below the opponent's set, **Generated opponent** chooses the **leader** and **base aspect** the generated deck is built around, and either can stay **random**. Both come from the opponent's chosen set, so switching sets drops a leader that the new set doesn't print (switch back and it returns). A random pick never pairs a leader with a base of an aspect the leader already has, since no card in the set rewards doubling an aspect; choose both yourself to get that pairing anyway. It only applies while the opponent is a random generated deck, and it's the way to watch how the AI plays a particular leader.
+
+The screen remembers your choices on this device: both sets, **Same set as my deck**, the opponent, and the generated opponent's leader and base aspect come back as you left them, after a game or a reload. A remembered deck you have since removed falls back to **Random generated deck**. Generated decks themselves are never kept.
 
 The current AI opponent plays **random legal moves**. It exists to exercise the full rules engine; smarter opponents are on the roadmap.
 

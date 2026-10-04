@@ -13,7 +13,9 @@ import { cardRefFromId } from '../utils/parseProtectThePod'
 import type { ParseDeckError, ParsedDeck } from '../utils/parseProtectThePod'
 import { syncCatalogue } from '../data/catalogueSync'
 import type { CardRef } from '../data/catalogueSync'
-import { TOTAL_PROGRESS, SET_PROGRESS, CARD_TYPES, sumCounts } from '../data/implementedCards'
+import { loadSetup, saveSetup } from '../data/setupStore'
+import type { Setup } from '../data/setupStore'
+import { TOTAL_PROGRESS, SET_PROGRESS, CARD_TYPES, sumCounts, printedCardCount } from '../data/implementedCards'
 import type { SetProgress, SetGroup, TypeCounts } from '../data/implementedCards'
 
 interface Props {
@@ -83,12 +85,6 @@ interface Pool {
 const SET_CODES = SET_PROGRESS.map(s => s.code)
 
 /**
- * Where both generators start. The newest set is the one a player is most likely to want, and a
- * sealed deck comes from a single set, so each side picks one rather than mixing.
- */
-const DEFAULT_SET = SET_CODES[0]
-
-/**
  * The pool one generator builds from, or `null` while its set has nothing cached.
  *
  * Reads the local cache only: fetching is `ensureSet`'s job, so this stays a pure read and cannot
@@ -124,19 +120,21 @@ const SELECT_CLASS = 'w-full bg-transparent border-2 border-accent rounded-xl px
 
 /**
  * One generator's set picker. Each side has its own, so a deck from one set can be played against an
- * opponent from another, and pointing a side at a set that is not cached yet is what caches it.
+ * opponent from another once the player unlinks them, and pointing a side at a set that is not cached
+ * yet is what caches it.
  *
  * `layout` has no default so that every call site states the shape it wants rather than inheriting
  * one: `inline` sets the label beside the control, for a picker sharing a row with buttons, where a
  * stacked label centres the pair as one unit and leaves the control alone below the buttons' line;
  * `stacked` sets it above, which is how a column of selects reads.
  */
-function SetSelect({ testId, value, onChange, layout, className = '' }: {
+function SetSelect({ testId, value, onChange, layout, className = '', disabled = false }: {
   testId: string
   value: string
   onChange: (code: string) => void
   layout: 'inline' | 'stacked'
   className?: string
+  disabled?: boolean
 }) {
   const inline = layout === 'inline'
   return (
@@ -146,6 +144,7 @@ function SetSelect({ testId, value, onChange, layout, className = '' }: {
         data-testid={testId}
         value={value}
         onChange={e => onChange(e.target.value)}
+        disabled={disabled}
         className={`${inline ? 'flex-1 min-w-0' : 'mt-1'} ${SELECT_CLASS}`}
       >
         {SET_CODES.map(code => <option key={code} value={code}>{code}</option>)}
@@ -307,23 +306,31 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   const { decks, importDeck, removeDeck } = useDecks()
   const [importText, setImportText] = useState('')
   const [importError, setImportError] = useState<ParseDeckError | null>(null)
-  const [opponentChoice, setOpponentChoice] = useState<string>(GENERATED_DECK_ID)
-  // What a generated opponent is built around. The empty string is "random".
-  const [opponentLeader, setOpponentLeader] = useState('')
-  const [opponentAspect, setOpponentAspect] = useState('')
-  // Each generator has its own set, so the deck you play and the deck you play against need not come
-  // from the same pool.
-  const [playerSet, setPlayerSet] = useState(DEFAULT_SET)
-  const [opponentSet, setOpponentSet] = useState(DEFAULT_SET)
+  // The choices as the player last left them. Saved on each change rather than on every render, so
+  // opening the screen writes nothing.
+  const [setup, setSetup] = useState(loadSetup)
+  const update = (patch: Partial<Setup>) => {
+    const next = { ...setup, ...patch }
+    setSetup(next)
+    saveSetup(next)
+  }
+  const { playerSet, linkSets, opponentLeader, opponentAspect } = setup
+  // Linked, a generated opponent builds from the player's set: different sets are a choice, not a default.
+  const opponentSet = linkSets ? playerSet : setup.opponentSet
+  // A remembered deck deleted since is not a choice, so the default stands in for it.
+  const opponentChoice = [GENERATED_DECK_ID, 'random'].includes(setup.opponentChoice) || decks.some(d => d.id === setup.opponentChoice)
+    ? setup.opponentChoice
+    : GENERATED_DECK_ID
   // Bumped when a fetch finishes, which is what makes both pools re-read the cache.
   const [cacheVersion, setCacheVersion] = useState(0)
   // How each set asked for is getting on, keyed by set code: the line a panel with no pool shows.
   // A map rather than one "currently caching" code, because the two generators can be on different
   // sets and both be waiting.
   const [fetchStatus, setFetchStatus] = useState<Record<string, string>>({})
-  // Set codes already asked for. The guard is synchronous and in a ref, so the two generators
-  // starting on the same set produce one fetch rather than two, and a re-render produces none.
-  const requestedSets = useRef(new Set<string>())
+  // Each set's fetch, once asked for. The guard is synchronous and in a ref, so the two generators
+  // starting on the same set produce one fetch rather than two, and a re-render produces none. The
+  // promise is kept so playing a deck from a set still caching can wait for it.
+  const requestedSets = useRef(new Map<string, Promise<void>>())
   // Deck ids whose cards have been handed to the catalogue sync, so a list is walked once.
   const syncedDecks = useRef(new Set<string>())
   // A fetch outlives the screen: the network does not care that the player started a game. Reporting
@@ -380,47 +387,66 @@ export default function DeckSelectScreen({ onPlay }: Props) {
     }
   }
 
-  function handlePlay(deck: SavedDeck) {
+  /**
+   * Start a game, building a generated opponent first if one is wanted.
+   *
+   * Linked, the opponent builds from the set of the deck being played, read from its leader, since an
+   * imported deck names no set of its own: a deck mixing sets is matched to its leader's only. That set
+   * may not be the one on screen, so it is cached and read here, which is why this can wait.
+   */
+  async function handlePlay(deck: SavedDeck) {
     const choice = { leaderId: leaderChoice || undefined, baseAspect: aspectChoice || undefined }
-    onPlay(deck, pickOpponent(decks, opponentChoice, deck, () => buildGenerated(opponentPool, choice)?.deck ?? null))
+    const leaderSet = cardRefFromId(deck.leader)?.set.toUpperCase()
+    const set = linkSets && leaderSet && SET_CODES.includes(leaderSet) ? leaderSet : opponentSet
+    let from = opponentPool?.set === set ? opponentPool : null
+    if (opponentChoice === GENERATED_DECK_ID && !from) {
+      await ensureSet(set)
+      const cards = await cachedSetCards(set)
+      from = cards.length > 0 ? { set, cards } : null
+    }
+    onPlay(deck, pickOpponent(decks, opponentChoice, deck, () => buildGenerated(from, choice)?.deck ?? null))
   }
 
   /**
-   * Cache a set the screen needs, at most once per set.
+   * Cache a set the screen needs, at most once per set, resolving once it is cached or has failed.
    *
-   * The ref is claimed before the first `await`, so two generators asking for the same set in one
-   * render produce a single fetch. A failure releases the claim, so switching away and back retries
-   * rather than leaving the set permanently unfetchable.
+   * The ref is claimed synchronously, so two generators asking for the same set in one render produce
+   * a single fetch and a second caller waits on the first. A failure releases the claim, so switching
+   * away and back retries rather than leaving the set permanently unfetchable.
    */
-  const ensureSet = useCallback(async (code: string) => {
+  const ensureSet = useCallback((code: string): Promise<void> => {
     const set = code.toUpperCase()
-    if (requestedSets.current.has(set)) return
-    requestedSets.current.add(set)
-    // Any card of the set counts as cached, so a fetch interrupted half way is not resumed on the
-    // next visit. That predates caching on open and is left as it was: the generator reports the
-    // short pool it builds from, and nothing re-downloads a set that is already whole.
-    if (await cachedSetCount(set) > 0) return
+    const pending = requestedSets.current.get(set)
+    if (pending) return pending
+    const fetching = (async () => {
+      // Cached means every printed card is here. A deck list caches its own cards one at a time, so a
+      // set can hold a handful without ever having been imported, and an interrupted import leaves it
+      // short too: both fetch the whole set. A set the manifest does not list counts once it has any.
+      if (await cachedSetCount(set) >= (printedCardCount(set) ?? 1)) return
 
-    const report = (line: string) => {
-      if (mounted.current) setFetchStatus(s => ({ ...s, [set]: line }))
-    }
-    report(`Caching ${set}…`)
-    try {
-      const result = await importSet(set, {
-        onProgress: (done, total) => report(`Caching ${set}… ${done}/${total}`),
-      })
-      report(`${result.cached} cards cached for ${set}`)
-    } catch (err) {
-      report(err instanceof Error ? err.message : String(err))
-      requestedSets.current.delete(set)
-    } finally {
-      // Whatever the cache now holds, both pools re-read it and the last Generate's verdict on the
-      // old one is stale.
-      if (mounted.current) {
-        setCacheVersion(v => v + 1)
-        setCannotBuild(false)
+      const report = (line: string) => {
+        if (mounted.current) setFetchStatus(s => ({ ...s, [set]: line }))
       }
-    }
+      report(`Caching ${set}…`)
+      try {
+        const result = await importSet(set, {
+          onProgress: (done, total) => report(`Caching ${set}… ${done}/${total}`),
+        })
+        report(`${result.cached} cards cached for ${set}`)
+      } catch (err) {
+        report(err instanceof Error ? err.message : String(err))
+        requestedSets.current.delete(set)
+      } finally {
+        // Whatever the cache now holds, both pools re-read it and the last Generate's verdict on the
+        // old one is stale.
+        if (mounted.current) {
+          setCacheVersion(v => v + 1)
+          setCannotBuild(false)
+        }
+      }
+    })()
+    requestedSets.current.set(set, fetching)
+    return fetching
   }, [])
 
   /**
@@ -491,7 +517,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
               // not explain.
               setGenerated(null)
               setCannotBuild(false)
-              setPlayerSet(code)
+              update({ playerSet: code })
             }}
             className="w-32 shrink-0"
           />
@@ -505,7 +531,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
           </button>
           <button
             data-testid="play-generated-button"
-            onClick={() => generated && handlePlay(generated.deck)}
+            onClick={() => { if (generated) void handlePlay(generated.deck) }}
             disabled={generated === null}
             className="px-4 py-1.5 text-sm border-2 border-ink text-ink rounded-xl shadow-[0_0_12px_rgba(255,255,255,0.2)] hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -558,7 +584,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
                 </span>
               </div>
               <button
-                onClick={() => handlePlay(deck)}
+                onClick={() => void handlePlay(deck)}
                 className="px-4 py-1.5 text-sm border-2 border-ink text-ink rounded-xl shadow-[0_0_12px_rgba(255,255,255,0.2)] hover:bg-white/10"
               >
                 Play
@@ -614,7 +640,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
             id="opponent-deck-select"
             data-testid="opponent-deck-select"
             value={opponentChoice}
-            onChange={e => setOpponentChoice(e.target.value)}
+            onChange={e => update({ opponentChoice: e.target.value })}
             className={`mt-4 ${SELECT_CLASS}`}
           >
             {/* A freshly generated deck each game, so it is not the same opponent twice. The default,
@@ -638,11 +664,25 @@ export default function DeckSelectScreen({ onPlay }: Props) {
           className="mt-4 border-2 border-line/60 rounded-xl bg-surface px-4 py-3"
         >
           <legend className="px-1 text-accent text-xs uppercase tracking-[0.12em] font-light">Generated opponent</legend>
+          {/* Unlinking starts the opponent on the set the player is on, so the different set is chosen
+              from there rather than from whatever was last stored. */}
+          <label className="flex items-center gap-2 text-xs text-ink-dim">
+            <input
+              data-testid="link-sets-checkbox"
+              type="checkbox"
+              checked={linkSets}
+              onChange={e => update(e.target.checked ? { linkSets: true } : { linkSets: false, opponentSet: playerSet })}
+              className="h-4 w-4 accent-[var(--color-accent)]"
+            />
+            Same set as my deck
+          </label>
           <SetSelect
             testId="opponent-set-select"
             layout="stacked"
             value={opponentSet}
-            onChange={setOpponentSet}
+            onChange={code => update({ opponentSet: code })}
+            disabled={linkSets}
+            className="mt-2"
           />
           <p data-testid="opponent-pool-summary" className="mt-1 text-xs text-ink-faint">
             {poolSummary(opponentSet, opponentPool, fetchStatus[opponentSet])}
@@ -652,7 +692,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
             <select
               data-testid="opponent-leader-select"
               value={leaderChoice}
-              onChange={e => setOpponentLeader(e.target.value)}
+              onChange={e => update({ opponentLeader: e.target.value })}
               className={`mt-1 ${SELECT_CLASS}`}
             >
               <option value="">Random leader</option>
@@ -666,7 +706,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
             <select
               data-testid="opponent-aspect-select"
               value={aspectChoice}
-              onChange={e => setOpponentAspect(e.target.value)}
+              onChange={e => update({ opponentAspect: e.target.value })}
               className={`mt-1 ${SELECT_CLASS}`}
             >
               <option value="">Random base aspect</option>

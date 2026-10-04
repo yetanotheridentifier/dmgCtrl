@@ -422,6 +422,7 @@ The board is drawn with art-dominant cards, not text rows:
 |---|---|---|
 | localStorage `sealed_decks` | Imported decks | Tiny, synchronous |
 | localStorage `sealed_settings` | User settings | Tiny, synchronous; per device and browser |
+| localStorage `sealed_setup` ← `setupStore.ts` | The deck screen's last choices: sets, the set link, the opponent and its leader and base aspect | Validated per field on load, written only on a change; a deck or leader that no longer exists is resolved by the screen |
 | IndexedDB `cards` ← `setImport.ts` | Whole sets via one SWUDB search call (`?q=set:XXX`), each row passed through `fromSearchRow` first because the search wraps aspects and traits as `{ S: value }` | Full catalogue offline; includes bases the detail endpoint 502s on |
 | IndexedDB `cards` (Dexie v1) | Card JSON + thumbnail bytes | ~KBs per card; queryable; offline |
 | IndexedDB `games` (Dexie v2) | Completed game records | Replayable substrate for E7 training |
