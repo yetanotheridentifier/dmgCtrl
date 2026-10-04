@@ -1,12 +1,15 @@
 import type { SwuCard } from '../data/cards'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
+import { minimumDeckSize } from '../utils/parseProtectThePod'
+import { alternativeAspects } from '../engine/cardDb'
 
 /**
  * The deck-construction rules for the coverage/representative deck generator (#408), encoded as a
  * checkable report. Two kinds of rule:
  *
- * - **Legality** (hard): exactly 30 cards, at most 3 copies of a card, and every card covered by the
- *   leader + base aspects so nothing takes an aspect penalty.
+ * - **Legality** (hard): exactly the base's deck size (30 unless the base changes it), at most 3
+ *   copies of a card, and every aspect icon on every card paid by the leader + base so nothing takes
+ *   an aspect penalty.
  * - **Realism shape** (targets): a sane curve, type caps, a pack-like rarity mix, and (for a leader
  *   with an alignment) 40-50% of the deck carrying that alignment. These make decks playable rather
  *   than random piles.
@@ -82,9 +85,84 @@ export function isAlignment(aspect: string): boolean {
   return ALIGNMENTS.includes(aspect)
 }
 
-/** Aspects a leader + base cover; a card is penalty-free iff its aspects are a subset of this. */
-export function coveredAspects(leader: SwuCard, base: SwuCard): Set<string> {
-  return new Set([...(leader.Aspects ?? []), ...(base.Aspects ?? [])])
+/**
+ * The aspects a card would take a penalty for: each icon on it needs one icon from the leader or the
+ * base, so a card showing two Command needs two between them. Empty when the card is penalty-free.
+ *
+ * A card with another way to be played (Smuggle, Piloting) is penalty-free when any one of its ways
+ * is paid, since that way can be played without the penalty. When none is, the printed aspects are
+ * the ones named.
+ */
+export function unpaidAspects(card: SwuCard, leader: SwuCard, base: SwuCard): string[] {
+  const unpaidFor = (aspects: string[]): string[] => {
+    const supply = new Map<string, number>()
+    for (const a of [...(leader.Aspects ?? []), ...(base.Aspects ?? [])]) supply.set(a, (supply.get(a) ?? 0) + 1)
+    const unpaid: string[] = []
+    for (const a of aspects) {
+      const left = supply.get(a) ?? 0
+      if (left > 0) supply.set(a, left - 1)
+      else if (!unpaid.includes(a)) unpaid.push(a)
+    }
+    return unpaid
+  }
+  const printed = unpaidFor(card.Aspects ?? [])
+  if (printed.length === 0) return printed
+  return alternativeAspects(card).some(aspects => unpaidFor(aspects).length === 0) ? [] : printed
+}
+
+/** Chance that a generated deck is built on a rare base, where its set prints any: a rare a pool has to open. */
+export const RARE_BASE_CHANCE = 1 / 25
+
+/** A base from a pack's rare slot rather than its common one: Rare, Legendary or Special. */
+export function isRareBase(base: SwuCard): boolean {
+  return (base.Rarity ?? 'Common') !== 'Common'
+}
+
+type Range = { min: number; max: number }
+
+/** The shape rules for one deck, sized to its base. */
+export interface DeckShape {
+  size: number
+  cheapUnits: Range
+  bombUnits: Range
+  maxEvents: number
+  maxUpgrades: number
+  rarity: Record<string, Range>
+  /** Scale a count tuned for {@link DECK_SIZE} to this deck's size. */
+  scale: (n: number) => number
+}
+
+/**
+ * The rules above are tuned for a 30-card deck, so a base that changes the size scales them with it:
+ * a 40-card Data Vault deck has room for more cheap units and more rares, and a 25-card Thermal
+ * Oscillator deck less. A scaled range rounds outward (minimum down, maximum up), since a pool that
+ * fills a 30-card shape exactly need not fill a scaled one to the card. A rare base also took a rare
+ * slot in the pool, so it leaves one rare fewer for the deck.
+ *
+ * A base repeating the leader's colour makes a one-colour deck, which draws its big units from one
+ * colour's pool, and one colour may not print two it can play (SOR's Aggression and Cunning print one
+ * each). It needs one fewer. A random deck never repeats the colour, so this only reaches a pairing
+ * chosen for its doubled cards.
+ */
+export function deckShape(base: SwuCard, leader: SwuCard): DeckShape {
+  const size = minimumDeckSize(`${base.Set}_${base.Number}`)
+  const ratio = size / DECK_SIZE
+  const scale = (n: number) => Math.round(n * ratio)
+  const range = (r: Range): Range => ({ min: Math.floor(r.min * ratio), max: Math.ceil(r.max * ratio) })
+  const rarity: Record<string, Range> = Object.fromEntries(Object.entries(RARITY_MIX).map(([name, r]) => [name, range(r)]))
+  if (isRareBase(base)) rarity.Rare = { ...rarity.Rare, max: Math.max(0, rarity.Rare.max - 1) }
+  const bombUnits = range(BOMB_UNITS)
+  const oneColour = (base.Aspects ?? []).some(a => (leader.Aspects ?? []).includes(a))
+  if (oneColour) bombUnits.min = Math.max(1, bombUnits.min - 1)
+  return {
+    size,
+    cheapUnits: range(CHEAP_UNITS),
+    bombUnits,
+    maxEvents: Math.ceil(MAX_EVENTS * ratio),
+    maxUpgrades: Math.ceil(MAX_UPGRADES * ratio),
+    rarity,
+    scale,
+  }
 }
 
 export interface DeckReport {
@@ -115,7 +193,7 @@ export function deckReport(deck: ParsedDeck, byId: Map<string, SwuCard>): DeckRe
   const base = byId.get(deck.base)
   if (!leader || !base) throw new Error('deckReport: missing leader/base card data')
   const cards = expand(deck, byId)
-  const covered = coveredAspects(leader, base)
+  const shape = deckShape(base, leader)
   const leaderAlignment = (leader.Aspects ?? []).find(isAlignment)
 
   const counts = {
@@ -134,19 +212,20 @@ export function deckReport(deck: ParsedDeck, byId: Map<string, SwuCard>): DeckRe
   const violations: string[] = []
   const inRange = (n: number, r: { min: number; max: number }) => n >= r.min && n <= r.max
 
-  if (cards.length !== DECK_SIZE) violations.push(`size ${cards.length} != ${DECK_SIZE}`)
+  if (cards.length !== shape.size) violations.push(`size ${cards.length} != ${shape.size}`)
   for (const entry of deck.cards) {
     if (entry.count > MAX_COPIES) violations.push(`${entry.count} copies of ${entry.id} (> ${MAX_COPIES})`)
   }
   for (const c of cards) {
-    const off = (c.Aspects ?? []).filter(a => !covered.has(a))
+    const off = unpaidAspects(c, leader, base)
     if (off.length) { violations.push(`off-aspect card ${c.Set}_${c.Number} (${off.join(',')})`); break }
   }
-  if (!inRange(counts.cheapUnits, CHEAP_UNITS)) violations.push(`cheap units ${counts.cheapUnits} not in ${CHEAP_UNITS.min}-${CHEAP_UNITS.max} (curve)`)
-  if (!inRange(counts.bombUnits, BOMB_UNITS)) violations.push(`bomb units ${counts.bombUnits} not in ${BOMB_UNITS.min}-${BOMB_UNITS.max} (curve)`)
-  if (counts.upgrades > MAX_UPGRADES) violations.push(`upgrades ${counts.upgrades} > ${MAX_UPGRADES}`)
-  if (counts.events > MAX_EVENTS) violations.push(`events ${counts.events} > ${MAX_EVENTS}`)
-  for (const [name, r] of Object.entries(RARITY_MIX)) {
+  const { cheapUnits, bombUnits, maxUpgrades, maxEvents } = shape
+  if (!inRange(counts.cheapUnits, cheapUnits)) violations.push(`cheap units ${counts.cheapUnits} not in ${cheapUnits.min}-${cheapUnits.max} (curve)`)
+  if (!inRange(counts.bombUnits, bombUnits)) violations.push(`bomb units ${counts.bombUnits} not in ${bombUnits.min}-${bombUnits.max} (curve)`)
+  if (counts.upgrades > maxUpgrades) violations.push(`upgrades ${counts.upgrades} > ${maxUpgrades}`)
+  if (counts.events > maxEvents) violations.push(`events ${counts.events} > ${maxEvents}`)
+  for (const [name, r] of Object.entries(shape.rarity)) {
     if (!inRange(rarity[name] ?? 0, r)) violations.push(`${name.toLowerCase()} ${rarity[name] ?? 0} not in ${r.min}-${r.max}`)
   }
   if (leaderAlignment && !inRange(alignmentFraction, ALIGNMENT_FRACTION)) {

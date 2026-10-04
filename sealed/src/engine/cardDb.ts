@@ -62,6 +62,17 @@ function parseBracket(card: SwuCard, keyword: 'Smuggle' | 'Piloting'): { cost: n
   return { cost: parseInt(match[1], 10), aspects, ...(match[3] !== undefined ? { extra: match[3].trim() } : {}) }
 }
 
+/**
+ * The aspects of each other way a card can be played (Smuggle, Piloting), which can differ from the
+ * printed ones: The Mandalorian (JTL) prints two Cunning and pilots for one.
+ */
+export function alternativeAspects(card: SwuCard): string[][] {
+  return (['Smuggle', 'Piloting'] as const).flatMap(k => {
+    const bracket = parseBracket(card, k)
+    return bracket ? [bracket.aspects] : []
+  })
+}
+
 /** Normalise a SWUDB card payload into engine static data. */
 export function normaliseCard(card: SwuCard): EngineCard {
   const type = toType(card.Type)

@@ -992,8 +992,22 @@ benchmark plays hundreds of thousands of games where the answer is never read.
 The decks come from `deckgen/generateDeck.ts` (a reusable primitive that builds one legal,
 penalty-free, realistically curved deck for a leader, respecting rarity mix and aspect balance, see
 `deckgen/rules.ts`) orchestrated by `bench/coverageDecks.ts` (which picks leaders and bases so the
-union covers the pool). The generator is deliberately separate from the bench so a future
-"play a random representative deck" setup feature can reuse it.
+union covers the pool). The generator is deliberately separate from the bench so the setup screen's
+generated decks reuse it.
+
+A card is penalty-free only when the leader and base pay each of its aspect icons, by its printed
+aspects or by those of its Smuggle or Piloting cost. A card with a doubled aspect is otherwise covered
+by a deck whose base repeats the leader's colour; such a one-colour deck needs one big unit rather
+than two, since SOR's Aggression and Cunning each print only one it can play. The deck is built to its
+base's size (25 on Thermal Oscillator, 40 on Data Vault) with the shape rules scaled to match, and a
+rare base counts against the deck's rares.
+
+Bases are chosen by `deckgen/bases.ts` for the bench suites and the setup screen alike. `colourBases`
+offers one base per colour to build on, common unless that colour's seeded roll lands inside one in
+25 and it prints a rare base. `settleBase` then puts the built deck on whichever base of the same
+colour, size and rarity its cards name most (a Homeworlds world), and otherwise on a seeded pick, so
+the suites spread across every base. A suite therefore varies with its seed in which base each deck
+sits on, not only in which cards it holds.
 
 ## Card triage: sizing an unimplemented set
 

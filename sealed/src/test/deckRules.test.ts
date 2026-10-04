@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { SwuCard } from '../data/cards'
-import { coveredAspects, deckReport } from '../deckgen/rules'
+import { deckReport, unpaidAspects } from '../deckgen/rules'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
 
 /**
@@ -43,9 +43,46 @@ function validSpec(): { id: string; card: Partial<SwuCard>; count: number }[] {
   return s
 }
 
-describe('coveredAspects', () => {
-  it('unions the leader and base aspects', () => {
-    expect(coveredAspects(LEADER, BASE)).toEqual(new Set(['Command', 'Heroism', 'Aggression']))
+/**
+ * An aspect penalty is paid per **icon**, not per aspect: a card showing two Command icons needs two
+ * Command between the leader and the base, and one short costs the penalty however many other icons
+ * are covered.
+ */
+describe('unpaidAspects', () => {
+  const card = (aspects: string[]) => c('x', { Aspects: aspects })
+  const commandBase = c('B2', { Type: 'Base', Aspects: ['Command'] })
+
+  it('is empty for a card whose icons the leader and base cover', () => {
+    expect(unpaidAspects(card(['Command', 'Heroism']), LEADER, BASE)).toEqual([])
+    expect(unpaidAspects(card([]), LEADER, BASE)).toEqual([])
+  })
+
+  it('names an aspect neither supplies', () => {
+    expect(unpaidAspects(card(['Villainy']), LEADER, BASE)).toEqual(['Villainy'])
+  })
+
+  it('names a doubled aspect the leader and base supply only once', () => {
+    expect(unpaidAspects(card(['Command', 'Command']), LEADER, BASE)).toEqual(['Command'])
+  })
+
+  it('pays a doubled aspect that the leader and base both supply', () => {
+    expect(unpaidAspects(card(['Command', 'Command']), LEADER, commandBase)).toEqual([])
+  })
+
+  /**
+   * A card with another way to be played is penalty-free when that way is paid: The Mandalorian (JTL)
+   * prints two Cunning but pilots for one, and a Smuggle card can carry aspects of its own.
+   */
+  it('pays a card through its Piloting or Smuggle aspects', () => {
+    const pilot = c('p', { Aspects: ['Command', 'Command'], FrontText: 'Piloting [C=2 Command]' })
+    expect(unpaidAspects(pilot, LEADER, BASE)).toEqual([])
+    const smuggler = c('s', { Aspects: ['Villainy'], FrontText: 'Smuggle [C=4 Aggression]' })
+    expect(unpaidAspects(smuggler, LEADER, BASE)).toEqual([])
+  })
+
+  it('still names the printed aspects when no way of playing the card is paid', () => {
+    const smuggler = c('s', { Aspects: ['Villainy'], FrontText: 'Smuggle [C=4 Cunning]' })
+    expect(unpaidAspects(smuggler, LEADER, BASE)).toEqual(['Villainy'])
   })
 })
 
@@ -69,6 +106,44 @@ describe('deckReport', () => {
     spec.pop() // keep size 30ish; still triggers the copy rule regardless
     const { deck, byId } = build(spec)
     expect(deckReport(deck, byId).violations.some(v => /cop/i.test(v))).toBe(true)
+  })
+
+  it('flags a doubled aspect the leader and base supply only once', () => {
+    const spec = validSpec()
+    spec[10].card = { ...spec[10].card, Aspects: ['Command', 'Command'] }
+    const { deck, byId } = build(spec)
+    expect(deckReport(deck, byId).violations.some(v => /aspect/i.test(v))).toBe(true)
+  })
+
+  /**
+   * A rare base comes out of a pack in a rare slot, so a deck on one has one rare card fewer to play.
+   * The valid deck carries four Rares; a fifth is inside the cap on a common base and over it on a rare one.
+   */
+  it('counts a rare base against the deck\'s rares', () => {
+    const spec = validSpec()
+    spec[0].card = { ...spec[0].card, Rarity: 'Rare' }
+    const common = build(spec)
+    expect(deckReport(common.deck, common.byId).violations).toEqual([])
+
+    const rare = build(spec)
+    rare.byId.set('TST_B', { ...BASE, Rarity: 'Rare' })
+    expect(deckReport(rare.deck, rare.byId).violations.some(v => /rare/i.test(v))).toBe(true)
+  })
+
+  /**
+   * A deck whose base repeats the leader's colour draws every card from one colour's pool, and one
+   * colour may not print two big units it can play: SOR's Aggression and Cunning print one each. So it
+   * needs only one, where a two-colour deck still needs two.
+   */
+  it('needs only one big unit when the base repeats the leader\'s colour', () => {
+    const oneBomb = () => validSpec().map((s, i) => i >= 28 ? { ...s, card: { ...s.card, Cost: '5' } } : s)
+    const twoColour = build(oneBomb())
+    expect(deckReport(twoColour.deck, twoColour.byId).violations.some(v => /bomb/i.test(v))).toBe(true)
+
+    const monoSpec = oneBomb().map(s => s.card.Aspects?.includes('Aggression') ? { ...s, card: { ...s.card, Aspects: ['Command'] } } : s)
+    const mono = build(monoSpec)
+    mono.byId.set('TST_B', { ...BASE, Aspects: ['Command'] })
+    expect(deckReport(mono.deck, mono.byId).violations).toEqual([])
   })
 
   it('flags an off-aspect card (aspect penalty)', () => {
