@@ -8,7 +8,7 @@ import { triggerAbility } from '../engine/abilities'
 import type { Action } from '../engine/actions'
 import { describeAction, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
-import { describeChoiceParts, answeredWithButtons, BOARD_TARGET_KINDS } from '../utils/describeChoice'
+import { describeChoiceParts, answeredWithButtons, BOARD_TARGET_KINDS, allocation, isRepeatable } from '../utils/describeChoice'
 import { upgradeHostIds, upgradeHostName } from '../utils/upgradeHosts'
 import { buildReportMarkdown, issueUrl } from '../utils/bugReport'
 import { BugReportOverlay } from './bugReportOverlay'
@@ -1603,7 +1603,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     const buttonChoiceHidden = buttonChoice !== undefined && hiddenChoice === buttonChoice.id
     const menuActions = unclaimed.filter(a => !buttonChoiceActions.includes(a))
     // The board-target decline and the hand-discard decline share one button (only one
-    // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
+    // choice is active at a time). "Done" for a repeatable pick (`isRepeatable`), else "Decline".
     // An optional "defeat an upgrade" choice (Clan Vizsla Soldier, Vane's On Attack, #416): the
     // two-step host-then-upgrade picker's own Cancel only steps back to re-pick a host, it never
     // declines the ability, so an optional instance needs its own reachable decline. Shown here
@@ -1611,14 +1611,15 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // full-screen modal that would hide this button anyway.
     const upgradeDefeatDecline = selectUpgradeActions.find(a => a.type === 'skipTrigger')
     const declineButton = declineChoice ?? discardDecline ?? handPlayDecline ?? upgradeDefeatDecline
-    // Distribute HUD (Ninth Sister damage / Helgait tokens): how much of the pool is allocated.
-    const distribute = targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens' || targetChoice?.kind === 'distributeIndirectDamage' ? targetChoice : undefined
-    const repeatable = targetChoice?.kind === 'multiPick' || targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens' || targetChoice?.kind === 'distributeIndirectDamage' || targetChoice?.kind === 'exploit'
+    // Distribute HUD (Ninth Sister damage, Helgait tokens, indirect damage, healing): how much of the
+    // pool is allocated.
+    const distribute = targetChoice ? allocation(targetChoice) : undefined
+    const repeatable = targetChoice !== undefined && isRepeatable(targetChoice)
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
         {distribute && (
           <div data-testid="distribute-hud" className="rounded-xl border-2 border-accent/60 px-3 py-1.5 text-center text-xs text-ink-dim">
-            {distribute.kind === 'distributeTokens' ? 'Tokens' : distribute.kind === 'distributeIndirectDamage' ? 'Indirect damage' : 'Damage'} allocated <span className="font-semibold text-ink">{distribute.total - distribute.remaining} / {distribute.total}</span>
+            {distribute.label} allocated <span className="font-semibold text-ink">{distribute.spent} / {distribute.total}</span>
           </div>
         )}
         {declineButton && (

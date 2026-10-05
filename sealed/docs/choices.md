@@ -410,17 +410,21 @@ action looks like a heal that never happened.
 ## Presentation
 
 - **Board-target kinds** (`BOARD_TARGET_KINDS` in `describeChoice.ts`) are answered by clicking a
-  highlighted unit or base. The list lives next to the prompt table so the two cannot drift.
+  highlighted unit or base. The list lives next to the prompt table so the two cannot drift. It
+  covers every kind whose answers name a unit or a base, the generic `selectUnitThen` included,
+  except `peekTopDiscard` (its base answer picks whose deck to look at) and `mayPreventDamage` (a unit
+  cost beside Prevent and Take buttons). The decline sits in the Action column, reading **Done** for a
+  repeatable pick (`isRepeatable`: `multiPick`, `exploit`, the distributions, `damageAnyBases`), and
+  a distribution shows how much is allocated (`allocation`) above it.
 - **A choice answered with buttons is asked in a centre-screen overlay.** Kinds with a dedicated
   overlay (the ordering prompts, the card pickers, searches, naming) use it; whatever is left goes to
   `ButtonChoiceOverlay` with the `describeChoiceParts` prompt and one `describeAction` button per
   answer, but only when `answeredWithButtons` holds: every answer is a plain accept or the decline,
   and at least one is not the decline. An answer that is an attack (Ambush, Support, `mayAttack`,
-  `mayAttackAnyUnit`) or names a unit, a base or a hand card (`selectUnitToReturn`,
-  `selectUnitToReady`, `selectUnitToSteal`, `selectDistributeSource`, `attachPlayedCard`,
-  `peekTopDiscard`, `playUnitFromHand`) keeps the choice where it is answered, with its decline and
-  any unit-named buttons in the Action column. So does a choice sharing the screen with a
-  board-target choice.
+  `mayAttackAnyUnit`) or names a unit, a base or a hand card (the board-target kinds,
+  `peekTopDiscard`, `mayPreventDamage`, `playUnitFromHand`) keeps the choice where it is answered,
+  with its decline and any unit-named buttons in the Action column. So does a choice sharing the
+  screen with a board-target choice.
 - **All of them share `OverlayShell`**, the game-over screen's frame: `panel` size for the ones
   answered with buttons, `cards` for the card pickers.
 - **Dismissing an overlay on your own trigger cancels the action** (`cancelChoice`, see the undo
