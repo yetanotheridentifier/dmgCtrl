@@ -24,9 +24,11 @@ export const PILL_W = TOKEN_W * 2
 export type TokenKind = 'damage' | 'mod' | 'debuff' | 'shield' | 'experience' | 'advantage' | 'weakness'
 
 /**
- * The one spec for every on-card token: fill, text colour and width. Colours are theme tokens in
- * `index.css` (`--color-token-*`), so a palette change happens there and nowhere else. Text is dark
- * on the light fills (Advantage, buff, Experience) and white on the rest, for legibility over art.
+ * The one spec for every on-card token: fill, label colour and width. A stat pill (buff, debuff,
+ * Experience, Weakness) prints a power figure and an HP figure, with no slash, in
+ * `TOKEN_STAT_INK`'s red and blue, mirroring the physical +X/+Y token; the others print their
+ * label in `ink`. Colours are theme tokens in `index.css` (`--color-token-*`), so a palette change
+ * happens there and nowhere else.
  */
 export const TOKEN_SPEC: Record<TokenKind, { background: string; ink: string; width: number }> = {
   damage: { background: 'var(--color-red)', ink: 'var(--color-ink)', width: TOKEN_W },
@@ -37,6 +39,13 @@ export const TOKEN_SPEC: Record<TokenKind, { background: string; ink: string; wi
   advantage: { background: 'var(--color-token-advantage)', ink: 'var(--color-token-ink-dark)', width: PILL_W },
   weakness: { background: 'var(--color-token-weakness)', ink: 'var(--color-ink)', width: PILL_W },
 }
+
+/** Figure colours on a stat pill: power red, HP blue (the physical token's, and the board's). */
+export const TOKEN_STAT_INK = { power: 'var(--color-red)', hp: 'var(--color-token-hp)' } as const
+
+/** Every token's drop shadow and edge: what keeps it readable over card art. */
+export const TOKEN_SHADOW = '0 1px 3px rgba(0, 0, 0, 0.7)'
+export const TOKEN_BORDER = '1px solid rgba(0, 0, 0, 0.35)'
 
 /** The most kinds of token a unit can show at once: one of each `TokenKind`. */
 export const MAX_TOKENS = 7

@@ -37,6 +37,7 @@
   --color-token-experience: #22c55e; /* +N/+N Experience: green */
   --color-token-weakness: #7e22ce;   /* -N/-N Weakness: purple */
   --color-token-ink-dark: #1a1200;   /* text on the light fills */
+  --color-token-hp: #2563eb;         /* HP figure on a stat pill (power uses --color-red) */
 }
 
 /* Dropdown option lists — explicit colours for browsers that ignore color-scheme. */

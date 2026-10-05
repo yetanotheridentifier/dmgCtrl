@@ -6,7 +6,7 @@ import type { UnitInteraction } from '../components/gameScreen'
 import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS } from '../engine/tokenUpgrades'
 import { effectivePower, effectiveHp } from '../engine/stats'
-import { PILL_W, TOKEN_H } from '../components/tokens'
+import { PILL_W, TOKEN_H, TOKEN_SHADOW, TOKEN_STAT_INK } from '../components/tokens'
 import { addLastingEffect } from '../engine/types'
 import type { GameState, LeaderState } from '../engine/types'
 import '../engine/cardDefinitions' // registers ASH_010's aura for the aura-token test
@@ -64,13 +64,31 @@ describe('UnitLine — on-card damage overlay', () => {
     // kind, token, label, theme colour
     ['advantage', TOKEN_ADVANTAGE, 'Adv. 2', 'var(--color-token-advantage)'],
     ['shield', TOKEN_SHIELD, 'Shd. 2', 'var(--color-token-shield)'],
-    ['experience', TOKEN_EXPERIENCE, '+2/+2', 'var(--color-token-experience)'],
-    ['weakness', TOKEN_WEAKNESS, '-2/-2', 'var(--color-token-weakness)'],
+    ['experience', TOKEN_EXPERIENCE, '+2 +2', 'var(--color-token-experience)'],
+    ['weakness', TOKEN_WEAKNESS, '-2 -2', 'var(--color-token-weakness)'],
   ])('shows two %s tokens as one labelled pill', (kind, cardId, label, colour) => {
     render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D', { upgrades: two(cardId) })} interact={noInteract} />)
     const token = screen.getByTestId(`board-unit-${kind}-u1`)
     expect(token).toHaveTextContent(label)
-    expect(token).toHaveStyle({ background: colour, width: `${PILL_W}px`, height: `${TOKEN_H}px` })
+    expect(token).not.toHaveTextContent('/')
+    expect(token).toHaveStyle({ background: colour, width: `${PILL_W}px`, height: `${TOKEN_H}px`, boxShadow: TOKEN_SHADOW })
+  })
+
+  /** The power and HP figures of a stat pill, in order. */
+  const figures = (token: HTMLElement) => [token.querySelector('[data-stat="power"]'), token.querySelector('[data-stat="hp"]')] as HTMLElement[]
+
+  it('prints every stat pill’s power figure in red and its HP figure in blue, with the shared shadow', () => {
+    const s = addLastingEffect(boardWith('TST_D'), { targetInstanceId: 'u1', power: 2, hp: -1 })
+    const u = unit('u1', 'TST_D', { upgrades: [{ cardId: TOKEN_EXPERIENCE, owner: 'player' }, { cardId: TOKEN_WEAKNESS, owner: 'player' }] })
+    render(<UnitLine state={s} unit={u} interact={noInteract} />)
+    for (const kind of ['mod', 'debuff', 'experience', 'weakness']) {
+      const token = screen.getByTestId(`board-unit-${kind}-u1`)
+      const [p, h] = figures(token)
+      expect(p, kind).toHaveStyle({ color: TOKEN_STAT_INK.power })
+      expect(h, kind).toHaveStyle({ color: TOKEN_STAT_INK.hp })
+      expect(token).toHaveStyle({ boxShadow: TOKEN_SHADOW })
+    }
+    expect(TOKEN_STAT_INK).toEqual({ power: 'var(--color-red)', hp: 'var(--color-token-hp)' })
   })
 
   it('tells Experience from Advantage by colour (they were both gold)', () => {
@@ -93,7 +111,7 @@ describe('UnitLine — on-card damage overlay', () => {
     s = addLastingEffect(s, { targetInstanceId: 'u1', power: 2, hp: 2 })
     render(<UnitLine state={s} unit={unit('u1', 'TST_D')} interact={noInteract} />)
     const token = screen.getByTestId('board-unit-mod-u1')
-    expect(token).toHaveTextContent('+2/+2')
+    expect(token).toHaveTextContent('+2 +2')
     expect(token).toHaveStyle({ background: 'var(--color-token-buff)', width: `${PILL_W}px` })
     expect(screen.queryByTestId('board-unit-debuff-u1')).toBeNull()
   })
@@ -102,7 +120,7 @@ describe('UnitLine — on-card damage overlay', () => {
     const s = addLastingEffect(boardWith('TST_D'), { targetInstanceId: 'u1', power: -1, hp: -1 })
     render(<UnitLine state={s} unit={unit('u1', 'TST_D')} interact={noInteract} />)
     const token = screen.getByTestId('board-unit-debuff-u1')
-    expect(token).toHaveTextContent('-1/-1')
+    expect(token).toHaveTextContent('-1 -1')
     expect(token).toHaveStyle({ background: 'var(--color-token-debuff)' })
     expect(screen.queryByTestId('board-unit-mod-u1')).toBeNull()
   })
@@ -110,8 +128,8 @@ describe('UnitLine — on-card damage overlay', () => {
   it('splits a mixed modifier into a buff pill and a debuff pill', () => {
     const s = addLastingEffect(boardWith('TST_D'), { targetInstanceId: 'u1', power: 2, hp: -1 })
     render(<UnitLine state={s} unit={unit('u1', 'TST_D')} interact={noInteract} />)
-    expect(screen.getByTestId('board-unit-mod-u1')).toHaveTextContent('+2/+0')
-    expect(screen.getByTestId('board-unit-debuff-u1')).toHaveTextContent('+0/-1')
+    expect(screen.getByTestId('board-unit-mod-u1')).toHaveTextContent('+2 +0')
+    expect(screen.getByTestId('board-unit-debuff-u1')).toHaveTextContent('+0 -1')
   })
 
   it('shows Clone Combat Squadron’s +1/+1 for each other friendly space unit', () => {
@@ -129,13 +147,13 @@ describe('UnitLine — on-card damage overlay', () => {
     const clone = s.players.player.units[0]
     expect(effectivePower(s, clone)).toBe(4) // the engine already applies it
     render(<UnitLine state={s} unit={clone} interact={noInteract} />)
-    expect(screen.getByTestId('board-unit-mod-c1')).toHaveTextContent('+2/+2')
+    expect(screen.getByTestId('board-unit-mod-c1')).toHaveTextContent('+2 +2')
   })
 
   it('shows a conditional debuff from the unit’s own card (D’Qar Cargo Frigate)', () => {
     const s = state({ cards: { ...CARDS, JTL_052: card({ id: 'JTL_052', type: 'unit', arena: 'space', power: 8, hp: 9 }) } })
     render(<UnitLine state={s} unit={unit('d1', 'JTL_052', { arena: 'space', damage: 3 })} interact={noInteract} />)
-    expect(screen.getByTestId('board-unit-debuff-d1')).toHaveTextContent('-3/+0')
+    expect(screen.getByTestId('board-unit-debuff-d1')).toHaveTextContent('-3 +0')
   })
 
   it('shows exactly the off-card part of the stats pipeline, for every kind of source', () => {
@@ -166,8 +184,9 @@ describe('UnitLine — on-card damage overlay', () => {
     })
     s = addLastingEffect(s, { targetInstanceId: 'd1', power: 3, hp: -2 })
     const pill = (kind: string, id: string): [number, number] => {
-      const text = screen.queryByTestId(`board-unit-${kind}-${id}`)?.textContent ?? '+0/+0'
-      const [p, h] = text.split('/').map(Number)
+      const token = screen.queryByTestId(`board-unit-${kind}-${id}`)
+      if (!token) return [0, 0]
+      const [p, h] = figures(token).map(f => Number(f.textContent))
       return [p, h]
     }
     for (const u of s.players.player.units.filter(x => !x.isLeader)) {
@@ -197,14 +216,14 @@ describe('UnitLine — on-card damage overlay', () => {
       },
     })
     render(<UnitLine state={s} unit={s.players.player.units.find(u => u.instanceId === 'm1')!} interact={noInteract} />)
-    expect(screen.getByTestId('board-unit-mod-m1')).toHaveTextContent('+1/+0')
+    expect(screen.getByTestId('board-unit-mod-m1')).toHaveTextContent('+1 +0')
   })
 
   it('shows +2/+0 when only power is buffed, and no token with no modifier', () => {
     let s = boardWith('TST_D')
     s = addLastingEffect(s, { targetInstanceId: 'u1', power: 2 })
     const { rerender } = render(<UnitLine state={s} unit={unit('u1', 'TST_D')} interact={noInteract} />)
-    expect(screen.getByTestId('board-unit-mod-u1')).toHaveTextContent('+2/+0')
+    expect(screen.getByTestId('board-unit-mod-u1')).toHaveTextContent('+2 +0')
 
     rerender(<UnitLine state={boardWith('TST_D')} unit={unit('u2', 'TST_D')} interact={noInteract} />)
     expect(screen.queryByTestId('board-unit-mod-u2')).toBeNull()

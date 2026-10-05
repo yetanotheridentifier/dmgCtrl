@@ -23,7 +23,7 @@ import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
 import { CardGridOverlay } from './cardGridOverlay'
 import { CARD_WIDTH_PX } from './cardSizing'
-import { tokenLayout, TOKEN_H, PILL_W, TOKEN_SPEC } from './tokens'
+import { tokenLayout, TOKEN_H, PILL_W, TOKEN_SPEC, TOKEN_STAT_INK, TOKEN_SHADOW, TOKEN_BORDER } from './tokens'
 import type { TokenKind } from './tokens'
 import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE, TOKEN_WEAKNESS } from '../engine/tokenUpgrades'
 import { unitHasKeyword } from '../engine/keywords'
@@ -226,8 +226,9 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
  */
 interface CardToken {
   kind: TokenKind
-  label: string
-  /** The full meaning, for screen readers ("Experience +2/+2"). */
+  /** A label pill's text ("Adv. 2"), or a stat pill's power and HP deltas. */
+  content: string | { power: number; hp: number }
+  /** The full meaning, for screen readers ("2 Experience"). */
   title: string
 }
 
@@ -239,33 +240,28 @@ function signed(n: number): string {
 function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
   const countToken = (id: string) => unit.upgrades.filter(u => u.cardId === id).length
   const tokens: CardToken[] = []
-  if (unit.damage > 0) tokens.push({ kind: 'damage', label: String(unit.damage), title: `${unit.damage} damage` })
+  if (unit.damage > 0) tokens.push({ kind: 'damage', content: String(unit.damage), title: `${unit.damage} damage` })
   // Everything not printed on the card art or an attached upgrade card: the unit's own and its
   // upgrades' conditional modifiers, other units' auras and "this phase" effects. Increases go on a
   // white buff pill and decreases on a dark grey debuff pill, so a mixed +2/-1 shows as +2/+0 and
   // +0/-1 rather than hiding either half.
   const power = offCardStatDelta(state, unit, 'power')
   const hp = offCardStatDelta(state, unit, 'hp')
-  const pair = (p: number, h: number) => `${signed(p)}/${signed(h)}`
-  if (power > 0 || hp > 0) {
-    const label = pair(Math.max(power, 0), Math.max(hp, 0))
-    tokens.push({ kind: 'mod', label, title: `Buff ${label}` })
-  }
-  if (power < 0 || hp < 0) {
-    const label = pair(Math.min(power, 0), Math.min(hp, 0))
-    tokens.push({ kind: 'debuff', label, title: `Debuff ${label}` })
-  }
+  const statPill = (kind: TokenKind, name: string, p: number, h: number): CardToken =>
+    ({ kind, content: { power: p, hp: h }, title: `${name} ${signed(p)}/${signed(h)}` })
+  if (power > 0 || hp > 0) tokens.push(statPill('mod', 'Buff', Math.max(power, 0), Math.max(hp, 0)))
+  if (power < 0 || hp < 0) tokens.push(statPill('debuff', 'Debuff', Math.min(power, 0), Math.min(hp, 0)))
   // Token upgrades render as on-card pills, not cards behind the unit. Experience and Weakness are
   // +1/+1 and -1/-1 each, so their pills read as the stat change, told apart from a buff and a
   // debuff by colour.
   const shields = countToken(TOKEN_SHIELD)
-  if (shields > 0) tokens.push({ kind: 'shield', label: `Shd. ${shields}`, title: `${shields} Shield` })
+  if (shields > 0) tokens.push({ kind: 'shield', content: `Shd. ${shields}`, title: `${shields} Shield` })
   const experience = countToken(TOKEN_EXPERIENCE)
-  if (experience > 0) tokens.push({ kind: 'experience', label: pair(experience, experience), title: `${experience} Experience` })
+  if (experience > 0) tokens.push(statPill('experience', 'Experience', experience, experience))
   const advantage = countToken(TOKEN_ADVANTAGE)
-  if (advantage > 0) tokens.push({ kind: 'advantage', label: `Adv. ${advantage}`, title: `${advantage} Advantage` })
+  if (advantage > 0) tokens.push({ kind: 'advantage', content: `Adv. ${advantage}`, title: `${advantage} Advantage` })
   const weakness = countToken(TOKEN_WEAKNESS)
-  if (weakness > 0) tokens.push({ kind: 'weakness', label: pair(-weakness, -weakness), title: `${weakness} Weakness` })
+  if (weakness > 0) tokens.push(statPill('weakness', 'Weakness', -weakness, -weakness))
   if (tokens.length === 0) return null
 
   const positions = tokenLayout(tokens.length, unit.exhausted ? 'landscape' : 'portrait')
@@ -292,11 +288,17 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
               fontSize: `${Math.round(TOKEN_H * (pill ? 0.5 : 0.6))}px`,
               fontWeight: 700,
               lineHeight: 1,
-              border: '1px solid rgba(0, 0, 0, 0.35)',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.7)',
+              border: TOKEN_BORDER,
+              boxShadow: TOKEN_SHADOW,
             }}
           >
-            {t.label}
+            {typeof t.content === 'string' ? t.content : (
+              // A stat pill: power in red, HP in blue, no slash (the physical +X/+Y token).
+              <span style={{ wordSpacing: 2 }}>
+                <span data-stat="power" style={{ color: TOKEN_STAT_INK.power }}>{signed(t.content.power)}</span>{' '}
+                <span data-stat="hp" style={{ color: TOKEN_STAT_INK.hp }}>{signed(t.content.hp)}</span>
+              </span>
+            )}
           </span>
         )
       })}
