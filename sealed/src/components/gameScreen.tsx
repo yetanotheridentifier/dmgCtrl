@@ -1,5 +1,4 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
 import { nameableCardNames, nameableTraits, zoneCards } from '../engine/legalMoves'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
@@ -22,6 +21,7 @@ import { orderUnits } from './boardLayout'
 import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
 import { CardGridOverlay } from './cardGridOverlay'
+import { OverlayShell, PANEL_BUTTON, PANEL_PRIMARY, PANEL_SECONDARY } from './overlayShell'
 import { CARD_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_H, PILL_W, TOKEN_SPEC, TOKEN_FIGURE_WEIGHT, TOKEN_FIGURE_LAYOUT, TOKEN_SHADOW, TOKEN_BORDER } from './tokens'
 import type { TokenKind } from './tokens'
@@ -341,6 +341,9 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
   )
 }
 
+/** What the corner button says when dismissing an overlay takes back the action that raised it. */
+const CANCEL_LABEL = 'Cancel: take back the action that raised this'
+
 /**
  * "Look at" / "reveal" overlay — a single card over a dark backdrop with a prompt and the
  * caller's action buttons. PRIVATE to the acting player. A thin wrapper over `CardGridOverlay`.
@@ -373,17 +376,21 @@ function hostDisplayName(state: GameState, hostId: string): string {
   return upgradeHostName(state, hostId) || 'the unit'
 }
 
-export function CardSelectOverlay({ state, prompt, items, onPick, onCancel }: {
+export function CardSelectOverlay({ state, prompt, items, onPick, onCancel, onDismiss }: {
   state: GameState
   prompt: string
   items: { cardId: string; optionIndex: number; disabled?: boolean; key?: string | number }[]
   onPick: (optionIndex: number) => void
   onCancel?: () => void
+  /** Cancels the action that raised the choice; absent, the overlay blocks until answered. */
+  onDismiss?: () => void
 }) {
   return (
     <CardGridOverlay
       idPrefix="card-select"
       prompt={prompt}
+      onDismiss={onDismiss}
+      dismissLabel={CANCEL_LABEL}
       cardsById={state.cards}
       items={items.map(item => {
         const key = item.key ?? item.optionIndex
@@ -504,11 +511,13 @@ function triggerLabel(state: GameState, t: PendingTrigger): string {
   return text ? `${name}: ${text}` : name
 }
 
-export function TriggerOrderOverlay({ state, mine, theirs, onPick }: {
+export function TriggerOrderOverlay({ state, mine, theirs, onPick, onDismiss }: {
   state: GameState
   mine: PendingTrigger[]
   theirs: PendingTrigger[]
   onPick: (optionIndex: number) => void
+  /** Cancels the action that raised the triggers; absent, the overlay blocks until answered. */
+  onDismiss?: () => void
 }) {
   const column = (title: string, triggers: PendingTrigger[], testId: string) => (
     <div data-testid={testId} className="min-w-[16rem] flex-1">
@@ -524,31 +533,23 @@ export function TriggerOrderOverlay({ state, mine, theirs, onPick }: {
       </ul>
     </div>
   )
-  return createPortal(
-    <div data-testid="trigger-order-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
-      <p className="text-sm text-ink">Abilities triggered on both sides. Who resolves first?</p>
-      <div className="flex flex-wrap justify-center gap-6">
+  return (
+    <OverlayShell testId="trigger-order-overlay" size="panel" onDismiss={onDismiss} dismissLabel={CANCEL_LABEL}>
+      <p className="text-lg font-semibold text-ink">Who resolves first?</p>
+      <p className="-mt-3 text-sm text-ink-dim">Abilities triggered on both sides.</p>
+      <div className="flex w-full flex-wrap justify-center gap-6 text-left">
         {column('Your triggers', mine, 'trigger-order-mine')}
         {column("Opponent's triggers", theirs, 'trigger-order-theirs')}
       </div>
-      <div className="flex gap-3">
-        <button
-          data-testid="trigger-order-mine-btn"
-          onClick={() => onPick(0)}
-          className="rounded-xl border-2 border-accent px-4 py-2 text-sm text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
-        >
+      <div className="flex justify-center gap-3">
+        <button data-testid="trigger-order-mine-btn" onClick={() => onPick(0)} className={PANEL_PRIMARY}>
           I resolve first
         </button>
-        <button
-          data-testid="trigger-order-theirs-btn"
-          onClick={() => onPick(1)}
-          className="rounded-xl border-2 border-line/60 px-4 py-2 text-sm text-ink-dim hover:text-ink"
-        >
+        <button data-testid="trigger-order-theirs-btn" onClick={() => onPick(1)} className={PANEL_SECONDARY}>
           They resolve first
         </button>
       </div>
-    </div>,
-    document.body,
+    </OverlayShell>
   )
 }
 
@@ -559,20 +560,23 @@ export function TriggerOrderOverlay({ state, mine, theirs, onPick }: {
  * Each is named by its own card, which is the whole point of asking, since a unit's own ability and one
  * granted by an upgrade attached to it are otherwise indistinguishable.
  */
-export function NextTriggerOverlay({ state, candidates, onPick }: {
+export function NextTriggerOverlay({ state, candidates, onPick, onDismiss }: {
   state: GameState
   candidates: { triggerId: string; cardId: string; sourceInstanceId?: string }[]
   onPick: (optionIndex: number) => void
+  /** Cancels the action that raised the triggers; absent, the overlay blocks until answered. */
+  onDismiss?: () => void
 }) {
   const owed = state.pendingTriggers ?? []
   const labels = candidates.map(c => {
     const trigger = owed.find(t => t.id === c.triggerId)
     return trigger ? triggerLabel(state, trigger) : (state.cards[c.cardId]?.name ?? c.cardId)
   })
-  return createPortal(
-    <div data-testid="next-trigger-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
-      <p className="text-sm text-ink">Several of your abilities triggered at once. Which resolves next?</p>
-      <ul className="flex w-full max-w-lg flex-col gap-2">
+  return (
+    <OverlayShell testId="next-trigger-overlay" size="panel" onDismiss={onDismiss} dismissLabel={CANCEL_LABEL}>
+      <p className="text-lg font-semibold text-ink">Which resolves next?</p>
+      <p className="-mt-3 text-sm text-ink-dim">Several of your abilities triggered at once.</p>
+      <ul className="flex w-full flex-col gap-2">
         {candidates.map((c, i) => {
           // Two copies of one card each hold their own ability, and the label cannot tell them apart.
           // Number those so the buttons are at least distinct to click.
@@ -594,11 +598,10 @@ export function NextTriggerOverlay({ state, candidates, onPick }: {
       {/* Picking here is not accepting the ability, and the difference is not obvious: there is no
           decline on this prompt because all of them resolve, and a "may" is turned down on its own
           choice once its turn comes. */}
-      <p className="max-w-lg text-center text-xs text-ink-dim">
+      <p className="text-center text-xs text-ink-dim">
         Each will resolve in turn. You can still decline optional effects when they do.
       </p>
-    </div>,
-    document.body,
+    </OverlayShell>
   )
 }
 
@@ -610,12 +613,18 @@ export function NextTriggerOverlay({ state, candidates, onPick }: {
  * `what` names what is being picked, so "name a Trait" (The First Legion) uses the same overlay: the
  * two choices differ in the list and the heading and in nothing else.
  */
-export function NameCardOverlay({ names, onPick, what = 'card' }: { names: string[]; onPick: (name: string) => void; what?: string }) {
+export function NameCardOverlay({ names, onPick, what = 'card', onDismiss }: {
+  names: string[]
+  onPick: (name: string) => void
+  what?: string
+  /** Cancels the action that asked for the name; absent, the overlay blocks until answered. */
+  onDismiss?: () => void
+}) {
   const [query, setQuery] = useState('')
   const filtered = query.trim() ? names.filter(n => n.toLowerCase().includes(query.trim().toLowerCase())) : names
-  return createPortal(
-    <div data-testid="name-card-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/75 p-4">
-      <p className="text-xs uppercase tracking-[0.14em] text-ink-dim">Name a {what}</p>
+  return (
+    <OverlayShell testId="name-card-overlay" size="panel" onDismiss={onDismiss} dismissLabel={CANCEL_LABEL}>
+      <p className="text-lg font-semibold text-ink">Name a {what}</p>
       <input
         data-testid="name-card-input"
         autoFocus
@@ -634,8 +643,44 @@ export function NameCardOverlay({ names, onPick, what = 'card' }: { names: strin
         ))}
         {filtered.length === 0 && <li className="py-2 text-center text-xs text-ink-faint">No match</li>}
       </ul>
-    </div>,
-    document.body,
+    </OverlayShell>
+  )
+}
+
+/**
+ * A triggered choice answered with buttons (choose one, pay or exhaust, a "may" on the leader): the
+ * choice's own prompt and one button per answer, the decline muted. Every choice without a dedicated
+ * overlay or a board affordance lands here, so the action column holds only what the player initiates.
+ *
+ * Always dismissible: `onDismiss` either cancels the action that raised it or, when that is not
+ * possible, puts the overlay aside so the board can be read, and `dismissLabel` says which.
+ */
+export function ButtonChoiceOverlay({ state, prompt, actions, onPick, onDismiss, dismissLabel }: {
+  state: GameState
+  prompt: DescribePart[]
+  actions: Action[]
+  onPick: (action: Action) => void
+  onDismiss: () => void
+  dismissLabel: string
+}) {
+  return (
+    <OverlayShell testId="choice-overlay" size="panel" onDismiss={onDismiss} dismissLabel={dismissLabel}>
+      <p data-testid="choice-overlay-prompt" className="px-6 text-lg text-ink first-letter:uppercase">
+        <DescribedParts state={state} parts={prompt} />
+      </p>
+      <div className="flex flex-wrap justify-center gap-3">
+        {actions.map((action, i) => (
+          <button
+            key={i}
+            data-testid={`choice-option-${i}`}
+            onClick={() => onPick(action)}
+            className={action.type === 'skipTrigger' ? PANEL_SECONDARY : PANEL_PRIMARY}
+          >
+            {describeAction(state, 'player', action)}
+          </button>
+        ))}
+      </div>
+    </OverlayShell>
   )
 }
 
@@ -1129,7 +1174,7 @@ function PlayerBar({ state, hand, action }: { state: GameState; hand: ReactNode;
 }
 
 export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOptions }: Props) {
-  const { status, errorDetail, gameState, legal, log, act, undo, canUndo, rematch, replayData, unresolvedPrintings } = useGame(deck, opponentDeck, gameOptions)
+  const { status, errorDetail, gameState, legal, log, act, undo, canUndo, cancelChoice, rematch, replayData, unresolvedPrintings } = useGame(deck, opponentDeck, gameOptions)
   // Board affordance: click an actionable friendly unit to select it,
   // then click a highlighted target to attack. Any action clears the selection.
   const [selectedAttacker, setSelectedAttacker] = useState<string | null>(null)
@@ -1152,6 +1197,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // Settings (#539): an overlay over the board, not a screen. Routing away would unmount this
   // component and the game with it (#541).
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // A button choice put aside to read the board (only where it cannot be cancelled): the id of the
+  // choice whose overlay is hidden. Any action clears it, so the next choice always shows.
+  const [hiddenChoice, setHiddenChoice] = useState<string | null>(null)
   const { settings } = useSettings()
 
   async function submitReport(title: string, description: string) {
@@ -1175,7 +1223,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     setSelectedUpgrade(null)
     setLeaderSelected(false)
     setUpgradeHost(null)
+    setHiddenChoice(null)
   }
+
+  // Dismissing an overlay on the player's own trigger takes back the action that raised it.
+  const cancel = cancelChoice ? () => { clearSelections(); cancelChoice() } : undefined
 
   function actAndClear(action: Action) {
     clearSelections()
@@ -1531,9 +1583,19 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const isPilotPlay = (a: Action) => a.type === 'playUpgrade' && a.piloting === true
-    const menuActions = gameState.winner === null
+    const unclaimed = gameState.winner === null
       ? legal.filter(a => (!CLICK_HANDLED.includes(a.type) || isPilotPlay(a)) && !lookActions.includes(a) && !discardTopActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !searchUpgradeActions.includes(a) && !nameCardActions.includes(a) && !nameTraitActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !playFromActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
       : []
+    // Whatever choice is left, answered with buttons, goes to the button overlay rather than the
+    // action column. Not while the board or the hand is answering another choice: those keep their
+    // own affordance in view, and their sibling's buttons stay in the column beside them.
+    const answers = (choiceId: string) => (a: Action) => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === choiceId
+    const buttonChoice = !targetChoice && !discardChoice && !handPlayChoice && !upgradePick
+      ? gameState.pendingChoices?.find(c => c.controller === 'player' && unclaimed.some(answers(c.id)))
+      : undefined
+    const buttonChoiceActions = buttonChoice ? unclaimed.filter(answers(buttonChoice.id)) : []
+    const buttonChoiceHidden = buttonChoice !== undefined && hiddenChoice === buttonChoice.id
+    const menuActions = unclaimed.filter(a => !buttonChoiceActions.includes(a))
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
     // An optional "defeat an upgrade" choice (Clan Vizsla Soldier, Vane's On Attack, #416): the
@@ -1560,6 +1622,15 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             className="rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-dim hover:text-ink"
           >
             {repeatable ? 'Done' : 'Decline'}
+          </button>
+        )}
+        {buttonChoiceHidden && (
+          <button
+            data-testid="show-choice-btn"
+            onClick={() => setHiddenChoice(null)}
+            className="rounded-xl border-2 border-accent px-3 py-1.5 text-xs text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
+          >
+            Show choice
           </button>
         )}
         {menuActions.map((action, i) => (
@@ -1629,6 +1700,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           mine={waiting('player')}
           theirs={waiting('opponent')}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: orderChoice.id, optionIndex })}
+          onDismiss={cancel}
         />
       )
     } else if (nextTriggerChoice) {
@@ -1637,6 +1709,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           state={gameState}
           candidates={nextTriggerChoice.candidates}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: nextTriggerChoice.id, optionIndex })}
+          onDismiss={cancel}
         />
       )
     } else if (lookChoice) {
@@ -1730,6 +1803,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         <NameCardOverlay
           names={nameableCardNames(gameState)}
           onPick={cardName => actAndClear({ type: 'acceptChoice', choiceId: nameCardChoice.id, cardName })}
+          onDismiss={cancel}
         />
       )
     } else if (nameTraitChoice) {
@@ -1738,6 +1812,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           what="Trait"
           names={nameableTraits(gameState)}
           onPick={traitName => actAndClear({ type: 'acceptChoice', choiceId: nameTraitChoice.id, traitName })}
+          onDismiss={cancel}
         />
       )
     } else if (selectUpgradeChoice && pickedHost !== null) {
@@ -1752,6 +1827,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           items={selectUpgradeChoice.candidates.flatMap((c, i) =>
             c.unitId === pickedHost ? [{ cardId: c.cardId, optionIndex: i, key: i }] : [])}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: selectUpgradeChoice.id, optionIndex })}
+          onDismiss={cancel}
           onCancel={() => setUpgradeHost(null)}
         />
       )
@@ -1759,7 +1835,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       // Reveal the whole zone; the cards that can be played are selectable, the rest are dimmed.
       // An offered candidate can still be unplayable (its cost moved, its host left), so the dimming
       // reads the legal moves rather than the candidate list.
-      const cancel = playFromActions.find(a => a.type === 'skipTrigger')
+      const decline = playFromActions.find(a => a.type === 'skipTrigger')
       const playable = new Set(playFromActions.flatMap(a => (a.type === 'acceptChoice' && a.optionIndex !== undefined ? [a.optionIndex] : [])))
       const items = zoneCards(gameState, 'player', playFromChoice.zone).map((cardId, i) => {
         const optionIndex = playFromChoice.candidates.findIndex(c => c.index === i)
@@ -1771,18 +1847,20 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           prompt={describeChoiceParts(gameState, playFromChoice).map(part => (typeof part === 'string' ? part : part.text)).join('')}
           items={items}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: playFromChoice.id, optionIndex })}
-          onCancel={cancel ? () => actAndClear(cancel) : undefined}
+          onDismiss={cancel}
+          onCancel={decline ? () => actAndClear(decline) : undefined}
         />
       )
     } else if (fromDiscardChoice) {
-      const cancel = fromDiscardActions.find(a => a.type === 'skipTrigger')
+      const decline = fromDiscardActions.find(a => a.type === 'skipTrigger')
       choiceOverlay = (
         <CardSelectOverlay
           state={gameState}
           prompt="Return a card from your discard to your hand"
           items={fromDiscardChoice.candidates.map((cardId, i) => ({ cardId, optionIndex: i, key: i }))}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: fromDiscardChoice.id, optionIndex })}
-          onCancel={cancel ? () => actAndClear(cancel) : undefined}
+          onDismiss={cancel}
+          onCancel={decline ? () => actAndClear(decline) : undefined}
         />
       )
     } else if (bottomFromDiscardChoice) {
@@ -1795,6 +1873,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           prompt={`Put a unit that costs ${bottomFromDiscardChoice.maxCost} or less on the bottom of your deck to play ${gameState.cards[bottomFromDiscardChoice.cardId]?.name ?? 'this unit'} with its "When Played" abilities (${left} more at most)`}
           items={gameState.players.player.discard.map((cardId, i) => ({ cardId, optionIndex: i, key: i, disabled: !offered.has(i) }))}
           onPick={optionIndex => offered.has(optionIndex) && actAndClear({ type: 'acceptChoice', choiceId: bottomFromDiscardChoice.id, optionIndex })}
+          onDismiss={cancel}
           onCancel={stop ? () => actAndClear(stop) : undefined}
         />
       )
@@ -1808,7 +1887,20 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           items={uniqueChoice.candidates.flatMap((c, i) =>
             c.unitId === pickedHost ? [{ cardId: c.cardId, optionIndex: i, key: i }] : [])}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: uniqueChoice.id, optionIndex })}
+          onDismiss={cancel}
           onCancel={() => setUpgradeHost(null)}
+        />
+      )
+    } else if (buttonChoice && !buttonChoiceHidden) {
+      // Cancelled when it can be; otherwise put aside, and brought back from the action column.
+      choiceOverlay = (
+        <ButtonChoiceOverlay
+          state={gameState}
+          prompt={describeChoiceParts(gameState, buttonChoice)}
+          actions={buttonChoiceActions}
+          onPick={actAndClear}
+          onDismiss={cancel ?? (() => setHiddenChoice(buttonChoice.id))}
+          dismissLabel={cancel ? CANCEL_LABEL : 'Hide: look at the board, then reopen it from the action column'}
         />
       )
     }
@@ -1943,12 +2035,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
       {/* Game over — a modal overlay over the whole screen. */}
       {gameState && gameState.winner !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <section
-            data-testid="game-over-banner"
-            style={{ backgroundColor: '#0d1b2a' }}
-            className="rounded-xl border-2 border-amber p-8 text-center shadow-[0_0_24px_rgba(245,166,35,0.35)]"
-          >
+        <OverlayShell testId="game-over" panelTestId="game-over-banner" size="panel" tone="amber">
+          <div>
             <p className={`text-2xl font-semibold ${outcomeBanner(gameState.winner).tone}`}>
               {outcomeBanner(gameState.winner).title}
             </p>
@@ -1957,16 +2045,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
                 {outcomeBanner(gameState.winner, gameState.concededBy).detail}
               </p>
             )}
-            <div className="mt-6 flex justify-center gap-3">
-              <button data-testid="rematch-btn" onClick={rematch} className="px-5 py-2 text-sm border-2 border-green text-green rounded-xl shadow-[0_0_12px_rgba(34,197,94,0.3)] hover:bg-green/10">
-                Rematch
-              </button>
-              <button onClick={onExit} className="px-5 py-2 text-sm border-2 border-line/60 text-ink-dim rounded-xl hover:text-ink">
-                Back to decks
-              </button>
-            </div>
-          </section>
-        </div>
+          </div>
+          <div className="mt-1 flex justify-center gap-3">
+            <button data-testid="rematch-btn" onClick={rematch} className={`${PANEL_BUTTON} border-green text-green shadow-[0_0_12px_rgba(34,197,94,0.3)] hover:bg-green/10`}>
+              Rematch
+            </button>
+            <button onClick={onExit} className={PANEL_SECONDARY}>
+              Back to decks
+            </button>
+          </div>
+        </OverlayShell>
       )}
     </div>
   )

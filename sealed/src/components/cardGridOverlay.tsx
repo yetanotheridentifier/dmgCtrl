@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { createPortal } from 'react-dom'
 import type { EngineCard } from '../engine/types'
+import { OverlayShell } from './overlayShell'
 import CardFace from './cardFace'
 import { ZOOM_WIDTH_PX } from './cardSizing'
 import { useCardZoom } from './useCardZoom'
@@ -22,11 +22,11 @@ export interface CardGridItem {
 }
 
 /**
- * The one centre-screen "set of cards" overlay: a dark backdrop, an optional prompt, a grid of
- * cards, and an optional footer (buttons / a counter). Consolidates the previous card-choice / card-
- * select / search-reveal / discard overlays. `idPrefix` reproduces each caller's testids
- * (`${idPrefix}-overlay`, `${idPrefix}-prompt`, `${idPrefix}-overlay-content`). `onBackdropClick`
- * dismisses view-only overlays (clicks inside the grid are ignored).
+ * The one centre-screen "set of cards" overlay: the shared `OverlayShell` at its `cards` size, holding
+ * an optional prompt, a grid of cards, and an optional footer (buttons / a counter). Consolidates the
+ * previous card-choice / card-select / search-reveal / discard overlays. `idPrefix` reproduces each
+ * caller's testids (`${idPrefix}-overlay`, `${idPrefix}-prompt`, `${idPrefix}-overlay-content`).
+ * `onBackdropClick` dismisses view-only overlays (clicks inside the panel are ignored).
  */
 /** One card cell: the card (a click target when selectable), zoom-on-hover, an optional labelled
  *  action button and host caption. */
@@ -56,7 +56,7 @@ function GridCardCell({ item, card, width }: { item: CardGridItem; card: EngineC
 }
 
 export function CardGridOverlay({
-  idPrefix, prompt, cardsById, items, footer, fullWidthCards, cardWidthPx, scrollable, onBackdropClick,
+  idPrefix, prompt, cardsById, items, footer, fullWidthCards, cardWidthPx, onBackdropClick, onDismiss, dismissLabel,
 }: {
   idPrefix: string
   prompt?: string
@@ -65,26 +65,19 @@ export function CardGridOverlay({
   footer?: ReactNode
   fullWidthCards?: boolean
   cardWidthPx?: number
-  scrollable?: boolean
   onBackdropClick?: () => void
+  /** The shell's corner close button; see `OverlayShell`. */
+  onDismiss?: () => void
+  dismissLabel?: string
 }) {
   const width = cardWidthPx ?? (fullWidthCards ? ZOOM_WIDTH_PX : Math.round(ZOOM_WIDTH_PX * 0.8))
-  // Portalled to document.body so it shares the root stacking context with the zoom
-  // popover (also portalled): the backdrop's z-50 then sits below the zoom's z-100,
-  // instead of being trapped in a board-tree stacking context that outranks it.
-  return createPortal(
-    <div data-testid={`${idPrefix}-overlay`} onClick={onBackdropClick} className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
-      {prompt && <p data-testid={`${idPrefix}-prompt`} className="text-xs uppercase tracking-[0.14em] text-ink-dim">{prompt}</p>}
-      <div
-        data-testid={`${idPrefix}-overlay-content`}
-        onClick={onBackdropClick ? e => e.stopPropagation() : undefined}
-        className={`flex flex-wrap justify-center gap-4${scrollable ? ' max-h-[80vh] max-w-4xl overflow-y-auto rounded-xl border-2 border-line/60 p-4' : ''}`}
-        style={scrollable ? { backgroundColor: '#0d1b2a' } : undefined}
-      >
+  return (
+    <OverlayShell testId={`${idPrefix}-overlay`} size="cards" onBackdropClick={onBackdropClick} onDismiss={onDismiss} dismissLabel={dismissLabel}>
+      {prompt && <p data-testid={`${idPrefix}-prompt`} className="px-8 text-center text-xs uppercase tracking-[0.14em] text-ink-dim">{prompt}</p>}
+      <div data-testid={`${idPrefix}-overlay-content`} className="flex max-w-4xl flex-wrap justify-center gap-4">
         {items.map(item => <GridCardCell key={item.key} item={item} card={cardsById[item.cardId]} width={width} />)}
       </div>
       {footer}
-    </div>,
-    document.body,
+    </OverlayShell>
   )
 }

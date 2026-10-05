@@ -95,7 +95,6 @@ function DiscardOverlay({ cardIds, state, onClose }: { cardIds: string[]; state:
       idPrefix="discard"
       cardsById={state.cards}
       cardWidthPx={CARD_WIDTH_PX}
-      scrollable
       onBackdropClick={onClose}
       items={cardIds.map((id, i) => ({ cardId: id, key: `${id}-${i}` }))}
     />
