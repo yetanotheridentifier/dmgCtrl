@@ -227,7 +227,7 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
 interface CardToken {
   kind: TokenKind
   /** A label pill's text ("Adv. 2"), or a stat pill's power and HP deltas. */
-  content: string | { power: number; hp: number }
+  content: string | { power: string; hp: string }
   /** The full meaning, for screen readers ("2 Experience"). */
   title: string
 }
@@ -247,8 +247,12 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
   // +0/-1 rather than hiding either half.
   const power = offCardStatDelta(state, unit, 'power')
   const hp = offCardStatDelta(state, unit, 'hp')
-  const statPill = (kind: TokenKind, name: string, p: number, h: number): CardToken =>
-    ({ kind, content: { power: p, hp: h }, title: `${name} ${signed(p)}/${signed(h)}` })
+  // A zero figure takes the pill's own sign, so a debuff reads "-2 -0", never "-2 +0".
+  const statPill = (kind: TokenKind, name: string, p: number, h: number): CardToken => {
+    const negative = p < 0 || h < 0
+    const fig = (n: number) => (n === 0 && negative ? '-0' : signed(n))
+    return { kind, content: { power: fig(p), hp: fig(h) }, title: `${name} ${fig(p)}/${fig(h)}` }
+  }
   if (power > 0 || hp > 0) tokens.push(statPill('mod', 'Buff', Math.max(power, 0), Math.max(hp, 0)))
   if (power < 0 || hp < 0) tokens.push(statPill('debuff', 'Debuff', Math.min(power, 0), Math.min(hp, 0)))
   // Token upgrades render as on-card pills, not cards behind the unit. Experience and Weakness are
@@ -295,8 +299,8 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
             {typeof t.content === 'string' ? t.content : (
               // A stat pill: power in red, HP in blue, no slash (the physical +X/+Y token).
               <span style={{ wordSpacing: 2 }}>
-                <span data-stat="power" style={{ color: TOKEN_STAT_INK.power }}>{signed(t.content.power)}</span>{' '}
-                <span data-stat="hp" style={{ color: TOKEN_STAT_INK.hp }}>{signed(t.content.hp)}</span>
+                <span data-stat="power" style={{ color: TOKEN_STAT_INK.power }}>{t.content.power}</span>{' '}
+                <span data-stat="hp" style={{ color: TOKEN_STAT_INK.hp }}>{t.content.hp}</span>
               </span>
             )}
           </span>

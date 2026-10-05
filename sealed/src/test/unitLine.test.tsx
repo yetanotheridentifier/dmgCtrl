@@ -129,7 +129,7 @@ describe('UnitLine — on-card damage overlay', () => {
     const s = addLastingEffect(boardWith('TST_D'), { targetInstanceId: 'u1', power: 2, hp: -1 })
     render(<UnitLine state={s} unit={unit('u1', 'TST_D')} interact={noInteract} />)
     expect(screen.getByTestId('board-unit-mod-u1')).toHaveTextContent('+2 +0')
-    expect(screen.getByTestId('board-unit-debuff-u1')).toHaveTextContent('+0 -1')
+    expect(screen.getByTestId('board-unit-debuff-u1')).toHaveTextContent('-0 -1') // a debuff's zero takes the debuff's sign
   })
 
   it('shows Clone Combat Squadron’s +1/+1 for each other friendly space unit', () => {
@@ -153,7 +153,7 @@ describe('UnitLine — on-card damage overlay', () => {
   it('shows a conditional debuff from the unit’s own card (D’Qar Cargo Frigate)', () => {
     const s = state({ cards: { ...CARDS, JTL_052: card({ id: 'JTL_052', type: 'unit', arena: 'space', power: 8, hp: 9 }) } })
     render(<UnitLine state={s} unit={unit('d1', 'JTL_052', { arena: 'space', damage: 3 })} interact={noInteract} />)
-    expect(screen.getByTestId('board-unit-debuff-d1')).toHaveTextContent('-3 +0')
+    expect(screen.getByTestId('board-unit-debuff-d1')).toHaveTextContent('-3 -0')
   })
 
   it('shows exactly the off-card part of the stats pipeline, for every kind of source', () => {
