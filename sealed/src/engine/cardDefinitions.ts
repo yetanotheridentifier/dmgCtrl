@@ -12637,8 +12637,18 @@ registerCard('TS26_63', { // Rex's DC-17s
     },
   }],
 })
-// TWI_068 Foresight is not registered: its "When the regroup phase starts (before drawing cards)" needs
-// the regroup draw to wait for that trigger's choices, and `enterRegroup` draws first.
+// The regroup draw waits for every "when the regroup phase starts" choice, so the top card is still there.
+registerCard('TWI_068', { // Foresight
+  abilities: [{ trigger: 'whenRegroupStarts', description: 'Attached unit gains: "When the regroup phase starts (before drawing cards): Name a card, then look at the top card of your deck. If it\'s the named card, you may reveal and draw it."', effect: (s, ctx) =>
+    pushChoice(s, { kind: 'nameCard', id: `${ctx.sourceInstanceId}-foresight`, controller: ctx.owner, unitId: ctx.sourceInstanceId!, then: resume(ctx, 'look') }) }],
+  ifYouDo: (s, ctx) => {
+    if (ctx.step !== 'look') return drawCards(s, ctx.owner, 1)
+    const top = s.players[ctx.owner].deck[0]
+    return top !== undefined && s.cards[top]?.name === ctx.nameChosen
+      ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-foresight-draw`, controller: ctx.owner, cost: 0, text: `reveal and draw ${s.cards[top]?.name}`, then: resume(ctx, 'draw') })
+      : s
+  },
+})
 registerCard('SEC_052', { // Diplomatic Immunity
   abilities: [{
     trigger: 'onDefense',

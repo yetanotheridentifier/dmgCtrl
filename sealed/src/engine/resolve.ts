@@ -1051,7 +1051,8 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
   // Regroup choices are resolved before anyone resources, and resourcing starts with the
   // initiative holder — `advanceTurn` below is action-phase logic and would hand the turn to the
   // wrong side here (or worse, re-enter regroup).
-  if (state.phase === 'regroup') return { ...state, activePlayer: state.initiative }
+  // The draw step, held back for "when the regroup phase starts" choices, comes once they are answered.
+  if (state.phase === 'regroup') return state.pendingRegroupDraw ? regroupDraw(state) : { ...state, activePlayer: state.initiative }
   // The action phase's opening choices are answered: play begins with the initiative holder.
   if (state.pendingRoundStart) return { ...state, pendingRoundStart: undefined, activePlayer: state.initiative }
   // A "when you take the initiative" choice: complete the deferred turn transition.
@@ -3437,29 +3438,41 @@ function enterRegroup(state: GameState): GameState {
   if (next.winner !== null) return next
   next = dropDelayed(next, e => e.when === 'takeInitiative')
   next = sweepUnitDefeats(next)
-  next = drawForRegroup(next, 'player')
-  next = drawForRegroup(next, 'opponent')
-  next = checkWin(next)
-  if (next.winner !== null) return next
-  // "When the regroup phase starts" abilities (e.g. Alphabet Squadron U-Wing).
+  // "When the regroup phase starts" abilities (e.g. Alphabet Squadron U-Wing), which come before the
+  // draw step: Foresight's "(before drawing cards)" says so outright.
   next = checkWin(fireForAllUnits(next, 'whenRegroupStarts'))
   if (next.winner !== null) return next
-  // These fire for BOTH players' units, and a choice belongs to the card's controller whichever
-  // side that is. Resourcing starts with the initiative holder, but if the only pending choice is
-  // the other player's, handing them the turn is the only way it can be answered: `choiceMoves`
-  // offers the active player's choices alone, so otherwise the regroup phase has no legal move at
-  // all and the game hangs (#365). `resumeAfterChoice` hands back once the queue drains.
+  next = { ...next, regroupResourced: { player: false, opponent: false } }
   // A search crosses the boundary in ONE step. The resource is already taken for both sides, and the
-  // choice must not be offered, since deciding the opponent's would mean reading their hand.
-  // `startNextRound` still hands the turn to whoever owes a `whenRegroupStarts` choice.
-  if (next.simulatedRegroup === true) return startNextRound(next)
-  const pending = next.pendingChoices ?? []
-  const answerable = pending.some(c => c.controller === next.initiative) || pending.length === 0
-  return {
-    ...next,
-    activePlayer: answerable ? next.initiative : pending[0].controller,
-    regroupResourced: { player: false, opponent: false },
+  // choice must not be offered, since deciding the opponent's would mean reading their hand, so the
+  // draw does not wait for it. `startNextRound` still hands the turn to whoever owes a
+  // `whenRegroupStarts` choice.
+  if (next.simulatedRegroup === true) {
+    next = checkWin(drawForRegroup(drawForRegroup(next, 'player'), 'opponent'))
+    return next.winner !== null ? next : startNextRound(next)
   }
+  // The draw waits for every choice those abilities raised; `resumeAfterChoice` runs it once they drain.
+  if (hasPendingChoices(next)) return handRegroupTurn({ ...next, pendingRegroupDraw: true })
+  return regroupDraw(next)
+}
+
+/** The regroup phase's draw step: both players draw, then resourcing begins. */
+function regroupDraw(state: GameState): GameState {
+  const next = checkWin(drawForRegroup(drawForRegroup({ ...state, pendingRegroupDraw: undefined }, 'player'), 'opponent'))
+  return next.winner !== null ? next : handRegroupTurn(next)
+}
+
+/**
+ * Who acts next in the regroup phase. Its abilities fire for BOTH players' units, and a choice belongs to
+ * the card's controller whichever side that is. Resourcing starts with the initiative holder, but if
+ * the only pending choice is the other player's, handing them the turn is the only way it can be
+ * answered: `choiceMoves` offers the active player's choices alone, so otherwise the regroup phase has
+ * no legal move at all and the game hangs (#365). `resumeAfterChoice` hands back once the queue drains.
+ */
+function handRegroupTurn(state: GameState): GameState {
+  const pending = state.pendingChoices ?? []
+  const answerable = pending.some(c => c.controller === state.initiative) || pending.length === 0
+  return { ...state, activePlayer: answerable ? state.initiative : pending[0].controller }
 }
 
 function regroupChoice(state: GameState, handIndex: number | null): GameState {

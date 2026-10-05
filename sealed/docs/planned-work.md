@@ -342,9 +342,8 @@ Two phases:
   per card against the registry; the ticket's "43 sole" and "81 touched" had counted the pilots and
   the other tickets' cards). Split to #740: Rex's DC-17s shipped (a new `whenEnemyUnitReadies` trigger
   point, raised by the `readyUnit` primitive itself rather than a resolver call site so it hears every
-  route a unit readies through). Foresight split again to **#744**: it needs the regroup phase's draw
-  to wait on `whenRegroupStarts` choices, an engine-wide sequencing change rather than a card
-  registration. Condemn shipped with #682; the pilot cards shipped with Piloting and the pilot leaders with #754, Boba Fett's front split to #756; Han's
+  route a unit readies through). Foresight split again and shipped with #744, once the regroup phase's draw
+  waited on `whenRegroupStarts` choices. Condemn shipped with #682; the pilot cards shipped with Piloting and the pilot leaders with #754, Boba Fett's front split to #756; Han's
   Golden Dice, Targeted For Removal and Payroll Heist on #719; Leia Organa on #733; For The Republic on
   #730.
 

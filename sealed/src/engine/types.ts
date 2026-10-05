@@ -585,6 +585,11 @@ export interface GameState {
    */
   pendingRoundStart?: boolean
   /**
+   * The regroup phase began with "when the regroup phase starts" choices still to answer: the draw
+   * step comes after them (Foresight: "before drawing cards"), so it waits until they drain.
+   */
+  pendingRegroupDraw?: boolean
+  /**
    * An opponent-interjected choice is pending as part of this player's action (Sabine Wren):
    * `activePlayer` is temporarily the choosing opponent, and this holds the original actor so that
    * once the interjected choice(s) drain, control is restored to them and the turn advances normally.

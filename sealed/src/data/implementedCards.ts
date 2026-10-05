@@ -570,6 +570,7 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'SEC_054', name: 'Exiled from the Force' },
   { id: 'LAW_200', name: 'Salvaged Blaster' },
   { id: 'SHD_038', name: 'Brutal Traditions' },
+  { id: 'TWI_068', name: 'Foresight' },
 ]
 
 /**
