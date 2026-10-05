@@ -81,7 +81,7 @@ The **cog** in the header opens **Settings**, from the deck screen and from insi
 
 ### Turn structure
 
-Players alternate single actions. When both players pass consecutively, the round moves to the **regroup phase**: each player draws 2, may put 1 card from hand into resources, then everything readies and a new round begins. In regroup, **click any hand card to resource it** (or Skip resourcing to bank nothing). Whoever holds the **initiative** acts first each round: take it during a round to act first in the next one (but you'll pass for the rest of the current one).
+Players alternate single actions. When both players pass consecutively, the round moves to the **regroup phase**: anything that happens "when the regroup phase starts" resolves first, then each player draws 2, may put 1 card from hand into resources, then everything readies and a new round begins. In regroup, **click any hand card to resource it** (or Skip resourcing to bank nothing). Whoever holds the **initiative** acts first each round: take it during a round to act first in the next one (but you'll pass for the rest of the current one).
 
 A card put into your resource zone **by a card ability** (Long Live the Empire, The Armorer) arrives **exhausted**, exactly as one you bank yourself does. It pays for something from the next round, not the action that created it, so ramp buys you a bigger future turn rather than a bigger current one. Only a card that says otherwise in its own text gives you a ready resource.
 

@@ -324,11 +324,12 @@ describe('Fortify: triggered abilities on the base', () => {
   })
 
   it('Noxious Refinery (HMW_160): deals 1 damage to an enemy unit when the top card is Aggression', () => {
-    const agg = toRegroup(board({ ...fortified('HMW_160'), units: [unit('f', 'GRD')], deck: ['GRD', 'GRD', 'AGG', 'GRD'] }, { units: [unit('e', 'GRD')] }))
+    // The top card as the regroup phase starts, before the regroup draw takes it.
+    const agg = toRegroup(board({ ...fortified('HMW_160'), units: [unit('f', 'GRD')], deck: ['AGG', 'GRD', 'GRD', 'GRD'] }, { units: [unit('e', 'GRD')] }))
     expect(choice(agg).controller).toBe('player')
     expect(unitOffers(agg)).toEqual(['e'])
     expect(U(accept(agg, { targetInstanceId: 'e' }), 'e')!.damage).toBe(1)
-    const not = toRegroup(board({ ...fortified('HMW_160'), deck: ['GRD', 'GRD', 'GRD', 'AGG'] }, { units: [unit('e', 'GRD')] }))
+    const not = toRegroup(board({ ...fortified('HMW_160'), deck: ['GRD', 'AGG', 'AGG', 'GRD'] }, { units: [unit('e', 'GRD')] }))
     expect(not.pendingChoices?.some(c => c.kind === 'selectDamageTarget') ?? false).toBe(false)
   })
 

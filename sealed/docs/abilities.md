@@ -226,6 +226,12 @@ whose cards, from where and which, so a registration compares `ctx.discard.playe
 not a discard and raises neither; `discardSites.test.ts` holds every other append to a pile to a named
 list.
 
+`whenRegroupStarts` fires as the regroup phase begins, **before the draw step**: `enterRegroup` holds
+both players' draw (`pendingRegroupDraw`) until every choice those abilities raised is answered, and
+`resumeAfterChoice` runs it once they drain. So a regroup-start ability reads the hand and deck as the
+action phase left them (Foresight's "before drawing cards", Zorii Bliss's discard, Doctor Aphra's mill).
+A search's simulated regroup draws without waiting, since it never offers those choices.
+
 `whenUnitLeavesPlay` ("when an enemy unit leaves play", Boba Fett) is raised wherever the phase
 record's `leftPlay` is written: a defeat (in the defeat batch) and a return to hand. It is heard by both
 players' undeployed leaders, bases and units, with the unit and its controller in `ctx.unitLeftPlay`.
