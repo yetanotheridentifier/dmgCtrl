@@ -1027,6 +1027,21 @@ export interface PhaseEvents {
   baseActionsUsed?: Partial<Record<PlayerId, string[]>>
   /** Players who dealt indirect damage this phase (Decimator of Dissidents). */
   indirectDamageDealers?: PlayerId[]
+  /**
+   * Cards each player has DISCARDED from their own hand or deck this phase, in order (Kylo's TIE
+   * Silencer, Fear and Dead Men). Narrower than reaching the pile: a defeated unit, a played event and
+   * an upgrade leaving play all end up there without being discarded. Recorded by `discardCards`.
+   */
+  discarded?: Partial<Record<PlayerId, DiscardedCard[]>>
+}
+
+/** Where a discarded card came from: "discarded from your hand or deck". */
+export type DiscardedFrom = 'hand' | 'deck'
+
+/** One card in `PhaseEvents.discarded`. */
+export interface DiscardedCard {
+  cardId: string
+  from: DiscardedFrom
 }
 
 /**
@@ -1127,6 +1142,12 @@ export interface TriggerContext {
   amountHealed?: number
   /** `whenDrawCards`: how many cards that one draw event drew. Fires once per event, not per card. */
   cardsDrawn?: number
+  /**
+   * `whenDiscard` / `whenDiscarded`: one discard event, the cards a single effect put into a discard
+   * pile out of `player`'s hand or deck. The point fires on both players, so a registration compares
+   * `player` against `ctx.owner` ("when you discard" or "when a player discards").
+   */
+  discard?: { player: PlayerId; from: DiscardedFrom; cardIds: string[] }
 }
 
 export interface PendingTrigger {
@@ -1986,6 +2007,19 @@ export function recordCardsDrawn(state: GameState, owner: PlayerId, n: number): 
 /** How many cards `owner` has drawn this phase (Beilert Valance). */
 export function cardsDrawnThisPhase(state: GameState, owner: PlayerId): number {
   return state.phaseEvents?.cardsDrawn?.[owner] ?? 0
+}
+
+/** Note that `owner` discarded `cardIds` from their hand or deck this phase. */
+export function recordDiscarded(state: GameState, owner: PlayerId, from: DiscardedFrom, cardIds: string[]): GameState {
+  if (cardIds.length === 0) return state
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  const before = events.discarded?.[owner] ?? []
+  return { ...state, phaseEvents: { ...events, discarded: { ...events.discarded, [owner]: [...before, ...cardIds.map(cardId => ({ cardId, from }))] } } }
+}
+
+/** The cards `owner` has discarded from their hand or deck this phase, in order. */
+export function discardedThisPhase(state: GameState, owner: PlayerId): DiscardedCard[] {
+  return state.phaseEvents?.discarded?.[owner] ?? []
 }
 
 /** Instance ids of units that attacked this phase (Anakin's Podracer). */

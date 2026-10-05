@@ -612,6 +612,17 @@ directly, with `discardIt` putting its find in the pile instead of the hand and 
 the terms ("search the top 10, discard it, and for this phase you may play that card from your
 discard pile").
 
+### "Action: … play this card from your discard pile"
+
+A card's own ability, rather than another card's permission, but the same shape on the move list (Kylo's
+TIE Silencer, Salvaged Blaster, Brutal Traditions). Every other ability the engine offers belongs to a
+card in play, a leader or a base, so a card in a pile offers one only by declaring it:
+`CardDefinition.discardAction` names the condition (`usable`), and the effect is always to play that card
+out of its owner's pile at its full cost. A unit's ordinary `actionAbilities` are never read from the
+pile. `discardActionMoves` (`legalMoves.ts`) offers a `useDiscardAction` move for each distinct such card
+whose condition holds and which could be played now, one per legal host for an upgrade, and
+`useDiscardAction` (`resolve.ts`) plays it through `playFromZone`, the same door as a grant.
+
 ### Smuggle: a standing action, not a choice
 
 "If this card is a resource, you may play it for its smuggle cost" (CR 14, #469) is the other shape a

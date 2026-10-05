@@ -136,7 +136,7 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 ### Trigger points
 
 `whenPlayed`, `onAttack`, `whenUnitAttacks`, `onAttackEnd`, `onDefense`, `whenHealed`, `whenDefeated`, `whenReadies`,
-`whenReadyStep`, `whenEnemyUnitReadies`, `whenDrawn`, `whenUnitLeavesPlay`, `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
+`whenReadyStep`, `whenEnemyUnitReadies`, `whenDrawn`, `whenDiscard`, `whenDiscarded`, `whenUnitLeavesPlay`, `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
 `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenDamageDealt`, `whenEnemyAttacksBase`,
@@ -213,6 +213,18 @@ unit that readied, the mirror of `whenEnemyUnitDefeated`.
 `whenDrawn` ("when you draw this card", Rey) is an ability of a card in **hand**: `drawCards` collects it
 from each card it drew, once the draw's `whenDrawCards` batch is done, with `ctx.drawingPlayer`. The
 source instance is a `drawn-<card>-<index>` id, since a hand card has none.
+
+`whenDiscard` and `whenDiscarded` are raised by **the one door for discarding from a hand or deck**,
+`discardTaken` (`effects.ts`, reached through `discardCards` and `discardFromHand`). Each call is one
+event: the door records the cards for the phase (`discardedThisPhase`, which "discarded from your hand
+or deck this phase" reads), then fires `whenDiscard` on both players' undeployed leaders, bases and
+units ("when you discard a card from your deck", Sebulba's Podracer; "when a player discards a card
+from their hand", Migs Mayfeld) and `whenDiscarded` on each discarded card itself, from the pile it
+has just reached ("when this event is discarded", That's a Rock), as one batch. `ctx.discard` names
+whose cards, from where and which, so a registration compares `ctx.discard.player` against
+`ctx.owner`. Reaching a pile any other way (a defeat, an event resolving, an upgrade leaving play) is
+not a discard and raises neither; `discardSites.test.ts` holds every other append to a pile to a named
+list.
 
 `whenUnitLeavesPlay` ("when an enemy unit leaves play", Boba Fett) is raised wherever the phase
 record's `leftPlay` is written: a defeat (in the defeat batch) and a return to hand. It is heard by both
@@ -348,6 +360,7 @@ Two triggers fire **once per event, not once per item**, matching cards worded "
   call to `giveTokens`, which attaches the whole batch and then fires: an upgrade attaching and that
   upgrade's own effect then granting tokens are two separate events and do fire twice.
 - **`whenDrawCards`** fires once per draw, however many cards it drew.
+- **`whenDiscard`** fires once per call to the discard door, however many cards it discarded.
 
 Granting tokens one at a time in a loop therefore fires these triggers repeatedly and is a bug; use
 `giveTokens` with a count.

@@ -68,6 +68,13 @@ export type TriggerPoint =
   // "When you draw 1 or more cards" (Axe Woves): fires once per draw EVENT (not per card)
   // on the drawing player's units, including the regroup-phase draw.
   | 'whenDrawCards'
+  // "When you discard a card from your deck" (Sebulba's Podracer), "when a player discards a card from
+  // their hand" (Migs Mayfeld): one discard event, raised by `discardCards` and heard by BOTH players'
+  // undeployed leaders, bases and units. `ctx.discard` says whose cards, from where, and which.
+  | 'whenDiscard'
+  // "When this card is discarded from your hand or deck" (That's a Rock): each discarded card's own
+  // ability, from the pile it has just reached, as `whenDrawn` is from the hand. Same `ctx.discard`.
+  | 'whenDiscarded'
   // Damage dealt, to units or a base, by combat or an ability (Rancor Keeper, Blade Three, Cassian
   // Andor, Darth Sidious). One event per application of damage, heard by BOTH players' undeployed
   // leaders, bases and units, the damaged side first. `ctx.damageDealt` names every unit dealt damage
@@ -242,6 +249,14 @@ export interface CardDefinition {
    * grant, …), which do not go through the hand at all.
    */
   cannotPlayFromHand?: boolean
+  /**
+   * "Action: If <condition>, play this card from your discard pile (paying its cost)" (Kylo's TIE
+   * Silencer, Salvaged Blaster, Brutal Traditions): the one kind of ability that works from a discard
+   * pile. Offered to the pile's owner as `useDiscardAction` while `usable` holds and the card could be
+   * played, and taken as their action for the turn. Declared on the card, rather than read off its
+   * `actionAbilities`, so a unit's ordinary "Action:" never becomes usable from the pile.
+   */
+  discardAction?: { description: string; usable: (state: GameState, owner: PlayerId) => boolean }
   /** Cost delta when playing this card (upgrades: `target` is the attach target). */
   costModifier?: (state: GameState, playerId: PlayerId, target?: UnitState) => number
   /**

@@ -568,6 +568,8 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'SHD_072', name: 'Imprisoned' },
   { id: 'SEC_038', name: 'Condemn' },
   { id: 'SEC_054', name: 'Exiled from the Force' },
+  { id: 'LAW_200', name: 'Salvaged Blaster' },
+  { id: 'SHD_038', name: 'Brutal Traditions' },
 ]
 
 /**
@@ -1043,6 +1045,8 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'TWI_102', name: 'Manufactured Soldiers' },
   { id: 'SHD_205', name: 'Let the Wookiee Win' },
   { id: 'JTL_235', name: 'Commandeer' },
+  { id: 'LAW_179', name: 'Fear and Dead Men' },
+  { id: 'LAW_206', name: "That's a Rock" },
 ]
 
 /**
@@ -2307,6 +2311,11 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'JTL_038', name: 'Corvus' },
   { id: 'JTL_083', name: 'Pantoran Starship Thief' },
   { id: 'JTL_094', name: 'Luke Skywalker' },
+  // Cards that read discarding from a hand or deck
+  { id: 'SHD_135', name: "Kylo's TIE Silencer" },
+  { id: 'LAW_076', name: "Vult Skerris's Defender" },
+  { id: 'LAW_176', name: "Sebulba's Podracer" },
+  { id: 'SHD_163', name: 'Migs Mayfeld' },
 ]
 
 /**
