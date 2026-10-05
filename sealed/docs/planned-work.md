@@ -142,8 +142,7 @@ Two phases:
   every ability lookup, and the twelve cards that needed it.
   **When Played units and upgrades are finished**, and so are **constant abilities on units and
   upgrades**: the ones existing primitives expressed shipped first, and the hooks and choices the rest
-  needed followed, group by group. Vult Skerris's Defender (needs "discarded a card this phase") is
-  on #678, and the 14 other constant-ability cards lifted out shipped with #682 (losing abilities) or #753
+  needed followed, group by group. Vult Skerris's Defender shipped with #678, and the 14 other constant-ability cards lifted out shipped with #682 (losing abilities) or #753
   (Phantom II) or are on #686; Fives, borrowing another unit's When Played abilities, shipped with #683. **When Defeated units are
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
   shared with another trigger point ("When Played/When Defeated") is built on the compound-head framework
@@ -182,8 +181,10 @@ Two phases:
   (#471): the discard piles became zones on the existing `playCardFrom` door, the unit-only
   `mayPlayUnitFromDiscard` it duplicated was retired onto it, and "for this phase you may play that
   card from a discard pile" became a standing permission on the Play a Card action. 20 cards, the
-  five HMW ones among them. Three cards need an "Action:" dispatched from a card sitting IN the
-  discard pile, a site the engine does not have, and are on #678; L3-37 shipped with #477 and
+  five HMW ones among them. The three with an "Action:" on a card sitting IN the discard pile shipped
+  with #678, on a discard door that records and announces every discard from a hand or deck, with five
+  more cards that read it; SEC_016 Padmé Amidala's leader still needs the reveal half of "reveal or
+  discard 1 or more cards from your hand", which has no single door; L3-37 shipped with #477 and
   Obi-Wan Kenobi with #474, Sifo-Dyas and Mother Talzin with #685; Second Chance and Stolen
   Landspeeder are on the ticket of their own other blocker.
   **Exploit is finished** (#473), and now so is every TWI Exploit card: 22 of TWI's 23 shipped with it
@@ -370,7 +371,7 @@ cards held on it, and read against the engine as it now is, 28 needed no engine 
 registration (six HMW among them, and "when an opponent plays" now read from the far side of
 `whenPlayCard`), and shipped. Every other card went to the ticket that owns its real blocker: the
 mechanic tickets above by comment, #680 for trigger heads no point raises, #678 for the discard
-record, and five new ones, #682 losing abilities (8, all shipped), #683 re-using abilities (7, of which the two that
+record (all shipped but Padmé Amidala's leader, which needs a reveal door), and five new ones, #682 losing abilities (8, all shipped), #683 re-using abilities (7, of which the two that
 borrow another card's When Played abilities shipped and the five that re-run an ability already used
 moved to #704, all shipped), #684 replacement
 effects (5, all shipped), #685 cards that need only writing (22, all shipped) and #686 the one-offs no other ticket owns (23).

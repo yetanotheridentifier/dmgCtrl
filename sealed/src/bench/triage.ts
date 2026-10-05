@@ -74,6 +74,9 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
   // is `onAttackEnd` read from the host.
   'when played as an upgrade', 'when played as a unit', 'when this upgrade attaches to a unit',
   'when a pilot attaches to this unit', 'when a pilot upgrade attaches to this unit', 'when attached unit completes an attack',
+  // A discard from a hand or deck: `whenDiscard` on both sides, `whenDiscarded` on the card itself.
+  'when you discard a card from your deck', 'when a player discards a card from their hand',
+  'when this event is discarded from your hand or deck',
 ])
 
 /**

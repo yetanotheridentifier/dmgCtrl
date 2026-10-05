@@ -9,7 +9,7 @@ import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, 
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, defeatForceToken } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, discardCards, discardTaken, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, defeatForceToken } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, cardHasTrait, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
@@ -136,8 +136,11 @@ function resolveAction(state: GameState, action: Action): GameState {
         return advanceTurn(resetPasses(played))
       })
     case 'playFromDiscard':
+    case 'useDiscardAction':
       return requirePhase(state, 'action', () => {
-        const played = takeDiscardPlayGrant(state, action.grantIndex, action.targetInstanceId)
+        const played = action.type === 'playFromDiscard'
+          ? takeDiscardPlayGrant(state, action.grantIndex, action.targetInstanceId)
+          : useDiscardAction(state, action.discardIndex, action.targetInstanceId)
         if (played.winner !== null) return played
         // Like every other play: a choice the card raises keeps the turn, and an opponent-controlled
         // one hands over first.
@@ -915,6 +918,19 @@ function takeDiscardPlayGrant(state: GameState, grantIndex: number, targetInstan
 }
 
 /**
+ * Use the "Action:" the card at `discardIndex` of the active player's discard pile has there, which
+ * plays that card out of the pile, paying its cost (`CardDefinition.discardAction`). Its condition is
+ * re-read here, since it is the ability's and not the play's.
+ */
+function useDiscardAction(state: GameState, discardIndex: number, targetInstanceId?: string): GameState {
+  const owner = state.activePlayer
+  const cardId = state.players[owner].discard[discardIndex]
+  const ability = cardId ? getCardDefinition(cardId)?.discardAction : undefined
+  if (!ability?.usable(state, owner)) throw new Error(`useDiscardAction: discard ${discardIndex} has no usable action`)
+  return playFromZone(state, owner, 'discard', { index: discardIndex, cardId }, {}, targetInstanceId)
+}
+
+/**
  * Take Smuggle (CR 14): play the resource at `resourceIndex` for its own printed smuggle cost,
  * replaced with the top card of the deck. Unlike a `DiscardPlayGrant` there is no standing record to
  * spend: the card's own `smuggle` bracket is read fresh, exactly as `smuggleMoves` (legalMoves.ts)
@@ -1172,8 +1188,7 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
     if (choice.held) {
       next = updatePlayer(next, choice.controller, { deck: [...next.players[choice.controller].deck, ...choice.revealed] })
     } else if (choice.discardRest) {
-      const p = next.players[choice.controller]
-      next = updatePlayer(next, choice.controller, { deck: p.deck.slice(choice.revealed.length), discard: [...p.discard, ...choice.revealed] })
+      next = discardCards(next, choice.controller, 'deck', choice.revealed.map((_, i) => i))
     } else {
       next = bottomTopCards(next, choice.controller, choice.revealed.length)
     }
@@ -2061,8 +2076,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     }
     case 'mayDiscardTop': {
       // The revealed card is discarded (or, on decline via skipTrigger, simply left in place).
-      const p = next.players[choice.deck]
-      if (p.deck.length > 0) next = updatePlayer(next, choice.deck, { deck: p.deck.slice(1), discard: [...p.discard, p.deck[0]] })
+      next = discardCards(next, choice.deck, 'deck', [0])
       break
     }
     case 'lookAtHand': {
@@ -2115,8 +2129,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         // (Cobb Vanth, Aid from the Innocent): the find goes to the pile rather than the hand, and
         // the permission is left over it. Otherwise the find is drawn, as every other search does.
         const keep = (st: GameState, deck: string[], andThen: string[] = []): GameState => choice.discardIt
-          ? updatePlayer(st, owner, { discard: [...st.players[owner].discard, drawn, ...andThen], deck })
-          : updatePlayer(st, owner, { hand: [...st.players[owner].hand, drawn], deck, ...(andThen.length ? { discard: [...st.players[owner].discard, ...andThen] } : {}) })
+          ? discardTaken(updatePlayer(st, owner, { deck }), owner, 'deck', [drawn, ...andThen])
+          : discardTaken(updatePlayer(st, owner, { hand: [...st.players[owner].hand, drawn], deck }), owner, 'deck', andThen)
         const grant = (st: GameState): GameState => choice.grantPlay
           ? addDiscardPlayGrant(st, { ...choice.grantPlay, player: owner, owner, cardId: drawn })
           : st
@@ -2433,10 +2447,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const owner = choice.controller
         const discarded = next.players[owner].deck[deckIndex]
         if (discarded !== undefined) {
-          next = updatePlayer(next, owner, {
-            deck: next.players[owner].deck.filter((_, i) => i !== deckIndex),
-            discard: [...next.players[owner].discard, discarded],
-          })
+          next = discardCards(next, owner, 'deck', [deckIndex])
           next = pushChoice(next, { kind: 'mayAttack', id: choice.unitId, controller: owner, unitId: choice.unitId, grantCardId: discarded })
         }
       }

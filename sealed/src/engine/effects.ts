@@ -1,5 +1,5 @@
-import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment, UsedAbility } from './types'
-import { baseHostId, upgradeSideId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, baseAbilityCardIds } from './types'
+import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, DiscardedFrom, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment, UsedAbility } from './types'
+import { baseHostId, upgradeSideId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordDiscarded, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint, ProtectedAction } from './abilities'
@@ -1117,13 +1117,35 @@ export function bottomTopCards(state: GameState, owner: PlayerId, n: number): Ga
 
 /** Discard the card at `handIndex` from a player's hand to their discard pile. No-op if out of range. */
 export function discardFromHand(state: GameState, owner: PlayerId, handIndex: number): GameState {
-  const p = state.players[owner]
-  const cardId = p.hand[handIndex]
-  if (cardId === undefined) return state
-  return {
-    ...state,
-    players: { ...state.players, [owner]: { ...p, hand: p.hand.filter((_, i) => i !== handIndex), discard: [...p.discard, cardId] } },
-  }
+  return discardCards(state, owner, 'hand', [handIndex])
+}
+
+/**
+ * Discard the cards at `indices` of `owner`'s hand or deck: the one door for "discard a card from your
+ * hand / deck". Indices out of range are ignored, and the cards reach the pile in index order.
+ */
+export function discardCards(state: GameState, owner: PlayerId, from: DiscardedFrom, indices: number[]): GameState {
+  const zone = state.players[owner][from]
+  const at = indices.filter(i => i >= 0 && i < zone.length).sort((a, b) => a - b)
+  if (at.length === 0) return state
+  const taken = updatePlayer(state, owner, { [from]: zone.filter((_, i) => !at.includes(i)) })
+  return discardTaken(taken, owner, from, at.map(i => zone[i]))
+}
+
+/**
+ * Put `cardIds` into `owner`'s discard pile as discarded from their hand or deck, where the caller has
+ * already taken them out of it: a search holds its window aside while the picks are made, so the cards
+ * are no longer in the deck by the time they are discarded. Everything that makes a discard a discard
+ * is here: the phase record, the "when you discard" event on both sides, and each card's own "when this
+ * is discarded" from the pile it has just reached.
+ */
+export function discardTaken(state: GameState, owner: PlayerId, from: DiscardedFrom, cardIds: string[]): GameState {
+  if (cardIds.length === 0) return state
+  const next = recordDiscarded(updatePlayer(state, owner, { discard: [...state.players[owner].discard, ...cardIds] }), owner, from, cardIds)
+  const ctx: TriggerContext = { discard: { player: owner, from, cardIds } }
+  const heard = [owner, opponentOf(owner)].flatMap(p => [...collectPlayerTriggers(next, 'whenDiscard', p, ctx), ...collectUnitsTrigger(next, 'whenDiscard', p, ctx)])
+  const own = cardIds.flatMap((cardId, i) => collectCardTriggers('whenDiscarded', cardId, owner, `discarded-${cardId}-${i}`, ctx))
+  return fireBatch(next, [...heard, ...own])
 }
 
 /**

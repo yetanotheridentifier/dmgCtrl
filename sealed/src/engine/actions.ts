@@ -24,6 +24,10 @@ export type Action =
   // player takes it on a turn of their own. `grantIndex` addresses it in `state.discardPlayGrants`,
   // and `targetInstanceId` supplies the host when the granted card is an upgrade.
   | { type: 'playFromDiscard'; grantIndex: number; targetInstanceId?: string }
+  // Use the "Action:" a card has while it sits in the acting player's own discard pile, which plays
+  // that card out of the pile (`CardDefinition.discardAction`). `discardIndex` addresses the card;
+  // `targetInstanceId` is the host when it is an upgrade.
+  | { type: 'useDiscardAction'; discardIndex: number; targetInstanceId?: string }
   // Smuggle (CR 14): a resource with the keyword may be played for its own printed smuggle cost,
   // replaced with the top card of the deck. A standing permission read straight off the card, like
   // `playFromDiscard`, rather than a raised choice: `resourceIndex` addresses it in the player's own

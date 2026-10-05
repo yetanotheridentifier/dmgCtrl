@@ -1,13 +1,13 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, actionAbilityKey, collectUnitTriggers, collectCardTriggers, abilityCardIds, usedAbilityOf } from './abilities'
-import { fireBatch, runAbilitiesAgain, thenAfterChoices,takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken } from './effects'
+import { fireBatch, runAbilitiesAgain, thenAfterChoices, discardCards, discardTaken, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage, isDoomed } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { deployLeaderAsPilot, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, indirectDamageDealtThisPhase, markAbilityUsed, updatePlayer, upgradeSideId, recordUnitDefeated } from './types'
+import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, discardedThisPhase, indirectDamageDealtThisPhase, markAbilityUsed, updatePlayer, upgradeSideId, recordUnitDefeated } from './types'
 import { canTakePilot, affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost, readyResourceCount } from './resources'
@@ -2620,9 +2620,7 @@ registerCard(GRANT_TRENCH_RUN, {
     description: "Discard 2 cards from the defending player's deck. Deal unpreventable damage equal to the difference in the discarded cards' costs to this unit.",
     effect: (s, ctx) => {
       const defending = opponentOf(ctx.owner)
-      const p = s.players[defending]
-      const milled = p.deck.slice(0, 2)
-      const next = updatePlayer(s, defending, { deck: p.deck.slice(milled.length), discard: [...p.discard, ...milled] })
+      const [next, milled] = millTop(s, defending, 2)
       // With fewer than two cards discarded there is no pair to take a difference of.
       if (milled.length < 2) return next
       const [a, b] = milled.map(id => s.cards[id]?.cost ?? 0)
@@ -4911,10 +4909,9 @@ registerCard('TWI_257', { // Private Manufacturing
   },
 })
 /** Discard the top `n` cards of `who`'s deck; returns the state and the cards discarded. */
-const millTop = (s: GameState, who: PlayerId, n: number): [GameState, string[]] => {
-  const p = s.players[who]
-  const milled = p.deck.slice(0, n)
-  return [updatePlayer(s, who, { deck: p.deck.slice(milled.length), discard: [...p.discard, ...milled] }), milled]
+function millTop(s: GameState, who: PlayerId, n: number): [GameState, string[]] {
+  const milled = s.players[who].deck.slice(0, n)
+  return [discardCards(s, who, 'deck', milled.map((_, i) => i)), milled]
 }
 registerCard('LAW_203', whenPlayed('Discard 2 cards from your deck. You may return an Aggression card discarded this way to your hand.', (s, ctx) => { // Daring Delve
   const [next, milled] = millTop(s, ctx.owner, 2)
@@ -5204,10 +5201,8 @@ function causePick(s: GameState, ctx: Resumable, size: number, picks: number[]):
  * the player reorder them; keeping the order is an approximation.
  */
 function causeFinish(s: GameState, ctx: Resumable, picks: number[]): GameState {
-  const p = s.players[ctx.owner]
-  const size = Math.min(4, p.deck.length)
-  const top = p.deck.slice(0, size)
-  return updatePlayer(s, ctx.owner, { deck: [...top.filter((_, i) => !picks.includes(i)), ...p.deck.slice(size)], discard: [...p.discard, ...picks.map(i => top[i])] })
+  const size = Math.min(4, s.players[ctx.owner].deck.length)
+  return discardCards(s, ctx.owner, 'deck', picks.filter(i => i < size))
 }
 /**
  * "Search the top `depth` cards of your deck for a <trait> unit and play it. It costs `discount` less
@@ -6736,12 +6731,12 @@ registerCard('JTL_014', { // Admiral Trench
     const chosen = ctx.optionIndex ?? 0
     const p = s.players[ctx.owner]
     if (stage === 'discard') {
-      const next = updatePlayer(s, ctx.owner, { discard: [...p.discard, st.cards[chosen]] })
+      const next = discardTaken(s, ctx.owner, 'deck', [st.cards[chosen]])
       return trenchOffer(next, ctx, { left: st.left - 1, cards: st.cards.filter((_, i) => i !== chosen) })
     }
     // The drawn card goes back on top and is drawn from there, so it is a draw like any other.
     const rest = st.cards.filter((_, i) => i !== chosen)
-    return drawCards(updatePlayer(s, ctx.owner, { deck: [st.cards[chosen], ...p.deck], discard: [...p.discard, ...rest] }), ctx.owner, 1)
+    return drawCards(discardTaken(updatePlayer(s, ctx.owner, { deck: [st.cards[chosen], ...p.deck] }), ctx.owner, 'deck', rest), ctx.owner, 1)
   },
 })
 
@@ -10122,8 +10117,7 @@ registerCard('SEC_205', { abilities: [{ trigger: 'onAttackEnd', description: "If
   const defender = opponentOf(ctx.owner)
   const top = s.players[defender].deck[0]
   if (!dealtToBase(ctx) || top === undefined) return s
-  const p = s.players[defender]
-  const milled = updatePlayer(s, defender, { deck: p.deck.slice(1), discard: [...p.discard, top] })
+  const [milled] = millTop(s, defender, 1)
   // The card stays the defending player's (CR 1.5.2): `owner` is theirs, `player` is who may play it.
   return addDiscardPlayGrant(milled, { player: ctx.owner, owner: defender, cardId: top, waive: { all: true } })
 } }] })
@@ -10460,7 +10454,7 @@ registerCard('SHD_035', { abilities: [{ trigger: 'onDefense', description: 'When
 registerCard('SEC_090', { abilities: [{ trigger: 'onDefense', description: "When this unit is attacked: Discard a card from your deck. If it's a unit, you may return it to your hand.", effect: (s, ctx) => { // Director Krennic
   const top = s.players[ctx.owner].deck[0]
   if (top === undefined) return s
-  const discarded = updatePlayer(s, ctx.owner, { deck: s.players[ctx.owner].deck.slice(1), discard: [...s.players[ctx.owner].discard, top] })
+  const [discarded] = millTop(s, ctx.owner, 1)
   return printedUnit(s.cards[top])
     ? pushChoice(discarded, { kind: 'selectFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: [top], optional: true })
     : discarded
@@ -10819,7 +10813,7 @@ registerCard('SEC_017', { // Sabé
     }
     // The picked position, since the two may be copies of one card.
     const at = ctx.optionIndex ?? 0
-    return at < deck.length ? updatePlayer(s, defender, { deck: deck.filter((_, i) => i !== at), discard: [...s.players[defender].discard, deck[at]] }) : s
+    return discardCards(s, defender, 'deck', [at])
   },
 })
 
@@ -13360,7 +13354,8 @@ const sifoFinish = (s: GameState, ctx: Resumable, picks: number[]): GameState =>
   if (window.length === 0) return s
   const found = picks.map(i => window[i])
   const rest = window.filter((_, i) => !picks.includes(i))
-  const settled = { ...updatePlayer(s, ctx.owner, { deck: [...p.deck.slice(window.length), ...seededShuffle(rest, s.rngSeed)], discard: [...p.discard, ...found] }), rngSeed: nextSeed(s.rngSeed) }
+  const shuffled = { ...updatePlayer(s, ctx.owner, { deck: [...p.deck.slice(window.length), ...seededShuffle(rest, s.rngSeed)] }), rngSeed: nextSeed(s.rngSeed) }
+  const settled = discardTaken(shuffled, ctx.owner, 'deck', found)
   return found.reduce((acc, cardId) => addDiscardPlayGrant(acc, { player: ctx.owner, owner: ctx.owner, cardId, free: true }), settled)
 }
 const sifoPick = (s: GameState, ctx: Resumable, picks: number[]): GameState => {
@@ -13862,6 +13857,68 @@ registerPilot('JTL_083', { unit: { // Pantoran Starship Thief
 } })
 
 registerPilot('JTL_094', { upgrade: { defeatedMovesToGround: true } }) // Luke Skywalker
+
+// ── Discarding from a hand or deck ───────────────────────────────────────────────────────────────
+// Every such discard goes through `discardCards`, which records it for the phase (`discardedThisPhase`)
+// and announces it (`whenDiscard` on both sides, `whenDiscarded` on the card itself).
+
+/** "If this card was discarded from your hand or deck this phase." */
+const discardedThisPhaseFrom = (cardId: string) => (s: GameState, owner: PlayerId): boolean =>
+  discardedThisPhase(s, owner).some(d => d.cardId === cardId)
+
+registerCard('SHD_135', { discardAction: { // Kylo's TIE Silencer
+  description: 'If this unit was discarded from your hand or deck this phase, play it from your discard pile (paying its cost).',
+  usable: discardedThisPhaseFrom('SHD_135'),
+} })
+registerCard('LAW_200', { // Salvaged Blaster
+  attachRestriction: nonVehicle,
+  discardAction: {
+    description: 'If this upgrade was discarded from your hand or deck this phase, play it from your discard pile (paying its cost).',
+    usable: discardedThisPhaseFrom('LAW_200'),
+  },
+})
+registerCard('SHD_038', { discardAction: { // Brutal Traditions
+  description: 'If an enemy unit was defeated this phase, play this upgrade from your discard pile (paying its cost).',
+  usable: (s, owner) => defeatedThisPhase(s, opponentOf(owner)).length > 0,
+} })
+
+registerCard('LAW_076', allOf( // Vult Skerris's Defender
+  whenPlayed('If you discarded a card from your hand or deck this phase, give a Shield token to this unit.', (s, ctx) =>
+    (discardedThisPhase(s, ctx.owner).length > 0 ? giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD) : s)),
+  attacks('You may deal 1 damage to a space unit and exhaust it.', (s, ctx) =>
+    pushChoice(s, { kind: 'mayDamageExhaust', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, arena: 'space' })),
+))
+
+registerCard('LAW_179', { // Fear and Dead Men
+  costModifier: (s, p) => -discardedThisPhase(s, p).filter(d => d.from === 'hand').length,
+  ...whenPlayed('Deal 4 damage to each enemy ground unit.', (s, ctx) =>
+    s.players[opponentOf(ctx.owner)].units.filter(u => u.arena === 'ground').reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 4), s)),
+})
+
+registerCard('LAW_206', { // That's a Rock
+  abilities: [
+    { trigger: 'whenPlayed', description: 'Deal 1 damage to a unit.', effect: (s, ctx) => damageChoice(s, ctx, 1, allUnits(s)) },
+    { trigger: 'whenDiscarded', description: 'When this event is discarded from your hand or deck: You may deal 1 damage to a unit.', effect: (s, ctx) => damageChoice(s, ctx, 1, allUnits(s), [], true) },
+  ],
+})
+
+const SEBULBA_ROUND_KEY = 'LAW_176#round'
+registerCard('LAW_176', { // Sebulba's Podracer
+  abilities: [{ trigger: 'whenDiscard', description: 'When you discard a card from your deck: You may ready this unit. Use this ability only once each round.', effect: (s, ctx) =>
+    (ctx.discard?.player === ctx.owner && ctx.discard.from === 'deck' && selfOf(s, ctx)?.exhausted && !usedThisRound(s, ctx, SEBULBA_ROUND_KEY)
+      ? mayThen(s, ctx, `${ctx.sourceInstanceId}-ready`, "ready Sebulba's Podracer")
+      : s) }],
+  ifYouDo: (s, ctx) => markAbilityUsed(readyUnit(s, ctx.sourceInstanceId!), ctx.owner, ctx.sourceInstanceId!, SEBULBA_ROUND_KEY),
+})
+
+const MIGS_ROUND_KEY = 'SHD_163#round'
+registerCard('SHD_163', { // Migs Mayfeld
+  abilities: [{ trigger: 'whenDiscard', description: 'When a player discards a card from their hand: You may deal 2 damage to a unit or base. Use this ability only once each round.', effect: (s, ctx) =>
+    (ctx.discard?.from === 'hand' && !usedThisRound(s, ctx, MIGS_ROUND_KEY)
+      ? mayThen(s, ctx, `${ctx.sourceInstanceId}-damage`, 'deal 2 damage to a unit or base')
+      : s) }],
+  ifYouDo: (s, ctx) => damageChoice(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, MIGS_ROUND_KEY), ctx, 2, allUnits(s), BOTH_BASES),
+})
 
 registerCard('JTL_126', { // Eject
   ...whenPlayed('Detach a Pilot upgrade, move it to the ground arena as a unit, and exhaust it. Draw a card.', (s, ctx) => {

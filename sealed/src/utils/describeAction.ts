@@ -133,6 +133,14 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const onto = action.targetInstanceId ? ` onto ${anyUnitName(state, action.targetInstanceId) ?? 'a unit'}` : ''
       return `Play ${card.name} from ${where}${onto} (${price})`
     }
+    case 'useDiscardAction': {
+      // The card's own ability, but all it does is play the card, so it reads as that play.
+      const cardId = state.players[by].discard[action.discardIndex]
+      const card = cardId ? state.cards[cardId] : undefined
+      if (!card) return 'Play a card from your discard pile'
+      const onto = action.targetInstanceId ? ` onto ${anyUnitName(state, action.targetInstanceId) ?? 'a unit'}` : ''
+      return `Play ${card.name} from your discard pile${onto} (${playFromCost(state, by, card, {})})`
+    }
     case 'playUpgrade': {
       const cardId = state.players[by].hand[action.handIndex]
       const card = cardId ? state.cards[cardId] : undefined

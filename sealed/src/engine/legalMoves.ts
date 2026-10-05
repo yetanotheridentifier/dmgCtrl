@@ -472,21 +472,37 @@ export function grantZoneRef(state: GameState, grant: DiscardPlayGrant): { zone:
  * because a grant outlives the board state that created it.
  */
 function discardGrantMoves(state: GameState, playerId: PlayerId, forbiddenNames: Set<string>): Action[] {
-  const moves: Action[] = []
-  ;(state.discardPlayGrants ?? []).forEach((grant, grantIndex) => {
-    if (grant.player !== playerId) return
-    const found = grantZoneRef(state, grant)
-    const card = state.cards[grant.cardId]
-    if (!found || !card || forbiddenNames.has(card.name)) return
-    if (card.type === 'upgrade' && !isFortify(card)) {
-      for (const id of validPlayTargets(state, playerId, found.zone, found.ref.index, grant.cardId, grant)) {
-        moves.push({ type: 'playFromDiscard', grantIndex, targetInstanceId: id })
-      }
-      return
-    }
-    if (canPlayFrom(state, playerId, found.zone, found.ref, grant)) moves.push({ type: 'playFromDiscard', grantIndex })
+  return (state.discardPlayGrants ?? []).flatMap((grant, grantIndex) => {
+    const found = grant.player === playerId ? grantZoneRef(state, grant) : undefined
+    return found
+      ? zonePlayMoves(state, playerId, found.zone, found.ref, grant, forbiddenNames, targetInstanceId => ({ type: 'playFromDiscard', grantIndex, ...(targetInstanceId ? { targetInstanceId } : {}) }))
+      : []
   })
-  return moves
+}
+
+/**
+ * The "Action:" abilities on cards in `playerId`'s own discard pile (`CardDefinition.discardAction`),
+ * each of which plays its card out of the pile at its full cost: one move per distinct card, since two
+ * copies are the same play, or one per legal host where it is an upgrade.
+ */
+function discardActionMoves(state: GameState, playerId: PlayerId, forbiddenNames: Set<string>): Action[] {
+  const pile = state.players[playerId].discard
+  return pile.flatMap((cardId, discardIndex) => {
+    if (pile.indexOf(cardId) !== discardIndex || !getCardDefinition(cardId)?.discardAction?.usable(state, playerId)) return []
+    return zonePlayMoves(state, playerId, 'discard', { index: discardIndex, cardId }, {}, forbiddenNames, targetInstanceId => ({ type: 'useDiscardAction', discardIndex, ...(targetInstanceId ? { targetInstanceId } : {}) }))
+  })
+}
+
+/**
+ * The moves that play the card at `ref` out of `zone` on `terms`, outside a pending choice: one, or one
+ * per legal host where the card is an upgrade that has to be attached to something. Affordability and
+ * legality are read now, from the board as it is.
+ */
+function zonePlayMoves(state: GameState, playerId: PlayerId, zone: PlayFromZone, ref: PlayFromRef, terms: PlayFromTerms, forbiddenNames: Set<string>, move: (targetInstanceId?: string) => Action): Action[] {
+  const card = state.cards[ref.cardId]
+  if (!card || forbiddenNames.has(card.name)) return []
+  if (card.type === 'upgrade' && !isFortify(card)) return validPlayTargets(state, playerId, zone, ref.index, ref.cardId, terms).map(id => move(id))
+  return canPlayFrom(state, playerId, zone, ref, terms) ? [move()] : []
 }
 
 /**
@@ -667,6 +683,8 @@ function actionPhaseMoves(state: GameState): Action[] {
   // "For this phase, you may play that card from <a> discard pile": a standing permission, taken
   // here among the normal plays rather than answered as a choice. See `DiscardPlayGrant`.
   moves.push(...discardGrantMoves(state, playerId, forbiddenNames))
+  // "Action: … play this card from your discard pile": a card's own ability, offered from the pile.
+  moves.push(...discardActionMoves(state, playerId, forbiddenNames))
 
   // Smuggle: a resource carrying the keyword may be played for its own smuggle cost.
   moves.push(...smuggleMoves(state, playerId, forbiddenNames))
