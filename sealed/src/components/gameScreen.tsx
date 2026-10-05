@@ -23,10 +23,12 @@ import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
 import { CardGridOverlay } from './cardGridOverlay'
 import { CARD_WIDTH_PX } from './cardSizing'
-import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
+import { tokenLayout, TOKEN_H, PILL_W, TOKEN_SPEC } from './tokens'
+import type { TokenKind } from './tokens'
 import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE, TOKEN_WEAKNESS } from '../engine/tokenUpgrades'
-import { unitHasKeyword, auraContributions } from '../engine/keywords'
-import { baseHostId, baseHostOwner, lastingEffectTotals } from '../engine/types'
+import { unitHasKeyword } from '../engine/keywords'
+import { baseHostId, baseHostOwner } from '../engine/types'
+import { offCardStatDelta } from '../engine/stats'
 import { useCardZoom } from './useCardZoom'
 import { CardRef, DescribedParts } from './cardRef'
 import { CardZoomPopover } from './cardZoom'
@@ -219,21 +221,14 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
 /**
  * Effect tokens (physical-token style) laid over a unit card on this
  * non-rotating wrapper, so they stay upright when the card is exhausted. Damage
- * is the first token; more effect types slot into the same 1–6 layout.
+ * is a square; every other kind is a labelled pill. Fill, ink and width come
+ * from `TOKEN_SPEC`, the one spec for all of them.
  */
 interface CardToken {
-  key: string
+  kind: TokenKind
   label: string
-  color: string
-  testid: string
-  /** Small caption above the count (e.g. "adv." on the Advantage token). */
-  sub?: string
-  /** Text colour; defaults to white. Dark on the light gold Advantage token. */
-  textColor?: string
-  /** Rich content shown in place of `label` (e.g. the two-tone +X/+Y modifier token). */
-  node?: React.ReactNode
-  /** Border (used for the light modifier token so it reads on pale card art). */
-  border?: string
+  /** The full meaning, for screen readers ("Experience +2/+2"). */
+  title: string
 }
 
 /** Signed delta, e.g. 2 → "+2", -1 → "-1", 0 → "+0" (matches the physical +X/+Y token). */
@@ -244,85 +239,67 @@ function signed(n: number): string {
 function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
   const countToken = (id: string) => unit.upgrades.filter(u => u.cardId === id).length
   const tokens: CardToken[] = []
-  if (unit.damage > 0) {
-    tokens.push({ key: 'damage', label: String(unit.damage), color: 'var(--color-red)', testid: `board-unit-damage-${unit.instanceId}` })
+  if (unit.damage > 0) tokens.push({ kind: 'damage', label: String(unit.damage), title: `${unit.damage} damage` })
+  // Everything not printed on the card art or an attached upgrade card: the unit's own and its
+  // upgrades' conditional modifiers, other units' auras and "this phase" effects. Increases go on a
+  // white buff pill and decreases on a dark grey debuff pill, so a mixed +2/-1 shows as +2/+0 and
+  // +0/-1 rather than hiding either half.
+  const power = offCardStatDelta(state, unit, 'power')
+  const hp = offCardStatDelta(state, unit, 'hp')
+  const pair = (p: number, h: number) => `${signed(p)}/${signed(h)}`
+  if (power > 0 || hp > 0) {
+    const label = pair(Math.max(power, 0), Math.max(hp, 0))
+    tokens.push({ kind: 'mod', label, title: `Buff ${label}` })
   }
-  // Floating stat modifiers not printed on the card art — "this phase" buffs (Baylan/Ahsoka)
-  // plus constant auras (Bo-Katan): a white token with red +X (power) over
-  // blue +Y (HP), mirroring the physical token. (Upgrade stats already show on the card.)
-  const lasting = lastingEffectTotals(state, unit.instanceId)
-  const aura = auraContributions(state, unit)
-  const mods = { power: lasting.power + aura.power, hp: lasting.hp + aura.hp }
-  if (mods.power !== 0 || mods.hp !== 0) {
-    tokens.push({
-      key: 'mod',
-      label: `${signed(mods.power)}/${signed(mods.hp)}`,
-      color: '#f8fafc',
-      border: '1px solid rgba(0,0,0,0.35)',
-      testid: `board-unit-mod-${unit.instanceId}`,
-      // +X (power, red) sits top-left, +Y (HP, blue) bottom-right — diagonally opposed, like the
-      // physical token, so each reads clearly at a larger size.
-      node: (
-        <span className="absolute inset-0" style={{ fontSize: `${Math.round(TOKEN_H * 0.42)}px`, fontWeight: 800, lineHeight: 1 }}>
-          <span style={{ position: 'absolute', top: 2, left: 3, color: 'var(--color-red)' }}>{signed(mods.power)}</span>
-          <span style={{ position: 'absolute', bottom: 2, right: 3, color: '#2563eb' }}>{signed(mods.hp)}</span>
-        </span>
-      ),
-    })
+  if (power < 0 || hp < 0) {
+    const label = pair(Math.min(power, 0), Math.min(hp, 0))
+    tokens.push({ kind: 'debuff', label, title: `Debuff ${label}` })
   }
-  // Token upgrades render as on-card tokens (not cards behind the unit):
-  // Shield = blue, Experience = amber (+1/+1), Advantage = gold "adv." (+1/0 next combat),
-  // Weakness = purple "weak." (-1/-1).
+  // Token upgrades render as on-card pills, not cards behind the unit. Experience and Weakness are
+  // +1/+1 and -1/-1 each, so their pills read as the stat change, told apart from a buff and a
+  // debuff by colour.
   const shields = countToken(TOKEN_SHIELD)
-  if (shields > 0) {
-    tokens.push({ key: 'shield', label: String(shields), color: '#3b82f6', testid: `board-unit-shield-${unit.instanceId}` })
-  }
+  if (shields > 0) tokens.push({ kind: 'shield', label: `Shd. ${shields}`, title: `${shields} Shield` })
   const experience = countToken(TOKEN_EXPERIENCE)
-  if (experience > 0) {
-    tokens.push({ key: 'experience', label: String(experience), color: 'var(--color-amber)', testid: `board-unit-experience-${unit.instanceId}` })
-  }
+  if (experience > 0) tokens.push({ kind: 'experience', label: pair(experience, experience), title: `${experience} Experience` })
   const advantage = countToken(TOKEN_ADVANTAGE)
-  if (advantage > 0) {
-    tokens.push({ key: 'advantage', label: String(advantage), color: '#f5c518', sub: 'adv.', textColor: '#1a1200', testid: `board-unit-advantage-${unit.instanceId}` })
-  }
+  if (advantage > 0) tokens.push({ kind: 'advantage', label: `Adv. ${advantage}`, title: `${advantage} Advantage` })
   const weakness = countToken(TOKEN_WEAKNESS)
-  if (weakness > 0) {
-    tokens.push({ key: 'weakness', label: String(weakness), color: '#7e22ce', sub: 'weak.', testid: `board-unit-weakness-${unit.instanceId}` })
-  }
+  if (weakness > 0) tokens.push({ kind: 'weakness', label: pair(-weakness, -weakness), title: `${weakness} Weakness` })
   if (tokens.length === 0) return null
 
   const positions = tokenLayout(tokens.length, unit.exhausted ? 'landscape' : 'portrait')
   return (
     <div className="pointer-events-none absolute inset-0">
-      {tokens.map((t, i) => (
-        <span
-          key={t.key}
-          data-testid={t.testid}
-          className="absolute flex flex-col items-center justify-center select-none tabular-nums"
-          style={{
-            left: `${positions[i].left}%`,
-            top: `${positions[i].top}%`,
-            transform: 'translate(-50%, -50%)',
-            width: TOKEN_W,
-            height: TOKEN_H,
-            borderRadius: 6,
-            background: t.color,
-            color: t.textColor ?? '#fff',
-            fontSize: `${Math.round(TOKEN_H * 0.6)}px`,
-            fontWeight: 600,
-            lineHeight: 1,
-            border: t.border,
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.7)',
-          }}
-        >
-          {t.node ?? (
-            <>
-              {t.sub && <span style={{ fontSize: `${Math.round(TOKEN_H * 0.26)}px`, fontWeight: 700, opacity: 0.85 }}>{t.sub}</span>}
-              {t.label}
-            </>
-          )}
-        </span>
-      ))}
+      {tokens.map((t, i) => {
+        const spec = TOKEN_SPEC[t.kind]
+        const pill = spec.width === PILL_W
+        return (
+          <span
+            key={t.kind}
+            data-testid={`board-unit-${t.kind}-${unit.instanceId}`}
+            aria-label={t.title}
+            className="absolute flex items-center justify-center whitespace-nowrap select-none tabular-nums"
+            style={{
+              left: `${positions[i].left}%`,
+              top: `${positions[i].top}%`,
+              transform: 'translate(-50%, -50%)',
+              width: spec.width,
+              height: TOKEN_H,
+              borderRadius: pill ? TOKEN_H / 2 : 6,
+              background: spec.background,
+              color: spec.ink,
+              fontSize: `${Math.round(TOKEN_H * (pill ? 0.5 : 0.6))}px`,
+              fontWeight: 700,
+              lineHeight: 1,
+              border: '1px solid rgba(0, 0, 0, 0.35)',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.7)',
+            }}
+          >
+            {t.label}
+          </span>
+        )
+      })}
     </div>
   )
 }

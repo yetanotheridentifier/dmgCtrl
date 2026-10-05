@@ -19,6 +19,11 @@ Each sums, in order:
 Combat and every defeat check go through these helpers, so a keyword granted by an aura or a
 "this phase" buff shapes attack targeting for free.
 
+Steps 3 to 5 for power and HP are one sum, `stats.offCardStatDelta`: the part of a stat no card on
+the table prints. The board's buff and debuff pills show exactly that sum, so any new source of a
+stat change that goes through those steps is displayed without touching the UI. The printed-stat
+replacement in step 1, Grit and Raid are left off the pills.
+
 Step 1 is narrower than the source data suggests. SWUDB's `Keywords` is a union over everything a
 card's text mentions, so a card that gains a keyword conditionally, or hands one to other units,
 ships it as a printed keyword of its own. Only what is printed on the card belongs in step 1, so

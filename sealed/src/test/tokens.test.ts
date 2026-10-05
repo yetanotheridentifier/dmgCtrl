@@ -1,7 +1,45 @@
 import { describe, it, expect } from 'vitest'
-import { tokenLayout } from '../components/tokens'
+import { tokenLayout, TOKEN_H, TOKEN_W, PILL_W, MAX_TOKENS, TOKEN_SPEC } from '../components/tokens'
+import type { TokenOrientation } from '../components/tokens'
+import { CARD_WIDTH_PX, longEdge } from '../components/cardSizing'
 
-describe('tokenLayout — physical-token placement on unit cards', () => {
+/** The card slot a token sits on, in px. */
+function slot(orientation: TokenOrientation): { w: number; h: number } {
+  const short = CARD_WIDTH_PX, long = longEdge(CARD_WIDTH_PX)
+  return orientation === 'portrait' ? { w: short, h: long } : { w: long, h: short }
+}
+
+/** Each token's rectangle in px, every token at the pill (widest) size. */
+function rects(n: number, orientation: TokenOrientation) {
+  const { w, h } = slot(orientation)
+  return tokenLayout(n, orientation).map(p => {
+    const cx = (p.left / 100) * w, cy = (p.top / 100) * h
+    return { x0: cx - PILL_W / 2, x1: cx + PILL_W / 2, y0: cy - TOKEN_H / 2, y1: cy + TOKEN_H / 2 }
+  })
+}
+
+describe('token pills: one spec', () => {
+  it('makes a pill the token height and double the token width', () => {
+    expect(PILL_W).toBe(TOKEN_W * 2)
+    for (const kind of ['mod', 'debuff', 'shield', 'experience', 'advantage', 'weakness'] as const) {
+      expect(TOKEN_SPEC[kind].width).toBe(PILL_W)
+    }
+  })
+
+  it('colours each kind from its own theme token, and no two kinds alike', () => {
+    const colours = Object.values(TOKEN_SPEC).map(s => s.background)
+    expect(new Set(colours).size).toBe(colours.length)
+    expect(TOKEN_SPEC.experience.background).toBe('var(--color-token-experience)')
+    expect(TOKEN_SPEC.advantage.background).toBe('var(--color-token-advantage)')
+    expect(TOKEN_SPEC.shield.background).toBe('var(--color-token-shield)')
+    expect(TOKEN_SPEC.mod.background).toBe('var(--color-token-buff)')
+    expect(TOKEN_SPEC.debuff.background).toBe('var(--color-token-debuff)')
+    expect(TOKEN_SPEC.weakness.background).toBe('var(--color-token-weakness)')
+    expect(TOKEN_SPEC.damage.background).toBe('var(--color-red)')
+  })
+})
+
+describe('tokenLayout: physical-token placement on unit cards', () => {
   it('places a single token over the middle of the art when ready (portrait)', () => {
     const pos = tokenLayout(1, 'portrait')
     expect(pos).toHaveLength(1)
@@ -10,53 +48,52 @@ describe('tokenLayout — physical-token placement on unit cards', () => {
     expect(pos[0].top).toBeLessThan(60) // above the bottom-third ability text
   })
 
-  it('builds up 1 → row-of-2 → 2-over-1 → 2×2 when ready (portrait)', () => {
-    // row of 2: same row, two columns
-    const two = tokenLayout(2, 'portrait')
-    expect(two[0].top).toEqual(two[1].top)
-    expect(two[0].left).not.toEqual(two[1].left)
-
-    // 2 over 1: two on the top row, one lower and centred
-    const three = tokenLayout(3, 'portrait')
-    expect(three[0].top).toEqual(three[1].top)
-    expect(three[2].top).toBeGreaterThan(three[0].top)
-    expect(three[2].left).toBe(50)
-
-    // 2×2: two distinct columns, two distinct rows
-    const four = tokenLayout(4, 'portrait')
-    expect(new Set(four.map(p => p.left)).size).toBe(2)
-    expect(new Set(four.map(p => p.top)).size).toBe(2)
-  })
-
-  it('lays tokens in a single centred row when exhausted (landscape)', () => {
-    const four = tokenLayout(4, 'landscape')
-    expect(four).toHaveLength(4)
-    expect(new Set(four.map(p => p.top)).size).toBe(1) // one row
-    expect(new Set(four.map(p => p.left)).size).toBe(4) // four distinct columns
-    // Symmetric about the centre; left→right order.
-    expect(four[0].left).toBeLessThan(four[3].left)
-    expect((four[0].left + four[3].left) / 2).toBeCloseTo(50)
-    // A single token sits over the middle of the art.
-    expect(tokenLayout(1, 'landscape')[0].left).toBe(50)
-  })
-
-  it('adds a third row for 5 and 6 when ready, and a second row for 5 and 6 when exhausted', () => {
-    // Six kinds can show at once (damage, a modifier, Shield, Experience, Advantage, Weakness).
-    const five = tokenLayout(5, 'portrait')
-    expect(new Set(five.map(p => p.top)).size).toBe(3)
-    expect(five[4].left).toBe(50)
-    const six = tokenLayout(6, 'portrait')
-    expect(new Set(six.map(p => `${p.left},${p.top}`)).size).toBe(6)
-    for (const n of [5, 6]) {
-      const row = tokenLayout(n, 'landscape')
-      expect(row).toHaveLength(n)
-      expect(new Set(row.map(p => p.top)).size).toBe(2)
-      expect(new Set(row.map(p => `${p.left},${p.top}`)).size).toBe(n)
+  it('stacks pills in one centred column when ready (portrait), since two pills are wider than the card', () => {
+    expect(PILL_W * 2).toBeGreaterThan(slot('portrait').w)
+    for (let n = 1; n <= MAX_TOKENS; n++) {
+      const pos = tokenLayout(n, 'portrait')
+      expect(pos.every(p => p.left === 50)).toBe(true)
+      for (let i = 1; i < n; i++) expect(pos[i].top).toBeGreaterThan(pos[i - 1].top)
     }
   })
 
-  it('never returns more than six tokens', () => {
-    expect(tokenLayout(7, 'portrait')).toHaveLength(6)
-    expect(tokenLayout(7, 'landscape')).toHaveLength(6)
+  it('lays pills two to a row, centred, when exhausted (landscape)', () => {
+    const four = tokenLayout(4, 'landscape')
+    expect(new Set(four.map(p => p.top)).size).toBe(2)
+    expect(new Set(four.map(p => p.left)).size).toBe(2)
+    expect((four[0].left + four[1].left) / 2).toBeCloseTo(50)
+    // An odd one out sits centred on its own row.
+    expect(tokenLayout(3, 'landscape')[2].left).toBe(50)
+    expect(tokenLayout(1, 'landscape')[0]).toEqual({ left: 50, top: 50 })
+  })
+
+  it('keeps every pill on the card, and never overlaps two of up to six', () => {
+    for (const o of ['portrait', 'landscape'] as const) {
+      const { w, h } = slot(o)
+      for (let n = 1; n <= MAX_TOKENS; n++) {
+        const rs = rects(n, o)
+        for (const r of rs) {
+          expect(r.x0).toBeGreaterThanOrEqual(-0.01)
+          expect(r.x1).toBeLessThanOrEqual(w + 0.01)
+          expect(r.y0).toBeGreaterThanOrEqual(-0.01)
+          expect(r.y1).toBeLessThanOrEqual(h + 0.01)
+        }
+        if (n > 6) continue
+        for (let i = 0; i < n; i++) {
+          for (let j = i + 1; j < n; j++) {
+            const a = rs[i], b = rs[j]
+            const overlap = a.x0 < b.x1 - 0.01 && b.x0 < a.x1 - 0.01 && a.y0 < b.y1 - 0.01 && b.y0 < a.y1 - 0.01
+            expect(overlap, `${o} ${n}: tokens ${i} and ${j}`).toBe(false)
+          }
+        }
+      }
+    }
+  })
+
+  it('never returns more than the seven kinds a unit can carry', () => {
+    // damage, a buff, a debuff, Shield, Experience, Advantage, Weakness
+    expect(MAX_TOKENS).toBe(7)
+    expect(tokenLayout(8, 'portrait')).toHaveLength(7)
+    expect(tokenLayout(8, 'landscape')).toHaveLength(7)
   })
 })

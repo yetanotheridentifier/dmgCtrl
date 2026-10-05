@@ -27,6 +27,16 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* On-card token pills (components/tokens.ts TOKEN_SPEC); damage uses --color-red. Plain
+     custom properties rather than @theme entries: they are read through var(), never as utilities. */
+  --color-token-advantage: #f5c518;  /* Adv. N: gold */
+  --color-token-shield: #2563eb;     /* Shd. N: blue */
+  --color-token-buff: #f8fafc;       /* +X/+Y off-card buffs: white */
+  --color-token-debuff: #3f3f46;     /* -X/-Y off-card debuffs: dark grey */
+  --color-token-experience: #22c55e; /* +N/+N Experience: green */
+  --color-token-weakness: #7e22ce;   /* -N/-N Weakness: purple */
+  --color-token-ink-dark: #1a1200;   /* text on the light fills */
 }
 
 /* Dropdown option lists — explicit colours for browsers that ignore color-scheme. */

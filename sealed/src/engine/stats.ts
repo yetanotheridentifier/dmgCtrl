@@ -131,9 +131,7 @@ export function effectivePower(state: GameState, unit: UnitState, ctx: StatConte
     if (unitHasKeyword(state, unit, 'Grit', ctx)) {
       power += unit.damage
     }
-    power += statModifiers(state, unit, ctx, 'power')
-    power += auraContributions(state, unit, ctx.combat).power // other units' auras
-    power += lastingEffectTotals(state, unit.instanceId).power // "this phase" buffs
+    power += offCardStatDelta(state, unit, 'power', ctx)
     // "Each enemy unit gets -4/-0 while attacking that unit" (I Have the High Ground) sits on the defender.
     const defenderId = ctx.attacking ? ctx.combat?.defenderInstanceId : undefined
     if (defenderId) {
@@ -146,8 +144,21 @@ export function effectivePower(state: GameState, unit: UnitState, ctx: StatConte
 }
 
 export function effectiveHp(state: GameState, unit: UnitState, ctx: StatContext = {}): number {
-  return Math.max(
-    0,
-    withUpgrades(state, unit, 'hp') + statModifiers(state, unit, ctx, 'hp') + auraContributions(state, unit, ctx.combat).hp + lastingEffectTotals(state, unit.instanceId).hp,
+  return Math.max(0, withUpgrades(state, unit, 'hp') + offCardStatDelta(state, unit, 'hp', ctx))
+}
+
+/**
+ * The part of a unit's power or HP that no card on the table prints: its own and its upgrades'
+ * conditional modifiers (Clone Combat Squadron's +1/+1 per other space unit), other units' auras,
+ * and "this phase" effects. Printed stats and upgrade stats are excluded, since the card art and
+ * the attached upgrade cards already show them. The board's buff and debuff pills show this delta,
+ * so it is the one sum both the engine and the display read. Outside combat it leaves out only the
+ * combat-only terms (Raid, attack-scoped modifiers) and Grit, whose bonus is the damage already shown.
+ */
+export function offCardStatDelta(state: GameState, unit: UnitState, stat: 'power' | 'hp', ctx: StatContext = {}): number {
+  return (
+    statModifiers(state, unit, ctx, stat) + // the unit's own card and its upgrades' conditional deltas
+    auraContributions(state, unit, ctx.combat)[stat] + // other units' auras
+    lastingEffectTotals(state, unit.instanceId)[stat] // "this phase" buffs
   )
 }
