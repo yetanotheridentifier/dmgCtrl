@@ -16,6 +16,17 @@
   --color-red: #d42121;           /* --color-error / damage — deep, not rose */
   --color-green: #22c55e;         /* --color-success    */
 
+  /* On-card token pills (components/tokens.ts TOKEN_SPEC); damage uses --color-red. Declared
+     here with the rest of the palette, the block whose colours render in every browser tested. */
+  --color-token-advantage: #f5c518;  /* Adv. N: gold */
+  --color-token-shield: #2563eb;     /* Shd. N: blue */
+  --color-token-buff: #f8fafc;       /* +X +Y off-card buffs: white */
+  --color-token-debuff: #3f3f46;     /* -X -Y off-card debuffs: dark grey */
+  --color-token-experience: #22c55e; /* +N +N Experience: green */
+  --color-token-weakness: #7e22ce;   /* -N -N Weakness: purple */
+  --color-token-ink-dark: #1a1200;   /* text on the light fills */
+  --color-token-hp: #2563eb;         /* HP figure on a stat pill (power uses --color-red) */
+
   --font-sans: 'Segoe UI', Helvetica, Arial, sans-serif;
   --font-mono: 'SF Mono', Consolas, Menlo, monospace;
 }

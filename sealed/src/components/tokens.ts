@@ -1,3 +1,5 @@
+import { CARD_WIDTH_PX, longEdge } from './cardSizing'
+
 export type TokenOrientation = 'portrait' | 'landscape'
 
 /** Centre of a token, as a percentage of the card slot (both axes). */
@@ -7,50 +9,103 @@ export interface TokenPos {
 }
 
 /**
- * Token size in px — a rounded rectangle, wide enough to hold two digits (damage
- * tops out around 20). The number inside is ~60% of the token height. Kept small
- * enough that four sit alongside each other on an exhausted (landscape) card
- * without touching the borders or each other.
+ * Token size in px. Damage is a rounded square wide enough for two digits; every other kind is a
+ * pill the same height and twice the width, room for an abbreviated label and its value
+ * ("Adv. 2", "+2/+2").
  */
 export const TOKEN_W = 32
 export const TOKEN_H = 26
-
-/** The most kinds of token a unit can show at once: damage, a modifier, Shield, Experience, Advantage, Weakness. */
-export const MAX_TOKENS = 6
+export const PILL_W = TOKEN_W * 2
 
 /**
- * Where 1–6 effect tokens sit on a unit card, representing physical tokens —
- * placed over the **middle of the art** so the cost/name (top), ability text
- * (bottom) and power/HP (corners) stay visible.
+ * The kinds of token a unit shows. `mod` is the buff pill (the name keeps its long-standing
+ * `board-unit-mod-*` test id); `debuff` carries the negative half of the same off-card delta.
+ */
+export type TokenKind = 'damage' | 'mod' | 'debuff' | 'shield' | 'experience' | 'advantage' | 'weakness'
+
+/**
+ * The one spec for every on-card token: fill, label colour and width, plus `figures` on a stat pill
+ * (buff, debuff, Experience, Weakness), which prints a power figure and an HP figure with no slash,
+ * each in its own colour. The white buff pill keeps the physical +X/+Y token's red power and blue
+ * HP; the darker stat pills print both figures white. The other kinds print their label in `ink`.
+ * Colours are theme tokens in `index.css` (`--color-token-*`), so a palette change happens there
+ * and nowhere else.
+ */
+export const TOKEN_SPEC: Record<TokenKind, { background: string; ink: string; width: number; figures?: { power: string; hp: string } }> = {
+  damage: { background: 'var(--color-red)', ink: 'var(--color-ink)', width: TOKEN_W },
+  mod: { background: 'var(--color-token-buff)', ink: 'var(--color-token-ink-dark)', width: PILL_W, figures: { power: 'var(--color-red)', hp: 'var(--color-token-hp)' } },
+  debuff: { background: 'var(--color-token-debuff)', ink: 'var(--color-ink)', width: PILL_W, figures: { power: 'var(--color-ink)', hp: 'var(--color-ink)' } },
+  shield: { background: 'var(--color-token-shield)', ink: 'var(--color-ink)', width: PILL_W },
+  experience: { background: 'var(--color-token-experience)', ink: 'var(--color-ink)', width: PILL_W, figures: { power: 'var(--color-ink)', hp: 'var(--color-ink)' } },
+  advantage: { background: 'var(--color-token-advantage)', ink: 'var(--color-token-ink-dark)', width: PILL_W },
+  weakness: { background: 'var(--color-token-weakness)', ink: 'var(--color-ink)', width: PILL_W, figures: { power: 'var(--color-ink)', hp: 'var(--color-ink)' } },
+}
+
+/** Weight of a stat pill's figures: bold, a step above the labels. */
+export const TOKEN_FIGURE_WEIGHT = 800
+
+/**
+ * Where a stat pill's figures sit: power in the top-left corner and HP in the bottom-right,
+ * diagonally opposed like the physical +X/+Y token. The font size and the 2px top and bottom
+ * insets are the old square badge's; the side insets clear the pill's rounded ends.
+ */
+export const TOKEN_FIGURE_LAYOUT = {
+  fontSize: Math.round(TOKEN_H * 0.42),
+  power: { top: 2, left: 9 },
+  hp: { bottom: 2, right: 9 },
+} as const
+
+/** Every token's drop shadow and edge: what keeps it readable over card art. */
+export const TOKEN_SHADOW = '0 1px 3px rgba(0, 0, 0, 0.7)'
+export const TOKEN_BORDER = '1px solid rgba(0, 0, 0, 0.35)'
+
+/** The most kinds of token a unit can show at once: one of each `TokenKind`. */
+export const MAX_TOKENS = 7
+
+/** Space between neighbouring tokens, px. */
+const GAP = 2
+
+/**
+ * Centres for `n` tokens in a line of `length` px, `step` px apart where they fit, centred on
+ * `centre` but pulled inward so the outermost stay on the card. Past what fits at `step`, the step
+ * shrinks so they still do (only seven tokens at once, portrait, overlap at all).
+ */
+function line(n: number, length: number, size: number, step: number, centre: number): number[] {
+  if (n <= 0) return []
+  const s = n > 1 ? Math.min(step, (length - size) / (n - 1)) : 0
+  const half = ((n - 1) * s) / 2
+  const c = Math.min(Math.max(centre, half + size / 2), length - half - size / 2)
+  return Array.from({ length: n }, (_, i) => c - half + i * s)
+}
+
+const pct = (px: number, of: number) => (px / of) * 100
+
+/**
+ * Where 1 to 7 tokens sit on a unit card, representing physical tokens over the art, so the
+ * cost and name (top), ability text (bottom) and power/HP (corners) stay visible where possible.
  *
- * - **Ready (portrait):** a cluster centred on the art, building up 1 → row-of-2
- *   → 2-over-1 → 2×2, then a third row for 5 (centred) and 6.
- * - **Exhausted (landscape):** a single row centred on the art; it widens
- *   symmetrically as tokens are added (upright, since the card is rotated), and
- *   splits into two rows of up to three past four.
+ * - **Ready (portrait):** one centred column (two pills are wider than the card), centred on the
+ *   art and growing downward and upward as tokens are added.
+ * - **Exhausted (landscape):** two pills to a row, centred, with an odd last token centred on its
+ *   own row.
  */
 export function tokenLayout(count: number, orientation: TokenOrientation): TokenPos[] {
   const n = Math.max(0, Math.min(count, MAX_TOKENS))
+  const short = CARD_WIDTH_PX, long = longEdge(CARD_WIDTH_PX)
+  const step = TOKEN_H + GAP
   if (orientation === 'portrait') {
-    const L = 34, R = 66, MID = 50, TOP = 33, BOT = 49, ART = 41
-    // Three rows keep the same 16-point step, centred on the art.
-    const R1 = 25, R3 = 57
-    const byCount: Record<number, TokenPos[]> = {
-      0: [],
-      1: [{ left: MID, top: ART }],
-      2: [{ left: L, top: ART }, { left: R, top: ART }],
-      3: [{ left: L, top: TOP }, { left: R, top: TOP }, { left: MID, top: BOT }],
-      4: [{ left: L, top: TOP }, { left: R, top: TOP }, { left: L, top: BOT }, { left: R, top: BOT }],
-      5: [{ left: L, top: R1 }, { left: R, top: R1 }, { left: L, top: ART }, { left: R, top: ART }, { left: MID, top: R3 }],
-      6: [{ left: L, top: R1 }, { left: R, top: R1 }, { left: L, top: ART }, { left: R, top: ART }, { left: L, top: R3 }, { left: R, top: R3 }],
-    }
-    return byCount[n]
+    const ART = 0.41 * long
+    return line(n, long, TOKEN_H, step, ART).map(y => ({ left: 50, top: pct(y, long) }))
   }
-  // Landscape: a row centred on the art, widening symmetrically as tokens accrue.
-  const spacing = 24
-  const row = (k: number, top: number): TokenPos[] =>
-    Array.from({ length: k }, (_, i) => ({ left: 50 + (i - (k - 1) / 2) * spacing, top }))
-  if (n <= 4) return row(n, 50)
-  const first = Math.ceil(n / 2)
-  return [...row(first, 36), ...row(n - first, 64)]
+  const rows = Math.ceil(n / 2)
+  const ys = line(rows, short, TOKEN_H, step, short / 2)
+  const colOffset = pct((PILL_W + 2 * GAP) / 2, long)
+  const out: TokenPos[] = []
+  for (let i = 0; i < n; i++) {
+    const row = Math.floor(i / 2)
+    const alone = i === n - 1 && n % 2 === 1
+    const left = alone ? 50 : i % 2 === 0 ? 50 - colOffset : 50 + colOffset
+    out.push({ left, top: pct(ys[row], short) })
+  }
+  return out
 }

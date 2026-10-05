@@ -328,11 +328,18 @@ The board is drawn with art-dominant cards, not text rows:
   Sizing constants live in `cardSizing.ts`; the roll-over zoom drives its `widthPx`.
   Selection/target/actionable highlights are a 2px outline hugging the card edge (1px in /
   1px out, `outline-offset: -1px`) via the `highlight` prop. Unit effects are drawn as
-  physical-style **tokens** (`tokens.ts`, where `tokenLayout` places 1 to 4 over the middle of the
-  art: a 2×2 build-up when ready, a centred row when exhausted, keeping the cost/name,
-  ability text and power/HP visible) on the non-rotating wrapper, so they stay upright when
-  the card is exhausted. Damage is the first token: a deep-red rounded rectangle with a
-  white number (two digits fit); more effect types slot into the same layout.
+  physical-style **tokens** (`tokens.ts`, where `tokenLayout` places 1 to 7 over the art: one
+  centred column when ready, two to a row when exhausted) on the non-rotating wrapper, so they
+  stay upright when the card is exhausted. Damage is a deep-red rounded square with a white
+  number; every other kind (buff, debuff, Shield, Experience, Advantage, Weakness) is a pill the
+  same height and twice as wide, carrying a short label and its value; the stat pills (buff,
+  debuff, Experience, Weakness) print bold power (top-left) and HP (bottom-right) figures in
+  their kind's `figures` colours (red and blue on the white buff, white on the rest), placed by
+  `TOKEN_FIGURE_LAYOUT`, with each sign drawn as a box one cap-height tall so it sits halfway up
+  the digits in any font, and every token
+  shares one drop shadow and edge (`TOKEN_SHADOW`, `TOKEN_BORDER`). `TOKEN_SPEC` is the one
+  spec for fill, ink and width, with the fills as `--color-token-*` properties in `index.css`. The
+  buff and debuff pills show `stats.offCardStatDelta`, split by sign.
 - **Roll-over zoom** (`useCardZoom` + `CardZoomPopover`): **Shift+hover** (mouse, so plain
   hovering doesn't obscure play) or **touch-long-press** shows a full-size, upright
   copy floating above the board (absolute, centred on the source; viewport-edge clamping is not yet
