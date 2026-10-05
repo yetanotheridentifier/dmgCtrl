@@ -21,20 +21,27 @@ Combat and every defeat check go through these helpers, so a keyword granted by 
 
 Step 1 is narrower than the source data suggests. SWUDB's `Keywords` is a union over everything a
 card's text mentions, so a card that gains a keyword conditionally, or hands one to other units,
-ships it as a printed keyword of its own. Only what is printed on the card belongs in step 1:
-`cardDataCorrections.ts` strips the rest, and the ability grants it back where it belongs, at step 3
-or 4. A wrongly printed Sentinel is the one that bites, since it redirects enemy attacks.
+ships it as a printed keyword of its own. Only what is printed on the card belongs in step 1, so
+**`toKeywords` keeps a unit's or leader's listed keyword only where its text prints it**: at the start
+of a line or a sentence, or in a printed list ("AMBUSH, OVERWHELM"). A keyword the text only mentions
+("this unit gains Sentinel", "give a unit Sentinel", "a unit with Sentinel") is dropped, and the
+ability grants it back where it belongs, at step 3 or 4. A wrongly held Sentinel is the one that bites,
+since it redirects enemy attacks. `printedKeywords.test.ts` pins every keyword the rule drops across the
+bundled sets, so a new set's surprises arrive as a diff to review.
 
 The union is literal enough to catch the **word** "Keyword" or "Keywords" where a card's text names a
-keyword it does not have: a card that hands out "the chosen Keyword" (Admiral Yularen) or counts "more
-different Keywords" (Maul) ships `Keyword` in its own list. None of those is a keyword, and they are
-`cardDataCorrections.ts` entries like the rest.
+keyword it does not have (Admiral Yularen's "the chosen Keyword"). The rule drops those too.
 
 For a **leader**, the source's `Keywords` describes the unit side, and the card's BackText spells that
-side's keywords out line by line. So a keyword the source lists that the back does not print belongs to
-whichever units the leader gives it to (Omega's Grit), one the back prints that the source omits is
-simply missing (The Warrior's Ambush and Raid 1), and a numeral the source drops is restored from the
-back (Darth Vader's Raid 1). All three are `cardDataCorrections.ts` entries.
+side's keywords out line by line, which is the text the rule reads. A keyword the back prints that the
+source omits is simply missing (The Warrior's Ambush and Raid 1): that, and a keyword the source gets
+wrong in the other direction, are what `cardDataCorrections.ts` still holds.
+
+**Upgrades are left as the source lists them**, since an upgrade's keyword is its attached unit's; an
+upgrade whose keyword is conditional, or given beyond its host, is stripped by a correction and granted
+by its ability. One unit is a stated exception: Millennium Falcon's "if you play this unit from your
+hand, it gains Ambush" cannot be read, since nothing records how a unit was played, so a correction
+keeps its Ambush, right in the usual case and wrong only when it is smuggled.
 
 ### Which cards supply a unit's abilities
 
@@ -960,9 +967,9 @@ triggered ability, active only while the condition holds.
   one-shot effect (create a token, an optional damage pair, a capture) checks the condition inline in
   its `whenPlayed`/`whenDefeated` effect, the same shape Lifetree Caravan's "If you control 3 or more
   units (including this one), you may resource the top card of your deck" already uses.
-- **A bundled keyword is corrected out of the card's base `Keywords[]`** in `cardDataCorrections.ts`,
-  the same treatment every other conditional-keyword card above gets: the source lists "Coordinate -
-  Sentinel" as `["Coordinate", "Sentinel"]`, which would make Sentinel permanent left alone. A keyword
+- **A bundled keyword is left out of the card's base keywords** by `toKeywords`, like every other
+  conditional keyword: the source lists "Coordinate - Sentinel" as `["Coordinate", "Sentinel"]`, which
+  would make Sentinel permanent left alone. A keyword
   the card also has UNCONDITIONALLY, on its own separate printed line (Plo Koon's Ambush), is left in
   place alongside `Coordinate`.
 - **15 of the 23 candidate cards need nothing else** (recounted against `registeredCardIds()`; the
@@ -997,8 +1004,8 @@ never offered without a token held.
     (`legalMoves.ts`'s `actionPhaseMoves`, `resolve.ts`'s `useAbility`/`useLeaderAbility`).
 - **"While the Force is with you" passive grants get the same live-board-read treatment as
   Coordinate**: `unitHasForce` (a live read of the unit's own controller's token, never cached)
-  feeding `conditionalKeywords`/`statModifier`/`aura`, and the same `cardDataCorrections.ts`
-  treatment for a bundled conditional keyword the source lists as permanent (Jedi Sentinel's
+  feeding `conditionalKeywords`/`statModifier`/`aura`, with `toKeywords` leaving out a bundled
+  conditional keyword the source lists as permanent (Jedi Sentinel's
   Sentinel, Plo Koon's Grit, Darth Tyranus's Ambush — its unconditional Shielded stays).
 - **28 of the 57 sole-blocked cards shipped** (recounted against `registeredCardIds()` via
   `--triage LOF`; the ticket's "unlocks 57" is correct once LOF_033's false-positive match is

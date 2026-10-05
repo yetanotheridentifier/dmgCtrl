@@ -36,9 +36,26 @@ function cardText(card: SwuCard): string {
  * SWUDB `Keywords[]` gives names only; numerals (Raid 2, Restore 1…) live in
  * the rules text in the standardised "Keyword N" form — extract them from there.
  */
+/**
+ * Whether a card's text prints `name` as a keyword of its own: at the start of a line or a sentence,
+ * or inside a printed list ("AMBUSH, OVERWHELM"). A keyword the text only mentions ("this unit gains
+ * Sentinel", "give a unit Sentinel", "a unit loses Sentinel") is not printed.
+ */
+function printsKeyword(text: string, name: string): boolean {
+  return new RegExp(`(^|\\n|\\.\\s+)([A-Za-z]+( \\d+)?,\\s*)*${name}\\b`, 'i').test(text)
+}
+
+/**
+ * The source lists, beside a unit's printed keywords, the ones it only gains on a condition and the
+ * ones it only gives to other units. Copied as they stand, each made the unit hold the keyword all
+ * game. So a unit or leader keeps only what its text prints, and a conditional keyword is granted by
+ * the card's ability while its condition holds. Upgrades keep the source's list: an upgrade's keyword
+ * is its attached unit's.
+ */
 function toKeywords(card: SwuCard): KeywordInstance[] {
   const text = cardText(card)
-  return (card.Keywords ?? []).map(raw => {
+  const own = card.Type === 'Unit' || card.Type === 'Leader'
+  return (card.Keywords ?? []).filter(raw => !own || printsKeyword(text, raw.trim())).map(raw => {
     // Trim: the source data ships some keywords with stray whitespace (e.g. two
     // "Shielded" variants), which would otherwise miss `hasKeyword` matches.
     const name = raw.trim()

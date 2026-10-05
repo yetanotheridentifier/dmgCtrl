@@ -7,152 +7,22 @@ import type { EngineCard } from './types'
  * entries **override** a value the source provides but gets wrong, read off the printed card.
  * Applied last in `normaliseCard`. Remove an entry once the upstream data is fixed; add new ones
  * as gaps surface during play (arena, cost, power/HP, …).
+ *
+ * A unit's or leader's conditional keywords, and those it only gives to other units, need no entry
+ * here: `toKeywords` keeps only the keywords a unit's text prints. What is left is what that rule
+ * cannot read off the text: a printed keyword the source omits, and upgrades, whose list `toKeywords`
+ * leaves alone.
  */
 export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   ASH_081: { arena: 'space' }, // Nebulon-C Frigate — a Space capital ship; the source ships Ground
 
-  // The source lists each card's *conditional* keyword in its base `Keywords`, which
-  // would make it permanent. Strip it to the genuine base set; the ability re-grants it when its
-  // condition holds (see `conditionalKeywords` in cardDefinitions.ts).
-  ASH_098: { keywords: [] }, // AT-ST Raider — Ambush is conditional
-  ASH_078: { keywords: [] }, // B-Wing Rearguard — Sentinel is conditional
-  ASH_105: { keywords: [] }, // Bo-Katan Kryze (unit) — Raid is conditional
-  ASH_093: { keywords: [] }, // Captain Pellaeon — Raid is conditional
-  ASH_122: { keywords: [] }, // Consortium StarViper — Restore is conditional
-  ASH_057: { keywords: [] }, // Lothal E-Wing — Restore is conditional
-  ASH_049: { keywords: [] }, // Shin Hati (unit) — Sentinel is conditional
-  ASH_120: { keywords: [] }, // Warrior of Clan Kryze — Sentinel is conditional
-  ASH_243: { keywords: [{ name: 'Shielded' }] }, // Darth Vader — Shielded is real; Sentinel is conditional (while ready)
-  ASH_113: { keywords: [] }, // Mandalorian Flagship — Ambush is conditional (while you control a leader)
-  ASH_030: { keywords: [{ name: 'Sentinel' }] }, // Marrok — Sentinel is real; Saboteur is conditional (while upgraded)
-  ASH_099: { keywords: [{ name: 'Support' }] }, // Gozanti Assault Carrier (E) — Support is real; Sentinel is gained on attack
-  ASH_079: { keywords: [] }, // Koska Reeves (F) — Sentinel is conditional (while you control a token unit)
-
-  // Same source behaviour, one step further out: a keyword the card only ever GIVES to other units
-  // is listed as the card's own. The ability grants it where it belongs; the card itself has only
-  // what is printed on it.
-  ASH_007: { keywords: [{ name: 'Overwhelm' }] }, // Grand Admiral Sloane — Overwhelm is hers; Sentinel goes to each OTHER friendly unit
-  ASH_127: { keywords: [] }, // The Twins — Sentinel is given to another friendly unit, never held
-  SEC_140: { keywords: [{ name: 'Plot' }] }, // Hondo Ohnaka — Raid 1 is given to each OTHER friendly unit, never held
-  SEC_099: { keywords: [{ name: 'Plot' }] }, // Naboo Royal Starship — Raid 2 and Overwhelm go to each friendly LEADER unit, never held
-  SEC_203: { keywords: [{ name: 'Plot' }] }, // Tala Durith — Hidden is given to each OTHER friendly unit, never held
-  SEC_104: { keywords: [] }, // Figure of Unity: its host gives each OTHER friendly unit Overwhelm, Raid 1 and Restore 1
-  HMW_112: { keywords: [{ name: 'Fortify' }] }, // Military Academy: its base gives friendly units Overwhelm
-  HMW_126: { keywords: [{ name: 'Fortify' }] }, // Verdant Fortress: its base gives friendly units Raid 1
-  HMW_066: { keywords: [{ name: 'Shielded' }] }, // Carrion Spike: Shielded is real; Restore 1 per upgrade on your base
-
-  // Homeworlds constant abilities: a keyword gained on a condition, given to other units, or given to
-  // the attached unit.
-  HMW_074: { keywords: [] }, // Yord Fandar: Sentinel while a base has 15 or more damage
-  HMW_084: { keywords: [{ name: 'Restore', value: 1 }] }, // Gunga City Guard: Restore 1 is real; Shielded is conditional
-  HMW_090: { keywords: [] }, // Opee Sea Killer: Grit while you control a Naboo base
-  HMW_117: { keywords: [] }, // Chewbacca: Raid per exhausted resource, Overwhelm while all are exhausted
-  HMW_118: { keywords: [] }, // Ryyk Blademaster: Ambush and Overwhelm at 6 resources
-  HMW_131: { keywords: [{ name: 'Raid', value: 1 }] }, // Soaring Can-Cell: Raid 1 is real; Ambush with a Kashyyyk base
-  HMW_137: { keywords: [] }, // V-19 Skirmisher: Sentinel at 3 units
-  HMW_138: { keywords: [] }, // Commander Gree: Raid 4 at 3 Command icons
-  HMW_142: { keywords: [] }, // Wookiee Rangers: Sentinel with another Wookiee or a Kashyyyk base
-  HMW_176: { keywords: [] }, // Village Troublemaker: Hidden and Saboteur with an Endor base
-  HMW_257: { keywords: [] }, // Ewok Archers: Ambush with another unit costing 3 or less
-  HMW_259: { keywords: [] }, // Pack Guardian: Sentinel while ready
-  HMW_210: { keywords: [{ name: 'Shielded' }] }, // Sol: Shielded is real; Sentinel is gained on attack
-
-  // Homeworlds leaders. The BackText spells out the leader unit's own keywords, so a keyword the
-  // source lists that the back does not print belongs to the units the leader gives it to, and one
-  // the back prints that the source omits is missing from the data.
-  HMW_006: { keywords: [] }, // Omega: Grit goes to each OTHER friendly Heroic unit
-  HMW_007: { keywords: [{ name: 'Raid', value: 1 }] }, // Darth Vader: the source ships Raid with no numeral
-  HMW_018: { keywords: [{ name: 'Ambush' }, { name: 'Raid', value: 1 }] }, // The Warrior: both printed on her back, neither in the source
-  HMW_039: { keywords: [{ name: 'Raid', value: 1 }] }, // Mother Talzin: Raid 1 is hers; Restore 1 goes to each other friendly unit
-  HMW_212: { keywords: [] }, // The Chieftain: Raid 1 per other friendly Tusken
-  HMW_096: { keywords: [] }, // Devotion: Restore 2
-  HMW_190: { keywords: [] }, // Enraged: Raid 2
-  HMW_191: { keywords: [] }, // Hunter's Instinct: Grit on a Creature
-
-  // The other sealed sets, conditional keywords.
-  LAW_105: { keywords: [] }, // Cinta Kaz: Sentinel while upgraded
-  SEC_201: { keywords: [{ name: 'Hidden' }] }, // Anakin Skywalker: Hidden is real; Raid 2 while you control Padmé Amidala
-  SEC_079: { keywords: [] }, // Corrupt Politician: Sentinel while you control more units
-  SEC_249: { keywords: [] }, // High Command Councilor: Raid 2 while you control another Official unit
-  SEC_134: { keywords: [] }, // Hunting Assassin Droid: Raid 2 while an enemy unit is damaged
-  SEC_116: { keywords: [] }, // Nubian Star Skiff: Restore 2 while you control an Official unit
-  SEC_063: { keywords: [] }, // Rotunda Senate Guards: Sentinel while undamaged
-  SEC_029: { keywords: [] }, // Zam Wesell: Grit while upgraded
-  LOF_162: { keywords: [] }, // Hunting Nexu: Raid 2 while you control another Aggression unit
-  LOF_212: { keywords: [] }, // Life Wind Sage: Raid 2 while an enemy unit is exhausted
-  LOF_118: { keywords: [] }, // Terentatek: Ambush while an opponent controls a Force unit
-  JTL_107: { keywords: [] }, // Bunker Defender: Sentinel while you control a Vehicle unit
-  JTL_081: { keywords: [] }, // First Order TIE Fighter: Raid 1 while you control a token unit
-  JTL_257: { keywords: [] }, // Flanking Fang Fighter: Raid 2 while you control another Fighter unit
-  JTL_113: { keywords: [] }, // Homestead Militia: Sentinel while you control 6 or more resources
-  JTL_150: { keywords: [{ name: 'Piloting' }] }, // Biggs Darklighter: Grit and Overwhelm are his upgrade side's, by host trait
-  JTL_109: { keywords: [{ name: 'Piloting' }] }, // Jarek Yeager: Sentinel is his upgrade side's, while you control both arenas
-  TWI_062: { keywords: [] }, // Daughter of Dathomir: Restore 2 while undamaged
-  TWI_081: { keywords: [] }, // Droid Commando: Ambush while you control another Separatist unit
-  TWI_180: { keywords: [] }, // Separatist Commando: Raid 2 while you control another Separatist unit
-  TWI_130: { keywords: [] }, // Bo-Katan Kryze: Overwhelm and Saboteur while you control another Mandalorian unit
-  TWI_143: { keywords: [] }, // Jyn Erso: Saboteur while an enemy unit was defeated this phase
-  TWI_043: { keywords: [] }, // Outspoken Representative: Sentinel while you control another Republic unit
-  SHD_169: { keywords: [{ name: 'Raid', value: 3 }] }, // Clan Challengers: Raid 3 is real; Overwhelm while upgraded
-  SHD_112: { keywords: [] }, // Gamorrean Retainer: Sentinel while you control another Command unit
-  SHD_247: { keywords: [] }, // Protector of the Throne: Sentinel while upgraded
-  SHD_034: { keywords: [{ name: 'Shielded' }] }, // Supercommando Squad: Shielded is real; Sentinel while upgraded
-  SOR_065: { keywords: [{ name: 'Grit' }] }, // Baze Malbus: Grit is real; Sentinel while you have the initiative
-  SOR_082: { keywords: [] }, // Emperor's Royal Guard: Sentinel while you control an Official unit
-  SOR_114: { keywords: [] }, // Escort Skiff: Ambush while you control another Command unit
-  SOR_249: { keywords: [] }, // Frontier AT-RT: Ambush while you control another Vehicle unit
-  SOR_211: { keywords: [] }, // Gamorrean Guards: Sentinel while you control another Cunning unit
-  SOR_159: { keywords: [] }, // Partisan Insurgent: Raid 2 while you control another Aggression unit
-  SOR_048: { keywords: [] }, // Vigilant Honor Guards: Sentinel while undamaged
-  TS26_20: { keywords: [{ name: 'Grit' }, { name: 'Raid', value: 1 }] }, // 501st Veteran: Grit and Raid 1 are real; Sentinel while undamaged
-  TS26_50: { keywords: [] }, // General Grievous: Sentinel while undamaged
-
-  // The other sealed sets, keywords a unit only gives to other units.
-  LOF_169: { keywords: [] }, // Invasion Control Ship: Raid 2 goes to friendly Droid units
-  JTL_161: { keywords: [] }, // Captain Tarkin: Overwhelm goes to friendly Vehicle units
-  SOR_079: { keywords: [] }, // Admiral Piett: Ambush goes to friendly units that cost 6 or more
-  SOR_100: { keywords: [] }, // Wedge Antilles: Ambush goes to friendly Vehicle units
-  TS26_40: { keywords: [] }, // Obi-Wan Kenobi: Restore 1 goes to other friendly Republic units
-
-  // An upgrade's "attached unit gains X" is the attached unit's keyword, granted by the ability, not the upgrade's own.
-  SEC_071: { keywords: [] }, // Disciples' Devotion: Sentinel while attached unit is exhausted
-  LOF_215: { keywords: [] }, // Ascension Cable: Saboteur
-  LOF_238: { keywords: [] }, // Darth Revan's Lightsabers: Grit on a Sith
-  LOF_053: { keywords: [] }, // Heirloom Lightsaber: Restore 1 on a Force unit
-  LAW_128: { keywords: [] }, // Veiled Strength: Grit
-  TWI_071: { keywords: [] }, // Unshakeable Will: Sentinel
-  SOR_070: { keywords: [] }, // Devotion: Restore 2
-  SOR_166: { keywords: [] }, // Infiltrator's Skill: Saboteur
-  SOR_057: { keywords: [] }, // Protector: Sentinel
-
-  // The other sealed sets, conditional keywords (continued).
-  SOR_130: { keywords: [] }, // First Legion Snowtrooper: Overwhelm while attacking a damaged unit
-  SHD_212: { keywords: [] }, // Privateer Scyk: Shielded while you control another Cunning unit
-  SHD_186: { keywords: [] }, // Hunter of the Haxion Brood: Shielded while an enemy unit has a Bounty
-  LOF_085: { keywords: [] }, // Praetorian Guard: Sentinel while you control a unit with 4 or more power
-  JTL_137: { keywords: [] }, // Vonreg's TIE Interceptor: Overwhelm at 4 power, Raid 1 at 6
-  SOR_188: { keywords: [] }, // Chopper: Raid 1 while you control another Spectre unit
-  SOR_131: { keywords: [] }, // Fifth Brother: Raid 1 for each damage on him
-  SEC_171: { keywords: [] }, // Punishing One: Raid 1 for each damaged enemy unit
-  TS26_75: { keywords: [] }, // Jango Fett: Ambush while an enemy unit has attacked your base this phase
-
-  // A keyword a unit only ever hands to other units (continued).
-  LOF_186: { keywords: [] }, // Marchion Ro: he doubles each friendly unit's Raid, and has none of his own
-  LAW_104: { keywords: [] }, // Bodhi Rook: gives a friendly Rebel unit Sentinel
-  SOR_156: { keywords: [] }, // Benthic "Two Tubes": gives another friendly Aggression unit Raid 2
-  LOF_180: { keywords: [] }, // Deceptive Shade: gives the next unit played Ambush
-
-  // The other sealed sets, conditional keywords (continued).
-  JTL_104: { keywords: [] }, // Raddus: Sentinel while you control another Resistance card
-
-  // Leaders: a deployed side's conditional keyword, or one it only gives to other units.
-  TWI_010: { keywords: [] }, // Pre Vizsla: Saboteur while you have 3 or more cards in hand
-  SEC_010: { keywords: [] }, // Dedra Meero: Raid 2 while you have more cards in hand than an opponent
-  SOR_012: { keywords: [] }, // IG-88: gives each other friendly unit Raid 1
-  LAW_001: { keywords: [] }, // Saw Gerrera: gives an attacker Overwhelm for that attack
-  SEC_007: { keywords: [{ name: 'Overwhelm' }] }, // Dryden Vos: Overwhelm is his; Ambush goes to the unit he plays
+  // Millennium Falcon gains Ambush "if you play this unit from your hand". Nothing records how a unit
+  // was played, so it keeps Ambush, which `toKeywords` would drop: right when played from hand, the
+  // usual way, and wrong only when smuggled.
+  SHD_204: { keywords: [{ name: 'Ambush' }, { name: 'Smuggle' }] },
 
   // A printed keyword the source omits.
+  HMW_018: { keywords: [{ name: 'Ambush' }, { name: 'Raid', value: 1 }] }, // The Warrior: both printed on her back, neither in the source
   SEC_189: { keywords: [{ name: 'Plot' }] }, // Lurking Snub Fighter: the source ships no Keywords array at all, though FrontText prints the full Plot reminder
   SHD_007: { keywords: [{ name: 'Overwhelm' }] }, // Moff Gideon (leader)
   SHD_016: { keywords: [{ name: 'Saboteur' }] }, // Fennec Shand (leader)
@@ -167,17 +37,23 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   // A keyword the source lists that the card does not print, alongside one it omits.
   LAW_081: { keywords: [{ name: 'Ambush' }, { name: 'Overwhelm' }] }, // Sullustan Sapper: the card prints Ambush and Overwhelm, not Shielded
 
-  // A keyword the source lists that the card only gains from its own ability.
-  LOF_096: { keywords: [] }, // Obi-Wan Kenobi: gains Sentinel for the phase when a Force unit is played
-
-  // The literal word "Keyword"/"Keywords" parsed out of ability text into the card's own keyword
-  // list, on the cards whose ability treats a keyword as a value. None of them is a keyword; each
-  // card's real printed set is whatever is left once the ability's words are taken back out.
-  HMW_001: { keywords: [{ name: 'Restore', value: 2 }] }, // Asajj Ventress: her back prints Restore 2; the Raid and Restore she swaps are her front's text
-  JTL_047: { keywords: [] }, // Admiral Yularen: "Keyword", and the four he offers, are his ability's options
-  JTL_053: { keywords: [] }, // The Ghost: "Keywords" is his ability's subject; Sentinel is conditional (while upgraded)
-  TS26_3: { keywords: [] }, // Maul: "Keywords" is what his ability counts
-  LOF_105: { keywords: [] }, // Oppo Rancisis: all nine are keywords he gains while another friendly unit has them
+  // An upgrade's "attached unit gains X", granted by the upgrade's ability while its condition holds,
+  // or a keyword its host gives to other units: not the attached unit's own keyword.
+  SEC_104: { keywords: [] }, // Figure of Unity: its host gives each OTHER friendly unit Overwhelm, Raid 1 and Restore 1
+  HMW_112: { keywords: [{ name: 'Fortify' }] }, // Military Academy: its base gives friendly units Overwhelm
+  HMW_126: { keywords: [{ name: 'Fortify' }] }, // Verdant Fortress: its base gives friendly units Raid 1
+  HMW_096: { keywords: [] }, // Devotion: Restore 2
+  HMW_190: { keywords: [] }, // Enraged: Raid 2
+  HMW_191: { keywords: [] }, // Hunter's Instinct: Grit on a Creature
+  SEC_071: { keywords: [] }, // Disciples' Devotion: Sentinel while attached unit is exhausted
+  LOF_215: { keywords: [] }, // Ascension Cable: Saboteur
+  LOF_238: { keywords: [] }, // Darth Revan's Lightsabers: Grit on a Sith
+  LOF_053: { keywords: [] }, // Heirloom Lightsaber: Restore 1 on a Force unit
+  LAW_128: { keywords: [] }, // Veiled Strength: Grit
+  TWI_071: { keywords: [] }, // Unshakeable Will: Sentinel
+  SOR_070: { keywords: [] }, // Devotion: Restore 2
+  SOR_166: { keywords: [] }, // Infiltrator's Skill: Saboteur
+  SOR_057: { keywords: [] }, // Protector: Sentinel
 
   // An arena the source gets wrong. "This unit can attack space units" is printed on a GROUND unit;
   // shipped as Space it could not have been printed at all.
@@ -186,23 +62,4 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   // A card type the source gets wrong. "When Played: you may attack with attached unit" is an
   // upgrade's text, and the printed card is an upgrade with +1/+1 that the source omits.
   SOR_215: { type: 'upgrade', power: 1, hp: 1 }, // Snapshot Reflexes
-
-  // Coordinate (#472): the bundled keyword named after the dash ("Coordinate - Sentinel") is
-  // entirely conditional, not real, the same treatment as every other conditional-keyword card
-  // above. `Coordinate` itself stays (it's the real, always-printed label); a keyword the card also
-  // has UNCONDITIONALLY on a separate printed line (TWI_196's Ambush) stays alongside it.
-  TWI_106: { keywords: [{ name: 'Coordinate' }] }, // Coruscant Guard — Ambush is conditional
-  TWI_164: { keywords: [{ name: 'Coordinate' }] }, // Hevy — Raid is conditional
-  TWI_061: { keywords: [{ name: 'Coordinate' }] }, // Infantry of the 212th — Sentinel is conditional
-  TWI_050: { keywords: [{ name: 'Coordinate' }] }, // Luminara Unduli — Grit is conditional
-  TWI_196: { keywords: [{ name: 'Ambush' }, { name: 'Coordinate' }] }, // Plo Koon — Ambush is real; Raid is conditional
-  TWI_243: { keywords: [{ name: 'Coordinate' }] }, // Republic Commando — Saboteur is conditional
-
-  // The Force (#462): same source behaviour as Coordinate above, for "While the Force is with you,
-  // this unit gains <keyword>." No `Force` label to keep this time (unlike Coordinate's own name,
-  // "the Force is with you" isn't itself a keyword), so the conditional one is simply dropped.
-  LOF_231: { keywords: [{ name: 'Shielded' }] }, // Darth Tyranus — Ambush is conditional
-  LOF_196: { keywords: [] }, // Jedi Sentinel — Sentinel is conditional
-  LOF_050: { keywords: [] }, // Plo Koon — Grit is conditional
-  LOF_007: { keywords: [] }, // Avar Kriss (leader, deployed back) — Overwhelm is conditional
 }

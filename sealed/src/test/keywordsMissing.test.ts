@@ -9,7 +9,7 @@ const hasShield = (u: { upgrades: { cardId: string }[] }) => u.upgrades.some(a =
 
 describe('keyword name trimming', () => {
   it('trims stray whitespace so hasKeyword matches (Shielded variants)', () => {
-    const c = normaliseCard({ Set: 'TST', Number: '1', Name: 'X', Type: 'Unit', Keywords: ['Shielded '] })
+    const c = normaliseCard({ Set: 'TST', Number: '1', Name: 'X', Type: 'Unit', Keywords: ['Shielded '], FrontText: 'Shielded' })
     expect(c.keywords).toEqual([{ name: 'Shielded' }])
   })
 })
