@@ -411,6 +411,22 @@ action looks like a heal that never happened.
 
 - **Board-target kinds** (`BOARD_TARGET_KINDS` in `describeChoice.ts`) are answered by clicking a
   highlighted unit or base. The list lives next to the prompt table so the two cannot drift.
+- **A choice answered with buttons is asked in a centre-screen overlay.** Kinds with a dedicated
+  overlay (the ordering prompts, the card pickers, searches, naming) use it; whatever is left goes to
+  `ButtonChoiceOverlay` with the `describeChoiceParts` prompt and one `describeAction` button per
+  answer, but only when `answeredWithButtons` holds: every answer is a plain accept or the decline,
+  and at least one is not the decline. An answer that is an attack (Ambush, Support, `mayAttack`,
+  `mayAttackAnyUnit`) or names a unit, a base or a hand card (`selectUnitToReturn`,
+  `selectUnitToReady`, `selectUnitToSteal`, `selectDistributeSource`, `attachPlayedCard`,
+  `peekTopDiscard`, `playUnitFromHand`) keeps the choice where it is answered, with its decline and
+  any unit-named buttons in the Action column. So does a choice sharing the screen with a
+  board-target choice.
+- **All of them share `OverlayShell`**, the game-over screen's frame: `panel` size for the ones
+  answered with buttons, `cards` for the card pickers.
+- **Dismissing an overlay on your own trigger cancels the action** (`cancelChoice`, see the undo
+  section of `architecture.md`). Where that is refused, the dedicated overlays block until answered,
+  and the button overlay can only be put aside to read the board: the floating prompt then carries
+  the question and a **Show choice** button in the Action column reopens it.
 - **`CardSelectOverlay`** is the centre-screen card picker: click the highlighted card to choose it,
   with a Cancel only when the choice is optional. Token art included.
 - **"Look at a card" is PRIVATE.** The overlay renders only for the human's own choice, so the AI's

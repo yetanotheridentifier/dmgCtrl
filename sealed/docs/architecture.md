@@ -235,6 +235,16 @@ pipeline can tell a retried line from a played one. A rewind that found nothing 
 does not count. The field is absent on records written before it existed, which means
 provenance unknown rather than zero, and it cannot be backfilled.
 
+**Cancelling a choice** rewinds the same history. `cancelChoice` is set while the human's pending
+choice came out of their own action, and rewinds to the last snapshot with no choice pending, so a
+follow-up choice cancels the whole action rather than one step of it. `cancelPoint` decides it, and
+refuses when the rewind would be more than taking back the player's own move: the AI acted since, the
+choice's `source` is the AI's card, or something hidden was seen (either deck, the AI's hand or
+resources changed, a look or search choice was pending at any step, or the seed moved further than its
+one step per action, meaning a random outcome was drawn). Because those refusals cover exactly what
+makes undo a practice tool, cancelling is not gated on `allowUndo`, and it counts toward `undoCount`
+like any rewind.
+
 The per-action granularity is finer than `undo` currently needs; it is the substrate for
 stepping through history from the log.
 

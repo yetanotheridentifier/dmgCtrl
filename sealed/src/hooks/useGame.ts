@@ -8,9 +8,10 @@ import { cardRefFromId } from '../utils/parseProtectThePod'
 import { buildCardDb } from '../engine/cardDb'
 import { initGame, fisherYates } from '../engine/initGame'
 import type { Action } from '../engine/actions'
-import type { GameState, PlayerId } from '../engine/types'
+import type { GameState, PendingChoice, PlayerId } from '../engine/types'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
+import { nextSeed } from '../engine/rng'
 import { opponentAi } from '../config'
 import { driverAction } from '../ai/concession'
 import { describeActionParts, partsText } from '../utils/describeAction'
@@ -47,6 +48,13 @@ export interface GameValue {
    */
   undo: () => void
   canUndo: boolean
+  /**
+   * Take back the player's own action whose choice is pending, as if it had never been made. Offered
+   * regardless of the undo setting, because `cancelPoint` refuses it whenever anything hidden has been
+   * seen, which is the reason undo is a setting at all. `undefined` when the pending choice cannot be
+   * cancelled.
+   */
+  cancelChoice: (() => void) | undefined
   rematch: () => void
   /**
    * The game so far as replay data, for an in-app bug report (#373). A function rather than a
@@ -94,6 +102,60 @@ interface Snapshot {
   state: GameState
   logLength: number
   movesLength: number
+}
+
+/**
+ * Choices whose whole point is to show the player cards they could not otherwise see. Nothing in the
+ * state changes when they are raised, so the look itself has to count as hidden information seen.
+ */
+const REVEALING_KINDS: ReadonlySet<PendingChoice['kind']> = new Set<PendingChoice['kind']>([
+  'mayPlayTopFree', 'mayDiscardTop', 'search', 'searchDraw', 'searchPlayFree', 'searchPlayUpgrade', 'lookAtHand',
+])
+
+const revealing = (s: GameState) => (s.pendingChoices ?? []).some(c => REVEALING_KINDS.has(c.kind))
+
+/**
+ * True when nothing hidden from the player differs between `a` and `b`, `actions` actions apart. The
+ * engine steps the random seed once per action whatever happens, so only a seed that moved further
+ * than that means a random outcome was drawn.
+ */
+function sameHidden(a: GameState, b: GameState, actions: number): boolean {
+  const same = (x: readonly string[], y: readonly string[]) => x.length === y.length && x.every((v, i) => v === y[i])
+  let seed = a.rngSeed
+  for (let i = 0; i < actions; i++) seed = nextSeed(seed)
+  const pa = a.players, pb = b.players
+  return seed === b.rngSeed
+    && same(pa.player.deck, pb.player.deck)
+    && same(pa.opponent.deck, pb.opponent.deck)
+    && same(pa.opponent.hand, pb.opponent.hand)
+    && same(pa.opponent.resources.map(r => r.cardId), pb.opponent.resources.map(r => r.cardId))
+}
+
+/**
+ * Where cancelling the player's pending choice rewinds to, or `undefined` when it cannot be cancelled.
+ *
+ * Cancelling takes back the player's own action that raised the choice, and every answer given to it
+ * since: the snapshot returned is the last one with no choice pending, so a follow-up choice cancels
+ * the whole action rather than one step of it. It is refused when that would be more than taking
+ * back the player's own move:
+ *
+ * - **The opponent has acted since.** The choice then came out of the opponent's turn, and rewinding
+ *   would take the opponent's moves back too.
+ * - **The choice is the opponent's card's.** Its source is theirs, so it is not the player's to cancel.
+ * - **Something hidden has been seen.** A draw, a search, a look at a hand or a random outcome: going
+ *   back would let the same decision be taken again knowing the cards.
+ */
+export function cancelPoint(history: readonly { by: PlayerId; state: GameState }[], current: GameState): number | undefined {
+  const choice = current.pendingChoices?.find(c => c.controller === HUMAN)
+  if (!choice || choice.source?.controller === AI) return undefined
+  let root = history.length - 1
+  for (; root >= 0; root--) {
+    if (history[root].by !== HUMAN) return undefined
+    if (!history[root].state.pendingChoices?.length) break
+  }
+  if (root < 0) return undefined
+  if (revealing(current) || history.slice(root + 1).some(s => revealing(s.state))) return undefined
+  return sameHidden(history[root].state, current, history.length - root) ? root : undefined
 }
 
 export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options: UseGameOptions = {}): GameValue {
@@ -283,9 +345,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
    * the AI's reply included — is dropped from the state, the log and the move list, so a saved
    * record never contains a move that was taken back.
    */
-  const undo = useCallback(() => {
-    const index = historyRef.current.map(s => s.by).lastIndexOf(HUMAN)
-    if (index < 0) return
+  const rewind = useCallback((index: number) => {
     undoCountRef.current++
     const snapshot = historyRef.current[index]
     historyRef.current = historyRef.current.slice(0, index)
@@ -297,6 +357,17 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
     setCanUndo(historyRef.current.some(s => s.by === HUMAN))
   }, [])
 
+  const undo = useCallback(() => {
+    const index = historyRef.current.map(s => s.by).lastIndexOf(HUMAN)
+    if (index >= 0) rewind(index)
+  }, [rewind])
+
+  // Read from the ref during render: the history only changes alongside `gameState`, which is what
+  // re-renders, so the answer is current whenever it is read.
+  // eslint-disable-next-line react-hooks/refs
+  const cancelAt = gameState && gameState.winner === null ? cancelPoint(historyRef.current, gameState) : undefined
+  const cancelChoice = cancelAt === undefined ? undefined : () => rewind(cancelAt)
+
   const rematch = useCallback(() => setGeneration(g => g + 1), [])
 
   const replayData = useCallback(() => ({ initialState: initialStateRef.current, moves: [...movesRef.current] }), [])
@@ -307,5 +378,5 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
 
   // Once the game is over the record has been written — rewinding past that would leave a saved
   // game disagreeing with what is on screen.
-  return { status, errorDetail, gameState, legal, log, act, undo, canUndo: canUndo && gameState?.winner === null, rematch, replayData, unresolvedPrintings }
+  return { status, errorDetail, gameState, legal, log, act, undo, canUndo: canUndo && gameState?.winner === null, cancelChoice, rematch, replayData, unresolvedPrintings }
 }
