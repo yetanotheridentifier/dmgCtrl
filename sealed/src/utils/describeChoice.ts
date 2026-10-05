@@ -37,7 +37,30 @@ export const BOARD_TARGET_KINDS = [
   'selectUnitToDefeat', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens',
   'multiPick', 'distributeDamage', 'distributeTokens', 'variableStrike', 'healForAdvantage',
   'returnFriendlyUnit', 'selectPair', 'exploit',
+  'selectUnitThen', 'selectUnitToReady', 'selectUnitToReturn', 'selectUnitToSteal', 'selectFriendlyUnit',
+  'selectDistributeSource', 'attachPlayedCard', 'mayPlayUpgradeFree',
+  'distributeHealing', 'distributeIndirectDamage', 'damageAnyBases',
 ] as const
+
+/** Board-target kinds picked again and again until Done (or until the amount is spent). */
+const REPEATABLE_KINDS: readonly BoardTargetKind[] = [
+  'multiPick', 'distributeDamage', 'distributeTokens', 'exploit', 'distributeHealing', 'distributeIndirectDamage', 'damageAnyBases',
+]
+export const isRepeatable = (choice: PendingChoice): boolean => (REPEATABLE_KINDS as readonly string[]).includes(choice.kind)
+
+/**
+ * How much of a distributed amount is placed, for the allocation HUD: a label and "spent / total".
+ * Undefined for a choice that is not a distribution.
+ */
+export function allocation(choice: PendingChoice): { label: string; spent: number; total: number } | undefined {
+  switch (choice.kind) {
+    case 'distributeDamage': return { label: 'Damage', spent: choice.total - choice.remaining, total: choice.total }
+    case 'distributeTokens': return { label: 'Tokens', spent: choice.total - choice.remaining, total: choice.total }
+    case 'distributeIndirectDamage': return { label: 'Indirect damage', spent: choice.total - choice.remaining, total: choice.total }
+    case 'distributeHealing': return { label: 'Healing', spent: choice.healed, total: choice.healed + choice.remaining }
+    default: return undefined
+  }
+}
 
 export type BoardTargetKind = (typeof BOARD_TARGET_KINDS)[number]
 
