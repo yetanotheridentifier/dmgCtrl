@@ -18,7 +18,7 @@ const BASE_CARD: SwuCard = {
 
 describe('normaliseCard — keyword capture', () => {
   it('captures plain keywords from Keywords[]', () => {
-    const c = normaliseCard({ ...BASE_CARD, Keywords: ['Sentinel', 'Overwhelm'] })
+    const c = normaliseCard({ ...BASE_CARD, Keywords: ['Sentinel', 'Overwhelm'], FrontText: 'Sentinel\nOverwhelm' })
     expect(c.keywords).toEqual([{ name: 'Sentinel' }, { name: 'Overwhelm' }])
   })
 

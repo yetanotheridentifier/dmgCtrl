@@ -551,8 +551,10 @@ describe('card data', () => {
     ['JTL_054', ['Shielded']],
     // Keywords the card only gains conditionally, or only gives to other units.
     ['SOR_130', []], ['SHD_212', []], ['LOF_085', []], ['JTL_137', []], ['LOF_186', []],
+    // The source lists Sentinel, but the text only names it ("each friendly ground unit with Sentinel").
+    ['SEC_032', []],
     // Unchanged: these are the card's own.
-    ['LOF_132', ['Hidden', 'Raid 1']], ['SEC_032', ['Sentinel']], ['LAW_036', ['Sentinel']],
+    ['LOF_132', ['Hidden', 'Raid 1']], ['LAW_036', ['Sentinel']],
     ['LOF_044', ['Sentinel']], ['LAW_108', ['Sentinel']], ['SOR_034', ['Restore 1']],
   ])('%s prints %j', (id, expected) => {
     expect(printed(id)).toEqual(expected)

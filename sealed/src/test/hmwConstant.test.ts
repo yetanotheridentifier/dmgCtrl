@@ -398,7 +398,7 @@ describe('HMW constant abilities, C: costs and entering play', () => {
     expect(played(play(board(), 'AMB'), 'AMB').exhausted).toBe(true)
     // An opponent's Firespray lends nothing.
     expect(played(play(board({}, { units: [unit('f', 'HMW_053')] }), 'AMB'), 'AMB').exhausted).toBe(true)
-    // Firespray's own Ambush may hit the base.
-    expect(baseAttack(play(board(), 'HMW_053'))).toBe(true)
+    // Firespray has no Ambush of its own: the source lists one, but the text only names it.
+    expect(played(play(board(), 'HMW_053'), 'HMW_053').exhausted).toBe(true)
   })
 })

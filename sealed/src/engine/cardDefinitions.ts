@@ -11584,7 +11584,10 @@ registerCard('SHD_173', bounty(whenPlayed('Deal 2 damage to a base. If this unit
 // snapshot directly via `hears`, rather than a `grantsAbilities` self-aura — the granting unit is
 // ALREADY OUT OF PLAY by the time a `bounty` trigger collects (that's what defeated/captured means),
 // so a self-referential aura lookup over `state.players[...].units` could never find itself there.
+// Each also HAS a Bounty only while exhausted, for the cards that ask "a unit with a Bounty" (Jango Fett).
+const bountyWhileExhausted = (_s: GameState, u: UnitState): KeywordInstance[] => (u.exhausted ? [{ name: 'Bounty' }] : [])
 registerCard('SHD_033', { // Synara San — Loyal to Kragan
+  conditionalKeywords: bountyWhileExhausted,
   abilities: [{
     trigger: 'bounty', description: 'While this unit is exhausted, she gains, "Bounty - Deal 5 damage to a base."',
     hears: (_s, ctx) => ctx.bountyUnit?.exhausted === true,
@@ -11592,6 +11595,7 @@ registerCard('SHD_033', { // Synara San — Loyal to Kragan
   }],
 })
 registerCard('SHD_165', { // Unlicensed Headhunter
+  conditionalKeywords: bountyWhileExhausted,
   abilities: [{
     trigger: 'bounty', description: 'While this unit is exhausted, it gains: "Bounty - Heal 5 damage from your base."',
     hears: (_s, ctx) => ctx.bountyUnit?.exhausted === true,

@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_BATTLE_DROID, TOKEN_CLONE_TROOPER } from '../engine/tokenUnits'
-import { CARD_DATA_CORRECTIONS } from '../engine/cardDataCorrections'
+import { normaliseCard } from '../engine/cardDb'
+import type { SwuCard } from '../data/cards'
+import lofSet from './fixtures/lofSet.json'
 import { unitHasKeyword } from '../engine/keywords'
 import { effectivePower } from '../engine/stats'
 import { getCardDefinition } from '../engine/abilities'
@@ -319,7 +321,9 @@ describe('TWI_102 Manufactured Soldiers', () => {
 
 describe('LOF_096 Obi-Wan Kenobi', () => {
   it('does not print Sentinel: the source parses it out of his ability', () => {
-    expect(CARD_DATA_CORRECTIONS.LOF_096?.keywords).toEqual([])
+    const row = (lofSet as unknown as SwuCard[]).find(c => c.Number === '096')!
+    expect(row.Keywords, 'the source still lists it').toContain('Sentinel')
+    expect(normaliseCard(row).keywords.map(k => k.name)).not.toContain('Sentinel')
   })
 
   it('gains Sentinel for the phase when he is played, and when another Force unit is played', () => {
