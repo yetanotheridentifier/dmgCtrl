@@ -44,6 +44,17 @@ export const TOKEN_SPEC: Record<TokenKind, { background: string; ink: string; wi
 /** Weight of a stat pill's figures: bold, a step above the labels. */
 export const TOKEN_FIGURE_WEIGHT = 800
 
+/**
+ * Where a stat pill's figures sit: power in the top-left corner and HP in the bottom-right,
+ * diagonally opposed like the physical +X/+Y token. The font size and the 2px top and bottom
+ * insets are the old square badge's; the side insets clear the pill's rounded ends.
+ */
+export const TOKEN_FIGURE_LAYOUT = {
+  fontSize: Math.round(TOKEN_H * 0.42),
+  power: { top: 2, left: 9 },
+  hp: { bottom: 2, right: 9 },
+} as const
+
 /** Every token's drop shadow and edge: what keeps it readable over card art. */
 export const TOKEN_SHADOW = '0 1px 3px rgba(0, 0, 0, 0.7)'
 export const TOKEN_BORDER = '1px solid rgba(0, 0, 0, 0.35)'

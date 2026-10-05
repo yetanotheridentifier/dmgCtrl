@@ -23,7 +23,7 @@ import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
 import { CardGridOverlay } from './cardGridOverlay'
 import { CARD_WIDTH_PX } from './cardSizing'
-import { tokenLayout, TOKEN_H, PILL_W, TOKEN_SPEC, TOKEN_FIGURE_WEIGHT, TOKEN_SHADOW, TOKEN_BORDER } from './tokens'
+import { tokenLayout, TOKEN_H, PILL_W, TOKEN_SPEC, TOKEN_FIGURE_WEIGHT, TOKEN_FIGURE_LAYOUT, TOKEN_SHADOW, TOKEN_BORDER } from './tokens'
 import type { TokenKind } from './tokens'
 import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE, TOKEN_WEAKNESS } from '../engine/tokenUpgrades'
 import { unitHasKeyword } from '../engine/keywords'
@@ -237,6 +237,36 @@ function signed(n: number): string {
   return n >= 0 ? `+${n}` : `${n}`
 }
 
+/**
+ * One figure on a stat pill, e.g. "-3". The sign is drawn rather than typed: a hyphen or minus
+ * glyph sits wherever the font puts it (below the digits' middle in most), so the sign is an
+ * inline box one cap-height tall standing on the baseline, with its bars centred in it. That puts
+ * it exactly halfway up the digits in any font. `data-value` records the figure with a true minus
+ * sign (U+2212) for anything reading it.
+ */
+function StatFigure({ stat, value, color, place }: {
+  stat: 'power' | 'hp'
+  value: string
+  color: string | undefined
+  place: { top?: number; left?: number; bottom?: number; right?: number }
+}) {
+  const minus = value.startsWith('-')
+  const bar = { position: 'absolute', background: 'currentColor', borderRadius: 1, left: '50%', top: '50%', transform: 'translate(-50%, -50%)' } as const
+  return (
+    <span
+      data-stat={stat}
+      data-value={(minus ? '−' : '+') + value.slice(1)}
+      style={{ position: 'absolute', ...place, color, fontSize: `${TOKEN_FIGURE_LAYOUT.fontSize}px`, fontWeight: TOKEN_FIGURE_WEIGHT, lineHeight: 1 }}
+    >
+      <span data-sign={minus ? 'minus' : 'plus'} aria-hidden style={{ display: 'inline-block', position: 'relative', width: '0.5em', height: '1cap', marginRight: '0.06em' }}>
+        <span style={{ ...bar, width: '0.5em', height: '0.14em' }} />
+        {!minus && <span style={{ ...bar, width: '0.14em', height: '0.5em' }} />}
+      </span>
+      {value.slice(1)}
+    </span>
+  )
+}
+
 function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
   const countToken = (id: string) => unit.upgrades.filter(u => u.cardId === id).length
   const tokens: CardToken[] = []
@@ -297,11 +327,12 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
             }}
           >
             {typeof t.content === 'string' ? t.content : (
-              // A stat pill: bold power and HP figures in the kind's `figures` colours, no slash.
-              <span style={{ wordSpacing: 2 }}>
-                <span data-stat="power" style={{ color: spec.figures?.power, fontWeight: TOKEN_FIGURE_WEIGHT }}>{t.content.power}</span>{' '}
-                <span data-stat="hp" style={{ color: spec.figures?.hp, fontWeight: TOKEN_FIGURE_WEIGHT }}>{t.content.hp}</span>
-              </span>
+              // A stat pill: bold power (top-left) and HP (bottom-right) figures in the kind's
+              // `figures` colours, laid out by TOKEN_FIGURE_LAYOUT.
+              <>
+                <StatFigure stat="power" value={t.content.power} color={spec.figures?.power} place={TOKEN_FIGURE_LAYOUT.power} />
+                <StatFigure stat="hp" value={t.content.hp} color={spec.figures?.hp} place={TOKEN_FIGURE_LAYOUT.hp} />
+              </>
             )}
           </span>
         )
