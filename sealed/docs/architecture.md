@@ -333,7 +333,8 @@ The board is drawn with art-dominant cards, not text rows:
   stay upright when the card is exhausted. Damage is a deep-red rounded square with a white
   number; every other kind (buff, debuff, Shield, Experience, Advantage, Weakness) is a pill the
   same height and twice as wide, carrying a short label and its value; the stat pills (buff,
-  debuff, Experience, Weakness) print power red and HP blue (`TOKEN_STAT_INK`), and every token
+  debuff, Experience, Weakness) print bold power and HP figures in their kind's `figures`
+  colours (red and blue on the white buff, white on the rest), and every token
   shares one drop shadow and edge (`TOKEN_SHADOW`, `TOKEN_BORDER`). `TOKEN_SPEC` is the one
   spec for fill, ink and width, with the fills as `--color-token-*` properties in `index.css`. The
   buff and debuff pills show `stats.offCardStatDelta`, split by sign.

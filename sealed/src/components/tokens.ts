@@ -24,24 +24,25 @@ export const PILL_W = TOKEN_W * 2
 export type TokenKind = 'damage' | 'mod' | 'debuff' | 'shield' | 'experience' | 'advantage' | 'weakness'
 
 /**
- * The one spec for every on-card token: fill, label colour and width. A stat pill (buff, debuff,
- * Experience, Weakness) prints a power figure and an HP figure, with no slash, in
- * `TOKEN_STAT_INK`'s red and blue, mirroring the physical +X/+Y token; the others print their
- * label in `ink`. Colours are theme tokens in `index.css` (`--color-token-*`), so a palette change
- * happens there and nowhere else.
+ * The one spec for every on-card token: fill, label colour and width, plus `figures` on a stat pill
+ * (buff, debuff, Experience, Weakness), which prints a power figure and an HP figure with no slash,
+ * each in its own colour. The white buff pill keeps the physical +X/+Y token's red power and blue
+ * HP; the darker stat pills print both figures white. The other kinds print their label in `ink`.
+ * Colours are theme tokens in `index.css` (`--color-token-*`), so a palette change happens there
+ * and nowhere else.
  */
-export const TOKEN_SPEC: Record<TokenKind, { background: string; ink: string; width: number }> = {
+export const TOKEN_SPEC: Record<TokenKind, { background: string; ink: string; width: number; figures?: { power: string; hp: string } }> = {
   damage: { background: 'var(--color-red)', ink: 'var(--color-ink)', width: TOKEN_W },
-  mod: { background: 'var(--color-token-buff)', ink: 'var(--color-token-ink-dark)', width: PILL_W },
-  debuff: { background: 'var(--color-token-debuff)', ink: 'var(--color-ink)', width: PILL_W },
+  mod: { background: 'var(--color-token-buff)', ink: 'var(--color-token-ink-dark)', width: PILL_W, figures: { power: 'var(--color-red)', hp: 'var(--color-token-hp)' } },
+  debuff: { background: 'var(--color-token-debuff)', ink: 'var(--color-ink)', width: PILL_W, figures: { power: 'var(--color-ink)', hp: 'var(--color-ink)' } },
   shield: { background: 'var(--color-token-shield)', ink: 'var(--color-ink)', width: PILL_W },
-  experience: { background: 'var(--color-token-experience)', ink: 'var(--color-token-ink-dark)', width: PILL_W },
+  experience: { background: 'var(--color-token-experience)', ink: 'var(--color-ink)', width: PILL_W, figures: { power: 'var(--color-ink)', hp: 'var(--color-ink)' } },
   advantage: { background: 'var(--color-token-advantage)', ink: 'var(--color-token-ink-dark)', width: PILL_W },
-  weakness: { background: 'var(--color-token-weakness)', ink: 'var(--color-ink)', width: PILL_W },
+  weakness: { background: 'var(--color-token-weakness)', ink: 'var(--color-ink)', width: PILL_W, figures: { power: 'var(--color-ink)', hp: 'var(--color-ink)' } },
 }
 
-/** Figure colours on a stat pill: power red, HP blue (the physical token's, and the board's). */
-export const TOKEN_STAT_INK = { power: 'var(--color-red)', hp: 'var(--color-token-hp)' } as const
+/** Weight of a stat pill's figures: bold, a step above the labels. */
+export const TOKEN_FIGURE_WEIGHT = 800
 
 /** Every token's drop shadow and edge: what keeps it readable over card art. */
 export const TOKEN_SHADOW = '0 1px 3px rgba(0, 0, 0, 0.7)'

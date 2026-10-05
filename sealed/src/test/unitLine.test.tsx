@@ -6,7 +6,8 @@ import type { UnitInteraction } from '../components/gameScreen'
 import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS } from '../engine/tokenUpgrades'
 import { effectivePower, effectiveHp } from '../engine/stats'
-import { PILL_W, TOKEN_H, TOKEN_SHADOW, TOKEN_STAT_INK } from '../components/tokens'
+import { PILL_W, TOKEN_H, TOKEN_SHADOW, TOKEN_SPEC, TOKEN_FIGURE_WEIGHT } from '../components/tokens'
+import type { TokenKind } from '../components/tokens'
 import { addLastingEffect } from '../engine/types'
 import type { GameState, LeaderState } from '../engine/types'
 import '../engine/cardDefinitions' // registers ASH_010's aura for the aura-token test
@@ -77,18 +78,23 @@ describe('UnitLine — on-card damage overlay', () => {
   /** The power and HP figures of a stat pill, in order. */
   const figures = (token: HTMLElement) => [token.querySelector('[data-stat="power"]'), token.querySelector('[data-stat="hp"]')] as HTMLElement[]
 
-  it('prints every stat pill’s power figure in red and its HP figure in blue, with the shared shadow', () => {
+  it.each([
+    // kind, power figure colour, HP figure colour
+    ['mod', 'var(--color-red)', 'var(--color-token-hp)'], // the white buff keeps the physical token's red and blue
+    ['debuff', 'var(--color-ink)', 'var(--color-ink)'],
+    ['experience', 'var(--color-ink)', 'var(--color-ink)'],
+    ['weakness', 'var(--color-ink)', 'var(--color-ink)'],
+  ])('prints the %s pill’s figures in bold, coloured from its spec, with the shared shadow', (kind, power, hp) => {
     const s = addLastingEffect(boardWith('TST_D'), { targetInstanceId: 'u1', power: 2, hp: -1 })
     const u = unit('u1', 'TST_D', { upgrades: [{ cardId: TOKEN_EXPERIENCE, owner: 'player' }, { cardId: TOKEN_WEAKNESS, owner: 'player' }] })
     render(<UnitLine state={s} unit={u} interact={noInteract} />)
-    for (const kind of ['mod', 'debuff', 'experience', 'weakness']) {
-      const token = screen.getByTestId(`board-unit-${kind}-u1`)
-      const [p, h] = figures(token)
-      expect(p, kind).toHaveStyle({ color: TOKEN_STAT_INK.power })
-      expect(h, kind).toHaveStyle({ color: TOKEN_STAT_INK.hp })
-      expect(token).toHaveStyle({ boxShadow: TOKEN_SHADOW })
-    }
-    expect(TOKEN_STAT_INK).toEqual({ power: 'var(--color-red)', hp: 'var(--color-token-hp)' })
+    const token = screen.getByTestId(`board-unit-${kind}-u1`)
+    const [p, h] = figures(token)
+    expect(TOKEN_SPEC[kind as TokenKind].figures).toEqual({ power, hp })
+    expect(p).toHaveStyle({ color: power, fontWeight: String(TOKEN_FIGURE_WEIGHT) })
+    expect(h).toHaveStyle({ color: hp, fontWeight: String(TOKEN_FIGURE_WEIGHT) })
+    expect(TOKEN_FIGURE_WEIGHT).toBeGreaterThanOrEqual(700) // bold
+    expect(token).toHaveStyle({ boxShadow: TOKEN_SHADOW })
   })
 
   it('tells Experience from Advantage by colour (they were both gold)', () => {

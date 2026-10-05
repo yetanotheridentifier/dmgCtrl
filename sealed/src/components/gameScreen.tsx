@@ -23,7 +23,7 @@ import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
 import { CardGridOverlay } from './cardGridOverlay'
 import { CARD_WIDTH_PX } from './cardSizing'
-import { tokenLayout, TOKEN_H, PILL_W, TOKEN_SPEC, TOKEN_STAT_INK, TOKEN_SHADOW, TOKEN_BORDER } from './tokens'
+import { tokenLayout, TOKEN_H, PILL_W, TOKEN_SPEC, TOKEN_FIGURE_WEIGHT, TOKEN_SHADOW, TOKEN_BORDER } from './tokens'
 import type { TokenKind } from './tokens'
 import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE, TOKEN_WEAKNESS } from '../engine/tokenUpgrades'
 import { unitHasKeyword } from '../engine/keywords'
@@ -297,10 +297,10 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
             }}
           >
             {typeof t.content === 'string' ? t.content : (
-              // A stat pill: power in red, HP in blue, no slash (the physical +X/+Y token).
+              // A stat pill: bold power and HP figures in the kind's `figures` colours, no slash.
               <span style={{ wordSpacing: 2 }}>
-                <span data-stat="power" style={{ color: TOKEN_STAT_INK.power }}>{t.content.power}</span>{' '}
-                <span data-stat="hp" style={{ color: TOKEN_STAT_INK.hp }}>{t.content.hp}</span>
+                <span data-stat="power" style={{ color: spec.figures?.power, fontWeight: TOKEN_FIGURE_WEIGHT }}>{t.content.power}</span>{' '}
+                <span data-stat="hp" style={{ color: spec.figures?.hp, fontWeight: TOKEN_FIGURE_WEIGHT }}>{t.content.hp}</span>
               </span>
             )}
           </span>
