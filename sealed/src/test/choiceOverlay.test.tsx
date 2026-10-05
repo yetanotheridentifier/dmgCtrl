@@ -12,6 +12,7 @@ import { registerAbility, unregisterAbility } from '../engine/abilities'
 import { pushChoice } from '../engine/types'
 import type { PlayerId } from '../engine/types'
 import { SettingsProvider } from '../hooks/useSettings'
+import { answeredWithButtons } from '../utils/describeChoice'
 
 /**
  * Triggered choices in the game screen: where they are asked, and what dismissing them does.
@@ -33,6 +34,8 @@ const CARDS: SwuCard[] = [
   { Set: 'TST', Number: '961', Name: 'Taxing Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '1', HP: '1' },
   { Set: 'TST', Number: '962', Name: 'Naming Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '1', HP: '1' },
   { Set: 'TST', Number: '963', Name: 'Asking Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '1', HP: '1' },
+  { Set: 'TST', Number: '965', Name: 'Plain Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '1', HP: '1' },
+  { Set: 'TST', Number: '966', Name: 'Ambusher', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '3', HP: '3', Keywords: ['Ambush'], FrontText: 'Ambush' },
 ]
 
 const OPTIONS = [
@@ -157,5 +160,59 @@ describe('triggered choices in the game screen', () => {
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
     const overlay = screen.getByTestId('name-card-overlay')
     expect(within(overlay).queryByTestId('overlay-dismiss')).toBeNull()
+  })
+
+  /**
+   * Ambush is answered by clicking an enemy unit; its only button is the decline. An overlay over
+   * the board would leave nothing to click but "Don't ambush", so it must stay on the board.
+   */
+  it('keeps Ambush on the board: no overlay, the enemy unit a target, the decline in the action column', async () => {
+    const user = await start(deck('p', 'TST_966'), allOf('TST_965'))
+    // The opponent plays a unit into the ground arena, then the Ambusher enters with it there.
+    await user.click(screen.getByRole('button', { name: /^pass$/i }))
+    expect(unitsOn('opponent')).toHaveLength(1)
+    await user.click(screen.getByTestId('hand-card-0'))
+
+    expect(screen.queryByTestId('choice-overlay')).toBeNull()
+    expect(within(screen.getByTestId('player-mat')).getByRole('button', { name: /don't ambush/i })).toBeInTheDocument()
+
+    const [ambusher] = unitsOn('player')
+    expect(ambusher).toHaveAttribute('data-actionable', 'true')
+    await user.click(ambusher)
+    const [enemy] = unitsOn('opponent')
+    expect(enemy).toHaveAttribute('data-target', 'true')
+    const enemyId = enemy.getAttribute('data-testid')!
+    await user.click(enemy)
+    // The ambush attack defeated it (the opponent may since have played another unit).
+    expect(screen.queryByTestId(enemyId)).toBeNull()
+  })
+})
+
+/**
+ * Which choices the button overlay takes: those answered by picking a button that isn't a decline.
+ * A choice answered on the board (an attack, a unit or base target) or from the hand keeps that
+ * affordance, with its decline beside it in the action column.
+ */
+describe('answeredWithButtons', () => {
+  const id = 'c'
+  const skip = { type: 'skipTrigger' as const, choiceId: id }
+
+  it('takes a choice answered by option buttons, with or without a decline', () => {
+    expect(answeredWithButtons([{ type: 'acceptChoice', choiceId: id, optionIndex: 0 }, { type: 'acceptChoice', choiceId: id, optionIndex: 1 }])).toBe(true)
+    expect(answeredWithButtons([{ type: 'acceptChoice', choiceId: id }, skip])).toBe(true)
+  })
+
+  it('leaves a choice whose only button is the decline', () => {
+    expect(answeredWithButtons([skip])).toBe(false)
+  })
+
+  it('leaves a choice answered by attacking (Ambush, Support, an attack-now)', () => {
+    expect(answeredWithButtons([{ type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' }, choiceId: id }, skip])).toBe(false)
+  })
+
+  it('leaves a choice answered by picking a unit, a base or a hand card', () => {
+    expect(answeredWithButtons([{ type: 'acceptChoice', choiceId: id, targetInstanceId: 'e1' }, skip])).toBe(false)
+    expect(answeredWithButtons([{ type: 'acceptChoice', choiceId: id, baseTarget: 'opponent' }])).toBe(false)
+    expect(answeredWithButtons([{ type: 'acceptChoice', choiceId: id, handIndex: 0 }, skip])).toBe(false)
   })
 })

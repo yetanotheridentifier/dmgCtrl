@@ -8,7 +8,7 @@ import { triggerAbility } from '../engine/abilities'
 import type { Action } from '../engine/actions'
 import { describeAction, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
-import { describeChoiceParts, BOARD_TARGET_KINDS } from '../utils/describeChoice'
+import { describeChoiceParts, answeredWithButtons, BOARD_TARGET_KINDS } from '../utils/describeChoice'
 import { upgradeHostIds, upgradeHostName } from '../utils/upgradeHosts'
 import { buildReportMarkdown, issueUrl } from '../utils/bugReport'
 import { BugReportOverlay } from './bugReportOverlay'
@@ -1588,10 +1588,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       : []
     // Whatever choice is left, answered with buttons, goes to the button overlay rather than the
     // action column. Not while the board or the hand is answering another choice: those keep their
-    // own affordance in view, and their sibling's buttons stay in the column beside them.
+    // own affordance in view, and their sibling's buttons stay in the column beside them. A choice
+    // answered on the board (Ambush's attack, a unit to pick) is never taken, even when the decline
+    // is its only button: see `answeredWithButtons`.
     const answers = (choiceId: string) => (a: Action) => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === choiceId
+    const allAnswers = (choiceId: string) => legal.filter(a => 'choiceId' in a && a.choiceId === choiceId)
     const buttonChoice = !targetChoice && !discardChoice && !handPlayChoice && !upgradePick
-      ? gameState.pendingChoices?.find(c => c.controller === 'player' && unclaimed.some(answers(c.id)))
+      ? gameState.pendingChoices?.find(c => {
+          const all = allAnswers(c.id)
+          return c.controller === 'player' && all.length > 0 && all.every(a => unclaimed.includes(a)) && answeredWithButtons(all)
+        })
       : undefined
     const buttonChoiceActions = buttonChoice ? unclaimed.filter(answers(buttonChoice.id)) : []
     const buttonChoiceHidden = buttonChoice !== undefined && hiddenChoice === buttonChoice.id

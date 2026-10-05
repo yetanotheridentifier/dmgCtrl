@@ -411,12 +411,16 @@ action looks like a heal that never happened.
 
 - **Board-target kinds** (`BOARD_TARGET_KINDS` in `describeChoice.ts`) are answered by clicking a
   highlighted unit or base. The list lives next to the prompt table so the two cannot drift.
-- **Every other choice is asked in a centre-screen overlay**, never in the Action column, which holds
-  only what the player initiates. Kinds with a dedicated overlay (the ordering prompts, the card
-  pickers, searches, naming) use it; whatever is left, answered with buttons (`chooseOne`,
-  `payOrExhaust`, a leader "may"), goes to `ButtonChoiceOverlay` with the `describeChoiceParts` prompt
-  and one `describeAction` button per answer. A choice answered in hand, or one sharing the screen
-  with a board-target choice, keeps its buttons in the Action column.
+- **A choice answered with buttons is asked in a centre-screen overlay.** Kinds with a dedicated
+  overlay (the ordering prompts, the card pickers, searches, naming) use it; whatever is left goes to
+  `ButtonChoiceOverlay` with the `describeChoiceParts` prompt and one `describeAction` button per
+  answer, but only when `answeredWithButtons` holds: every answer is a plain accept or the decline,
+  and at least one is not the decline. An answer that is an attack (Ambush, Support, `mayAttack`,
+  `mayAttackAnyUnit`) or names a unit, a base or a hand card (`selectUnitToReturn`,
+  `selectUnitToReady`, `selectUnitToSteal`, `selectDistributeSource`, `attachPlayedCard`,
+  `peekTopDiscard`, `playUnitFromHand`) keeps the choice where it is answered, with its decline and
+  any unit-named buttons in the Action column. So does a choice sharing the screen with a
+  board-target choice.
 - **All of them share `OverlayShell`**, the game-over screen's frame: `panel` size for the ones
   answered with buttons, `cards` for the card pickers.
 - **Dismissing an overlay on your own trigger cancels the action** (`cancelChoice`, see the undo

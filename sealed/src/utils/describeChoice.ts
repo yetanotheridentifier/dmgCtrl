@@ -2,6 +2,7 @@ import type { GameState, PendingChoice, PlayFromZone, PlayerId } from '../engine
 import { getCardDefinition } from '../engine/abilities'
 import { discloseRemaining } from '../engine/effects'
 import type { DescribePart } from './describeAction'
+import type { Action } from '../engine/actions'
 
 /**
  * What a play's zone is called in a prompt. One table for every site that names a zone, so a new
@@ -39,6 +40,22 @@ export const BOARD_TARGET_KINDS = [
 ] as const
 
 export type BoardTargetKind = (typeof BOARD_TARGET_KINDS)[number]
+
+/**
+ * Whether a choice, given every legal move that answers it, is asked in the button overlay.
+ *
+ * Only when its answers are buttons, and at least one of them is not the decline. Any answer that
+ * names an attack, a unit, a base or a hand card means the choice is answered by clicking that thing
+ * (Ambush, Support, an attack-now, a unit to return, a card to play from hand), and an overlay over
+ * the board would leave the decline as the only thing to press. Those keep their affordance, with the
+ * decline beside it in the action column. The split is by how a choice is answered, not by its kind.
+ */
+export function answeredWithButtons(answers: readonly Action[]): boolean {
+  const buttons = answers.every(a =>
+    a.type === 'skipTrigger'
+    || (a.type === 'acceptChoice' && a.targetInstanceId === undefined && a.baseTarget === undefined && a.handIndex === undefined))
+  return buttons && answers.some(a => a.type === 'acceptChoice')
+}
 
 /** "a ready unit", narrowed the way the card narrows it: "a damaged non-leader Vehicle unit". */
 function attackerPhrase(choice: PendingChoice & { kind: 'mayAttackAnyUnit' }): string {
