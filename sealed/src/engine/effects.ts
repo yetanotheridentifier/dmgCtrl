@@ -1,5 +1,5 @@
 import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, DiscardedFrom, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment, UsedAbility } from './types'
-import { baseHostId, upgradeSideId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordDiscarded, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, baseAbilityCardIds } from './types'
+import { baseHostId, upgradeSideId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordDiscarded, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordBaseHealed, recordUnitLeftPlay, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint, ProtectedAction } from './abilities'
@@ -735,8 +735,9 @@ export function returnResourceToHand(state: GameState, controller: PlayerId, ind
  */
 export function healBase(state: GameState, player: PlayerId, amount: number): GameState {
   const p = state.players[player]
-  if (p.base.damage === 0 || baseHealingSuppressed(state)) return state
-  return { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: Math.max(0, p.base.damage - amount) } } } }
+  if (p.base.damage === 0 || amount <= 0 || baseHealingSuppressed(state)) return state
+  // Recorded here, the one place a base is healed, so every source of healing counts.
+  return recordBaseHealed({ ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: Math.max(0, p.base.damage - amount) } } } }, player)
 }
 
 /**

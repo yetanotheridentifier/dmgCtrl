@@ -524,7 +524,7 @@ describe('compound trigger heads, E: decks and hands', () => {
       const right = accept(fired, { optionIndex: 2 })
       expect(choice(right)).toMatchObject({ kind: 'mayPayThen' })
       expect(accept(right).players.player.hand).toContain('TST_U3')
-      const wrong = accept(fired, { optionIndex: 3 })
+      const wrong = accept(fired, { optionIndex: 1 })
       noChoice(wrong)
       expect(wrong.players.player.deck).toEqual(DECK)
     }
@@ -594,7 +594,7 @@ describe('compound trigger heads, F: upgrades moved and taken', () => {
       const c = choice(fired)
       expect(c).toMatchObject({ kind: 'selectUpgradeToDefeat', optional: true })
       expect((c as { candidates: { unitId: string }[] }).candidates.map(x => x.unitId)).toEqual(['sp'])
-      expect(U(accept(fired, { upgradeIndex: 0 }), 'sp')!.upgrades).toHaveLength(0)
+      expect(U(accept(fired, { optionIndex: 0 }), 'sp')!.upgrades).toHaveLength(0)
     }
   })
 
@@ -605,7 +605,8 @@ describe('compound trigger heads, F: upgrades moved and taken', () => {
       expect(c).toMatchObject({ kind: 'selectUpgradeThen', optional: true })
       expect(c.candidates.every(x => x.cardId in { [TOKEN_EXPERIENCE]: 1, [TOKEN_SHIELD]: 1 }), 'only token upgrades').toBe(true)
       const at = c.candidates.findIndex(x => x.unitId === 'e' && x.cardId === TOKEN_EXPERIENCE)
-      const picked = accept(fired, { upgradeIndex: at })
+      expect(at).toBeGreaterThanOrEqual(0)
+      const picked = accept(fired, { optionIndex: at })
       expect(targetsOf(choice(picked))).not.toContain('e')
       const done = accept(picked, { targetInstanceId: 'mine' })
       expect(U(done, 'mine')!.upgrades).toEqual([upgrade(TOKEN_EXPERIENCE, 'player')])
@@ -617,7 +618,7 @@ describe('compound trigger heads, F: upgrades moved and taken', () => {
     const theirs = { units: [unit('e1', 'GRD', { upgrades: [upgrade('UPG', 'opponent')] }), unit('e2', 'GRD')] }
     for (const fired of [played(board({ units: [unit('mine', 'GRD')] }, theirs), 'SHD_064'), attacking('SHD_064', { units: [unit('mine', 'GRD')] }, theirs)]) {
       expect(choice(fired)).toMatchObject({ kind: 'selectUpgradeThen', optional: true })
-      const picked = accept(fired, { upgradeIndex: 0 })
+      const picked = accept(fired, { optionIndex: 0 })
       expect(targetsOf(choice(picked))).toEqual(['e2'])
       const done = accept(picked, { targetInstanceId: 'e2' })
       expect(U(done, 'e2')!.upgrades).toEqual([upgrade('UPG', 'opponent')])
@@ -632,7 +633,7 @@ describe('compound trigger heads, F: upgrades moved and taken', () => {
       expect(c).toMatchObject({ kind: 'selectUpgradeThen', optional: true })
       expect(c.candidates.map(x => x.unitId)).toEqual(['e'])
       const readyBefore = fired.players.player.resources.filter(r => !r.exhausted).length
-      const done = accept(fired, { upgradeIndex: 0 })
+      const done = accept(fired, { optionIndex: 0 })
       const vizsla = done.players.player.units.find(u => u.cardId === 'SHD_142')!
       expect(vizsla.upgrades).toEqual([upgrade('UPG', 'player')])
       expect(U(done, 'e')!.upgrades).toHaveLength(0)
@@ -643,7 +644,7 @@ describe('compound trigger heads, F: upgrades moved and taken', () => {
   it("SHD_142 defeats the taken upgrade when it can't attach to Pre Vizsla", () => {
     // Mark My Words attaches only to a damaged unit, and Pre Vizsla is undamaged as he is played.
     const s = played(board({}, { units: [unit('e', 'GRD', { damage: 1, upgrades: [upgrade('ASH_181', 'opponent')] })] }), 'SHD_142')
-    const done = accept(s, { upgradeIndex: 0 })
+    const done = accept(s, { optionIndex: 0 })
     expect(U(done, 'e')!.upgrades).toHaveLength(0)
     expect(done.players.player.units.find(u => u.cardId === 'SHD_142')!.upgrades).toHaveLength(0)
     expect(done.players.opponent.discard).toContain('ASH_181')
@@ -724,8 +725,9 @@ describe('compound trigger heads, G: units returned, readied and defeated', () =
     expect(c).not.toMatchObject({ optional: true })
     expect(targetsOf(c)).toContain('mate')
     expect(targetsOf(c)).not.toContain('e')
-    // Played for 3 out of 20: one of those 3 is readied again.
-    expect(s.players.player.resources.filter(r => r.exhausted)).toHaveLength(2)
+    // One of the resources paid to play it is readied again.
+    const paid = effectiveCost(board(), 'player', F['JTL_219'])
+    expect(s.players.player.resources.filter(r => r.exhausted)).toHaveLength(paid - 1)
     expect(U(accept(s, { targetInstanceId: 'mate' }), 'mate')!.damage).toBe(1)
     const onAttack = attacking('JTL_219', { units: [unit('mate', 'GRD')], resources: [{ cardId: 'R0', exhausted: true }] })
     expect(onAttack.players.player.resources[0].exhausted).toBe(false)
