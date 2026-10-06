@@ -467,6 +467,16 @@ base together. It is the same rule shape, so it binds all five sources of an att
 once. Such a unit can still be given Sentinel, and still forces enemy attacks onto itself: what it
 may attack and what may attack it are different questions.
 
+**Every "can't be attacked" is one read, `unitCannotBeAttacked`**, which `enemyAttackTargets` asks of
+each candidate defender. It gathers four sources: Hidden (the unit's `hidden` mark), a lasting
+protection (Dooku, On Top of Things, Go Into Hiding, Ben Solo), the unit's own cards' `cannotBeAttacked`
+(Tatooine Repulsor Train, Muckraker Crab Droid, both Sabine Wrens) and its controller's undeployed
+leader's `leaderAbilities.cannotBeAttacked` (Cassian Andor, over friendly units that damaged an
+opponent's base this phase). A protected unit is not a target and not a forced Sentinel target. Each
+protection carries its own Sentinel exception where the card prints one ("unless it has Sentinel":
+Hidden, the Train, both Sabines, On Top of Things, Go Into Hiding, Cassian Andor); Muckraker Crab
+Droid, Dooku and Ben Solo print none, so they hold against Sentinel too and the unit does not force.
+
 `attackMoves` is the single enumeration built on that answer, and every source of an attack goes
 through it: the action phase, Ambush, Support and the two "attack with a unit" choices. They differ
 only in which units are candidates, what abilities they lend the attacker, and whether the base is
@@ -570,7 +580,11 @@ damage, or one that can't be healed this phase, is not recorded.
 
 Two more phase records are written at the one place each event happens. `dealDamageToBase` adds what a
 base was actually dealt to `phaseEvents.baseDamageTaken` ("if you've dealt 3 or more damage to an enemy
-base this phase", Cassian Andor). `phaseEvents.tokensCreated` holds each player who created a token:
+base this phase", Cassian Andor). It also names the unit that dealt it, when a unit did, against an
+opponent's base: `phaseEvents.baseDamagers` holds every such unit, by combat (Overwhelm included) or
+by an ability the unit is the source of ("friendly units that have damaged an opponent's base this
+phase", Cassian Andor's front), and `phaseEvents.baseCombatDamagers` the combat ones only (Moff
+Gideon). Damage a prevention soaked entirely is not recorded. `phaseEvents.tokensCreated` holds each player who created a token:
 `createTokenUnit`, `giveTokens` and a Shielded entry all record it, crediting a token upgrade to the
 controller of the unit it lands on, which is who created it for every card that gives one to its own
 side (The Client).

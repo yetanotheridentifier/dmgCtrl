@@ -7,7 +7,7 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { deployLeaderAsPilot, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, discardedThisPhase, indirectDamageDealtThisPhase, baseHealedThisPhase, markAbilityUsed, updatePlayer, upgradeSideId, recordUnitDefeated } from './types'
+import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, damagedBaseThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, discardedThisPhase, indirectDamageDealtThisPhase, baseHealedThisPhase, markAbilityUsed, updatePlayer, upgradeSideId, recordUnitDefeated } from './types'
 import { canTakePilot, affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost, readyResourceCount } from './resources'
@@ -11734,9 +11734,12 @@ registerCard('LOF_073', { // Mythosaur — Folklore Awakened. Shielded is printe
   grantsEnemyAbilityProtection: (_s, _source, target, sameController, action) =>
     sameController && isUpgraded(target) && (action === 'exhaust' || action === 'return'),
 })
-registerCard('SEC_012', { // Cassian Andor — Climb! Front ("friendly units that damaged a base this phase
-  // can't be attacked") needs ability damage folded into `dealtBaseCombatDamageThisPhase`, which
-  // records combat damage only (#690, open) — left unregistered rather than duplicating that fix.
+registerCard('SEC_012', { // Cassian Andor — Climb!
+  // Front: "Friendly units that have damaged an opponent's base this phase can't be attacked (unless
+  // they have Sentinel)." Combat or ability damage, read from the phase record.
+  leaderAbilities: {
+    cannotBeAttacked: (s, _owner, u) => damagedBaseThisPhase(s, u.instanceId) && !unitHasKeyword(s, u, 'Sentinel'),
+  },
   // Back: Overwhelm is printed; the rest is gated on holding the initiative.
   survivesNoHp: (s, u) => s.initiative === unitOwner(s, u),
   cannotBeTargetedByEnemyAbility: (s, u, action) => action === 'defeat' && s.initiative === unitOwner(s, u),

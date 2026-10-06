@@ -501,10 +501,12 @@ A leader has two sides and they register separately on one card id:
   are triggered, and fire regardless of exhaustion.
 - The top-level `abilities` are the deployed (back) side, registering exactly like a unit's.
 
-The front side also carries two constant hooks, since an undeployed leader is not a unit and the unit
+The front side also carries three constant hooks, since an undeployed leader is not a unit and the unit
 hooks never see it: `leaderAbilities.aura` (Director Krennic's "each friendly damaged unit gets
 +1/+0"), shaped like `aura` with the leader's controller in place of a source unit and folded into the
-same aura pass, and `leaderAbilities.waivesAspectPenalty` (Hera Syndulla), read by `effectiveCost`.
+same aura pass, `leaderAbilities.waivesAspectPenalty` (Hera Syndulla), read by `effectiveCost`, and
+`leaderAbilities.cannotBeAttacked` (Cassian Andor), asked of the controller's units by
+`unitCannotBeAttacked` beside a unit's own `cannotBeAttacked`.
 An undeployed leader's triggered abilities fire at `whenRegroupStarts` as well as at the leader-specific
 points.
 

@@ -309,10 +309,7 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   // Bounty: front only. His back ("When you collect a Bounty, you may collect it again") needs a
   // separate new primitive that nothing else built for Bounty needs.
   { id: 'SHD_010', name: 'Bossk', front: true, back: false },
-  // Back only ("can't be defeated by enemy card abilities" while you have the initiative). Front
-  // ("friendly units that damaged a base this phase can't be attacked") needs ability damage folded
-  // into `dealtBaseCombatDamageThisPhase`, which records combat damage only (#690, open).
-  { id: 'SEC_012', name: 'Cassian Andor', front: false, back: true },
+  { id: 'SEC_012', name: 'Cassian Andor', front: true, back: true },
   // Front only ("search the top 5 for a card with Plot, reveal it, and draw it"). Back ("the next
   // card you play using Plot this phase costs 3 less") needs a new `NextUnitGrant` restriction plus
   // play-route context threaded into `effectiveCost`, split to a follow-up ticket.

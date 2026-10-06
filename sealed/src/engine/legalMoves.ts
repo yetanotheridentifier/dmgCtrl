@@ -11,8 +11,8 @@ type AttackTarget = Extract<Action, { type: 'attack' }>['target']
 
 /**
  * Everything `attacker` may legally attack: the enemy units, whether Sentinel locks the attack onto
- * them, and whether the enemy base is a legal target. Sentinel forces the attack; Hidden removes a
- * unit as a target unless it also has Sentinel; Saboteur ignores Sentinel.
+ * them, and whether the enemy base is a legal target. Sentinel forces the attack; "can't be attacked"
+ * (`unitCannotBeAttacked`, Hidden included) removes a unit as a target; Saboteur ignores Sentinel.
  *
  * **`canAttackBase` lives here because it is a targeting rule like the others.** Two separate things
  * close the base off: Sentinel forcing, and "can't attack bases" (Wicket). Only the first used to
@@ -32,9 +32,9 @@ export function enemyAttackTargets(state: GameState, attacker: UnitState, owner:
   const enemy = state.players[opponentOf(owner)]
   // Normally same-arena only; Red Leader reaches either arena.
   const inRange = unitAttacksEitherArena(state, attacker) ? enemy.units : enemy.units.filter(e => e.arena === attacker.arena)
-  // Hidden hides a unit (unless it has Sentinel); "can't be attacked" (Tatooine Repulsor Train)
-  // removes it entirely — including as a forced Sentinel target.
-  const attackable = inRange.filter(e => (!e.hidden || unitHasKeyword(state, e, 'Sentinel')) && !unitCannotBeAttacked(state, e))
+  // "Can't be attacked" (Hidden, Tatooine Repulsor Train, Cassian Andor ...) removes a unit entirely,
+  // including as a forced Sentinel target; each protection carries its own Sentinel exception.
+  const attackable = inRange.filter(e => !unitCannotBeAttacked(state, e))
   // **Sentinel forces only from the attacker's OWN arena**, because it reads "Enemy units in this
   // arena must attack a Sentinel when they attack you": the forcing is scoped by where the attacker
   // STANDS, not by what it can reach. The arena filter is a no-op for an ordinary attacker, whose

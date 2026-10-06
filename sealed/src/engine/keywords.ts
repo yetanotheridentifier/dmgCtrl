@@ -215,12 +215,29 @@ export function unitCannotAttack(state: GameState, unit: UnitState): boolean {
   return abilityCardIds(state, unit).some(id => getCardDefinition(id)?.cannotAttack?.(state, unit) ?? false)
 }
 
-/** True if the unit currently can't be attacked (Tatooine Repulsor Train). */
+/**
+ * True if the unit currently can't be attacked. **The one read of every "can't be attacked"**: Hidden,
+ * a lasting protection, the unit's own cards (Tatooine Repulsor Train) and its controller's undeployed
+ * leader (Cassian Andor). `enemyAttackTargets` asks it for each candidate, so every source of an attack
+ * honours all of them. Each one that prints "unless it has Sentinel" checks that itself, since some
+ * protections (Muckraker Crab Droid, Dooku) hold against Sentinel too.
+ */
 export function unitCannotBeAttacked(state: GameState, unit: UnitState): boolean {
+  // Hidden: until the next phase, unless the unit has Sentinel.
+  if (unit.hidden && !unitHasKeyword(state, unit, 'Sentinel')) return true
   // A lasting protection aimed at this unit (Dooku; On Top of Things only while it lacks Sentinel).
   const lasting = (state.lastingEffects ?? []).filter(e => e.cannotBeAttacked && e.targetInstanceId === unit.instanceId)
   if (lasting.some(e => !e.unlessSentinel) || (lasting.length > 0 && !unitHasKeyword(state, unit, 'Sentinel'))) return true
-  return abilityCardIds(state, unit).some(id => getCardDefinition(id)?.cannotBeAttacked?.(state, unit) ?? false)
+  if (abilityCardIds(state, unit).some(id => getCardDefinition(id)?.cannotBeAttacked?.(state, unit) ?? false)) return true
+  // An undeployed leader is not a unit, so it protects its controller's units from outside play.
+  return (['player', 'opponent'] as const).some(owner => {
+    const leader = state.players[owner].leader
+    const protects = leader.deployed ? undefined : getCardDefinition(leader.cardId)?.leaderAbilities?.cannotBeAttacked
+    return protects !== undefined
+      && state.players[owner].units.some(u => u.instanceId === unit.instanceId)
+      && !leaderAbilitiesBlanked(state, owner)
+      && protects(state, owner, unit)
+  })
 }
 
 /** True if the unit may attack enemy units in either arena (Red Leader). */

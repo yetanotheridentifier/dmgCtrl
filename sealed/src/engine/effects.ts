@@ -1,5 +1,5 @@
 import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, DiscardedFrom, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment, UsedAbility } from './types'
-import { baseHostId, upgradeSideId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseCombatDamage, recordBaseDamaged, recordCardsDrawn, recordDiscarded, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordBaseHealed, recordUnitLeftPlay, baseAbilityCardIds } from './types'
+import { baseHostId, upgradeSideId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseDamagedBy, recordBaseDamaged, recordCardsDrawn, recordDiscarded, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordBaseHealed, recordUnitLeftPlay, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint, ProtectedAction } from './abilities'
@@ -520,12 +520,14 @@ export function dealDamageToBase(state: GameState, player: PlayerId, rawAmount: 
   if (dealt <= 0) return state
   let next: GameState = { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + dealt } } } }
   next = recordBaseDamaged(next, player, dealt) // "an enemy base was damaged this phase" (Baylan Skoll)
-  // Only combat damage that actually LANDED counts, which is why this sits below the prevention
-  // above rather than beside `recordBaseAttacked` at the declaration (Moff Gideon).
-  if (combat) next = recordBaseCombatDamage(next, combat.attackerInstanceId)
+  const dealer = damageDealer(state, source, combat !== undefined)
+  // Which unit damaged an opponent's base: the attacker, or the unit whose ability this is (Moff Gideon
+  // reads combat only, Cassian Andor either). Only damage that actually LANDED counts, which is why this
+  // sits below the prevention above rather than beside `recordBaseAttacked` at the declaration.
+  const damager = combat?.attackerInstanceId ?? (dealer?.controller !== player ? dealer?.unitId : undefined)
+  if (damager) next = recordBaseDamagedBy(next, damager, combat !== undefined)
   // One damage event, heard by both sides: "when your base is dealt damage" (Blade Three) and "when
   // you deal damage to an enemy base" (Cassian Andor) are its two readings.
-  const dealer = damageDealer(state, source, combat !== undefined)
   const indirect = (source ?? state.resolvingSource)?.indirect === true
   return fireBatch(next, collectDamageDealt(next, { owner: player, units: [], base: dealt, byCombat: combat !== undefined, ...(dealer ? { dealer } : {}), ...(indirect ? { indirect } : {}) }))
 }
