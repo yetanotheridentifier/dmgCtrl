@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, actionAbilityKey, collectUnitTriggers, collectCardTriggers, abilityCardIds, usedAbilityOf } from './abilities'
-import { fireBatch, runAbilitiesAgain, thenAfterChoices, discardCards, discardTaken, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken, defeatForceToken } from './effects'
+import { fireBatch, runAbilitiesAgain, thenAfterChoices, discardCards, discardTaken, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken, defeatForceToken, useTheForce } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage, isDoomed } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -12785,6 +12785,131 @@ registerCard('LOF_014', { // Grand Inquisitor — front: Action [Exhaust, use th
   },
   aura: defenderPowerAura(-2), // his own "On Attack: the defender gets -2/-0", unconditional
 })
+
+// ── The Force: bases, "When you use the Force", and abilities heard at other points ───────────────
+// A base's own printed ability needs nothing of its own: a triggered one is an `abilities` entry, which
+// `collectBaseTriggers` collects for the base's controller, and an "Action:" is a `baseAbilities.actions`
+// entry, offered by `usableBaseActions`. Every use of the Force goes through `useTheForce`, which fires
+// `whenUseForce` once the ability that used it has resolved.
+
+/** A When Played helper's abilities, fired at `trigger` instead and collected only while `hears` holds. */
+const heardAt = (trigger: TriggerPoint, hears: (s: GameState, ctx: EffectContext) => boolean, def: CardDefinition): CardDefinition => ({
+  ...def,
+  abilities: def.abilities?.map(a => (a.trigger === 'whenPlayed' ? { ...a, trigger, hears } : a)),
+})
+/** `hears` for a "you may use the Force" ability: not collected at all while there is no token to use. */
+const withForce = (hears: (s: GameState, ctx: EffectContext) => boolean) => (s: GameState, ctx: EffectContext): boolean => hasForceToken(s, ctx.owner) && hears(s, ctx)
+/** "You may use the Force. If you do, ..." about `unit`, which the card's `ifYouDo` reads as `unitChosen`. */
+const mayUseForceOn = (s: GameState, ctx: Resumable, text: string, unit: string): GameState =>
+  (hasForceToken(s, ctx.owner) ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, useForce: true, text, then: resume(ctx, undefined, unit) }) : s)
+const readyFriendlyIds = (s: GameState, owner: PlayerId): string[] => s.players[owner].units.filter(u => !u.exhausted).map(u => u.instanceId)
+const nonLeaderIds = (s: GameState, test: (u: UnitState) => boolean = () => true): string[] => allUnits(s).filter(u => nonLeader(s, u) && test(u)).map(u => u.instanceId)
+
+// Bases. A base action that would only make a token already held is not offered.
+const friendlyForceUnitAttacks = (s: GameState, ctx: EffectContext): boolean => {
+  const attacker = ctx.attackingPlayer === ctx.owner ? findUnit(s, ctx.attackerInstanceId ?? '')?.unit : undefined
+  return attacker !== undefined && unitHasTrait(s, attacker, 'Force')
+}
+// Crystal Caves, Fortress Vader, Jedi Temple, Nightsister Lair, Shadowed Undercity, Starlight Temple, Strangled Cliffs, The Holy City
+for (const id of ['LOF_029', 'LOF_026', 'LOF_023', 'LOF_020', 'LOF_021', 'LOF_024', 'LOF_027', 'LOF_030']) {
+  registerCard(id, { abilities: [{ trigger: 'whenUnitAttacks', hears: friendlyForceUnitAttacks, description: 'When a friendly Force unit attacks: The Force is with you (create your Force token).',
+    effect: (s, ctx) => createForceToken(s, ctx.owner) }] })
+}
+registerCard('LOF_025', { abilities: [{ trigger: 'whenDamageDealt', description: 'When a friendly unit deals 3 or more combat damage to an enemy base: The Force is with you (create your Force token).', // Temple of Destruction
+  hears: (_s, ctx) => {
+    const d = ctx.damageDealt
+    return d !== undefined && d.byCombat && d.owner !== ctx.owner && (d.base ?? 0) >= 3 && d.dealer?.controller === ctx.owner && d.dealer.unitId !== undefined
+  },
+  effect: (s, ctx) => createForceToken(s, ctx.owner) }] })
+registerCard('LOF_019', { abilities: [{ trigger: 'whenRegroupStarts', description: 'When the regroup phase starts: If you control a unit with 4 or more remaining HP, the Force is with you (create your Force token).', // Vergence Temple
+  effect: (s, ctx) => (s.players[ctx.owner].units.some(u => remainingHp(s, u) >= 4) ? createForceToken(s, ctx.owner) : s) }] })
+registerCard('LOF_022', { baseAbilities: { actions: [{ // Mystic Monastery
+  description: 'Action: The Force is with you (create your Force token). Use this ability no more than 3 times each game.',
+  usesEachGame: 3,
+  usable: (s, owner) => !hasForceToken(s, owner),
+  effect: (s, ctx) => createForceToken(s, ctx.owner),
+}] } })
+registerCard('LOF_028', { // Tomb of Eilram
+  baseAbilities: { actions: [{
+    description: 'Action [exhaust a friendly unit]: The Force is with you (create your Force token).',
+    usable: (s, owner) => !hasForceToken(s, owner) && readyFriendlyIds(s, owner).length > 0,
+    effect: (s, ctx) => unitThen(s, ctx, readyFriendlyIds(s, ctx.owner), 'exhaust a friendly unit', 'cunning', false),
+  }] },
+  ifYouDo: (s, ctx) => createForceToken(exhaustUnit(s, ctx.targetInstanceId!), ctx.owner),
+})
+
+// "When you use the Force".
+registerCard('LOF_101', allOf( // Yoda
+  mayUseForceWp('When Played: You may use the Force. If you do, heal 5 damage from a base.', 'heal 5 damage from a base', (s, ctx) => healChoice(s, ctx, 5, [], BOTH_BASES)),
+  { abilities: [{ trigger: 'whenUseForce', description: 'When you use the Force: You may deal damage to a unit equal to twice the number of units you control.',
+    effect: (s, ctx) => damageChoice(s, ctx, 2 * s.players[ctx.owner].units.length, allUnits(s), [], true) }] },
+))
+registerCard('LOF_260', { // The Father
+  abilities: [{ trigger: 'whenUseForce', description: 'When you use the Force: You may deal 1 damage to this unit. If you do, the Force is with you.',
+    effect: (s, ctx) => pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, damageSelf: 1, text: 'deal 1 damage to this unit to have the Force with you', then: resume(ctx) }) }],
+  ifYouDo: (s, ctx) => createForceToken(s, ctx.owner),
+})
+
+// A Force-gated mode, an either/or cost, and a gated action.
+registerCard('LOF_079', { // Shatterpoint
+  ...whenPlayed('Choose one: Defeat a non-leader unit with 3 or less remaining HP. Use the Force. If you do, defeat a non-leader unit.', (s, ctx) =>
+    chooseModeThen(s, ctx, ctx.sourceInstanceId!, [
+      ...(nonLeaderIds(s, u => remainingHp(s, u) <= 3).length ? [['hp', 'Defeat a non-leader unit with 3 or less remaining HP.'] as [string, string]] : []),
+      ...(hasForceToken(s, ctx.owner) ? [['force', 'Use the Force. If you do, defeat a non-leader unit.'] as [string, string]] : []),
+    ])),
+  ifYouDo: (s, ctx) => (ctx.step === 'force'
+    ? useTheForce(s, ctx.owner, used => targetChoice(used, ctx, 'selectUnitToDefeat', nonLeaderIds(used)))
+    : targetChoice(s, ctx, 'selectUnitToDefeat', nonLeaderIds(s, u => remainingHp(s, u) <= 3))),
+})
+registerCard('LOF_218', { // Impossible Escape
+  ...whenPlayed('You may either exhaust a friendly unit or use the Force. If you do either, exhaust an enemy unit and draw a card.', (s, ctx) => {
+    const costs: [string, string][] = [
+      ...(readyFriendlyIds(s, ctx.owner).length ? [['exhaust', 'Exhaust a friendly unit'] as [string, string]] : []),
+      ...(hasForceToken(s, ctx.owner) ? [['force', 'Use the Force'] as [string, string]] : []),
+    ]
+    return costs.length ? chooseModeThen(s, ctx, ctx.sourceInstanceId!, [...costs, ['neither', 'Do neither']]) : s
+  }),
+  ifYouDo: (s, ctx) => {
+    const escape = (paid: GameState): GameState =>
+      targetChoice(drawCards(paid, ctx.owner, 1), ctx, 'mayExhaustUnit', paid.players[opponentOf(ctx.owner)].units.map(u => u.instanceId))
+    switch (ctx.step) {
+      case 'exhaust': return unitThen(s, ctx, readyFriendlyIds(s, ctx.owner), 'exhaust a friendly unit', 'cunning', false, 'exhausted')
+      case 'exhausted': return escape(exhaustUnit(s, ctx.targetInstanceId!))
+      case 'force': return useTheForce(s, ctx.owner, escape)
+      default: return s
+    }
+  },
+})
+registerCard('LOF_098', { // Leia Organa: "While this unit is in the space arena, she can't ready and gains: ..."
+  cannotReady: (_s, u) => u.arena === 'space',
+  actionAbilities: [{
+    description: 'Action [use the Force]: Move this unit to the ground arena and give each friendly Heroism unit +2/+2 for this phase.',
+    useForceCost: true,
+    usable: (_s, u) => u.arena === 'space',
+    effect: (s, ctx) => {
+      const moved = moveUnitToArena(s, ctx.sourceInstanceId!, 'ground')
+      return lastingOnEach(moved, moved.players[ctx.owner].units.filter(u => printedAspect(cardOf(moved, u), 'Heroism')), { power: 2, hp: 2 })
+    },
+  }],
+})
+
+// "You may use the Force. If you do, ..." heard at points other than When Played.
+registerCard('LOF_067', { // Chirrut Îmwe
+  abilities: [{ trigger: 'onDefense', hears: withForce(() => true), description: 'When this unit is attacked (before damage is dealt): You may use the Force (lose your Force token). If you do, the attacker gets -2/-0 for this attack.',
+    effect: (s, ctx) => (ctx.attackerInstanceId ? mayUseForceOn(s, ctx as Resumable, 'give the attacker -2/-0 for this attack', ctx.attackerInstanceId) : s) }],
+  ifYouDo: (s, ctx) => (ctx.unitChosen ? addLastingEffect(s, { targetInstanceId: ctx.unitChosen, power: -2, untilEndOfAttack: true }) : s),
+})
+registerCard('LOF_229', heardAt('whenUpgradeAttached', withForce((_s, ctx) => youPlayedUpgradeOnThis(ctx)), mayUseForceWp( // Kylo Ren
+  'When you play an upgrade on this unit: You may use the Force (lose your Force token). If you do, draw a card.', 'draw a card', (s, ctx) => drawCards(s, ctx.owner, 1))))
+const playedUniqueUnit = (s: GameState, ctx: EffectContext): boolean => {
+  const played = findUnit(s, ctx.targetInstanceId ?? '')?.unit
+  return played !== undefined && (s.cards[played.cardId]?.unique ?? false)
+}
+registerCard('LOF_249', heardAt('whenPlayUnit', withForce(playedUniqueUnit), mayUseForceWp( // Luke Skywalker
+  'When you play another unique unit: You may use the Force (lose your Force token). If you do, give an Experience token and a Shield token to this unit.',
+  'give an Experience token and a Shield token to this unit', (s, ctx) => giveToken(giveToken(s, ctx.sourceInstanceId!, TOKEN_EXPERIENCE), ctx.sourceInstanceId!, TOKEN_SHIELD))))
+registerCard('LOF_252', heardAt('whenDamageDealt', withForce((_s, ctx) => friendlyBaseDamaged(ctx)), mayUseForceWp( // The Daughter
+  'When damage is dealt to your base: You may use the Force (lose your Force token). If you do, heal 2 damage from your base.', 'heal 2 damage from your base', (s, ctx) => healBase(s, ctx.owner, 2))))
 
 // ── Granted ability blocks: "Attached unit gains: ...", "each friendly unit gains: ..." ──────────────
 // A card that hands a unit a whole ability block needs no plumbing of its own. An upgrade's abilities

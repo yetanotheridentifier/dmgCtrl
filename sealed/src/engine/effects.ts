@@ -415,6 +415,21 @@ export function defeatForceToken(state: GameState, owner: PlayerId): GameState {
 }
 
 /**
+ * `owner` uses the Force: the token is defeated, `then` runs the rest of the ability that used it, and
+ * "When you use the Force" (`whenUseForce`) fires for `owner`'s leader, base and units. Every use goes
+ * through here, whether as a "[use the Force]" action cost or a "use the Force. If you do" choice.
+ *
+ * The trigger fires after `then`, so it resolves once the ability that used the Force has: a choice that
+ * ability raised is answered first, since the queue drains nothing while a choice is open (CR 7.6).
+ * Defeating the token by any other route ("defeat your Force token") is not a use and fires nothing.
+ */
+export function useTheForce(state: GameState, owner: PlayerId, then: (s: GameState) => GameState = s => s): GameState {
+  if (!hasForceToken(state, owner)) return state
+  const used = then(defeatForceToken(state, owner))
+  return fireBatch(used, [...collectPlayerTriggers(used, 'whenUseForce', owner), ...collectUnitsTrigger(used, 'whenUseForce', owner)])
+}
+
+/**
  * Move a unit to the other arena (Blue Leader: "move this unit to the ground arena"). The unit keeps
  * its damage, upgrades and ready state: only where it fights changes, and every arena test in the
  * engine reads `arena`, so nothing else has to be told.

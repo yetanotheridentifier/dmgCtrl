@@ -91,6 +91,10 @@ export type TriggerPoint =
   // controller's leader and units. `ctx.usedAbility` is the ability's handle, which
   // `runAbilitiesAgain` runs a second time. Reading which point it was is the hearing card's job.
   | 'whenAbilityUsed'
+  // "When you use the Force" (Yoda, The Father): raised by `useTheForce`, the one route every use of the
+  // Force takes, once the ability that used it has resolved. Heard by the user's undeployed leader, base
+  // and units only, since every card that reads it says "you".
+  | 'whenUseForce'
   // "When you play a unit" (Maz Kanata, Poggle the Lesser): a unit arriving through a play. Fires on the
   // player's undeployed leader and their OTHER units, with `ctx.targetInstanceId` the played unit.
   | 'whenPlayUnit'
@@ -660,8 +664,9 @@ export interface BaseAbilities {
   /** Cards the deck must hold, relative to the usual minimum (Data Vault: +10). */
   deckMinimumDelta?: number
   /**
-   * "Action:" abilities the base has, from an upgrade attached to it (Heavy Ion Cannon, Bacta Tank).
-   * Offered as `useBaseAbility` with the card and index, taken as that player's action for the turn.
+   * "Action:" abilities the base has, printed on it (Mystic Monastery) or from an upgrade attached to it
+   * (Heavy Ion Cannon, Bacta Tank). Offered as `useBaseAbility` with the card and index, taken as that
+   * player's action for the turn.
    */
   actions?: BaseUpgradeActionDef[]
   /**
@@ -671,13 +676,18 @@ export interface BaseAbilities {
   interceptDamage?: (state: GameState, owner: PlayerId, amount: number) => GameState | undefined
 }
 
-/** An "Action:" a base has from one of its upgrades. `cardId` in the effect's context is the upgrade. */
+/**
+ * An "Action:" a base has, printed on it or from one of its upgrades. `cardId` in the effect's context is
+ * the card that prints it: the base, or the upgrade.
+ */
 export interface BaseUpgradeActionDef {
   description: string
   /** "[defeat this upgrade]": the cost is the upgrade itself, defeated before the effect. */
   defeatsSelf?: boolean
   /** "Use this ability only once each phase", counted per copy on the base. */
   oncePerPhase?: boolean
+  /** "Use this ability no more than N times each game", counted on the base (`BaseState.actionsUsed`). */
+  usesEachGame?: number
   /** Offered only while this holds, so the action is never taken for nothing. */
   usable?: (state: GameState, owner: PlayerId) => boolean
   effect: (state: GameState, ctx: EffectContext) => GameState
@@ -702,6 +712,7 @@ export function usableBaseActions(state: GameState, owner: PlayerId): { cardId: 
     const copies = baseAbilityCardIds(base).filter(id => id === cardId).length
     ;(registry.get(cardId)?.baseAbilities?.actions ?? []).forEach((ability, index) => {
       if (ability.oncePerPhase && used.filter(k => k === baseActionKey(cardId, index)).length >= copies) return
+      if (ability.usesEachGame !== undefined && (base.actionsUsed ?? []).filter(k => k === baseActionKey(cardId, index)).length >= ability.usesEachGame) return
       if (ability.usable && !ability.usable(state, owner)) return
       out.push({ cardId, index, ability })
     })

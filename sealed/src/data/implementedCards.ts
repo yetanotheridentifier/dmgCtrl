@@ -388,6 +388,19 @@ export const IMPLEMENTED_BASES: UpgradeStatus[] = [
   { id: 'TS26_12', name: 'Sundari Palace' },
   // Credit tokens (#719): "defeat a friendly token" over every kind of token.
   { id: 'LAW_019', name: 'Alliance Outpost' },
+  // The Force: a base's own triggered ability or "Action:".
+  { id: 'LOF_029', name: 'Crystal Caves' },
+  { id: 'LOF_026', name: 'Fortress Vader' },
+  { id: 'LOF_023', name: 'Jedi Temple' },
+  { id: 'LOF_020', name: 'Nightsister Lair' },
+  { id: 'LOF_021', name: 'Shadowed Undercity' },
+  { id: 'LOF_024', name: 'Starlight Temple' },
+  { id: 'LOF_027', name: 'Strangled Cliffs' },
+  { id: 'LOF_030', name: 'The Holy City' },
+  { id: 'LOF_025', name: 'Temple of Destruction' },
+  { id: 'LOF_019', name: 'Vergence Temple' },
+  { id: 'LOF_022', name: 'Mystic Monastery' },
+  { id: 'LOF_028', name: 'Tomb of Eilram' },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
@@ -1047,6 +1060,9 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LOF_173', name: 'Unleash Rage' },
   { id: 'LOF_175', name: 'Do or Do Not' },
   { id: 'LOF_216', name: 'Disturbance in the Force' },
+  // The Force: a Force-gated mode and an either/or cost.
+  { id: 'LOF_079', name: 'Shatterpoint' },
+  { id: 'LOF_218', name: 'Impossible Escape' },
   // Granted ability blocks (#464): a phase-long or one-attack grant.
   { id: 'SEC_231', name: 'Implicate' },
   { id: 'LOF_205', name: 'Force Speed' },
@@ -2298,6 +2314,14 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LOF_156', name: 'Infused Brawler' },
   { id: 'LOF_159', name: 'Jedi In Hiding' },
   { id: 'LOF_178', name: 'Adept of Anger' },
+  // The Force: "When you use the Force", a gated action, and "you may use the Force" heard at other points.
+  { id: 'LOF_101', name: 'Yoda' },
+  { id: 'LOF_260', name: 'The Father' },
+  { id: 'LOF_098', name: 'Leia Organa' },
+  { id: 'LOF_067', name: 'Chirrut Îmwe' },
+  { id: 'LOF_229', name: 'Kylo Ren' },
+  { id: 'LOF_249', name: 'Luke Skywalker' },
+  { id: 'LOF_252', name: 'The Daughter' },
   // Granted ability blocks (#464): an aura handing other units an ability block.
   { id: 'TWI_047', name: 'Satine Kryze' },
   { id: 'SOR_105', name: 'General Krell' },

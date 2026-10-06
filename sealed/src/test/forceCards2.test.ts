@@ -209,7 +209,7 @@ describe('"When you use the Force": LOF_101 Yoda and LOF_260 The Father', () => 
     expect(hasForceToken(s, 'player')).toBe(true)
   })
   it('LOF_260 does not hear an opponent using the Force', () => {
-    let s = { ...withToken(board({ player: { units: [unit('f0', 'LOF_260')] }, opponent: { hand: ['LOF_172'], units: [unit('e0', 'ENEMY')] } }), 'opponent'), activePlayer: 'opponent' as const }
+    let s: GameState = { ...withToken(board({ player: { units: [unit('f0', 'LOF_260')] }, opponent: { hand: ['LOF_172'], units: [unit('e0', 'ENEMY')] } }), 'opponent'), activePlayer: 'opponent' }
     s = playEvent(s)
     s = accept(s)
     s = accept(s, { targetInstanceId: 'f0' })
