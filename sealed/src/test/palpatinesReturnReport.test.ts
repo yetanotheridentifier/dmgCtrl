@@ -17,7 +17,7 @@ const report = loadReport('palpatinesReturnTwoPlays')
 const SHD = poolFor(['SHD'])
 const AFTER_PLAYING_IT = 96
 const palpatine = (s: GameState): PendingChoice[] =>
-  (s.pendingChoices ?? []).filter(c => c.kind === 'playCardFrom' && c.id.startsWith('SHD_094'))
+  (s.pendingChoices ?? []).filter(c => c.kind === 'playCardFrom')
 
 describe('Palpatine\'s Return, from the dropped sweep game', () => {
   it('offers one play over the whole pile, the Force unit among the rest', () => {

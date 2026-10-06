@@ -432,6 +432,7 @@ export function zoneCards(state: GameState, controller: PlayerId, zone: PlayFrom
     case 'opponentDiscard': return theirs.discard
     case 'anyDiscard': return [...p.discard, ...theirs.discard]
     case 'handOrDiscard': return [...p.hand, ...p.discard]
+    case 'handOrAnyDiscard': return [...p.hand, ...p.discard, ...theirs.discard]
   }
 }
 
@@ -439,6 +440,10 @@ export function zoneCards(state: GameState, controller: PlayerId, zone: PlayFrom
 export function zoneHolder(state: GameState, controller: PlayerId, zone: PlayFromZone, index: number): PlayerId {
   if (zone === 'opponentResources' || zone === 'opponentDeckTop' || zone === 'opponentDiscard') return opponentOf(controller)
   if (zone === 'anyDiscard') return index < state.players[controller].discard.length ? controller : opponentOf(controller)
+  if (zone === 'handOrAnyDiscard') {
+    const own = state.players[controller]
+    return index < own.hand.length + own.discard.length ? controller : opponentOf(controller)
+  }
   return controller
 }
 
@@ -601,6 +606,12 @@ export function selfPayingResource(state: GameState, controller: PlayerId, zone:
 export interface PlayFromTerms {
   free?: boolean
   costDelta?: number
+  /**
+   * A card with this printed trait takes this delta in place of `costDelta`, so one play can price
+   * its candidates differently (Palpatine's Return: "It costs 6 less. If it's a Force unit, it costs
+   * 8 less instead.").
+   */
+  traitCostDelta?: { trait: string; costDelta: number }
   waive?: AspectWaiver
   /** Smuggle: `card.smuggle`, the card's own alternate cost and aspect list, in place of its printed ones. */
   altCost?: { cost: number; aspects: string[] }
@@ -618,7 +629,10 @@ export interface PlayFromTerms {
 export function playFromCost(state: GameState, controller: PlayerId, card: EngineCard, terms: PlayFromTerms, target?: UnitState): number {
   if (terms.free) return 0
   const plotDelta = terms.plot ? plotCostDelta(state, controller) : 0
-  return Math.max(0, effectiveCost(state, controller, card, target, terms.waive, terms.piloting ? card.piloting : terms.altCost) + (terms.costDelta ?? 0) + plotDelta)
+  const byTrait = terms.traitCostDelta
+  const delta = byTrait && (card.traits ?? []).some(t => t.toLowerCase() === byTrait.trait.toLowerCase())
+    ? byTrait.costDelta : terms.costDelta ?? 0
+  return Math.max(0, effectiveCost(state, controller, card, target, terms.waive, terms.piloting ? card.piloting : terms.altCost) + delta + plotDelta)
 }
 
 /**

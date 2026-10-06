@@ -288,7 +288,7 @@ describe('A Fine Addition (TWI_040) — an upgrade from your hand or ANY player\
   it('reaches into both discard piles as one zone, ignoring the aspect penalty', () => {
     const played = playEvent(fineBoard(['GRD']))
     const c = choice(played)
-    expect(c).toMatchObject({ kind: 'playCardFrom', zone: 'anyDiscard', waive: { all: true } })
+    expect(c).toMatchObject({ kind: 'playCardFrom', zone: 'handOrAnyDiscard', waive: { all: true } })
     expect(c.kind === 'playCardFrom' && c.candidates.map(r => r.cardId)).toEqual(['PLAIN_UP', 'ITEM_UP'])
   })
 
