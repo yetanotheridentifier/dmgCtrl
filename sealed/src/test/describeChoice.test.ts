@@ -36,7 +36,7 @@ describe('describeChoiceParts', () => {
     healForAdvantage: { kind: 'healForAdvantage', id: 'c', controller: 'player', targets: ['u1'], maxHeal: 2 },
     selectPair: { kind: 'selectPair', id: 'c', controller: 'player', friendlyTargets: ['u1'], enemyTargets: ['u2'], mode: 'exhaust' },
     exploit: { kind: 'exploit', id: 'c', controller: 'player', cardId: 'TST_U1', handIndex: 0, picks: [], limit: 2, discount: 2 },
-    selectUnitThen: { kind: 'selectUnitThen', id: 'c', controller: 'player', targets: ['u1'], text: 'choose the unit that deals the damage', then: { cardId: 'SRC', owner: 'player' } },
+    selectUnitThen: { kind: 'selectUnitThen', id: 'c', controller: 'player', targets: ['u1'], text: 'choose the unit that deals the damage', intent: 'cunning', then: { cardId: 'SRC', owner: 'player' } },
     attachPlayedCard: { kind: 'attachPlayedCard', id: 'c', controller: 'player', zone: 'discard', index: 0, cardId: 'SRC', targets: ['u1'] },
     mayPlayUpgradeFree: { kind: 'mayPlayUpgradeFree', id: 'c', controller: 'player', cardId: 'SRC', targets: ['u1'] },
     distributeHealing: { kind: 'distributeHealing', id: 'c', controller: 'player', remaining: 2, healed: 0, unitTargets: ['u1'], baseTargets: ['player'] },

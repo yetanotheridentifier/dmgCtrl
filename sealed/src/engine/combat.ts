@@ -234,7 +234,7 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
 
   for (const { unit, targets } of replacements) {
     result = pushChoice(result, {
-      kind: 'selectUnitThen', id: `instead-${unit.instanceId}`, controller: owner, targets, optional: true, hookOnDecline: true,
+      kind: 'selectUnitThen', intent: 'attach', id: `instead-${unit.instanceId}`, controller: owner, targets, optional: true, hookOnDecline: true,
       text: `attach ${result.cards[unit.cardId]?.name ?? 'this unit'} as an upgrade instead of defeating her`,
       then: { cardId: unit.cardId, owner, step: 'insteadOfDefeat' },
     })

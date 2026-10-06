@@ -15,6 +15,7 @@
   --color-amber: #f5a623;         /* --color-warning    */
   --color-red: #d42121;           /* --color-error / damage — deep, not rose */
   --color-green: #22c55e;         /* --color-success    */
+  --color-yellow: #facc15;        /* "cunning" target highlight (exhaust, capture, return, take control) */
 
   /* On-card token pills (components/tokens.ts TOKEN_SPEC); damage uses --color-red. Declared
      here with the rest of the palette, the block whose colours render in every browser tested. */

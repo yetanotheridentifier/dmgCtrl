@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { EngineCard, KeywordInstance } from '../engine/types'
+import type { Highlight } from './highlight'
 import { artUrl } from '../data/thumbnails'
 import { CARD_WIDTH_PX, longEdge } from './cardSizing'
 
@@ -11,8 +12,11 @@ interface Props {
   deployed?: boolean
   /** Exhausted cards lie sideways (rotated 90° from their ready orientation) and dim. */
   exhausted?: boolean
-  /** A highlight that hugs the card edge (1px in / 1px out): selection, target, playable, or resourcing (green). */
-  highlight?: 'accent' | 'red' | 'accent-dim' | 'green'
+  /**
+   * A highlight that hugs the card edge (1px in / 1px out): selection, playable, resourcing (green), or
+   * a target coloured by what the effect does to it (`intentHighlight`).
+   */
+  highlight?: Highlight
   /** Frame the card tightly (its own art box, no square slot). For cards that never rotate, e.g. the hand. */
   tight?: boolean
   /** Short-edge size in px. Defaults to 50% of full size; the zoom feature overrides it. */
@@ -81,6 +85,8 @@ export default function CardFace({
     highlight === 'accent' ? '2px solid var(--color-accent)'
     : highlight === 'green' ? '2px solid var(--color-green)'
     : highlight === 'red' ? '2px solid var(--color-red)'
+    : highlight === 'yellow' ? '2px solid var(--color-yellow)'
+    : highlight === 'white' ? '2px solid var(--color-ink)'
     : highlight === 'accent-dim' ? '2px solid rgba(79, 195, 247, 0.55)'
     : undefined
 

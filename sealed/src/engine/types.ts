@@ -12,6 +12,7 @@
 
 import type { AttackTarget } from './actions'
 import type { TriggerPoint } from './abilities'
+import { TOKEN_WEAKNESS } from './tokenUpgrades'
 
 export type PlayerId = 'player' | 'opponent'
 export type Arena = 'ground' | 'space'
@@ -1219,7 +1220,53 @@ export type UsedAbility = Pick<PendingTrigger, 'controller' | 'point' | 'cardId'
  * `switch (choice.kind)` narrowing and exhaustiveness all keep working.
  */
 export type PendingChoice = WithChoiceSource<ChoiceVariant>
-type WithChoiceSource<T> = T extends unknown ? T & { source?: DamageSource } : never
+type WithChoiceSource<T> = T extends unknown ? T & { source?: DamageSource; intent?: TargetIntent } : never
+
+/**
+ * What a board-target choice does to the unit or base picked, which the board shows as the
+ * highlight's colour: `help` (buff, heal, a Shield, Experience or Advantage token, ready), `harm`
+ * (damage, debuff, Weakness, defeat), `cunning` (exhaust, capture, return to hand, take control, or
+ * choosing which unit acts), `attach` (a real upgrade card, which may help or hurt).
+ *
+ * Every board-target choice carries one once raised. `pushChoice` stamps it for a kind whose effect
+ * follows from the kind and its payload (`choiceIntent`); `selectUnitThen` is generic (free text and a
+ * continuation), so its raiser must state it, and the type requires that.
+ */
+export type TargetIntent = 'help' | 'harm' | 'cunning' | 'attach'
+
+const tokenIntent = (token: string): TargetIntent => (token === TOKEN_WEAKNESS ? 'harm' : 'help')
+
+/**
+ * The intent a board-target choice's kind and payload imply, or undefined for a kind that is not a
+ * board target (or one whose raiser must state it).
+ */
+export function choiceIntent(choice: PendingChoice): TargetIntent | undefined {
+  switch (choice.kind) {
+    case 'mayAdvantageEach': case 'mayGiveAdvantage': case 'mayExhaustLeaderGiveAdvantage': case 'opponentGivesAdvantage':
+    case 'selectHealTarget': case 'healForAdvantage': case 'distributeHealing': case 'selectUnitToReady':
+      return 'help'
+    case 'mayDamage': case 'mayDamageExhaust': case 'selectDamageTarget': case 'distributeDamage': case 'distributeIndirectDamage':
+    case 'variableStrike': case 'selectUnitToDefeat': case 'selectUniqueUnitToDefeat': case 'exploit':
+      return 'harm'
+    case 'mayExhaustLeaderExhaustUnit': case 'mayExhaustUnit': case 'selectUnitToExhaust': case 'returnFriendlyUnit':
+    case 'selectUnitToReturn': case 'selectUnitToSteal': case 'selectFriendlyUnit': case 'selectDistributeSource':
+      return 'cunning'
+    case 'attachPlayedCard': case 'mayPlayUpgradeFree':
+      return 'attach'
+    case 'mayLastingBuff':
+      return (choice.power ?? 0) + (choice.hp ?? 0) < 0 ? 'harm' : 'help'
+    case 'mayGiveTokens': case 'distributeTokens':
+      return tokenIntent(choice.token)
+    case 'selectPair':
+      return choice.mode === 'defeat' ? 'harm' : 'cunning'
+    case 'multiPick':
+      return choice.spec.mode === 'giveAdvantage' ? 'help' : choice.spec.mode === 'exhaust' ? 'cunning' : 'harm'
+    case 'damageAnyBases':
+      return choice.heal ? 'help' : 'harm'
+    default:
+      return undefined
+  }
+}
 
 /**
  * A decision the resolver pauses on until its `controller` picks an option or skips.
@@ -1469,7 +1516,7 @@ type ChoiceVariant =
   // `text` names what the pick is for, for the prompt.
   // `hookOnDecline` runs the hook with no unit when the choice is declined, for an ability that goes on
   // after its picks stop ("If no friendly units were damaged by this ability", AAT Incinerator).
-  | { kind: 'selectUnitThen'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; text: string; then: IfYouDo; hookOnDecline?: boolean }
+  | { kind: 'selectUnitThen'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; text: string; intent: TargetIntent; then: IfYouDo; hookOnDecline?: boolean }
   // "Choose a player": option 0 is the controller's opponent, option 1 the controller. Mandatory
   // unless `optional`. The chosen player reaches the card's `ifYouDo` hook as `playerChosen`. `text`
   // is the effect. `candidates` restricts which of the two may be picked (defaults both) — "defeat a
@@ -1768,7 +1815,10 @@ export function pushChoice(state: GameState, choice: PendingChoice): GameState {
   let id = choice.id
   let n = 1
   while (existing.some(c => c.id === id)) id = `${choice.id}#${n++}`
-  return { ...state, pendingChoices: [...existing, id === choice.id ? choice : { ...choice, id }] }
+  // A board-target choice says what it does to the target, for the highlight colour (`TargetIntent`).
+  const intent = choice.intent ?? choiceIntent(choice)
+  const stamped = intent && !choice.intent ? { ...choice, intent } : choice
+  return { ...state, pendingChoices: [...existing, id === choice.id ? stamped : { ...stamped, id }] }
 }
 
 // ---------------------------------------------------------------------------

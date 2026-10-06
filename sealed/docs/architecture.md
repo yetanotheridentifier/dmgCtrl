@@ -337,7 +337,11 @@ The board is drawn with art-dominant cards, not text rows:
   or failed art falls back to a text summary (cost/name/power-HP/keywords/abilities).
   Sizing constants live in `cardSizing.ts`; the roll-over zoom drives its `widthPx`.
   Selection/target/actionable highlights are a 2px outline hugging the card edge (1px in /
-  1px out, `outline-offset: -1px`) via the `highlight` prop. Unit effects are drawn as
+  1px out, `outline-offset: -1px`) via the `highlight` prop. A target's colour is the choice's
+  (or leader ability's) `intent`, mapped once in `components/highlight.ts`: green helps, red
+  harms, yellow (`--color-yellow`) is cunning, white attaches a real upgrade card (including one
+  placed from hand); a target with no intent is an attack, so red. Accent blue stays selection
+  and dimmed accent "can act". A base takes the same colours through `BaseCard`'s `target`. Unit effects are drawn as
   physical-style **tokens** (`tokens.ts`, where `tokenLayout` places 1 to 7 over the art: one
   centred column when ready, two to a row when exhausted) on the non-rotating wrapper, so they
   stay upright when the card is exhausted. Damage is a deep-red rounded square with a white

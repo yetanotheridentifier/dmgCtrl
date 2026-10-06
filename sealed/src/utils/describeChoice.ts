@@ -33,14 +33,14 @@ export function playFromZoneName(zone: PlayFromZone): string {
 export const BOARD_TARGET_KINDS = [
   'mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage',
   'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit',
-  'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade',
+  'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust',
   'selectUnitToDefeat', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens',
   'multiPick', 'distributeDamage', 'distributeTokens', 'variableStrike', 'healForAdvantage',
   'returnFriendlyUnit', 'selectPair', 'exploit',
   'selectUnitThen', 'selectUnitToReady', 'selectUnitToReturn', 'selectUnitToSteal', 'selectFriendlyUnit',
   'selectDistributeSource', 'attachPlayedCard', 'mayPlayUpgradeFree',
   'distributeHealing', 'distributeIndirectDamage', 'damageAnyBases',
-] as const
+] as const satisfies readonly PendingChoice['kind'][]
 
 /** Board-target kinds picked again and again until Done (or until the amount is spent). */
 const REPEATABLE_KINDS: readonly BoardTargetKind[] = [

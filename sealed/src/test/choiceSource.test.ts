@@ -3,7 +3,7 @@ import { resolve } from '../engine/resolve'
 import { collectUnitTriggers, stampChoiceSource } from '../engine/abilities'
 import { fireBatch } from '../engine/effects'
 import '../engine/cardDefinitions'
-import { choiceSourceRef } from '../utils/describeChoice'
+import { choiceSourceRef, BOARD_TARGET_KINDS } from '../utils/describeChoice'
 import { buildCoverageDecks } from '../bench/coverageDecks'
 import { buildCardDb } from '../engine/cardDb'
 import { initGame } from '../engine/initGame'
@@ -85,6 +85,8 @@ describe('every choice raised in real games can name its source (#374)', () => {
     const decks = buildCoverageDecks(POOL, 1).decks
     const cardDb = buildCardDb(POOL)
     const unnamed = new Map<string, string>()
+    // A board-target choice with no intent would highlight in no colour that says what it does.
+    const noIntent = new Map<string, string>()
     const kindsSeen = new Set<string>()
 
     /**
@@ -113,6 +115,7 @@ describe('every choice raised in real games can name its source (#374)', () => {
       for (let i = 0; i < 5000 && s.winner === null; i++) {
         for (const choice of s.pendingChoices ?? []) {
           kindsSeen.add(choice.kind)
+          if ((BOARD_TARGET_KINDS as readonly string[]).includes(choice.kind) && !choice.intent) noIntent.set(choice.kind, JSON.stringify(choice))
           if (ruleLevel.has(choice.kind)) continue
           if (choiceSourceRef(s, choice).length === 0) unnamed.set(choice.kind, JSON.stringify(choice))
         }
@@ -124,5 +127,6 @@ describe('every choice raised in real games can name its source (#374)', () => {
 
     expect(kindsSeen.size, 'the sweep must actually exercise a broad set of choice kinds').toBeGreaterThan(15)
     expect([...unnamed.values()], 'these choice kinds reached a player with no card to explain them').toEqual([])
+    expect([...noIntent.values()], 'these board-target choices reached a player with no intent to colour them').toEqual([])
   })
 })

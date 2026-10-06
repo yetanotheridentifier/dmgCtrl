@@ -365,7 +365,32 @@ describe('UnitLine — attached upgrades', () => {
     expect(screen.queryByTestId('board-unit-upgrades-u1')).toBeNull() // tokens aren't stacked as cards
   })
 
-  it('marks a unit as an upgrade target: green highlight and clickable', () => {
+  /**
+   * A target's highlight says what the effect does to it: green helps, red harms, yellow is cunning
+   * (exhaust, capture, return, take control), white attaches a real upgrade card. Selection keeps the
+   * accent, so a selected unit never reads as a target.
+   */
+  it.each([
+    ['help', 'green'],
+    ['harm', 'red'],
+    ['cunning', 'yellow'],
+    ['attach', 'white'],
+  ] as const)('highlights a target whose intent is %s in %s', (intent, colour) => {
+    render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D')} interact={{ actionable: false, selected: false, isTarget: true, intent, onClick: vi.fn() }} />)
+    expect(within(screen.getByTestId('board-unit-u1')).getByTestId('card-face')).toHaveAttribute('data-highlight', colour)
+  })
+
+  it('highlights an attack target red when no intent is given', () => {
+    render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D')} interact={{ actionable: false, selected: false, isTarget: true, onClick: vi.fn() }} />)
+    expect(within(screen.getByTestId('board-unit-u1')).getByTestId('card-face')).toHaveAttribute('data-highlight', 'red')
+  })
+
+  it('keeps the accent for a selected unit, whatever the intent', () => {
+    render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D')} interact={{ actionable: true, selected: true, isTarget: false, intent: 'help', onClick: vi.fn() }} />)
+    expect(within(screen.getByTestId('board-unit-u1')).getByTestId('card-face')).toHaveAttribute('data-highlight', 'accent')
+  })
+
+  it('marks a unit as an upgrade target: white highlight and clickable', () => {
     const onClick = vi.fn()
     render(
       <UnitLine
@@ -376,7 +401,7 @@ describe('UnitLine — attached upgrades', () => {
     )
     const tile = screen.getByTestId('board-unit-u1')
     expect(tile).toHaveAttribute('data-upgrade-target', 'true')
-    expect(within(tile).getByTestId('card-face')).toHaveAttribute('data-highlight', 'green')
+    expect(within(tile).getByTestId('card-face')).toHaveAttribute('data-highlight', 'white')
     fireEvent.click(tile)
     expect(onClick).toHaveBeenCalledTimes(1)
   })
