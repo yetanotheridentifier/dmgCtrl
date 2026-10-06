@@ -51,6 +51,7 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   LOF_053: { keywords: [] }, // Heirloom Lightsaber: Restore 1 on a Force unit
   LAW_128: { keywords: [] }, // Veiled Strength: Grit
   TWI_071: { keywords: [] }, // Unshakeable Will: Sentinel
+  TWI_051: { keywords: [] }, // For The Republic: Coordinate - Restore 2
   SOR_070: { keywords: [] }, // Devotion: Restore 2
   SOR_166: { keywords: [] }, // Infiltrator's Skill: Saboteur
   SOR_057: { keywords: [] }, // Protector: Sentinel

@@ -7953,20 +7953,12 @@ const ANY_NUMBER = 99
 // top of the file) because several registrations below need `createWp`/`captureWp`, defined above
 // this point but not before it.
 //
-// 15 of the 23 Coordinate cards ship here: 14 sole-blocked plus TWI_213 (Sanctioner's Shuttle),
-// whose only other blocker is capture (#466), a fully built primitive already reused elsewhere
-// (`costAtMost`/`pickEnemy`/`nonLeader` is exactly SEC_253 Covert Operative's shape at a different
-// cost). The bundled keyword a card's Coordinate line grants ("Coordinate - Sentinel") is corrected
-// out of its base `Keywords[]` in `cardDataCorrections.ts`; a keyword the card ALSO has
-// unconditionally, on its own printed line (Plo Koon's Ambush), is left alone.
-//
-// Left for a follow-up (commented on #472, not filed as a new ticket): TWI_096 Aayla Secura needs a
-// new "prevent all combat damage for this attack" lasting-effect field (`preventEach`/`preventNext`
-// don't fit "prevent ALL"); TWI_064 Ki-Adi-Mundi needs a new "opponent's Nth card this phase"
-// refinement of `whenPlayCard`; TWI_011 Ahsoka Tano and TWI_008 Padmé Amidala are deployed-leader
-// `actionAbilities` gated by `usable`; TWI_147 Anakin Skywalker, TWI_165 Kit Fisto and TWI_192
-// Padmé Amidala (unit) are simple gated `onAttack` effects held back only for time; TWI_051 For The
-// Republic's granted "Coordinate - Restore 2" is an upgrade's own gated keyword, also held back only for time.
+// Every TWI card carrying the keyword is registered here. The bundled keyword a card's Coordinate
+// line grants ("Coordinate - Sentinel") is left out of its base keywords (`toKeywords` reads only the
+// keywords a unit prints unconditionally, and an upgrade's grant is corrected in
+// `cardDataCorrections.ts`); a keyword the card ALSO has on its own printed line (Plo Koon's Ambush,
+// Kit Fisto's Saboteur) is kept. A triggered Coordinate ability is gated with `hears`, settled when
+// the event happens: a unit without the ability at that moment never triggers.
 const hasCoordinate = (s: GameState, owner: PlayerId): boolean => s.players[owner].units.length >= 3
 const unitHasCoordinate = (s: GameState, u: UnitState): boolean => {
   const o = unitOwner(s, u)
@@ -8024,6 +8016,59 @@ registerCard('TWI_162', { // Reckless Torrent — Coordinate: you may deal 2 dam
   },
 })
 registerCard('TWI_213', captureWp('Coordinate - When Played: This unit captures an enemy non-leader unit that costs 3 or less.', pickAll(pickEnemy, nonLeader, costAtMost(3)), false, (s, ctx) => hasCoordinate(s, ctx.owner))) // Sanctioner's Shuttle
+
+// Triggered abilities: "Coordinate - On Attack: ..." and "Coordinate - When an opponent ...".
+const coordinated = (s: GameState, ctx: EffectContext): boolean => hasCoordinate(s, ctx.owner)
+const coordinateOnAttack = (description: string, effect: AbilityDef['effect']): AbilityDef =>
+  ({ trigger: 'onAttack', description, hears: coordinated, effect })
+registerCard('TWI_096', { abilities: [coordinateOnAttack('Coordinate - On Attack: Prevent all combat damage that would be dealt to this unit for this attack.', (s, ctx) => // Aayla Secura
+  addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, preventCombat: true, untilEndOfAttack: true }))] })
+registerCard('TWI_147', { abilities: [coordinateOnAttack('Coordinate - On Attack: Draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1))] }) // Anakin Skywalker
+registerCard('TWI_165', { abilities: [coordinateOnAttack('Coordinate - On Attack: You may deal 3 damage to a ground unit.', (s, ctx) => // Kit Fisto (Saboteur is unconditional, printed)
+  damageChoice(s, ctx, 3, picked(s, ctx, pickGround), [], true))] })
+registerCard('TWI_192', { abilities: [coordinateOnAttack('Coordinate - On Attack: Give an enemy unit -3/-0 for this phase.', (s, ctx) => // Padmé Amidala
+  lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickEnemy), { power: -3 }))] })
+registerCard('TWI_064', { // Ki-Adi-Mundi
+  abilities: [{
+    trigger: 'whenPlayCard',
+    description: 'Coordinate - When an opponent plays their second card each phase: You may draw 2 cards.',
+    // The card being played is already in its player's record for the phase when this is heard.
+    hears: (s, ctx) => ctx.playingPlayer !== undefined && ctx.playingPlayer !== ctx.owner
+      && cardsPlayedThisPhase(s, ctx.playingPlayer).length === 2 && coordinated(s, ctx),
+    effect: (s, ctx) => mayThen(s, ctx, `${ctx.sourceInstanceId}-draw`, 'draw 2 cards'),
+  }],
+  ifYouDo: (s, ctx) => drawCards(s, ctx.owner, 2),
+})
+
+// Leaders: a front "Coordinate - Action" usable only with Coordinate, and a back that has it too.
+const GRANT_AHSOKA_SNIPS = 'GRANT_AHSOKA_SNIPS'
+registerCard(GRANT_AHSOKA_SNIPS, { sourceCardId: 'TWI_011', ...attackBonus(1) })
+registerCard('TWI_011', { // Ahsoka Tano
+  leaderAbilities: {
+    actions: [{
+      description: 'Coordinate - Action [Exhaust]: Attack with a unit. It gets +1/+0 for this attack.',
+      usable: (s, owner) => hasCoordinate(s, owner) && actionAttack(owner, s, { grantCardId: GRANT_AHSOKA_SNIPS }),
+      effect: (s, ctx) => offerAttack(s, ctx.owner, `${ctx.cardId}-attack`, { grantCardId: GRANT_AHSOKA_SNIPS }),
+    }],
+  },
+  statModifier: (s, u) => (unitHasCoordinate(s, u) ? { power: 2 } : {}),
+})
+const republicCard: CardTest = c => printedTrait(c, 'Republic')
+registerCard('TWI_008', allOf( // Padmé Amidala (Restore 1 on her back is printed, unconditional)
+  leaderFront('Coordinate - Action [C=1, Exhaust]: Search the top 3 cards of your deck for a Republic card, reveal it, and draw it.', {
+    cost: 1,
+    usable: (s, ctx) => hasCoordinate(s, ctx.owner) && s.players[ctx.owner].deck.length > 0,
+    effect: (s, ctx) => searchDrawChoice(s, ctx, 3, republicCard),
+  }),
+  { abilities: [coordinateOnAttack('Coordinate - On Attack: Search the top 3 cards of your deck for a Republic card, reveal it, and draw it.', (s, ctx) =>
+    searchDrawChoice(s, ctx, 3, republicCard))] },
+))
+
+// An upgrade's granted Coordinate ability: its host's controller is the one counted.
+registerCard('TWI_051', { // For The Republic
+  costModifier: (s, p) => (s.players[p].units.filter(u => unitHasTrait(s, u, 'Republic')).length >= 3 ? -2 : 0),
+  ...gains(unitHasCoordinate, KW.restore(2)),
+})
 
 // A: tokens on a trigger
 registerCard('JTL_082', createWp('Create a TIE Fighter token.', TOKEN_TIE_FIGHTER)) // Kijimi Patrollers

@@ -229,7 +229,7 @@ GameState.lastingEffects?: LastingEffect[]
 // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, untilRoundEnd?, abilityCardIds?,
 //   cannotAttack?, cannotAttackBases?, cannotBeAttacked?, unlessSentinel?, removeKeywords?,
 //   losesAllAbilities?, noCombatDamage?, attackersPower?, cannotReady?, whileSourceInPlay?, preventNext?, preventEach?,
-//   survivesNoHp?, redirectDamageTo?, printedHp? }
+//   preventCombat?, survivesNoHp?, redirectDamageTo?, printedHp? }
 ```
 
 `printedHp` replaces the unit's printed HP for the duration ("its printed HP is considered to be 1 for
@@ -519,7 +519,9 @@ limited to once a phase reads, since `damagedUnits` by definition cannot hold it
 lasting effect on the unit (Shien Flurry) is applied in the same place, after the cards, and is spent by
 the first instance it meets. A `preventEach` lasting effect (Finn: "for this phase, if damage would be
 dealt to that unit, prevent 1 of that damage") is counted with the cards and never spent, so it
-applies to every instance for its duration.
+applies to every instance for its duration. A `preventCombat` lasting effect (Aayla Secura: "prevent
+all combat damage that would be dealt to this unit for this attack", set with `untilEndOfAttack`) is
+counted there too and stops the whole of any combat instance, leaving ability damage alone.
 
 Unpreventable damage ignores both kinds, and ignores Shields entirely: the token is not even spent.
 
@@ -976,26 +978,28 @@ triggered ability, active only while the condition holds.
   leave play, never cached, so a Coordinate unit's buff or keyword can drop mid-combat if a
   Sentinel'd ally is defeated first. A one-shot ability (When Played, When Defeated) settles the
   condition once, at the moment it would fire, exactly like every other triggered ability.
-- **No new hook was needed.** A stat buff uses `statModifier` (Mandalorian Super Commandos'
+- **No hook of its own.** A stat buff uses `statModifier` (Mandalorian Super Commandos'
   "+2/+0 while you control a leader unit" is the precedent), a self-keyword grant uses
   `conditionalKeywords`, an effect on OTHER units or the current defender uses `aura`, and a gated
-  one-shot effect (create a token, an optional damage pair, a capture) checks the condition inline in
-  its `whenPlayed`/`whenDefeated` effect, the same shape Lifetree Caravan's "If you control 3 or more
-  units (including this one), you may resource the top card of your deck" already uses.
+  When Played effect (create a token, an optional damage pair, a capture) checks the condition inline,
+  the same shape Lifetree Caravan's "If you control 3 or more units (including this one), you may
+  resource the top card of your deck" already uses. A Coordinate On Attack (Anakin Skywalker, Kit
+  Fisto, Padmé Amidala, Aayla Secura) or "when an opponent plays their second card each phase"
+  (Ki-Adi-Mundi) is gated with the ability's `hears`, so a unit without Coordinate when the event
+  happens never triggers. A leader's front "Coordinate - Action" (Ahsoka Tano, Padmé Amidala) is
+  gated by its action's `usable`, and its back reads the same condition for the deployed unit.
+- **An upgrade can grant a Coordinate ability** (For The Republic: "Attached unit gains:
+  'Coordinate - Restore 2.'"). It is the upgrade's own `conditionalKeywords`, which already land on its
+  host, gated on `unitHasCoordinate` of the host, so the host's controller is the one counted. The
+  source lists the upgrade's keywords as `["Coordinate", "Restore"]`, which would give every host
+  Restore unconditionally, so `cardDataCorrections.ts` empties them.
 - **A bundled keyword is left out of the card's base keywords** by `toKeywords`, like every other
   conditional keyword: the source lists "Coordinate - Sentinel" as `["Coordinate", "Sentinel"]`, which
   would make Sentinel permanent left alone. A keyword
-  the card also has UNCONDITIONALLY, on its own separate printed line (Plo Koon's Ambush), is left in
-  place alongside `Coordinate`.
-- **15 of the 23 candidate cards need nothing else** (recounted against `registeredCardIds()`; the
-  ticket's stale count read 15 sole-blocked, which the recount confirms by a different route: 14
-  sole plus Sanctioner's Shuttle, whose only other blocker, capture, is a fully built primitive).
-  Left out, each commented on the ticket rather than filed as a new one: Aayla Secura needs a new
-  "prevent all combat damage for this attack" lasting-effect field; Ki-Adi-Mundi needs a new
-  "opponent's Nth card this phase" refinement of the `whenPlayCard` trigger; Ahsoka Tano and Padmé
-  Amidala's leader front are deployed-leader `actionAbilities` gated by `usable`; Anakin Skywalker,
-  Kit Fisto and Padmé Amidala's unit are simple gated `onAttack` effects held back only for time, and
-  so is For The Republic's granted "Coordinate - Restore 2".
+  the card also has UNCONDITIONALLY, on its own separate printed line (Plo Koon's Ambush, Kit Fisto's
+  Saboteur, Padmé Amidala's leader-back Restore 1), is left in place alongside `Coordinate`.
+- **Every TWI card carrying Coordinate is built**: 21 units and upgrades plus both sides of the two
+  leaders.
 
 ## The Force
 

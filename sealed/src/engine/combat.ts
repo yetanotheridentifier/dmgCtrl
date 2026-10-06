@@ -24,9 +24,12 @@ function preventedDamage(state: GameState, target: UnitState, amount: number, ct
       }
     }
   }
-  // "For this phase, if damage would be dealt to that unit, prevent 1 of that damage" (Finn).
+  // "For this phase, if damage would be dealt to that unit, prevent 1 of that damage" (Finn), and
+  // "prevent all combat damage that would be dealt to this unit for this attack" (Aayla Secura).
   for (const e of state.lastingEffects ?? []) {
-    if (e.preventEach && e.targetInstanceId === target.instanceId) prevented += e.preventEach
+    if (e.targetInstanceId !== target.instanceId) continue
+    if (e.preventEach) prevented += e.preventEach
+    if (e.preventCombat && ctx.byCombat) prevented += amount
   }
   return Math.min(amount, Math.max(0, prevented))
 }
