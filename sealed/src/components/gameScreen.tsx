@@ -23,7 +23,7 @@ import CardFace from './cardFace'
 import { intentHighlight } from './highlight'
 import type { Highlight } from './highlight'
 import { CardGridOverlay } from './cardGridOverlay'
-import { OverlayShell, PANEL_BUTTON, PANEL_PRIMARY, PANEL_SECONDARY } from './overlayShell'
+import { OVERLAY_DETAIL, OverlayButtons, OverlayHeader, OverlayShell, PANEL_BUTTON, PANEL_PRIMARY, PANEL_SECONDARY } from './overlayShell'
 import { CARD_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_H, PILL_W, TOKEN_SPEC, TOKEN_FIGURE_WEIGHT, TOKEN_FIGURE_LAYOUT, TOKEN_SHADOW, TOKEN_BORDER } from './tokens'
 import type { TokenKind } from './tokens'
@@ -365,7 +365,7 @@ export function CardChoiceOverlay({ card, cardId, prompt, children }: {
       cardsById={{ [cardId]: card }}
       items={[{ cardId, key: 0 }]}
       fullWidthCards
-      footer={<div className="flex flex-wrap justify-center gap-2">{children}</div>}
+      footer={children}
     />
   )
 }
@@ -407,7 +407,7 @@ export function CardSelectOverlay({ state, prompt, items, onPick, onCancel, onDi
         }
       })}
       footer={onCancel && (
-        <button data-testid="card-select-cancel" onClick={onCancel} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+        <button data-testid="card-select-cancel" onClick={onCancel} className={PANEL_SECONDARY}>
           Cancel
         </button>
       )}
@@ -441,7 +441,7 @@ export function SearchRevealOverlay({ state, choice, onPick, onDone }: {
           : { cardId, key: i, dimmed: true }
       })}
       footer={onDone && (
-        <button data-testid="search-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+        <button data-testid="search-done" onClick={onDone} className={PANEL_SECONDARY}>
           Done
         </button>
       )}
@@ -473,7 +473,7 @@ export function SearchDrawOverlay({ state, choice, onPick, onDone }: {
         ? { cardId, key: i, testId: `search-draw-pick-${i}`, actionLabel: 'Draw', onSelect: () => onPick(i) }
         : { cardId, key: i, dimmed: true })}
       footer={onDone && (
-        <button data-testid="search-draw-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+        <button data-testid="search-draw-done" onClick={onDone} className={PANEL_SECONDARY}>
           Done
         </button>
       )}
@@ -523,14 +523,16 @@ export function TriggerOrderOverlay({ state, mine, theirs, onPick, onDismiss }: 
   /** Cancels the action that raised the triggers; absent, the overlay blocks until answered. */
   onDismiss?: () => void
 }) {
+  // The waiting abilities are information, not answers, so they are plain text: a boxed row reads as a
+  // button, and the only buttons here are the two that answer.
   const column = (title: string, triggers: PendingTrigger[], testId: string) => (
     <div data-testid={testId} className="min-w-[16rem] flex-1">
-      <p className="mb-2 text-xs uppercase tracking-[0.14em] text-ink-dim">{title}</p>
-      <ul className="flex flex-col gap-1.5">
+      <p className={`mb-2 ${OVERLAY_DETAIL}`}>{title}</p>
+      <ul className="flex flex-col gap-2">
         {triggers.length === 0
           ? <li className="text-sm text-ink-faint">nothing waiting</li>
           : triggers.map(t => (
-            <li key={t.id} className="rounded-lg border border-line/50 px-3 py-2 text-sm text-ink">
+            <li key={t.id} className="text-sm text-ink">
               {triggerLabel(state, t)}
             </li>
           ))}
@@ -539,20 +541,19 @@ export function TriggerOrderOverlay({ state, mine, theirs, onPick, onDismiss }: 
   )
   return (
     <OverlayShell testId="trigger-order-overlay" size="panel" onDismiss={onDismiss} dismissLabel={CANCEL_LABEL}>
-      <p className="text-lg font-semibold text-ink">Who resolves first?</p>
-      <p className="-mt-3 text-sm text-ink-dim">Abilities triggered on both sides.</p>
+      <OverlayHeader title="Who resolves first?" detail="Abilities triggered on both sides." />
       <div className="flex w-full flex-wrap justify-center gap-6 text-left">
         {column('Your triggers', mine, 'trigger-order-mine')}
         {column("Opponent's triggers", theirs, 'trigger-order-theirs')}
       </div>
-      <div className="flex justify-center gap-3">
+      <OverlayButtons>
         <button data-testid="trigger-order-mine-btn" onClick={() => onPick(0)} className={PANEL_PRIMARY}>
           I resolve first
         </button>
         <button data-testid="trigger-order-theirs-btn" onClick={() => onPick(1)} className={PANEL_SECONDARY}>
           They resolve first
         </button>
-      </div>
+      </OverlayButtons>
     </OverlayShell>
   )
 }
@@ -578,31 +579,24 @@ export function NextTriggerOverlay({ state, candidates, onPick, onDismiss }: {
   })
   return (
     <OverlayShell testId="next-trigger-overlay" size="panel" onDismiss={onDismiss} dismissLabel={CANCEL_LABEL}>
-      <p className="text-lg font-semibold text-ink">Which resolves next?</p>
-      <p className="-mt-3 text-sm text-ink-dim">Several of your abilities triggered at once.</p>
-      <ul className="flex w-full flex-col gap-2">
+      <OverlayHeader title="Which resolves next?" detail="Several of your abilities triggered at once." />
+      <OverlayButtons stacked>
         {candidates.map((c, i) => {
           // Two copies of one card each hold their own ability, and the label cannot tell them apart.
           // Number those so the buttons are at least distinct to click.
           const duplicated = labels.filter(l => l === labels[i]).length > 1
           const seen = labels.slice(0, i + 1).filter(l => l === labels[i]).length
           return (
-            <li key={c.triggerId}>
-              <button
-                data-testid={`next-trigger-btn-${i}`}
-                onClick={() => onPick(i)}
-                className="w-full rounded-xl border-2 border-line/60 px-4 py-2 text-left text-sm text-ink hover:border-accent hover:bg-accent/10"
-              >
-                {duplicated ? `${labels[i]} (${seen})` : labels[i]}
-              </button>
-            </li>
+            <button key={c.triggerId} data-testid={`next-trigger-btn-${i}`} onClick={() => onPick(i)} className={PANEL_PRIMARY}>
+              {duplicated ? `${labels[i]} (${seen})` : labels[i]}
+            </button>
           )
         })}
-      </ul>
+      </OverlayButtons>
       {/* Picking here is not accepting the ability, and the difference is not obvious: there is no
           decline on this prompt because all of them resolve, and a "may" is turned down on its own
           choice once its turn comes. */}
-      <p className="text-center text-xs text-ink-dim">
+      <p className={OVERLAY_DETAIL}>
         Each will resolve in turn. You can still decline optional effects when they do.
       </p>
     </OverlayShell>
@@ -628,7 +622,7 @@ export function NameCardOverlay({ names, onPick, what = 'card', onDismiss }: {
   const filtered = query.trim() ? names.filter(n => n.toLowerCase().includes(query.trim().toLowerCase())) : names
   return (
     <OverlayShell testId="name-card-overlay" size="panel" onDismiss={onDismiss} dismissLabel={CANCEL_LABEL}>
-      <p className="text-lg font-semibold text-ink">Name a {what}</p>
+      <OverlayHeader title={`Name a ${what}`} />
       <input
         data-testid="name-card-input"
         autoFocus
@@ -637,16 +631,42 @@ export function NameCardOverlay({ names, onPick, what = 'card', onDismiss }: {
         placeholder="Type to search…"
         className="w-72 rounded-xl border-2 border-line/60 bg-black/40 px-4 py-2 text-sm text-ink outline-none focus:border-accent"
       />
-      <ul className="flex max-h-[50vh] w-72 flex-col gap-1 overflow-y-auto">
+      <ul className="flex max-h-[50vh] w-72 flex-col gap-2 overflow-y-auto">
         {filtered.slice(0, 50).map((n, i) => (
           <li key={n}>
-            <button data-testid={`name-card-option-${i}`} onClick={() => onPick(n)} className="w-full rounded-lg border border-line/40 px-3 py-1.5 text-left text-sm text-ink-dim hover:border-accent hover:text-ink">
+            <button data-testid={`name-card-option-${i}`} onClick={() => onPick(n)} className={`${PANEL_SECONDARY} w-full`}>
               {n}
             </button>
           </li>
         ))}
-        {filtered.length === 0 && <li className="py-2 text-center text-xs text-ink-faint">No match</li>}
+        {filtered.length === 0 && <li className="py-2 text-sm text-ink-faint">No match</li>}
       </ul>
+    </OverlayShell>
+  )
+}
+
+/**
+ * The game-over screen: the outcome as the header's banner, and Rematch (in the winning green) or back
+ * to the deck list. The reference the choice overlays are drawn to match.
+ */
+export function GameOverOverlay({ winner, concededBy, onRematch, onExit }: {
+  winner: PlayerId | 'draw'
+  concededBy?: PlayerId
+  onRematch: () => void
+  onExit: () => void
+}) {
+  const outcome = outcomeBanner(winner, concededBy)
+  return (
+    <OverlayShell testId="game-over" panelTestId="game-over-banner" size="panel" tone="amber">
+      <OverlayHeader title={outcome.title} banner={outcome.tone} detail={outcome.detail} detailTestId="outcome-detail" />
+      <OverlayButtons>
+        <button data-testid="rematch-btn" onClick={onRematch} className={`${PANEL_BUTTON} border-green text-green shadow-[0_0_12px_rgba(34,197,94,0.3)] hover:bg-green/10`}>
+          Rematch
+        </button>
+        <button onClick={onExit} className={PANEL_SECONDARY}>
+          Back to decks
+        </button>
+      </OverlayButtons>
     </OverlayShell>
   )
 }
@@ -669,10 +689,8 @@ export function ButtonChoiceOverlay({ state, prompt, actions, onPick, onDismiss,
 }) {
   return (
     <OverlayShell testId="choice-overlay" size="panel" onDismiss={onDismiss} dismissLabel={dismissLabel}>
-      <p data-testid="choice-overlay-prompt" className="px-6 text-lg text-ink first-letter:uppercase">
-        <DescribedParts state={state} parts={prompt} />
-      </p>
-      <div className="flex flex-wrap justify-center gap-3">
+      <OverlayHeader testId="choice-overlay-prompt" title={<DescribedParts state={state} parts={prompt} />} />
+      <OverlayButtons>
         {actions.map((action, i) => (
           <button
             key={i}
@@ -683,7 +701,7 @@ export function ButtonChoiceOverlay({ state, prompt, actions, onPick, onDismiss,
             {describeAction(state, 'player', action)}
           </button>
         ))}
-      </div>
+      </OverlayButtons>
     </OverlayShell>
   )
 }
@@ -715,7 +733,7 @@ export function SearchPlayFreeOverlay({ state, choice, onPick, onDone }: {
         ? { cardId, key: i, testId: `search-free-pick-${i}`, actionLabel: 'Play free', onSelect: () => onPick(i) }
         : { cardId, key: i, dimmed: true })}
       footer={
-        <button data-testid="search-free-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+        <button data-testid="search-free-done" onClick={onDone} className={PANEL_SECONDARY}>
           Done
         </button>
       }
@@ -748,7 +766,7 @@ export function SearchPlayUpgradeOverlay({ state, choice, playableIndices, onPic
         ? { cardId, key: i, testId: `search-upgrade-pick-${i}`, actionLabel: 'Play', onSelect: () => onPick(i) }
         : { cardId, key: i, dimmed: true })}
       footer={
-        <button data-testid="search-upgrade-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+        <button data-testid="search-upgrade-done" onClick={onDone} className={PANEL_SECONDARY}>
           Done
         </button>
       }
@@ -780,7 +798,7 @@ export function OpponentHandOverlay({ state, choice, onDiscard, onDone }: {
         ? { cardId, key: i, testId: `opp-hand-pick-${i}`, actionLabel: 'Discard', onSelect: () => onDiscard(i) }
         : { cardId, key: i })}
       footer={
-        <button data-testid="opp-hand-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+        <button data-testid="opp-hand-done" onClick={onDone} className={PANEL_SECONDARY}>
           Done
         </button>
       }
@@ -1743,7 +1761,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
               key={i}
               data-testid={`choice-btn-${i}`}
               onClick={() => actAndClear(action)}
-              className="rounded-xl border-2 border-accent px-4 py-2 text-sm text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
+              className={PANEL_PRIMARY}
             >
               {describeAction(gameState, 'player', action)}
             </button>
@@ -1762,7 +1780,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
               key={i}
               data-testid={`choice-btn-${i}`}
               onClick={() => actAndClear(action)}
-              className="rounded-xl border-2 border-accent px-4 py-2 text-sm text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
+              className={PANEL_PRIMARY}
             >
               {describeAction(gameState, 'player', action)}
             </button>
@@ -2058,26 +2076,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
       {/* Game over — a modal overlay over the whole screen. */}
       {gameState && gameState.winner !== null && (
-        <OverlayShell testId="game-over" panelTestId="game-over-banner" size="panel" tone="amber">
-          <div>
-            <p className={`text-2xl font-semibold ${outcomeBanner(gameState.winner).tone}`}>
-              {outcomeBanner(gameState.winner).title}
-            </p>
-            {outcomeBanner(gameState.winner, gameState.concededBy).detail && (
-              <p data-testid="outcome-detail" className="mt-1 text-sm text-ink-dim">
-                {outcomeBanner(gameState.winner, gameState.concededBy).detail}
-              </p>
-            )}
-          </div>
-          <div className="mt-1 flex justify-center gap-3">
-            <button data-testid="rematch-btn" onClick={rematch} className={`${PANEL_BUTTON} border-green text-green shadow-[0_0_12px_rgba(34,197,94,0.3)] hover:bg-green/10`}>
-              Rematch
-            </button>
-            <button onClick={onExit} className={PANEL_SECONDARY}>
-              Back to decks
-            </button>
-          </div>
-        </OverlayShell>
+        <GameOverOverlay winner={gameState.winner} concededBy={gameState.concededBy} onRematch={rematch} onExit={onExit} />
       )}
     </div>
   )
