@@ -195,24 +195,17 @@ which wait on that blocker's ticket; Stolen AT-Hauler
   **The resource zone is finished** (#475): resources are defeated, returned to hand and put into play
   from any zone, a resource records its owner where that is not its controller, and Greater Sarlacc is
   Exploit's step on ready resources. 19 cards shipped (HMW's Greater Sarlacc and Giant Gorax among
-  them). Each card left touching the zone waits on another mechanic's ticket: Smuggle #723 (Lando
-  Calrissian's leader and DJ, which also needs taking control of a resource, the one piece of the zone
-  not built — Enterprising Lackeys shipped with #469); Chewbacca and Intimidator shipped with #719. Eeth Koth
+  them). Lando Calrissian's leader and DJ (taking control of a resource) shipped with #723, and
+  Enterprising Lackeys with #469; Chewbacca and Intimidator shipped with #719. Eeth Koth
   shipped with the Force (#462). When Has Become Now shipped with Plot (#470). Outlaw Corona and Price on
   Your Head shipped with Bounty (#467); Chancellor Valorum shipped with Disclose (#603).
   **Smuggle is finished** (#469): a full alternate cost (CR 14) read off the printed bracket
   (`EngineCard.smuggle`), not a discount — its own aspect list can differ from the card's printed
   aspects (Hotshot DL-44 Blaster is Aggression but smuggles as Cunning). A standing action read
   straight off the resource zone (`smuggleMoves`/`takeSmuggle`), reusing `playFromZone` (#468) with an
-  `altCost` term, exactly the way a `DiscardPlayGrant` reuses it. 27 of the 34 SHD cards that print the
-  keyword shipped (Scanning Officer was already built, reading the keyword on revealed enemy
-  resources without playing through it). Six split to **#723**: DJ (taking control of a resource, the
-  zone's one unbuilt piece), Tech (granting Smuggle to other resources at a computed cost — a keyword
-  grant, not a play), First Light (its own bracket carries an additional cost beyond resources),
-  Hondo Ohnaka and Lando Calrissian (both leaders read/use "using SMUGGLE" globally rather than
-  printing the keyword, needing a watch flag and, for Lando, an ability that initiates a smuggle play),
-  and Millennium Falcon ("if you play this unit from your hand" needs a zone-specific read the engine
-  does not have — every non-resource door already collapses to one `fromResources`-shaped boolean).
+  `altCost` term, exactly the way a `DiscardPlayGrant` reuses it. Every SHD card that prints or reads
+  the keyword is built, the last six with #723: DJ, Tech, First Light, Hondo Ohnaka, Lando Calrissian
+  and Millennium Falcon.
   **Plot is finished** (#470): CR 14, an alternate ROUTE into play rather than an alternate cost
   (unlike Smuggle): a Plot card sits inert in the resource zone, so `deployLeader` raises one
   `playCardFrom` choice over every Plot card there, re-offered until declined or empty, at full

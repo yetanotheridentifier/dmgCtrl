@@ -44,9 +44,9 @@ wrong in the other direction, are what `cardDataCorrections.ts` still holds.
 
 **Upgrades are left as the source lists them**, since an upgrade's keyword is its attached unit's; an
 upgrade whose keyword is conditional, or given beyond its host, is stripped by a correction and granted
-by its ability. One unit is a stated exception: Millennium Falcon's "if you play this unit from your
-hand, it gains Ambush" cannot be read, since nothing records how a unit was played, so a correction
-keeps its Ambush, right in the usual case and wrong only when it is smuggled.
+by its ability. A unit's keyword that depends on how it was played is granted the same way: Millennium
+Falcon's "if you play this unit from your hand, it gains Ambush" is `fromHandKeywords`, which
+`playUnitCard` gives the unit for a play from hand only (see "Smuggle" below).
 
 ### Which cards supply a unit's abilities
 
@@ -770,45 +770,60 @@ smuggles as Cunning.
   (`cardDb.ts`) is read out of `FrontText`/`BackText` by a dedicated regex, because the bracket's
   shape (`\[\{?C=N\}?\s+aspects...\]`, sometimes every token wrapped in the source's own icon-markup
   braces, e.g. DJ's `[{C=7} {Cunning} {Cunning}]`) does not fit the simple "Keyword N" numeral
-  `toKeywords` already reads. `extra` catches a trailing comma-led additional cost this parser does
-  not resolve (First Light: "deal 4 damage to a friendly unit"), kept only so the card is not silently
-  miscounted as plain. No card needs a hand-declared `smuggle` field: the bracket is the one source of
-  truth, so a wrong number here is a data bug, not two places to keep in sync.
+  `toKeywords` already reads. `extra` keeps a trailing comma-led additional cost as raw text (First
+  Light: "deal 4 damage to a friendly unit"); the card's definition resolves it
+  (`smuggleDamagesFriendly`), and a bracket whose `extra` no definition resolves is never offered. No
+  card needs a hand-declared `smuggle` field: the bracket is the one source of truth, so a wrong number
+  here is a data bug, not two places to keep in sync.
+- **A card can have more than one Smuggle** (CR 14.b), each an independent ability. `smuggleTerms`
+  (`legalMoves.ts`) lists them: the printed bracket, and the one Tech gives every friendly resource
+  (`grantsResourceSmuggle`: the card's own cost plus 2 and its own aspect icons). A gained one identical
+  to the printed one is the same play and is left out. A card that has lost its abilities (Galen
+  Erso) has none. Scanning Officer counts a gained Smuggle as the keyword.
 - **A standing action, not a raised choice.** Unlike `playCardFrom` (#468), which something else has
   to raise, Smuggle is read straight off the resource zone every time legal moves are generated
-  (`smuggleMoves`, `legalMoves.ts`), exactly the way a `DiscardPlayGrant`'s `playFromDiscard` is: a new
-  `{ type: 'smuggle', resourceIndex, targetInstanceId? }` `Action`, one per card that carries the
-  keyword and can afford it (one per legal host, for an upgrade). `takeSmuggle` (`resolve.ts`) reads
-  the card's `smuggle` bracket fresh and hands it to the existing `playFromZone` door with an
-  `altCost` term and a `resourceTop` tail — the cost rules, the ownership rule and the three type
-  doors (unit/upgrade/event) are the same ones `playCardFrom` uses, not a parallel mechanism.
+  (`smuggleMoves`), exactly the way a `DiscardPlayGrant`'s `playFromDiscard` is: a
+  `{ type: 'smuggle', resourceIndex, targetInstanceId?, granted?, costUnitId?, choiceId? }` `Action`
+  for each Smuggle a card has that the zone can afford, one per legal host for an upgrade and one per
+  friendly unit an additional cost could land on (`costUnitId`). `granted` names Tech's Smuggle rather
+  than the printed one. `takeSmuggle` (`resolve.ts`) pays the additional cost first (First Light's 4
+  damage, dealt as the exploit step's damage is), then hands the term to the existing `playFromZone`
+  door with an `altCost` term and a `resourceTop` tail — the cost rules, the ownership rule and the
+  three type doors (unit/upgrade/event) are the same ones `playCardFrom` uses, not a parallel mechanism.
+- **An ability that makes a Smuggle play** ("Play a card using Smuggle. It costs 2 less", Lando
+  Calrissian) raises a `playUsingSmuggle` choice carrying a `costDelta`. It is answered by the same
+  `smuggle` moves, priced at the delta and carrying the choice's `choiceId`, so a gained Smuggle and an
+  additional cost come with it. The choice's `then` resumes the card ("Defeat a resource you own and
+  control", which leaves out a resource taken from an opponent).
 - **`effectiveCost` grew one optional parameter**, `altCost?: { cost, aspects }`: when given, it swaps
   in for `card.cost` and `card.aspects` in the sum, but every other modifier (a card's own
   `costModifier`, board discounts, "your next unit" grants, a named-card surcharge, halving) still
   applies on top, because none of them are specific to which printed cost started the sum.
   `PlayFromTerms.altCost` carries it through `playFromCost` the same way `costDelta`/`waive` already do.
-- **"When played using Smuggle"** (Cassian Andor, Hotshot DL-44 Blaster, Privateer Crew) reads a flag
-  the play recorded on the unit/upgrade itself — `UnitState.playedUsingSmuggle` /
-  `UpgradeAttachment.usingSmuggle`, set at construction from `PlayFromTail.usingSmuggle` — the same way
-  Weequay Pirate already reads `resourcesPaidToPlay`. `whenPlayed`'s `ctx` carries no notion of which
-  zone a play came from (that is what `ctx.playedFromResources` on the *global* `whenPlayCard` watch is
-  for, Bail Organa), so a card's own ability has to read it off itself instead. An upgrade reads its
-  own attachment entry the same way Blade of Talzin already finds itself among a host's upgrades:
+- **How a card was played is one value, `HowPlayed`** (`{ from: 'hand' | 'resources' | 'other',
+  smuggle? }`), threaded through the play doors (`playUnitCard`, `playUpgradeCardOnto`,
+  `playEventCard`) from wherever the card was picked up. `playFromZone` reads it off the zone, so an
+  ability playing a card out of a hand is a play from hand, and a deck-top or discard-pile play is not.
+- **"When played using Smuggle"** (Cassian Andor, Hotshot DL-44 Blaster, Privateer Crew, DJ) reads a
+  flag the play recorded on the unit/upgrade itself — `UnitState.playedUsingSmuggle` /
+  `UpgradeAttachment.usingSmuggle`, set at construction from `HowPlayed.smuggle` — the same way
+  Weequay Pirate already reads `resourcesPaidToPlay`. `whenPlayed`'s `ctx` carries no notion of how a
+  play was made, so a card's own ability reads it off itself. An upgrade reads its own attachment entry
+  the same way Blade of Talzin already finds itself among a host's upgrades:
   `host.upgrades.find(u => u.cardId === ctx.cardId)`.
-- **27 of the SHD cards Smuggle unlocked need nothing else** (of a set-wide 34 that print the keyword;
-  Scanning Officer only detects it on revealed enemy resources and was already built). Five print
-  nothing beyond the keyword and Ambush/Sentinel, already implemented, and need no registration at
-  all. Not shipped, each needing a genuinely separate piece: **DJ** (taking control of an enemy
-  resource, and handing it back when DJ leaves play — the one piece of the resource zone `#475` did not
-  build); **Tech** (grants Smuggle to OTHER resources at a computed cost — a keyword *grant*, not a
-  play); **First Light** (its own bracket carries the additional cost the `extra` field above catches);
-  **Hondo Ohnaka and Lando Calrissian** (both leaders read/use "play a card using SMUGGLE" globally
-  rather than printing the keyword themselves — a watch flag on `whenPlayCard` plus, for Lando, an
-  ability that *initiates* a smuggle play at a further discount, neither exercised by any shipped card);
-  and **Millennium Falcon** ("if you play this unit from your hand" needs a zone-specific read the
-  engine does not yet have: every non-resource-zone play door already collapses to the same
-  `fromResources`-shaped boolean, which is not precise enough to tell "from hand" apart from a deck-top
-  or discard-pile play).
+- **"When you play a card using Smuggle"** (Hondo Ohnaka) is the global `whenPlayCard` watch with
+  `ctx.playedUsingSmuggle`, beside `ctx.playedFromResources` (Bail Organa).
+- **"If you play this unit from your hand, it gains Ambush"** (Millennium Falcon) is
+  `fromHandKeywords`: `playUnitCard` gives the unit those keywords for the phase, as a "your next unit"
+  grant's are, when `HowPlayed.from` is `hand`. Smuggled, or played out of a discard pile, it has no
+  Ambush.
+- **Taking control of a resource** (DJ: "Take control of an enemy resource. When this unit leaves play,
+  that resource's owner takes control of it") is `takeControlOfResource` (`effects.ts`): the resource
+  moves zones keeping its ready or exhausted state (CR 27.1.c), with `ResourceState.owner` and
+  `ResourceState.controlUntil` (DJ's instance id). `returnControlledResources` hands it back once that
+  unit is no longer in play, swept once per action beside `returnControlledUnits`. A facedown resource
+  is the same as any other to the player taking it apart from being ready or not, so DJ takes a ready
+  one where there is one rather than raising a pick.
 
 ## Piloting
 

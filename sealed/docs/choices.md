@@ -674,13 +674,20 @@ whose condition holds and which could be played now, one per legal host for an u
 "If this card is a resource, you may play it for its smuggle cost" (CR 14, #469) is the other shape a
 permission to play from another zone takes: read straight off the card itself, every time legal moves
 are generated, rather than granted by another card's effect. `smuggleMoves` (`legalMoves.ts`) offers a
-`{ type: 'smuggle', resourceIndex, targetInstanceId? }` `Action` for each resource whose
-`EngineCard.smuggle` bracket the player can afford — one per legal host when the card is an upgrade —
+`{ type: 'smuggle', resourceIndex, targetInstanceId?, granted?, costUnitId? }` `Action` for each
+Smuggle a resource has (`smuggleTerms`: printed, or gained from Tech) that the player can afford — one
+per legal host when the card is an upgrade, and one per friendly unit an additional cost could land on —
 the same way `discardGrantMoves` turns each live `DiscardPlayGrant` into a `playFromDiscard` move.
-`takeSmuggle` resolves it through the same `playFromZone` door a `playCardFrom` uses, with the card's
-own bracket as an `altCost` term (an alternate cost AND aspect list, not a discount) and a
+`takeSmuggle` resolves it through the same `playFromZone` door a `playCardFrom` uses, with the
+Smuggle's bracket as an `altCost` term (an alternate cost AND aspect list, not a discount) and a
 `resourceTop` tail. See `keywords-effects.md` "Smuggle" for the cost mechanics and which cards read
 the play back off themselves afterwards.
+
+**An ability that makes a Smuggle play answers with the same moves.** "Play a card using Smuggle. It
+costs 2 less" (Lando Calrissian) raises `playUsingSmuggle` with a `costDelta`, and `choiceMoves` offers
+`smuggleMoves` at that delta, each carrying the choice's `choiceId`, as an attack answers an Ambush
+choice. Taking one consumes the choice, makes the play and resumes the card's `then`. A decline is
+offered only when no play is left, and it still resumes the card.
 
 **Every play of an upgrade goes through one door**, `playUpgradeCardOnto`, whatever zone the card came
 from and whether or not it was paid for: from hand (`playUpgradeOnto`, including Cin Drallig's and

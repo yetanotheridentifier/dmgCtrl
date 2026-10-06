@@ -89,7 +89,7 @@ A card put into your resource zone **by a card ability** (Long Live the Empire, 
 
 Some cards **play a card back out of a resource zone** (The Armorer, Osha), or out of the top of your deck or an opponent's resources. When one does, you get a picker showing that whole zone, with the cards you can play highlighted and the rest dimmed. **A resource you play helps pay for itself**: it is still a resource while you pay, so a 5-cost card is playable out of a zone holding exactly 5 ready resources, one of which is that card. It leaves the zone as it enters play, and a card that says so replaces it with the top card of your deck.
 
-A card with **Smuggle** offers this same play on its own, with no picker needed: whenever one sits in your resource zone and you can afford its printed smuggle cost, "Smuggle" shows up as an ordinary move alongside Play a Card, for as long as it stays there.
+A card with **Smuggle** offers this same play on its own, with no picker needed: whenever one sits in your resource zone and you can afford its printed smuggle cost, "Smuggle" shows up as an ordinary move alongside Play a Card, for as long as it stays there. With **Tech** in play every one of your resources has Smuggle, so a card that prints its own may show two Smuggle moves at different prices. **First Light** also costs 4 damage to a friendly unit, so it shows one Smuggle move for each unit that could take it. When **Lando Calrissian** plays a card using Smuggle, the same moves appear at 2 less.
 
 ### Winning
 
