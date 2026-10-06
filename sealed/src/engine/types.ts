@@ -847,12 +847,8 @@ export interface LastingEffect {
   cannotAttack?: boolean
   /** The unit can't attack bases for the duration (Fly Casual). Read by `unitCannotAttackBases`. */
   cannotAttackBases?: boolean
-  /**
-   * The unit can't be attacked for the duration (Dooku), or not while it lacks Sentinel when
-   * `unlessSentinel` is set (On Top of Things). Read by `unitCannotBeAttacked`.
-   */
+  /** The unit can't be attacked for the duration (Dooku), unless it has Sentinel. Read by `unitCannotBeAttacked`. */
   cannotBeAttacked?: boolean
-  unlessSentinel?: boolean
   /** Keyword names the unit loses for the duration (SpecForce Soldier: Sentinel). Read by `unitKeywords`. */
   removeKeywords?: string[]
   /**

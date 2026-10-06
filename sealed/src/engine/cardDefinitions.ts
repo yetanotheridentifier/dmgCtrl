@@ -1390,9 +1390,8 @@ registerCard('ASH_034', { cannotAttackBases: () => true }) // Wicket
 registerCard('ASH_037', { attacksEitherArena: () => true }) // Red Leader — may attack units in either arena
 
 registerCard('ASH_035', { // Tatooine Repulsor Train
-  // Can't be attacked while its controller has 2+ exhausted units — unless it has Sentinel.
+  // Can't be attacked while its controller has 2+ exhausted units (Sentinel overrides it, in `unitCannotBeAttacked`).
   cannotBeAttacked: (s, u) => {
-    if (unitHasKeyword(s, u, 'Sentinel')) return false
     const owner = findUnit(s, u.instanceId)?.owner
     return owner !== undefined && s.players[owner].units.filter(x => x.exhausted).length >= 2
   },
@@ -4012,7 +4011,7 @@ registerCard('SOR_136', { // Vader's Lightsaber
   ...damageWp('If attached unit is Darth Vader, you may deal 4 damage to a ground unit.', pickGround, 4, true, hostIs('Darth Vader')),
 })
 registerCard('TWI_219', whenPlayed('Attached unit can\'t be attacked this phase (unless it has Sentinel).', (s, ctx) => // On Top of Things
-  addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, cannotBeAttacked: true, unlessSentinel: true })))
+  addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, cannotBeAttacked: true })))
 
 // Lasting effects the buff choice cannot carry
 /** "Choose another friendly unit. While this unit is in play, the chosen unit gets ...". */
@@ -4642,7 +4641,7 @@ registerCard('LAW_041', unitThenWp('Choose a friendly unit and give it +2/+2 for
     return targetChoice(next, ctx, 'selectUnitToDefeat', pickedIds(next, ctx, pickAll(nonLeader, (st, u) => effectivePower(st, u) <= bar)), true)
   }))
 registerCard('LOF_262', unitThenWp("Choose a unit. It can't be attacked this phase (unless it has Sentinel).", pickAny, "choose a unit that can't be attacked this phase", 'help', false, // Go Into Hiding
-  (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, cannotBeAttacked: true, unlessSentinel: true })))
+  (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, cannotBeAttacked: true })))
 registerCard('JTL_077', whenPlayed('Each unit gains Sentinel and loses Saboteur for this phase.', s => // In the Heat of Battle
   allUnits(s).reduce((acc, u) => addLastingEffect(acc, { targetInstanceId: u.instanceId, keywords: [KW.sentinel], removeKeywords: ['Saboteur'] }), s)))
 
@@ -5868,8 +5867,7 @@ registerCard('TWI_034', { // General Grievous
 // B: the defender, and this attack
 registerCard('SHD_183', attacks('Exhaust the defender.', (s, ctx) => { const d = defenderOf(s, ctx); return d ? exhaustUnit(s, d.instanceId) : s })) // Kintan Intimidator
 registerCard('SOR_142', { // Sabine Wren
-  cannotBeAttacked: (s, u) => !unitHasKeyword(s, u, 'Sentinel')
-    && new Set(friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId).flatMap(x => cardOf(s, x)?.aspects ?? [])).size >= 3,
+  cannotBeAttacked: (s, u) => new Set(friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId).flatMap(x => cardOf(s, x)?.aspects ?? [])).size >= 3,
   ...attacks('You may deal 1 damage to the defender or to a base.', (s, ctx) => {
     const d = defenderOf(s, ctx)
     return damageChoice(s, ctx, 1, d ? [d] : [], BOTH_BASES, true)
@@ -5913,7 +5911,7 @@ registerCard('SHD_041', onAttack(whenPlayed('Discard a card from your deck. If i
   return milled.length && sharesAspectWithBase(next, ctx.owner, milled[0]) ? returnCardFromDiscardToHand(next, ctx.owner, milled[0]) : next
 })))
 registerCard('TWI_195', { // Sabine Wren
-  cannotBeAttacked: (s, u) => u.exhausted && !unitHasKeyword(s, u, 'Sentinel'),
+  cannotBeAttacked: (_s, u) => u.exhausted,
   ...onAttack(whenPlayed("You may discard a card from your deck. If it doesn't share an aspect with your base, deal 2 damage to a ground unit.", (s, ctx) =>
     (s.players[ctx.owner].deck.length ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'discard a card from your deck', then: resume(ctx) }) : s))),
   ifYouDo: (s, ctx) => {
@@ -11736,9 +11734,10 @@ registerCard('LOF_073', { // Mythosaur — Folklore Awakened. Shielded is printe
 })
 registerCard('SEC_012', { // Cassian Andor — Climb!
   // Front: "Friendly units that have damaged an opponent's base this phase can't be attacked (unless
-  // they have Sentinel)." Combat or ability damage, read from the phase record.
+  // they have Sentinel)." Combat or ability damage, read from the phase record; Sentinel overrides it
+  // in `unitCannotBeAttacked`, as it does every can't-be-attacked.
   leaderAbilities: {
-    cannotBeAttacked: (s, _owner, u) => damagedBaseThisPhase(s, u.instanceId) && !unitHasKeyword(s, u, 'Sentinel'),
+    cannotBeAttacked: (s, _owner, u) => damagedBaseThisPhase(s, u.instanceId),
   },
   // Back: Overwhelm is printed; the rest is gated on holding the initiative.
   survivesNoHp: (s, u) => s.initiative === unitOwner(s, u),
