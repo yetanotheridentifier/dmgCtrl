@@ -1,6 +1,6 @@
 import type { Action } from './actions'
 import type { AspectWaiver, AttackerFilter, DiscardPlayGrant, EngineCard, GameState, HandCardRef, KeywordInstance, PendingChoice, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
-import { opponentOf, hasPendingChoices, nextUnitGrantMatches, pushChoice, isFortify, upgradeSideId } from './types'
+import { opponentOf, hasPendingChoices, nextUnitGrantMatches, plotCostDelta, pushChoice, isFortify, upgradeSideId } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { cardHasTrait, keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
 import { abilityCardIds, cardAbilitiesBlanked, getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, leaderAbilitiesBlanked, baseEpicAction, usableBaseActions } from './abilities'
@@ -606,6 +606,8 @@ export interface PlayFromTerms {
   altCost?: { cost: number; aspects: string[] }
   /** Play a Pilot as an upgrade, for its Piloting bracket, onto a friendly Vehicle with room (Wedge Antilles). */
   piloting?: boolean
+  /** This play is using Plot, so a "next card you play using Plot" discount applies (Chancellor Palpatine). */
+  plot?: boolean
 }
 
 /**
@@ -615,7 +617,8 @@ export interface PlayFromTerms {
  */
 export function playFromCost(state: GameState, controller: PlayerId, card: EngineCard, terms: PlayFromTerms, target?: UnitState): number {
   if (terms.free) return 0
-  return Math.max(0, effectiveCost(state, controller, card, target, terms.waive, terms.piloting ? card.piloting : terms.altCost) + (terms.costDelta ?? 0))
+  const plotDelta = terms.plot ? plotCostDelta(state, controller) : 0
+  return Math.max(0, effectiveCost(state, controller, card, target, terms.waive, terms.piloting ? card.piloting : terms.altCost) + (terms.costDelta ?? 0) + plotDelta)
 }
 
 /**

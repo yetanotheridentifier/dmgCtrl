@@ -137,6 +137,10 @@ export function effectivePower(state: GameState, unit: UnitState, ctx: StatConte
     if (defenderId) {
       for (const e of state.lastingEffects ?? []) if (e.targetInstanceId === defenderId) power += e.attackersPower ?? 0
     }
+    // "Each enemy unit gets -2/-0 while it's attacking a base" (Sly Moore) sits on each attacker.
+    if (ctx.attackingBase) {
+      for (const e of state.lastingEffects ?? []) if (e.targetInstanceId === unit.instanceId) power += e.attackingBasePower ?? 0
+    }
     return Math.max(0, power)
   } finally {
     computingPower.delete(unit.instanceId)

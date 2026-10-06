@@ -330,6 +330,12 @@ export interface CardDefinition {
    */
   damageMultiplier?: (state: GameState, unit: UnitState) => number
   /**
+   * "If damage would be dealt to this unit by another card, deal that much damage plus 1 instead"
+   * (Vigil): extra damage this unit takes from one instance. Asked after prevention, so damage
+   * prevented to nothing is not dealt and gains nothing, and before the Shield token.
+   */
+  extraDamageTaken?: (state: GameState, unit: UnitState, ctx: DamagePreventionContext) => number
+  /**
    * A unit in play reducing damage about to hit *its controller's* base (At Attin Safety Droid
    * caps an instance at 4). Receives the incoming amount, returns what actually lands.
    */
