@@ -1,5 +1,6 @@
 import ashSet from '../fixtures/ashSet.json'
 import baylanExhaust from '../fixtures/reports/baylanExhaust.json'
+import cassianBaseAttackerAttacked from '../fixtures/reports/cassianBaseAttackerAttacked.json'
 import exhaustedLeaderDraw from '../fixtures/reports/exhaustedLeaderDraw.json'
 import haulcraftPrompt from '../fixtures/reports/haulcraftPrompt.json'
 import attackBuffPersists from '../fixtures/reports/attackBuffPersists.json'
@@ -48,7 +49,7 @@ const ashCards = ashSet as SwuCard[]
  * bundled the same way the other fixtures are; add an entry when a new report is worth keeping.
  */
 const REPORTS: Record<string, unknown> = {
-  advantageToEnemy, attackBuffPersists, baylanExhaust, debuffOnOwnUnit, deployedLeaderExhaust,
+  advantageToEnemy, attackBuffPersists, baylanExhaust, cassianBaseAttackerAttacked, debuffOnOwnUnit, deployedLeaderExhaust,
   exhaustedLeaderDraw, grassrootsHeal, haulcraftPrompt, minefieldArenaChoice,
   nestedDeployShieldTarget, rampResourceReady,
   shieldedSentinelLockout, shieldedSentinelPing, sloaneSelfSentinel, triggerOrderNotOffered,

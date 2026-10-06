@@ -250,8 +250,7 @@ which wait on that blocker's ticket; Stolen AT-Hauler
   return-to-hand and take-control sites, and documented in `keywords-effects.md`. Lurking TIE Phantom
   and Shadowed Intentions shipped with it, plus LAW_149 Rey and LOF_073 Mythosaur's prohibition clause
   from #701's matching group. SEC_061 Willrow Hood shipped for the upgrade-protection case, and
-  SEC_012 Cassian Andor's back only; his front, now unblocked (#690 names the dealing unit on ability
-  damage), is on #701. #701 keeps the rest of that group and its unrelated one-offs.
+  SEC_012 Cassian Andor (both sides). #701 keeps the rest of that group and its unrelated one-offs.
   **The trigger-head batch is finished** (#474, #680). Most heads needed only context on points that
   already fired; the damage points became one both-sides event (`whenDamageDealt`), and the heads no
   point raised got their own (a unit attacking, healing, the ready step, a card being drawn, a unit

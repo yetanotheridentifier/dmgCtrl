@@ -602,6 +602,11 @@ export interface LeaderAbilities {
    * source unit, since an undeployed leader is not a unit. Folded into the same aura pass.
    */
   aura?: (state: GameState, owner: PlayerId, target: UnitState, sameController: boolean, combat?: CombatContext) => AuraContribution | undefined
+  /**
+   * Whether `target`, one of the leader's controller's units, can't be attacked while the leader is
+   * undeployed (Cassian Andor). Read by `unitCannotBeAttacked` beside a unit's own `cannotBeAttacked`.
+   */
+  cannotBeAttacked?: (state: GameState, owner: PlayerId, target: UnitState) => boolean
   /** "Ignore the aspect penalty on <cards> you play" while undeployed (Hera Syndulla). */
   waivesAspectPenalty?: (state: GameState, owner: PlayerId, ctx: CostDiscountContext) => boolean
 }

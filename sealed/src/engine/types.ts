@@ -1018,6 +1018,11 @@ export interface PhaseEvents {
    */
   baseCombatDamagers?: string[]
   /**
+   * Instance ids of units that have damaged an opponent's base this phase by any means: combat, or an
+   * ability the unit is the source of (Cassian Andor). A superset of `baseCombatDamagers`.
+   */
+  baseDamagers?: string[]
+  /**
    * Players who created a token this phase (The Client). A token upgrade is credited to the controller of
    * the unit it lands on, which is who created it for every card that gives one to its own side.
    */
@@ -1963,16 +1968,27 @@ export function baseAttackersThisPhase(state: GameState, owner: PlayerId): strin
   return state.phaseEvents?.baseAttackers?.[owner] ?? []
 }
 
-/** Record that `attackerId` dealt combat damage to a base this phase (Moff Gideon). */
-export function recordBaseCombatDamage(state: GameState, attackerId: string): GameState {
+/**
+ * Record that unit `unitId` damaged an opponent's base this phase: in `baseDamagers` whatever the
+ * means (Cassian Andor), and in `baseCombatDamagers` too when it was combat damage (Moff Gideon).
+ */
+export function recordBaseDamagedBy(state: GameState, unitId: string, combat: boolean): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
-  const dealers = events.baseCombatDamagers ?? []
-  return dealers.includes(attackerId) ? state : { ...state, phaseEvents: { ...events, baseCombatDamagers: [...dealers, attackerId] } }
+  const add = (ids: string[] | undefined): string[] => (ids?.includes(unitId) ? ids : [...(ids ?? []), unitId])
+  const baseDamagers = add(events.baseDamagers)
+  const baseCombatDamagers = combat ? add(events.baseCombatDamagers) : events.baseCombatDamagers
+  if (baseDamagers === events.baseDamagers && baseCombatDamagers === events.baseCombatDamagers) return state
+  return { ...state, phaseEvents: { ...events, baseDamagers, baseCombatDamagers } }
 }
 
 /** Whether `instanceId` has dealt combat damage to a base this phase. */
 export function dealtBaseCombatDamageThisPhase(state: GameState, instanceId: string): boolean {
   return state.phaseEvents?.baseCombatDamagers?.includes(instanceId) ?? false
+}
+
+/** Whether `instanceId` has damaged an opponent's base this phase, by combat or by an ability. */
+export function damagedBaseThisPhase(state: GameState, instanceId: string): boolean {
+  return state.phaseEvents?.baseDamagers?.includes(instanceId) ?? false
 }
 
 /** Record that `owner`'s base took `amount` damage this phase. */

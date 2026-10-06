@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { legalMoves } from '../engine/legalMoves'
+import twiSet from './fixtures/twiSet.json'
+import { enemyAttackTargets, legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
+import { buildCardDb } from '../engine/cardDb'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
+import type { SwuCard } from '../data/cards'
 import type { Action } from '../engine/actions'
-import type { GameState, PendingChoice } from '../engine/types'
+import type { GameState, LastingEffect, PendingChoice } from '../engine/types'
 
 /**
  * Targeting rules — who may attack what: "can't attack bases" (Wicket), "can't be attacked
@@ -250,4 +253,191 @@ describe('a mandatory granted attack is offered only when one is legal', () => {
     const played = resolve(withEnemy({ hand: ['ASH_162'] }), { type: 'playEvent', handIndex: 0 })
     expect(played.pendingChoices ?? []).toHaveLength(1)
   })
+})
+
+// ── "Can't be attacked": one rule, every source of an attack ────────────────────────────────────
+
+const C = {
+  ...F,
+  ...buildCardDb(twiSet as unknown as SwuCard[]),
+  SEC_012: card({ id: 'SEC_012', type: 'leader', cost: 5, power: 3, hp: 6 }), // Cassian Andor
+  SEC_135: card({ id: 'SEC_135', type: 'unit', arena: 'ground', power: 3, hp: 3 }), // Muckraker Crab Droid
+  SOR_142: card({ id: 'SOR_142', type: 'unit', arena: 'ground', power: 2, hp: 3 }), // Sabine Wren
+  TWI_195: card({ id: 'TWI_195', type: 'unit', arena: 'ground', power: 3, hp: 4 }), // Sabine Wren
+  SENTINEL_UP: card({ id: 'SENTINEL_UP', type: 'upgrade', power: 0, hp: 0, keywords: [{ name: 'Sentinel' }] }),
+  OVERWHELM_UP: card({ id: 'OVERWHELM_UP', type: 'upgrade', power: 0, hp: 0, keywords: [{ name: 'Overwhelm' }] }),
+  CMD: card({ id: 'CMD', type: 'unit', arena: 'ground', power: 1, hp: 5, aspects: ['Command'] }),
+  AGG: card({ id: 'AGG', type: 'unit', arena: 'ground', power: 1, hp: 5, aspects: ['Aggression'] }),
+  CUN: card({ id: 'CUN', type: 'unit', arena: 'ground', power: 1, hp: 5, aspects: ['Cunning'] }),
+  SEP: card({ id: 'SEP', type: 'unit', arena: 'ground', power: 1, hp: 5, traits: ['Separatist'] }),
+}
+const cassian = { cardId: 'SEC_012', deployed: false, epicActionUsed: false, exhausted: false }
+const sentinel = [{ cardId: 'SENTINEL_UP', owner: 'opponent' as const }]
+
+/**
+ * Cassian Andor's undeployed front: "Friendly units that have damaged an opponent's base this phase
+ * can't be attacked (unless they have Sentinel)." The opponent leads with him here and attacks the
+ * player's base with `d`, so the board handed back is the player's turn, with `d` the protected unit.
+ */
+function cassianBoard({ leader = cassian, defender = {}, playerUnits = [], baseShielded = false }: {
+  leader?: typeof cassian
+  defender?: Parameters<typeof unit>[2]
+  playerUnits?: ReturnType<typeof unit>[]
+  baseShielded?: boolean
+} = {}): GameState {
+  const s = state({
+    cards: C,
+    activePlayer: 'opponent',
+    ...(baseShielded ? { shieldedBases: ['player' as const] } : {}),
+    players: {
+      player: player({ units: [unit('a', 'GRD', { arena: 'ground' }), unit('n', 'GRD', { arena: 'ground' }), ...playerUnits] }),
+      opponent: player({ leader, units: [unit('d', 'GRD', { arena: 'ground', ...defender }), unit('x', 'GRD', { arena: 'ground' })] }),
+    },
+  })
+  const attacked = resolve(s, { type: 'attack', attackerId: 'd', target: { kind: 'base' } })
+  expect(attacked.activePlayer, 'the attack hands the turn to the player').toBe('player')
+  return attacked
+}
+
+describe("Cassian Andor (SEC_012) front: friendly units that damaged an opponent's base can't be attacked", () => {
+  it('closes off a unit that dealt combat damage to the enemy base, and only that unit', () => {
+    const s = cassianBoard()
+    expect(s.players.player.base.damage, 'the attack landed').toBe(2)
+    expect(targetsOf(s, 'a')).toEqual(['base', 'x'])
+  })
+
+  it('a unit that attacked the base but dealt it no damage is still attackable', () => {
+    const s = cassianBoard({ baseShielded: true })
+    expect(s.players.player.base.damage, 'the shield soaked it').toBe(0)
+    expect(targetsOf(s, 'a')).toEqual(['base', 'd', 'x'])
+  })
+
+  it('counts Overwhelm damage that tramples through to the base', () => {
+    const s0 = state({
+      cards: C,
+      activePlayer: 'opponent',
+      players: {
+        player: player({ units: [unit('a', 'GRD', { arena: 'ground' }), unit('weak', 'GRD', { arena: 'ground', damage: 4 })] }),
+        opponent: player({ leader: cassian, units: [unit('d', 'GRD', { arena: 'ground', upgrades: [{ cardId: 'OVERWHELM_UP', owner: 'opponent' }] }), unit('x', 'GRD', { arena: 'ground' })] }),
+      },
+    })
+    const s = resolve(s0, { type: 'attack', attackerId: 'd', target: { kind: 'unit', instanceId: 'weak' } })
+    expect(s.players.player.base.damage, '2 power into 1 remaining HP: 1 tramples').toBe(1)
+    expect(targetsOf(s, 'a')).toEqual(['base', 'x'])
+  })
+
+  it('counts damage a friendly unit deals to the enemy base with an ability (Vanguard Droid Bomber)', () => {
+    const play = (units: ReturnType<typeof unit>[]) => {
+      const s0 = state({
+        cards: C,
+        activePlayer: 'opponent',
+        players: {
+          player: player({ units: [unit('sa', 'SPC', { arena: 'space' })] }),
+          opponent: player({ leader: cassian, resources: ready(10), hand: ['TWI_160'], units }),
+        },
+      })
+      const s = resolve(s0, { type: 'playUnit', handIndex: 0 })
+      const bomber = s.players.opponent.units.find(u => u.cardId === 'TWI_160')!
+      return { s, bomber: bomber.instanceId }
+    }
+    const fired = play([unit('sep', 'SEP', { arena: 'ground' })])
+    expect(fired.s.players.player.base.damage, 'When Played dealt 2 to the base').toBe(2)
+    expect(targetsOf(fired.s, 'sa')).toEqual(['base'])
+    // Control: without another Separatist the ability does nothing, and the Bomber is fair game.
+    const idle = play([])
+    expect(idle.s.players.player.base.damage).toBe(0)
+    expect(targetsOf(idle.s, 'sa')).toEqual(['base', idle.bomber])
+  })
+
+  it('with Sentinel the unit is attackable again, and forces the attack', () => {
+    const s = cassianBoard({ defender: { upgrades: sentinel } })
+    expect(targetsOf(s, 'a')).toEqual(['d'])
+  })
+
+  it("protects only Cassian's side: the player's own base attackers stay attackable", () => {
+    // The opponent's unit attacked first, then the player's `a` hits back at the base.
+    const s = cassianBoard()
+    const back = resolve(s, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
+    expect(back.activePlayer).toBe('opponent')
+    expect(targetsOf(back, 'x')).toEqual(['a', 'base', 'n'])
+  })
+
+  it('stops once he is deployed: the front is no longer in play', () => {
+    const s = cassianBoard({ leader: { ...cassian, deployed: true } })
+    expect(targetsOf(s, 'a')).toEqual(['base', 'd', 'x'])
+  })
+})
+
+/**
+ * **Every "can't be attacked" protection binds every source of an attack, with the Sentinel exception
+ * exactly where the card prints one.** A row per protection: the board it holds on, and whether
+ * Sentinel lifts it. Each row is read through the five sources of an attack (the action phase, Ambush,
+ * Support, an attack offered to any unit, an attack offered to one named unit) and through
+ * `enemyAttackTargets` as the AI's race reads it. The lasting rows are the protection the event or
+ * When Played leaves behind; the cards' own tests show they leave it.
+ */
+describe("can't be attacked: every protection, every source of an attack", () => {
+  type Row = { name: string; defender: Parameters<typeof unit>[2]; extras?: ReturnType<typeof unit>[]; lasting?: LastingEffect; unlessSentinel: boolean; cardId?: string; cassian?: boolean }
+  const rows: Row[] = [
+    { name: 'Hidden', defender: { hidden: true }, unlessSentinel: true },
+    { name: 'Tatooine Repulsor Train (ASH_035), 2 exhausted friendlies', cardId: 'ASH_035', defender: { exhausted: true }, extras: [unit('e2', 'GRD', { arena: 'ground', exhausted: true })], unlessSentinel: true },
+    { name: 'Muckraker Crab Droid (SEC_135), ready', cardId: 'SEC_135', defender: {}, unlessSentinel: false },
+    { name: 'Sabine Wren (SOR_142), 3 aspects among other friendlies', cardId: 'SOR_142', defender: {}, extras: [unit('c1', 'CMD', { arena: 'ground' }), unit('c2', 'AGG', { arena: 'ground' }), unit('c3', 'CUN', { arena: 'ground' })], unlessSentinel: true },
+    { name: 'Sabine Wren (TWI_195), exhausted', cardId: 'TWI_195', defender: { exhausted: true }, unlessSentinel: true },
+    { name: 'On Top of Things (TWI_219) / Go Into Hiding (LOF_262)', defender: {}, lasting: { targetInstanceId: 'd', cannotBeAttacked: true, unlessSentinel: true }, unlessSentinel: true },
+    { name: 'Dooku (LOF_211) / Ben Solo (LAW_185)', defender: {}, lasting: { targetInstanceId: 'd', cannotBeAttacked: true }, unlessSentinel: false },
+    { name: 'Cassian Andor (SEC_012) front, after damaging the base', defender: {}, cassian: true, unlessSentinel: true },
+  ]
+
+  const board = (row: Row, withSentinel: boolean, choice?: PendingChoice): GameState => {
+    const defender = { arena: 'ground' as const, ...row.defender, ...(withSentinel ? { upgrades: sentinel } : {}) }
+    const base = row.cassian
+      ? cassianBoard({ defender })
+      : state({
+        cards: C,
+        ...(row.lasting ? { lastingEffects: [row.lasting] } : {}),
+        players: {
+          player: player({ units: [unit('a', 'GRD', { arena: 'ground' }), unit('n', 'GRD', { arena: 'ground' })] }),
+          opponent: player({ units: [unit('d', row.cardId ?? 'GRD', defender), unit('x', 'GRD', { arena: 'ground' }), ...(row.extras ?? [])] }),
+        },
+      })
+    return choice ? { ...base, pendingChoices: [choice] } : base
+  }
+  const sources: [string, PendingChoice | undefined][] = [
+    ['the action phase', undefined],
+    ['Ambush', { kind: 'ambush', id: 'c', controller: 'player', unitId: 'a' }],
+    ['Support', { kind: 'support', id: 'c', controller: 'player', unitId: 'n' }],
+    ['an attack offered to any unit', { kind: 'mayAttackAnyUnit', id: 'c', controller: 'player', restore: 0 }],
+    ['an attack offered to one named unit', { kind: 'mayAttack', id: 'c', controller: 'player', unitId: 'a' }],
+  ]
+  const hits = (s: GameState) => targetsOf(s, 'a').includes('d')
+
+  for (const row of rows) {
+    describe(row.name, () => {
+      for (const [source, choice] of sources) {
+        it(`is not a target via ${source}`, () => {
+          expect(hits(board(row, false, choice))).toBe(false)
+        })
+      }
+
+      it("is not a target in the AI's race read", () => {
+        const s = board(row, false)
+        expect(enemyAttackTargets(s, s.players.player.units[0], 'player').targets.map(u => u.instanceId)).not.toContain('d')
+      })
+
+      if (row.unlessSentinel) {
+        it('is a target again with Sentinel, which forces the attack', () => {
+          for (const [, choice] of sources) expect(targetsOf(board(row, true, choice), 'a')).toEqual(['d'])
+        })
+      } else {
+        it('stays out of reach with Sentinel, and does not force the attack', () => {
+          for (const [, choice] of sources) {
+            const t = targetsOf(board(row, true, choice), 'a')
+            expect(t).not.toContain('d')
+            expect(t).toContain('x')
+          }
+        })
+      }
+    })
+  }
 })
