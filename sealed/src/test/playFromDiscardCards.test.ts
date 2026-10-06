@@ -131,6 +131,31 @@ describe('Palpatine\'s Return (SHD_094) — 6 less, or 8 less for a Force unit',
     const donePlain = accept(playEvent(plain), { optionIndex: 0 })
     expect(donePlain.players.player.resources.filter(r => r.exhausted)).toHaveLength(9) // 8 + (7 − 6)
   })
+
+  it('plays one unit: with both kinds in the pile it raises one choice, priced per card', () => {
+    const both = { ...board({ hand: ['SHD_094'], discard: ['BIG', 'FORCE_U'], resources: ready(17) }), cards: F }
+    const played = playEvent(both)
+    expect(played.pendingChoices ?? []).toHaveLength(1)
+    const c = choice(played)
+    expect(c.kind === 'playCardFrom' && c.candidates.map(r => r.cardId)).toEqual(['BIG', 'FORCE_U'])
+    // FORCE_U at 8 with 8 off: the event's 8 and nothing more, and BIG stays in the pile.
+    const done = accept(played, { optionIndex: 1 })
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+    expect(done.players.player.units.map(u => u.cardId)).toEqual(['FORCE_U'])
+    expect(done.players.player.discard).toContain('BIG')
+    expect(done.players.player.resources.filter(r => r.exhausted)).toHaveLength(8)
+  })
+
+  it('offers a Force unit only 8 less is enough for, and a plain unit only at 6 less', () => {
+    // 8 for the event leaves 1: FORCE_U (8 − 8 = 0) and BIG (7 − 6 = 1) are both affordable. Leaving
+    // 0, only FORCE_U is: priced at 6 off it would cost 2 and drop out as well.
+    const tight = { ...board({ hand: ['SHD_094'], discard: ['BIG', 'FORCE_U'], resources: ready(9) }), cards: F }
+    const c = choice(playEvent(tight))
+    expect(c.kind === 'playCardFrom' && c.candidates.map(r => r.cardId)).toEqual(['BIG', 'FORCE_U'])
+    const tighter = { ...board({ hand: ['SHD_094'], discard: ['BIG', 'FORCE_U'], resources: ready(8) }), cards: F }
+    const c2 = choice(playEvent(tighter))
+    expect(c2.kind === 'playCardFrom' && c2.candidates.map(r => r.cardId)).toEqual(['FORCE_U'])
+  })
 })
 
 describe('Home One (SOR_102) — a Heroism unit from the discard, 3 less', () => {
@@ -273,6 +298,19 @@ describe('A Fine Addition (TWI_040) — an upgrade from your hand or ANY player\
     const done = accept(accept(played, { optionIndex: 1 }), { targetInstanceId: 'u1' })
     expect(done.players.opponent.discard).toEqual([])
     expect(done.players.player.units[0].upgrades).toEqual([{ cardId: 'ITEM_UP', owner: 'opponent' }])
+  })
+
+  it('plays one upgrade: hand and both piles are one choice, and taking one ends the event', () => {
+    const s = fineBoard(['GRD'])
+    const withHandUpgrade = { ...s, players: { ...s.players, player: { ...s.players.player, hand: ['TWI_040', 'ITEM_UP'] } } }
+    const played = playEvent(withHandUpgrade)
+    expect(played.pendingChoices ?? []).toHaveLength(1)
+    const c = choice(played)
+    expect(c.kind === 'playCardFrom' && c.candidates.map(r => r.cardId)).toEqual(['ITEM_UP', 'PLAIN_UP', 'ITEM_UP'])
+    const done = accept(accept(played, { optionIndex: 0 }), { targetInstanceId: 'u1' })
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+    expect(done.players.player.units[0].upgrades).toEqual([{ cardId: 'ITEM_UP', owner: 'player' }])
+    expect(done.players.player.discard).toEqual(['PLAIN_UP', 'TWI_040'])
   })
 })
 
