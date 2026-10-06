@@ -369,29 +369,38 @@ describe("Cassian Andor (SEC_012) front: friendly units that damaged an opponent
 })
 
 /**
- * **Every "can't be attacked" protection binds every source of an attack, with the Sentinel exception
- * exactly where the card prints one.** A row per protection: the board it holds on, and whether
- * Sentinel lifts it. Each row is read through the five sources of an attack (the action phase, Ambush,
- * Support, an attack offered to any unit, an attack offered to one named unit) and through
- * `enemyAttackTargets` as the AI's race reads it. The lasting rows are the protection the event or
- * When Played leaves behind; the cards' own tests show they leave it.
+ * **Every "can't be attacked" protection binds every source of an attack, and Sentinel overrides every
+ * one of them** (CR Sentinel: "Abilities this unit has or gains can't prevent this unit from being
+ * attacked"), whether or not the card repeats the exception. A row per protection: the board it holds
+ * on. Each row is read through the five sources of an attack (the action phase, Ambush, Support, an
+ * attack offered to any unit, an attack offered to one named unit) and through `enemyAttackTargets` as
+ * the AI's race reads it, then again with Sentinel gained from an upgrade and from a lasting grant. The
+ * lasting row is the protection the event or When Played leaves behind; the cards' own tests show
+ * they leave it.
  */
 describe("can't be attacked: every protection, every source of an attack", () => {
-  type Row = { name: string; defender: Parameters<typeof unit>[2]; extras?: ReturnType<typeof unit>[]; lasting?: LastingEffect; unlessSentinel: boolean; cardId?: string; cassian?: boolean }
+  type Row = { name: string; defender: Parameters<typeof unit>[2]; extras?: ReturnType<typeof unit>[]; lasting?: LastingEffect; cardId?: string; cassian?: boolean }
   const rows: Row[] = [
-    { name: 'Hidden', defender: { hidden: true }, unlessSentinel: true },
-    { name: 'Tatooine Repulsor Train (ASH_035), 2 exhausted friendlies', cardId: 'ASH_035', defender: { exhausted: true }, extras: [unit('e2', 'GRD', { arena: 'ground', exhausted: true })], unlessSentinel: true },
-    { name: 'Muckraker Crab Droid (SEC_135), ready', cardId: 'SEC_135', defender: {}, unlessSentinel: false },
-    { name: 'Sabine Wren (SOR_142), 3 aspects among other friendlies', cardId: 'SOR_142', defender: {}, extras: [unit('c1', 'CMD', { arena: 'ground' }), unit('c2', 'AGG', { arena: 'ground' }), unit('c3', 'CUN', { arena: 'ground' })], unlessSentinel: true },
-    { name: 'Sabine Wren (TWI_195), exhausted', cardId: 'TWI_195', defender: { exhausted: true }, unlessSentinel: true },
-    { name: 'On Top of Things (TWI_219) / Go Into Hiding (LOF_262)', defender: {}, lasting: { targetInstanceId: 'd', cannotBeAttacked: true, unlessSentinel: true }, unlessSentinel: true },
-    { name: 'Dooku (LOF_211) / Ben Solo (LAW_185)', defender: {}, lasting: { targetInstanceId: 'd', cannotBeAttacked: true }, unlessSentinel: false },
-    { name: 'Cassian Andor (SEC_012) front, after damaging the base', defender: {}, cassian: true, unlessSentinel: true },
+    { name: 'Hidden', defender: { hidden: true } },
+    { name: 'Tatooine Repulsor Train (ASH_035), 2 exhausted friendlies', cardId: 'ASH_035', defender: { exhausted: true }, extras: [unit('e2', 'GRD', { arena: 'ground', exhausted: true })] },
+    { name: 'Muckraker Crab Droid (SEC_135), ready', cardId: 'SEC_135', defender: {} },
+    { name: 'Sabine Wren (SOR_142), 3 aspects among other friendlies', cardId: 'SOR_142', defender: {}, extras: [unit('c1', 'CMD', { arena: 'ground' }), unit('c2', 'AGG', { arena: 'ground' }), unit('c3', 'CUN', { arena: 'ground' })] },
+    { name: 'Sabine Wren (TWI_195), exhausted', cardId: 'TWI_195', defender: { exhausted: true } },
+    { name: 'a lasting protection (On Top of Things, Go Into Hiding, Dooku, Ben Solo)', defender: {}, lasting: { targetInstanceId: 'd', cannotBeAttacked: true } },
+    { name: 'Cassian Andor (SEC_012) front, after damaging the base', defender: {}, cassian: true },
   ]
 
-  const board = (row: Row, withSentinel: boolean, choice?: PendingChoice): GameState => {
-    const defender = { arena: 'ground' as const, ...row.defender, ...(withSentinel ? { upgrades: sentinel } : {}) }
-    const base = row.cassian
+  type SentinelFrom = 'none' | 'an upgrade' | 'a lasting grant'
+  const board = (row: Row, from: SentinelFrom, choice?: PendingChoice): GameState => {
+    const defender = { arena: 'ground' as const, ...row.defender, ...(from === 'an upgrade' ? { upgrades: sentinel } : {}) }
+    const built = buildBoard(row, defender)
+    const granted = from === 'a lasting grant'
+      ? { ...built, lastingEffects: [...(built.lastingEffects ?? []), { targetInstanceId: 'd', keywords: [{ name: 'Sentinel' }] }] }
+      : built
+    return choice ? { ...granted, pendingChoices: [choice] } : granted
+  }
+  const buildBoard = (row: Row, defender: Parameters<typeof unit>[2]): GameState => {
+    return row.cassian
       ? cassianBoard({ defender })
       : state({
         cards: C,
@@ -401,7 +410,6 @@ describe("can't be attacked: every protection, every source of an attack", () =>
           opponent: player({ units: [unit('d', row.cardId ?? 'GRD', defender), unit('x', 'GRD', { arena: 'ground' }), ...(row.extras ?? [])] }),
         },
       })
-    return choice ? { ...base, pendingChoices: [choice] } : base
   }
   const sources: [string, PendingChoice | undefined][] = [
     ['the action phase', undefined],
@@ -416,26 +424,20 @@ describe("can't be attacked: every protection, every source of an attack", () =>
     describe(row.name, () => {
       for (const [source, choice] of sources) {
         it(`is not a target via ${source}`, () => {
-          expect(hits(board(row, false, choice))).toBe(false)
+          expect(hits(board(row, 'none', choice))).toBe(false)
         })
       }
 
       it("is not a target in the AI's race read", () => {
-        const s = board(row, false)
+        const s = board(row, 'none')
         expect(enemyAttackTargets(s, s.players.player.units[0], 'player').targets.map(u => u.instanceId)).not.toContain('d')
       })
 
-      if (row.unlessSentinel) {
-        it('is a target again with Sentinel, which forces the attack', () => {
-          for (const [, choice] of sources) expect(targetsOf(board(row, true, choice), 'a')).toEqual(['d'])
-        })
-      } else {
-        it('stays out of reach with Sentinel, and does not force the attack', () => {
-          for (const [, choice] of sources) {
-            const t = targetsOf(board(row, true, choice), 'a')
-            expect(t).not.toContain('d')
-            expect(t).toContain('x')
-          }
+      for (const from of ['an upgrade', 'a lasting grant'] as const) {
+        it(`is a target again with Sentinel gained from ${from}, which forces the attack`, () => {
+          for (const [source, choice] of sources) expect(targetsOf(board(row, from, choice), 'a'), source).toEqual(['d'])
+          const s = board(row, from)
+          expect(enemyAttackTargets(s, s.players.player.units[0], 'player').targets.map(u => u.instanceId)).toEqual(['d'])
         })
       }
     })
