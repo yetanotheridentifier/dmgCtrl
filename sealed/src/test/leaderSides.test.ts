@@ -63,10 +63,8 @@ const SHIPPED = [
  * (#708), but his front needs ability damage folded into `dealtBaseCombatDamageThisPhase` (#690,
  * open), so he too is neither SHIPPED nor LIFTED.
  *
- * SEC_001 Chancellor Palpatine, once Plot landed (#470): his FRONT (search the top 5 for a card
- * with Plot, reveal it, draw it) is built and covered in `plot.test.ts`, but his back ("the next
- * card you play using Plot this phase costs 3 less") needs a new `NextUnitGrant` restriction plus
- * play-route context threaded into `effectiveCost`, so he too is neither SHIPPED nor LIFTED.
+ * SEC_001 Chancellor Palpatine is built on both sides and covered with the rest of Plot, in
+ * `plot.test.ts` (front) and `plot2.test.ts` (back).
  */
 // The JTL Pilot leaders lifted from here have shipped and are covered in `pilotLeaders.test.ts`.
 const LIFTED = [

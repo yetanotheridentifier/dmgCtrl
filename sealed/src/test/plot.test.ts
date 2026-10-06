@@ -439,9 +439,3 @@ describe('Chancellor Palpatine, leader front (SEC_001) — Action: search top 5 
     expect(done.players.player.hand).toContain('PLOT1')
   })
 })
-
-describe('Chancellor Palpatine, back (When Deployed discount): not built here, split out to a follow-up', () => {
-  it('the leader is not registered with a back-side ability', () => {
-    expect(getCardDefinition('SEC_001')?.abilities ?? []).toEqual([])
-  })
-})
