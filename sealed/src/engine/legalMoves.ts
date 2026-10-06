@@ -1,5 +1,5 @@
 import type { Action } from './actions'
-import type { AspectWaiver, AttackerFilter, DiscardPlayGrant, EngineCard, GameState, HandCardRef, PendingChoice, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
+import type { AspectWaiver, AttackerFilter, DiscardPlayGrant, EngineCard, GameState, HandCardRef, KeywordInstance, PendingChoice, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
 import { opponentOf, hasPendingChoices, nextUnitGrantMatches, pushChoice, isFortify, upgradeSideId } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { cardHasTrait, keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
@@ -247,7 +247,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
  * `resources` makes the picks ready resources rather than units (Greater Sarlacc), and `fromDiscard`
  * unit cards in the discard pile costing at most `maxCost` (Vernestra Rwoh).
  */
-export interface ExploitTerms { limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean }
+export interface ExploitTerms { limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean; creditGrant?: KeywordInstance[] }
 
 /**
  * Where in `playerId`'s discard pile the unit cards costing at most `maxCost` are: the picks Vernestra
@@ -322,6 +322,7 @@ export function raiseExploit(state: GameState, owner: PlayerId, cardId: string, 
     ...(terms.resources ? { resources: true } : {}),
     ...(terms.fromDiscard ? { fromDiscard: true, maxCost: terms.maxCost } : {}),
     ...(terms.credit ? { credit: true } : {}),
+    ...(terms.credit && terms.creditGrant ? { creditGrant: terms.creditGrant } : {}),
     source: { cardId, controller: owner },
   })
 }
@@ -425,6 +426,7 @@ export function zoneCards(state: GameState, controller: PlayerId, zone: PlayFrom
     case 'resources': return p.resources.map(r => r.cardId)
     case 'opponentResources': return theirs.resources.map(r => r.cardId)
     case 'deckTop': return p.deck.slice(0, 1)
+    case 'opponentDeckTop': return theirs.deck.slice(0, 1)
     case 'handOrResources': return [...p.hand, ...p.resources.map(r => r.cardId)]
     case 'discard': return p.discard
     case 'opponentDiscard': return theirs.discard
@@ -435,7 +437,7 @@ export function zoneCards(state: GameState, controller: PlayerId, zone: PlayFrom
 
 /** Whose zone holds the card at `index` of `zone`: the player playing it, or the opponent. */
 export function zoneHolder(state: GameState, controller: PlayerId, zone: PlayFromZone, index: number): PlayerId {
-  if (zone === 'opponentResources' || zone === 'opponentDiscard') return opponentOf(controller)
+  if (zone === 'opponentResources' || zone === 'opponentDeckTop' || zone === 'opponentDiscard') return opponentOf(controller)
   if (zone === 'anyDiscard') return index < state.players[controller].discard.length ? controller : opponentOf(controller)
   return controller
 }

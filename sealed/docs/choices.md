@@ -556,8 +556,10 @@ controller to order. A card whose "When Played" ability is borrowed this way is 
 - **The exploited units' powers are recorded** on the unit played (`exploitedPowers`), as read when
   they were defeated, for the When Played that counts them (Count Dooku).
 
-The step belongs to the Play a Card action from hand (`playUnit`, `playEvent`) and to Count Dooku's
-front, which raises it itself with its Exploit 1. **The other ways to play a card do not offer it**:
+The step belongs to the Play a Card action from hand (`playUnit`, `playEvent`), to Count Dooku's
+front, which raises it itself with its Exploit 1, and to Jabba the Hutt's deployed action, which raises
+it so Credit tokens can pay and carries a `creditGrant` (Ambush for the phase when one did). **The
+other ways to play a card do not offer it**:
 `playCardFrom`, `playUnitFromHand`, the free plays and the discard grants pay the card's effective cost
 with no exploit step. No card in the sealed sets both has Exploit and is commonly played that way.
 
@@ -576,7 +578,8 @@ currency from ready resources). See `keywords-effects.md` "Credit tokens".
 
 **`playCardFrom` is the one door for a play that is not the Play a Card action**: a card of any type,
 out of `zone`, answered by `optionIndex` into its `candidates`. The zones are `hand`, `resources`,
-`opponentResources`, `deckTop`, `discard` and `opponentDiscard`, plus three **paired** zones for a
+`opponentResources`, `deckTop`, `opponentDeckTop` (Vermillion: either player may play the top card
+of either deck), `discard` and `opponentDiscard`, plus three **paired** zones for a
 card offered out of either of two places at once: `handOrResources`, `handOrDiscard` and `anyDiscard`
 (both players' piles). A paired zone is one zone holding one list, in the order the card names them,
 so an index past the first half names the second.

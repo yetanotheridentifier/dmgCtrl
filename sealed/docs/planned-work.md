@@ -196,7 +196,7 @@ Two phases:
   Exploit's step on ready resources. 19 cards shipped (HMW's Greater Sarlacc and Giant Gorax among
   them). Each card left touching the zone waits on another mechanic's ticket: Smuggle #723 (Lando
   Calrissian's leader and DJ, which also needs taking control of a resource, the one piece of the zone
-  not built — Enterprising Lackeys shipped with #469), Credit #719 (Chewbacca, Intimidator). Eeth Koth
+  not built — Enterprising Lackeys shipped with #469); Chewbacca and Intimidator shipped with #719. Eeth Koth
   shipped with the Force (#462). When Has Become Now shipped with Plot (#470). Outlaw Corona and Price on
   Your Head shipped with Bounty (#467); Chancellor Valorum shipped with Disclose (#603).
   **Smuggle is finished** (#469): a full alternate cost (CR 14) read off the printed bracket
@@ -276,17 +276,10 @@ Two phases:
   **Credit tokens are finished** (#602): a per-PLAYER count (`PlayerState.creditTokens`), unlike
   Experience/Shield/Weakness which attach to a unit, with its own standing payment rule ("while
   paying resources, you may defeat this token, pay 1 less") read by `exploitTerms` as a fourth mode of
-  the Exploit/`whilePlaying` step (#473) rather than a parallel mechanism. 20 of the 35 cards it
-  unlocked on its own shipped (Unmarked Credits, Windfall, Backed by the Hutts, Bank Job Fugitives,
-  Champion's KT9 Podracer, Canto Bight Security, The Max Rebo Band, Rodian Bondsman, Bib Fortuna,
-  Getaway Freighter, Criminal Contact, Bix Caleen, Cad Bane, Defiant Scrapper, Lieutenant Gorn, Arvel
-  Skeen, Taramyn Barcona, Partisan U-Wing, Fett's Firespray, Scavenging Sandcrawler); the other 15 (6
-  leaders' activated-action wiring, a base Epic Action spanning three token kinds, an "any player may
-  use this" unit action, an ordinary action ability and an "any number" resource-zone return each cut
-  only for time, two cards where an opponent decides a friendly When Played, a reveal-then-play-for-free
-  chain, and an "exchange control of two units" primitive Double-Cross needs) are on #719. Conveyex
-  Security Captain shipped with #682; Han's Golden Dice, Targeted For Removal and Payroll Heist are
-  no longer held by the granted ability block (#464, shipped) and wait only on #719.
+  the Exploit/`whilePlaying` step (#473) rather than a parallel mechanism. Every card it unlocked has
+  shipped: 20 with the token itself, and the other 17 with #719 (six leaders, Alliance Outpost, Hunter
+  For Hire, Lady Proxima, Intimidator, Luke Skywalker, Two-Faced Troig, Vermillion, Double-Cross, Han's
+  Golden Dice, Targeted For Removal and Payroll Heist). Conveyex Security Captain shipped with #682.
   **Disclose is finished** (#603, #721): "reveal cards from your hand with these aspect icons among
   them" is a flat aspect multiset (`need`) matched against each hand card's own `aspects`, which can
   itself repeat an entry (a double-icon card counts twice on its own). All 33 cards it unlocked
@@ -344,7 +337,7 @@ Two phases:
   point, raised by the `readyUnit` primitive itself rather than a resolver call site so it hears every
   route a unit readies through). Foresight split again and shipped with #744, once the regroup phase's draw
   waited on `whenRegroupStarts` choices. Condemn shipped with #682; the pilot cards shipped with Piloting and the pilot leaders with #754, Boba Fett's front split to #756; Han's
-  Golden Dice, Targeted For Removal and Payroll Heist on #719; Leia Organa on #733; For The Republic on
+  Golden Dice, Targeted For Removal and Payroll Heist shipped with #719; Leia Organa on #733; For The Republic on
   #730.
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards

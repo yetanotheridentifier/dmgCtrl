@@ -72,8 +72,8 @@ const decline = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: ch
 const playUnit = (s: GameState, handIndex = 0) => resolve(s, { type: 'playUnit', handIndex })
 const playEvent = (s: GameState, handIndex = 0) => resolve(s, { type: 'playEvent', handIndex })
 const playUpgrade = (s: GameState, targetInstanceId: string, handIndex = 0) => resolve(s, { type: 'playUpgrade', handIndex, targetInstanceId })
-const useLeader = (s: GameState, index = 0) => resolve(s, { type: 'useLeaderAbility', index })
-const useAbility = (s: GameState, instanceId: string, cardId: string, index = 0) => resolve(s, { type: 'useAbility', instanceId, cardId, index })
+const leaderAction =(s: GameState, index = 0) => resolve(s, { type: 'useLeaderAbility', index })
+const unitAction =(s: GameState, instanceId: string, cardId: string, index = 0) => resolve(s, { type: 'useAbility', instanceId, cardId, index })
 const attackBase = (s: GameState, attackerId: string) => resolve(s, { type: 'attack', attackerId, target: { kind: 'base' } })
 const attackUnit = (s: GameState, attackerId: string, targetId: string) =>
   resolve(s, { type: 'attack', attackerId, target: { kind: 'unit', instanceId: targetId } })
@@ -87,7 +87,7 @@ const readyCount = (s: GameState, who: PlayerId = 'player') => s.players[who].re
 
 describe('LAW_235 Lady Proxima: Action [Exhaust]: create a Credit token', () => {
   it('exhausts her and creates one', () => {
-    const s = useAbility(board({ units: [unit('p', 'LAW_235')] }), 'p', 'LAW_235')
+    const s = unitAction(board({ units: [unit('p', 'LAW_235')] }), 'p', 'LAW_235')
     expect(credits(s)).toBe(1)
     expect(U(s, 'p')!.exhausted).toBe(true)
   })
@@ -101,7 +101,7 @@ describe('LAW_156 Hunter For Hire: Action [defeat a friendly Credit token]: take
   const hunterIsTheirs = (playerCredits: number) =>
     withCredits(board({}, { units: [unit('h', 'LAW_156')] }), 'player', playerCredits)
   it('the player who uses it pays with their own Credit token and takes control of it', () => {
-    const s = useAbility(hunterIsTheirs(2), 'h', 'LAW_156')
+    const s = unitAction(hunterIsTheirs(2), 'h', 'LAW_156')
     expect(controllerOf(s, 'h')).toBe('player')
     expect(credits(s)).toBe(1)
   })
@@ -117,7 +117,8 @@ describe('LAW_156 Hunter For Hire: Action [defeat a friendly Credit token]: take
 })
 
 describe("LAW_140 Intimidator: return any number of friendly resources to their owners' hands, a Credit token for each", () => {
-  const played = () => playUnit(board({ hand: ['LAW_140'], resources: [...ready(11), { cardId: 'THEIRS', exhausted: true, owner: 'opponent' }] }))
+  // 11 plus 2 for its Villainy aspect penalty.
+  const played = () => playUnit(board({ hand: ['LAW_140'], resources: [...ready(13), { cardId: 'THEIRS', exhausted: true, owner: 'opponent' }] }))
   it('offers the resources one at a time, creating a Credit token for each returned', () => {
     let s = played()
     expect(choice(s).kind).toBe('selectCardThen')
@@ -126,7 +127,7 @@ describe("LAW_140 Intimidator: return any number of friendly resources to their 
     expect(s.players.player.hand).toEqual(['R0'])
     s = accept(s, { optionIndex: 0 })
     expect(credits(s)).toBe(2)
-    expect(s.players.player.resources).toHaveLength(10)
+    expect(s.players.player.resources).toHaveLength(12)
     s = decline(s)
     noChoice(s)
     expect(credits(s)).toBe(2)
@@ -161,7 +162,8 @@ describe('LAW_092 Two-Faced Troig: may have an opponent take control of this uni
 })
 
 describe('LAW_080 Luke Skywalker: an opponent chooses one', () => {
-  const played = () => playUnit(board({ hand: ['LAW_080'] }, { units: [unit('e', 'BIG')] }))
+  // 7 plus 4 for its Aggression and Cunning aspect penalties.
+  const played = () => playUnit(board({ hand: ['LAW_080'], resources: ready(11) }, { units: [unit('e', 'BIG')] }))
   it('the opponent decides', () => {
     expect(choice(played())).toMatchObject({ kind: 'chooseMode', controller: 'opponent' })
   })
@@ -297,7 +299,7 @@ describe('LAW_141 Targeted For Removal: attached unit gains "When Defeated: An o
 
 describe('LAW_013 Chewbacca', () => {
   it('front: [C=1, Exhaust, defeat a friendly resource]: deal 2 damage to a unit and create a Credit token', () => {
-    let s = useLeader(board({ ...leader('LAW_013'), resources: ready(3) }, { units: [unit('e', 'BIG')] }))
+    let s = leaderAction(board({ ...leader('LAW_013'), resources: ready(3) }, { units: [unit('e', 'BIG')] }))
     expect(s.players.player.leader.exhausted).toBe(true)
     expect(readyCount(s)).toBe(2)
     expect(choice(s)).toMatchObject({ kind: 'selectCardThen' })
@@ -329,7 +331,7 @@ describe('LAW_013 Chewbacca', () => {
 
 describe('LAW_008 Director Krennic', () => {
   it('front: [Exhaust, defeat a friendly unit]: create a Credit token', () => {
-    let s = useLeader(board({ ...leader('LAW_008'), units: [unit('f', 'CHEAP')] }))
+    let s = leaderAction(board({ ...leader('LAW_008'), units: [unit('f', 'CHEAP')] }))
     expect(targetsOf(choice(s))).toEqual(['f'])
     s = accept(s, { targetInstanceId: 'f' })
     expect(U(s, 'f')).toBeUndefined()
@@ -349,7 +351,7 @@ describe('LAW_008 Director Krennic', () => {
 
 describe('LAW_015 Jabba the Hutt', () => {
   it("front: [C=1, Exhaust, return a friendly Underworld unit to its owner's hand]: create a Credit token", () => {
-    let s = useLeader(board({ ...leader('LAW_015'), units: [unit('u', 'UW'), unit('n', 'CHEAP')] }))
+    let s = leaderAction(board({ ...leader('LAW_015'), units: [unit('u', 'UW'), unit('n', 'CHEAP')] }))
     expect(readyCount(s)).toBe(9)
     expect(targetsOf(choice(s))).toEqual(['u'])
     s = accept(s, { targetInstanceId: 'u' })
@@ -362,7 +364,7 @@ describe('LAW_015 Jabba the Hutt', () => {
   const jabbaBack = (credit: number, hand = ['UW', 'CHEAP']) =>
     withCredits(board({ ...leader('LAW_015', true), units: [leaderUnit('j', 'LAW_015')], hand }, { units: [unit('e', 'CHEAP')] }), 'player', credit)
   it('back: Action: play an Underworld unit from your hand; a Credit defeated while paying gives it Ambush for this phase', () => {
-    let s = useAbility(jabbaBack(1), 'j', 'LAW_015')
+    let s = unitAction(jabbaBack(1), 'j', 'LAW_015')
     expect(choice(s)).toMatchObject({ kind: 'selectHandCardThen', handIndices: [0] })
     s = accept(s, { handIndex: 0 })
     expect(choice(s)).toMatchObject({ kind: 'exploit', credit: true })
@@ -373,7 +375,7 @@ describe('LAW_015 Jabba the Hutt', () => {
     expect(unitHasKeyword(s, played, 'Ambush')).toBe(true)
   })
   it('back: paid without a Credit, the unit does not gain Ambush', () => {
-    let s = useAbility(jabbaBack(1), 'j', 'LAW_015')
+    let s = unitAction(jabbaBack(1), 'j', 'LAW_015')
     s = accept(s, { handIndex: 0 })
     s = decline(s) // pay in full, keeping the Credit
     const played = s.players.player.units.find(u => u.cardId === 'UW')!
@@ -382,7 +384,7 @@ describe('LAW_015 Jabba the Hutt', () => {
     expect(unitHasKeyword(s, played, 'Ambush')).toBe(false)
   })
   it('back: with no Credit held the unit is still played, paying its cost', () => {
-    let s = useAbility(jabbaBack(0), 'j', 'LAW_015')
+    let s = unitAction(jabbaBack(0), 'j', 'LAW_015')
     s = accept(s, { handIndex: 0 })
     if (s.pendingChoices?.[0]?.kind === 'exploit') s = decline(s)
     expect(s.players.player.units.map(u => u.cardId)).toContain('UW')
@@ -395,7 +397,7 @@ describe('LAW_015 Jabba the Hutt', () => {
 
 describe('LAW_018 Lando Calrissian', () => {
   const front = (deck: string[], who: PlayerId = 'player') =>
-    useLeader(board({ ...leader('LAW_018'), ...(who === 'player' ? { deck } : {}) }, who === 'opponent' ? { deck } : {}))
+    leaderAction(board({ ...leader('LAW_018'), ...(who === 'player' ? { deck } : {}) }, who === 'opponent' ? { deck } : {}))
   const aspectIndex = (s: GameState, aspect: string) => {
     const c = choice(s)
     return c.kind === 'chooseMode' ? c.modes.indexOf(aspect) : -1
@@ -438,7 +440,7 @@ describe('LAW_018 Lando Calrissian', () => {
 
 describe('LAW_002 Tobias Beckett', () => {
   it('front: [Exhaust]: choose a friendly unit, an opponent takes control of it, and you create a Credit token', () => {
-    let s = useLeader(board({ ...leader('LAW_002'), units: [unit('f', 'CHEAP')] }))
+    let s = leaderAction(board({ ...leader('LAW_002'), units: [unit('f', 'CHEAP')] }))
     expect(targetsOf(choice(s))).toEqual(['f'])
     s = accept(s, { targetInstanceId: 'f' })
     expect(controllerOf(s, 'f')).toBe('opponent')
@@ -446,7 +448,7 @@ describe('LAW_002 Tobias Beckett', () => {
     expect(credits(s)).toBe(1)
   })
   it('front: a leader unit changing control is defeated instead, and no Credit is created', () => {
-    let s = useLeader(board({ ...leader('LAW_002'), units: [leaderUnit('l', 'TST_L')] }))
+    let s = leaderAction(board({ ...leader('LAW_002'), units: [leaderUnit('l', 'TST_L')] }))
     s = accept(s, { targetInstanceId: 'l' })
     expect(U(s, 'l')).toBeUndefined()
     expect(credits(s)).toBe(0)
@@ -474,7 +476,7 @@ describe('LAW_002 Tobias Beckett', () => {
 
 describe('LAW_006 Vel Sartha', () => {
   it('front: [Exhaust]: give an Experience token to a unit; an opponent creates a Credit token', () => {
-    let s = useLeader(board({ ...leader('LAW_006'), units: [unit('f', 'CHEAP')] }))
+    let s = leaderAction(board({ ...leader('LAW_006'), units: [unit('f', 'CHEAP')] }))
     expect(credits(s, 'opponent')).toBe(1)
     s = accept(s, { targetInstanceId: 'f' })
     expect(U(s, 'f')!.upgrades.map(u => u.cardId)).toEqual([TOKEN_EXPERIENCE])
@@ -496,7 +498,7 @@ describe('LAW_006 Vel Sartha', () => {
 
 describe('LAW_019 Alliance Outpost: Epic Action [defeat a friendly token]: give an Experience or Shield token to a unit, or create a Credit token', () => {
   const outpost = (mine: Side = {}) => board({ base: { cardId: 'LAW_019', damage: 0 }, ...mine })
-  const useOutpost = (s: GameState) => resolve(s, { type: 'useBaseAbility' })
+  const outpostAction =(s: GameState) => resolve(s, { type: 'useBaseAbility' })
   const modeIndex = (s: GameState, mode: string) => {
     const c = choice(s)
     return c.kind === 'chooseMode' ? c.modes.indexOf(mode) : -1
@@ -505,7 +507,7 @@ describe('LAW_019 Alliance Outpost: Epic Action [defeat a friendly token]: give 
     expect(offers(outpost({ units: [unit('f', 'CHEAP')] }), a => a.type === 'useBaseAbility')).toBe(false)
   })
   it('a Credit token pays for it, and it can give an Experience token to a unit', () => {
-    let s = useOutpost(withCredits(outpost({ units: [unit('f', 'CHEAP')] }), 'player', 1))
+    let s = outpostAction(withCredits(outpost({ units: [unit('f', 'CHEAP')] }), 'player', 1))
     // A Credit is the only friendly token, so it is defeated without asking which.
     expect(credits(s)).toBe(0)
     s = accept(s, { optionIndex: modeIndex(s, 'experience') })
@@ -514,7 +516,7 @@ describe('LAW_019 Alliance Outpost: Epic Action [defeat a friendly token]: give 
     expect(s.players.player.base.epicActionUsed).toBe(true)
   })
   it('a token upgrade on a unit pays for it, and it can create a Credit token', () => {
-    let s = useOutpost(outpost({ units: [unit('f', 'CHEAP', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'player' }] })] }))
+    let s = outpostAction(outpost({ units: [unit('f', 'CHEAP', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'player' }] })] }))
     expect(choice(s).kind).toBe('selectUpgradeThen')
     s = accept(s, { optionIndex: 0 })
     expect(U(s, 'f')!.upgrades).toEqual([])
@@ -522,7 +524,7 @@ describe('LAW_019 Alliance Outpost: Epic Action [defeat a friendly token]: give 
     expect(credits(s)).toBe(1)
   })
   it('a token unit pays for it, and it can give a Shield token to a unit', () => {
-    let s = useOutpost(outpost({ units: [unit('t', TOKEN_CLONE_TROOPER), unit('f', 'CHEAP')] }))
+    let s = outpostAction(outpost({ units: [unit('t', TOKEN_CLONE_TROOPER), unit('f', 'CHEAP')] }))
     expect(targetsOf(choice(s))).toEqual(['t'])
     s = accept(s, { targetInstanceId: 't' })
     expect(U(s, 't')).toBeUndefined()
@@ -530,19 +532,19 @@ describe('LAW_019 Alliance Outpost: Epic Action [defeat a friendly token]: give 
     s = accept(s, { targetInstanceId: 'f' })
     expect(U(s, 'f')!.upgrades.map(u => u.cardId)).toEqual([TOKEN_SHIELD])
   })
-  it('the Force token pays for it', () => {
-    let s = useOutpost(createForceToken(outpost(), 'player'))
+  it('the Force token pays for it; with no unit in play, the Credit token is the only reward', () => {
+    const s = outpostAction(createForceToken(outpost(), 'player'))
     expect(hasForceToken(s, 'player')).toBe(false)
-    s = accept(s, { optionIndex: modeIndex(s, 'credit') })
+    noChoice(s)
     expect(credits(s)).toBe(1)
   })
   it('with several kinds of token, it asks which kind first', () => {
     let s = withCredits(outpost({ units: [unit('t', TOKEN_CLONE_TROOPER)] }), 'player', 1)
-    s = useOutpost(s)
+    s = outpostAction(s)
     const c = choice(s)
     expect(c.kind).toBe('chooseMode')
-    expect(c.kind === 'chooseMode' ? [...c.modes].sort() : []).toEqual(['credit', 'unit'])
-    s = accept(s, { optionIndex: c.kind === 'chooseMode' ? c.modes.indexOf('credit') : -1 })
+    expect(c.kind === 'chooseMode' ? [...c.modes].sort() : []).toEqual(['defeatCredit', 'defeatUnit'])
+    s = accept(s, { optionIndex: modeIndex(s, 'defeatCredit') })
     expect(credits(s)).toBe(0)
     expect(U(s, 't')).toBeDefined()
   })

@@ -12,6 +12,7 @@ export function playFromZoneName(zone: PlayFromZone): string {
   switch (zone) {
     case 'hand': return 'your hand'
     case 'deckTop': return 'the top of your deck'
+    case 'opponentDeckTop': return "the top of your opponent's deck"
     case 'resources': return 'your resources'
     case 'opponentResources': return "your opponent's resources"
     case 'handOrResources': return 'your hand or resources'
