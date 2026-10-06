@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
-import { defeatUnit } from '../engine/combat'
+import { defeatUnit, dealDamageToUnit } from '../engine/combat'
+import { effectiveCost, legalMoves } from '../engine/legalMoves'
+import { getCardDefinition } from '../engine/abilities'
+import { recordCardPlayed } from '../engine/types'
+import { IMPLEMENTED_LEADERS } from '../data/implementedCards'
 import { normaliseCard } from '../engine/cardDb'
 import { poolFor } from '../bench/setPools'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
@@ -8,23 +12,17 @@ import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword, unitKeywordValue } from '../engine/keywords'
 import { TOKEN_CLONE_TROOPER } from '../engine/tokenUnits'
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
-import type { EngineCard, GameState, PlayerId, UnitState } from '../engine/types'
+import type { EngineCard, GameState, LeaderState, PlayerId, UnitState } from '../engine/types'
 
 /**
- * Coordinate (#472): "Gain this ability while you control 3 or more units." A live, continuously
+ * Coordinate: "Gain this ability while you control 3 or more units." A live, continuously
  * checked board-state condition (`hasCoordinate`/`unitHasCoordinate` in cardDefinitions.ts) — the
  * same treatment as every other conditional keyword/stat grant (`conditionalKeywords`/
  * `statModifier`/`aura`): it can turn on and off mid-round as units enter or leave play, and every
- * read settles it fresh rather than caching it.
+ * read settles it fresh rather than caching it. A triggered Coordinate ability (On Attack, "when an
+ * opponent plays") is gated where the event happens (`hears`), so a unit without it never triggers.
  *
- * 15 cards shipped here: 14 sole-blocked by Coordinate plus TWI_213, whose only other blocker
- * (capture, #466) is a fully built primitive already reused by other cards (`captureWp`). 8 more
- * candidates split to a follow-up (see the ticket comment): TWI_096 Aayla Secura needs a new
- * "prevent all combat damage this attack" lasting-effect field; TWI_064 Ki-Adi-Mundi needs a new
- * per-phase play-count condition; TWI_011 Ahsoka Tano and TWI_008 Padmé Amidala are deployed-leader
- * action abilities; TWI_147 Anakin Skywalker, TWI_165 Kit Fisto and TWI_192 Padmé Amidala (unit) are
- * simple gated `onAttack` effects held back only for time, and so is TWI_051 For The Republic's
- * granted "Coordinate - Restore 2".
+ * Every TWI card carrying the keyword is covered here, the two leaders on both sides.
  */
 
 const POOL = poolFor(['TWI'])
@@ -37,6 +35,7 @@ const real = (id: string): EngineCard => {
 const SHIPPED = [
   'TWI_240', 'TWI_045', 'TWI_114', 'TWI_205', 'TWI_158', 'TWI_106', 'TWI_090', 'TWI_164', 'TWI_061',
   'TWI_050', 'TWI_095', 'TWI_196', 'TWI_162', 'TWI_243', 'TWI_213',
+  'TWI_096', 'TWI_064', 'TWI_011', 'TWI_008', 'TWI_147', 'TWI_165', 'TWI_192', 'TWI_051',
 ]
 const F: Record<string, EngineCard> = {
   ...CARDS,
@@ -47,6 +46,10 @@ const F: Record<string, EngineCard> = {
   ENEMY_SP: card({ id: 'ENEMY_SP', arena: 'space', cost: 3, power: 3, hp: 6 }),
   ENEMY_CHEAP: card({ id: 'ENEMY_CHEAP', arena: 'space', cost: 2, power: 2, hp: 2 }),
   ENEMY_PRICEY: card({ id: 'ENEMY_PRICEY', arena: 'space', cost: 5, power: 4, hp: 6 }),
+  ENEMY_BIG: card({ id: 'ENEMY_BIG', arena: 'ground', cost: 5, power: 4, hp: 20 }),
+  REPUBLIC: card({ id: 'REPUBLIC', arena: 'ground', cost: 1, power: 1, hp: 1, traits: ['REPUBLIC'] }),
+  REP_EV: card({ id: 'REP_EV', type: 'event', cost: 1, traits: ['REPUBLIC'] }),
+  EV: card({ id: 'EV', type: 'event', cost: 1 }),
 }
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
   fixtureUnit(instanceId, cardId, { arena: F[cardId]?.arena ?? 'ground', ...over })
@@ -229,5 +232,203 @@ describe("TWI_213 Sanctioner's Shuttle — Coordinate: When Played, captures an 
     expect(targets).toEqual(['cheap'])
     played = accept(played, { targetInstanceId: 'cheap' })
     expect(U(played, 'cheap')).toBeUndefined()
+  })
+})
+
+// ── Coordinate On Attack abilities ───────────────────────────────────────────────────────────────
+
+/** Units alongside the card under test: one other makes 2 units, two others make 3. */
+const oneOther = () => [unit('f1', 'FILLER')]
+const twoOthers = () => [unit('f1', 'FILLER'), unit('f2', 'FILLER')]
+/** Three units of the player's own, for an undeployed leader (which is not a unit). */
+const threeUnits = () => [...twoOthers(), unit('f3', 'FILLER')]
+const attack = (s: GameState, attackerId: string, target?: string) =>
+  resolve(s, { type: 'attack', attackerId, target: target ? { kind: 'unit', instanceId: target } : { kind: 'base' } })
+const noChoice = (s: GameState) => expect(s.pendingChoices ?? []).toHaveLength(0)
+
+describe('TWI_096 Aayla Secura — Coordinate - On Attack: prevent all combat damage that would be dealt to this unit for this attack', () => {
+  it('takes no combat damage from the defender at 3+ units, and still deals her own', () => {
+    const s = board({ units: [unit('a', 'TWI_096'), ...twoOthers()] }, { units: [unit('e', 'ENEMY_BIG')] })
+    const after = attack(s, 'a', 'e')
+    expect(U(after, 'a')?.damage).toBe(0)
+    expect(U(after, 'e')?.damage).toBe(F.TWI_096.power)
+  })
+
+  it('takes the combat damage below 3 units', () => {
+    const s = board({ units: [unit('a', 'TWI_096'), ...oneOther()] }, { units: [unit('e', 'ENEMY_BIG')] })
+    expect(U(attack(s, 'a', 'e'), 'a')?.damage).toBe(F.ENEMY_BIG.power)
+  })
+
+  it('lasts for that attack only: damage after it lands as usual', () => {
+    const s = board({ units: [unit('a', 'TWI_096'), ...twoOthers()] }, { units: [unit('e', 'ENEMY_BIG')] })
+    const after = dealDamageToUnit(attack(s, 'a', 'e'), 'a', 2)
+    expect(U(after, 'a')?.damage).toBe(2)
+  })
+})
+
+describe('TWI_147 Anakin Skywalker — Coordinate - On Attack: draw a card', () => {
+  it('draws at 3+ units and not below', () => {
+    const at3 = board({ deck: ['FILLER', 'FILLER'], units: [unit('a', 'TWI_147'), ...twoOthers()] })
+    expect(attack(at3, 'a').players.player.hand).toHaveLength(1)
+    const below = board({ deck: ['FILLER', 'FILLER'], units: [unit('a', 'TWI_147'), ...oneOther()] })
+    expect(attack(below, 'a').players.player.hand).toHaveLength(0)
+  })
+})
+
+describe('TWI_165 Kit Fisto — Saboteur + Coordinate - On Attack: you may deal 3 damage to a ground unit', () => {
+  it('keeps Saboteur regardless of Coordinate', () => {
+    const below = board({ units: [unit('k', 'TWI_165'), ...oneOther()] })
+    expect(unitHasKeyword(below, U(below, 'k')!, 'Saboteur')).toBe(true)
+  })
+
+  it('offers 3 damage to any ground unit at 3+ units, optionally', () => {
+    const s = board({ units: [unit('k', 'TWI_165'), ...twoOthers()] }, { units: [unit('eg', 'ENEMY'), unit('es', 'ENEMY_SP')] })
+    const a = attack(s, 'k')
+    const c = choice(a) as unknown as { kind: string; amount: number; unitTargets: string[] }
+    expect(c.kind).toBe('selectDamageTarget')
+    expect(c.amount).toBe(3)
+    expect([...c.unitTargets].sort()).toEqual(['eg', 'f1', 'f2', 'k'])
+    expect(U(accept(a, { targetInstanceId: 'eg' }), 'eg')).toBeUndefined() // 3 damage defeats a 3-HP unit
+    expect(U(skip(a), 'eg')?.damage).toBe(0)
+  })
+
+  it('offers nothing below 3 units', () => {
+    const s = board({ units: [unit('k', 'TWI_165'), ...oneOther()] }, { units: [unit('eg', 'ENEMY')] })
+    noChoice(attack(s, 'k'))
+  })
+})
+
+describe('TWI_192 Padmé Amidala — Coordinate - On Attack: give an enemy unit -3/-0 for this phase', () => {
+  it('gives a chosen enemy unit -3/-0 at 3+ units, and only enemies are offered', () => {
+    const s = board({ units: [unit('p', 'TWI_192'), ...twoOthers()] }, { units: [unit('e', 'ENEMY_BIG'), unit('es', 'ENEMY_SP')] })
+    const a = attack(s, 'p')
+    const c = choice(a) as unknown as { kind: string; targets: string[] }
+    expect(c.kind).toBe('mayLastingBuff')
+    expect([...c.targets].sort()).toEqual(['e', 'es'])
+    const after = accept(a, { targetInstanceId: 'e' })
+    expect(effectivePower(after, U(after, 'e')!)).toBe(F.ENEMY_BIG.power! - 3)
+  })
+
+  it('offers nothing below 3 units', () => {
+    const s = board({ units: [unit('p', 'TWI_192'), ...oneOther()] }, { units: [unit('e', 'ENEMY_BIG')] })
+    noChoice(attack(s, 'p'))
+  })
+})
+
+// ── Ki-Adi-Mundi: "When an opponent plays their second card each phase" ──────────────────────────
+
+describe('TWI_064 Ki-Adi-Mundi — Coordinate - When an opponent plays their second card each phase: you may draw 2 cards', () => {
+  /** The opponent to act, having played `already` cards this phase, with an event in hand. */
+  const opponentTurn = (units: UnitState[], already: number) => {
+    let s = board({ deck: ['FILLER', 'FILLER', 'FILLER'], units }, { hand: ['EV'] }, { activePlayer: 'opponent' })
+    for (let i = 0; i < already; i++) s = recordCardPlayed(s, 'opponent', 'EV')
+    return resolve(s, { type: 'playEvent', handIndex: 0 })
+  }
+
+  it('offers the draw on their second card at 3+ units, and draws 2 when taken', () => {
+    const played = opponentTurn([unit('k', 'TWI_064'), ...twoOthers()], 1)
+    expect(choice(played)).toMatchObject({ kind: 'mayPayThen', controller: 'player' })
+    expect(accept(played).players.player.hand).toHaveLength(2)
+    expect(skip(played).players.player.hand).toHaveLength(0)
+  })
+
+  it('does not fire on their first or third card', () => {
+    noChoice(opponentTurn([unit('k', 'TWI_064'), ...twoOthers()], 0))
+    noChoice(opponentTurn([unit('k', 'TWI_064'), ...twoOthers()], 2))
+  })
+
+  it('does not fire below 3 units', () => {
+    noChoice(opponentTurn([unit('k', 'TWI_064'), ...oneOther()], 1))
+  })
+
+  it('does not fire on your own second card', () => {
+    let s = board({ hand: ['EV'], deck: ['FILLER', 'FILLER'], units: [unit('k', 'TWI_064'), ...twoOthers()] })
+    s = recordCardPlayed(s, 'player', 'EV')
+    noChoice(resolve(s, { type: 'playEvent', handIndex: 0 }))
+  })
+})
+
+// ── The leaders ──────────────────────────────────────────────────────────────────────────────────
+
+const undeployed = (cardId: string): LeaderState => ({ cardId, deployed: false, epicActionUsed: false, exhausted: false })
+const deployed = (cardId: string): LeaderState => ({ cardId, deployed: true, epicActionUsed: true, exhausted: false })
+const leaderUsable = (s: GameState) => legalMoves(s).some(m => m.type === 'useLeaderAbility')
+const useLeader = (s: GameState) => {
+  expect(leaderUsable(s), 'the leader action is offered').toBe(true)
+  return resolve(s, { type: 'useLeaderAbility', index: 0 })
+}
+
+describe('the Coordinate leaders are built on both sides', () => {
+  it.each(['TWI_011', 'TWI_008'])('%s', id => {
+    expect(getCardDefinition(id)?.leaderAbilities?.actions).toHaveLength(1)
+    expect(IMPLEMENTED_LEADERS.find(l => l.id === id)).toMatchObject({ front: true, back: true })
+  })
+})
+
+describe('TWI_011 Ahsoka Tano — front: Coordinate - Action [Exhaust]: attack with a unit, +1/+0 for this attack; back: Coordinate - +2/+0', () => {
+  it('front: offered only at 3+ units', () => {
+    expect(leaderUsable(board({ leader: undeployed('TWI_011'), units: twoOthers() }))).toBe(false)
+    expect(leaderUsable(board({ leader: undeployed('TWI_011'), units: threeUnits() }))).toBe(true)
+  })
+
+  it('front: exhausts her and attacks with a unit that gets +1/+0 for the attack', () => {
+    const s = board({ leader: undeployed('TWI_011'), units: [unit('f1', 'FILLER'), unit('f2', 'FILLER'), unit('f3', 'FILLER')] }, { units: [unit('e', 'ENEMY_BIG')] })
+    let after = useLeader(s)
+    expect(after.players.player.leader.exhausted).toBe(true)
+    after = attack(after, 'f1', 'e')
+    expect(U(after, 'e')?.damage).toBe(F.FILLER.power! + 1)
+  })
+
+  it('back: +2/+0 at 3+ units, printed otherwise', () => {
+    const at3 = board({ leader: deployed('TWI_011'), units: [unit('L', 'TWI_011', { isLeader: true }), ...twoOthers()] })
+    expect(effectivePower(at3, U(at3, 'L')!)).toBe(F.TWI_011.power! + 2)
+    const below = board({ leader: deployed('TWI_011'), units: [unit('L', 'TWI_011', { isLeader: true }), ...oneOther()] })
+    expect(effectivePower(below, U(below, 'L')!)).toBe(F.TWI_011.power)
+  })
+})
+
+describe('TWI_008 Padmé Amidala (leader) — front: Coordinate - Action [C=1, Exhaust]; back: Restore 1, Coordinate - On Attack: search the top 3 for a Republic card', () => {
+  const deck = ['REP_EV', 'EV', 'REPUBLIC', 'FILLER']
+
+  it('front: offered only at 3+ units, costs 1, and searches the top 3 for a Republic card', () => {
+    expect(leaderUsable(board({ deck, leader: undeployed('TWI_008'), units: twoOthers() }))).toBe(false)
+    const s = board({ deck, leader: undeployed('TWI_008'), units: threeUnits() })
+    const used = useLeader(s)
+    expect(used.players.player.leader.exhausted).toBe(true)
+    expect(used.players.player.resources.filter(r => !r.exhausted)).toHaveLength(19)
+    expect(choice(used)).toMatchObject({ kind: 'searchDraw', revealed: ['REP_EV', 'EV', 'REPUBLIC'], eligibleIndices: [0, 2] })
+  })
+
+  it('back: Restore 1 regardless of Coordinate', () => {
+    const below = board({ leader: deployed('TWI_008'), units: [unit('L', 'TWI_008', { isLeader: true })] })
+    expect(unitKeywordValue(below, U(below, 'L')!, 'Restore')).toBe(1)
+  })
+
+  it('back: On Attack searches at 3+ units and not below', () => {
+    const at3 = board({ deck, leader: deployed('TWI_008'), units: [unit('L', 'TWI_008', { isLeader: true }), ...twoOthers()] })
+    expect(choice(attack(at3, 'L'))).toMatchObject({ kind: 'searchDraw', eligibleIndices: [0, 2] })
+    const below = board({ deck, leader: deployed('TWI_008'), units: [unit('L', 'TWI_008', { isLeader: true }), unit('f1', 'FILLER')] })
+    noChoice(attack(below, 'L'))
+  })
+})
+
+// ── For The Republic: an upgrade that grants "Coordinate - Restore 2" ───────────────────────────
+
+describe('TWI_051 For The Republic — costs 2 less with 3+ Republic units; attached unit gains "Coordinate - Restore 2"', () => {
+  const upgraded = (units: UnitState[]) =>
+    board({ units: units.map((u, i) => (i === 0 ? { ...u, upgrades: [{ cardId: 'TWI_051', owner: 'player' as PlayerId }] } : u)) })
+
+  it('gives its host Restore 2 only at 3+ units, never unconditionally', () => {
+    const below = upgraded([unit('h', 'FILLER'), unit('f2', 'FILLER')])
+    expect(unitKeywordValue(below, U(below, 'h')!, 'Restore')).toBe(0)
+    const at3 = upgraded([unit('h', 'FILLER'), unit('f2', 'FILLER'), unit('f3', 'FILLER')])
+    expect(unitKeywordValue(at3, U(at3, 'h')!, 'Restore')).toBe(2)
+  })
+
+  it('costs 2 less with 3 or more Republic units, not with 3 units of which 2 are Republic', () => {
+    const rep = board({ units: [unit('r1', 'REPUBLIC'), unit('r2', 'REPUBLIC'), unit('r3', 'REPUBLIC')] })
+    expect(effectiveCost(rep, 'player', F.TWI_051)).toBe(F.TWI_051.cost - 2)
+    const mixed = board({ units: [unit('r1', 'REPUBLIC'), unit('r2', 'REPUBLIC'), unit('f1', 'FILLER')] })
+    expect(effectiveCost(mixed, 'player', F.TWI_051)).toBe(F.TWI_051.cost)
   })
 })
