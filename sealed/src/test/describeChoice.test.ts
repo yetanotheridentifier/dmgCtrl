@@ -108,6 +108,13 @@ describe('describeChoiceParts', () => {
     expect(prompt({ kind: 'selectUnitToSteal', id: 'c', controller: 'player', targets: ['u1'] } as unknown as PendingChoice)).toMatch(/control/i)
   })
 
+  it('names both prices of a play that prices one trait differently (Palpatine\'s Return)', () => {
+    expect(prompt({
+      kind: 'playCardFrom', id: 'c', controller: 'player', zone: 'discard', candidates: [],
+      costDelta: -6, traitCostDelta: { trait: 'Force', costDelta: -8 },
+    } as unknown as PendingChoice)).toMatch(/6 less \(8 less for a Force card\)/)
+  })
+
   /** #388: this fell through to the generic "choose a target on the board" default, which is
    *  wrong for a deck choice with no board target at all. */
   it('prompts for choosing which deck to look at (Reanimated Night Trooper)', () => {

@@ -409,7 +409,8 @@ const playFromZoneChoice = (s: GameState, ctx: EventCtx, o: PlayFromZoneOptions)
   return candidates.length === 0 && !o.always ? s : pushChoice(s, {
     kind: 'playCardFrom', id: o.id ?? ctx.sourceInstanceId!, controller: ctx.owner, zone, candidates,
     ...(o.optional ? { optional: true } : {}), ...(o.free ? { free: true } : {}),
-    ...(o.costDelta ? { costDelta: o.costDelta } : {}), ...(o.waive ? { waive: o.waive } : {}),
+    ...(o.costDelta ? { costDelta: o.costDelta } : {}), ...(o.traitCostDelta ? { traitCostDelta: o.traitCostDelta } : {}),
+    ...(o.waive ? { waive: o.waive } : {}),
     ...(o.piloting ? { piloting: true } : {}),
     ...(targetUnits ? { targetUnits } : {}), ...(o.then ? { then: o.then } : {}),
   })
@@ -9899,19 +9900,12 @@ registerCard('SOR_102', { // Home One — Restore and the friendly Restore 1 aur
   aura: (_s, _source, target, friendly) => (friendly && !target.isLeader ? { keywords: [KW.restore(1)] } : undefined),
 })
 
-registerCard('SHD_094', whenPlayed("Play a unit from your discard pile. It costs 6 less. If it's a Force unit, it costs 8 less instead.", (s, ctx) => { // Palpatine's Return
-  // Two prices over one pile, and the discount depends on the card picked rather than on the play,
-  // so the Force units are offered as their own cheaper choice and the rest at 6 off. The player
-  // sees both lists; a Force unit only ever appears in the 8-off one.
-  const force = playFromZoneChoice(s, ctx, {
-    zone: 'discard', costDelta: -8, id: `${ctx.cardId}-force`,
-    test: c => printedUnit(c) && printedTrait(c, 'Force'),
-  })
-  return playFromZoneChoice(force, ctx, {
-    zone: 'discard', costDelta: -6, id: `${ctx.cardId}-plain`,
-    test: c => printedUnit(c) && !printedTrait(c, 'Force'),
-  })
-}))
+registerCard('SHD_094', whenPlayed("Play a unit from your discard pile. It costs 6 less. If it's a Force unit, it costs 8 less instead.", (s, ctx) => // Palpatine's Return
+  // One play over the whole pile, priced per card: the discount depends on the unit picked, so a
+  // Force unit takes 8 off in place of the 6 (`traitCostDelta`) inside the same choice.
+  playFromZoneChoice(s, ctx, {
+    zone: 'discard', costDelta: -6, traitCostDelta: { trait: 'Force', costDelta: -8 }, test: printedUnit,
+  })))
 
 registerCard('SHD_242', whenPlayed('If you control Moff Gideon (as a leader or unit), play a Villainy unit that costs 3 or less from your hand or discard pile for free.', (s, ctx) => // Gideon's Light Cruiser
   // "As a leader or unit" reaches the undeployed leader card as well as anything in play, which is
@@ -9924,12 +9918,11 @@ registerCard('SHD_242', whenPlayed('If you control Moff Gideon (as a leader or u
     : s))
 
 registerCard('TWI_040', whenPlayed('If an enemy unit was defeated this phase, play an upgrade from your hand or from any player\'s discard pile, ignoring its aspect penalty.', (s, ctx) => // A Fine Addition
-  // "From your hand OR from any player's discard pile" is two zones, so the hand play and the
-  // two-pile play are raised as one choice each; the piles are one paired zone, own first.
-  defeatedThisPhase(s, opponentOf(ctx.owner)).length === 0 ? s : playFromZoneChoice(
-    playFromZoneChoice(s, ctx, { zone: 'hand', test: isUpgradeCard, waive: { all: true }, optional: true, id: `${ctx.cardId}-hand` }),
-    ctx, { zone: 'anyDiscard', test: isUpgradeCard, waive: { all: true }, optional: true, id: `${ctx.cardId}-piles` },
-  )))
+  // "From your hand OR from any player's discard pile" is one play out of three places, so it is one
+  // paired zone: hand, own pile, then the opponent's.
+  defeatedThisPhase(s, opponentOf(ctx.owner)).length === 0 ? s : playFromZoneChoice(s, ctx, {
+    zone: 'handOrAnyDiscard', test: isUpgradeCard, waive: { all: true }, optional: true,
+  })))
 
 // Kylo Ren's back: "Play any number of upgrades from your discard pile on this unit (one at a time,
 // paying their costs)". Uncapped, so the re-offer carries no limit; the one legal host is Kylo.

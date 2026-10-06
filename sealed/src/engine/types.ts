@@ -758,17 +758,18 @@ export interface PlayFromHandSpec {
  * only in where the card is picked up: the Play a Card action itself does not come through here.
  *
  * A discard pile is a zone like the rest, so playing out of one adds zones rather than a door. The
- * paired zones (`handOrResources`, `handOrDiscard`, `anyDiscard`) are each ONE zone for ONE play out
- * of either half, listed in the order a card names them, so an index past the first half names the
- * second.
+ * paired zones (`handOrResources`, `handOrDiscard`, `anyDiscard`, and `handOrAnyDiscard`, which is
+ * hand, own pile, then the opponent's) are each ONE zone for ONE play out of any part, listed in the
+ * order a card names them, so an index past the first part names the next.
  */
 export type PlayFromZone =
   | 'hand' | 'resources' | 'opponentResources' | 'deckTop' | 'opponentDeckTop' | 'handOrResources'
-  | 'discard' | 'opponentDiscard' | 'anyDiscard' | 'handOrDiscard'
+  | 'discard' | 'opponentDiscard' | 'anyDiscard' | 'handOrDiscard' | 'handOrAnyDiscard'
 
 /** True if `zone` can hold a card somebody other than the player playing it owns. */
 export function zoneCrossesOwners(zone: PlayFromZone): boolean {
   return zone === 'opponentResources' || zone === 'opponentDeckTop' || zone === 'opponentDiscard' || zone === 'anyDiscard'
+    || zone === 'handOrAnyDiscard'
 }
 
 /**
@@ -1535,13 +1536,14 @@ type ChoiceVariant =
   // carrying this choice's id, so the plays on offer are exactly the standing Smuggle ones at
   // `costDelta`, with a gained Smuggle and an additional cost included. `then` resumes the card.
   | { kind: 'playUsingSmuggle'; id: string; controller: PlayerId; costDelta: number; then?: IfYouDo }
-  // `plot` marks the plays Plot offers (`PlayFromTerms.plot`).
-  | { kind: 'playCardFrom'; id: string; controller: PlayerId; zone: PlayFromZone; candidates: PlayFromRef[]; optional?: boolean; free?: boolean; costDelta?: number; waive?: AspectWaiver; piloting?: boolean; plot?: boolean; targetUnits?: string[]; then?: PlayFromTail; markUsed?: { instanceId: string; key: string } }
+  // `plot` marks the plays Plot offers (`PlayFromTerms.plot`). `traitCostDelta` prices the cards of
+  // one trait differently from the rest of the same play (`PlayFromTerms.traitCostDelta`).
+  | { kind: 'playCardFrom'; id: string; controller: PlayerId; zone: PlayFromZone; candidates: PlayFromRef[]; optional?: boolean; free?: boolean; costDelta?: number; traitCostDelta?: { trait: string; costDelta: number }; waive?: AspectWaiver; piloting?: boolean; plot?: boolean; targetUnits?: string[]; then?: PlayFromTail; markUsed?: { instanceId: string; key: string } }
   // Follow-up: attach the upgrade picked above to one of `targets`, paying for it there. Mandatory.
   // `candidates` is the list the `playCardFrom` above offered, carried through so a `then.again`
   // re-offer can re-index what is left: an upgrade's play finishes HERE, not at the pick, so the
   // re-offer has to be able to fire from this step too (Kylo Ren's "any number of upgrades").
-  | { kind: 'attachPlayedCard'; id: string; controller: PlayerId; zone: PlayFromZone; index: number; cardId: string; targets: string[]; candidates?: PlayFromRef[]; targetUnits?: string[]; free?: boolean; costDelta?: number; waive?: AspectWaiver; piloting?: boolean; plot?: boolean; then?: PlayFromTail }
+  | { kind: 'attachPlayedCard'; id: string; controller: PlayerId; zone: PlayFromZone; index: number; cardId: string; targets: string[]; candidates?: PlayFromRef[]; targetUnits?: string[]; free?: boolean; costDelta?: number; traitCostDelta?: { trait: string; costDelta: number }; waive?: AspectWaiver; piloting?: boolean; plot?: boolean; then?: PlayFromTail }
   // "You may resource a card from your hand" (Osha), answered by `handIndex`. Always a may.
   | { kind: 'mayResourceFromHand'; id: string; controller: PlayerId }
   // Optionally pay `cost` to draw `draw` cards (Mandalorian). `cost` 0 = a free "may draw".

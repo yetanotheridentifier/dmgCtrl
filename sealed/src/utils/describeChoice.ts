@@ -20,6 +20,7 @@ export function playFromZoneName(zone: PlayFromZone): string {
     case 'opponentDiscard': return "your opponent's discard pile"
     case 'anyDiscard': return 'either discard pile'
     case 'handOrDiscard': return 'your hand or discard pile'
+    case 'handOrAnyDiscard': return 'your hand or either discard pile'
   }
 }
 
@@ -328,7 +329,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return ['name a Trait: enemy cards, including those not in play, lose it for this phase']
     case 'playCardFrom': {
       const price = choice.free ? ' for free' : choice.costDelta ? ` for ${Math.abs(choice.costDelta)} less` : ''
-      return [`choose a card to play from ${playFromZoneName(choice.zone)}${price}`]
+      const byTrait = choice.traitCostDelta
+      const traitPrice = byTrait && !choice.free ? ` (${Math.abs(byTrait.costDelta)} less for a ${byTrait.trait} card)` : ''
+      return [`choose a card to play from ${playFromZoneName(choice.zone)}${price}${traitPrice}`]
     }
     case 'playUsingSmuggle':
       return [`choose a card to play from your resources using Smuggle${choice.costDelta < 0 ? ` for ${-choice.costDelta} less` : ''}`]

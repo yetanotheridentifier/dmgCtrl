@@ -847,6 +847,14 @@ function removeFromZone(state: GameState, controller: PlayerId, zone: PlayFromZo
     case 'handOrDiscard': return index < p.hand.length
       ? updatePlayer(state, owner, { hand: drop(p.hand, index) })
       : updatePlayer(state, owner, { discard: drop(p.discard, index - p.hand.length) })
+    case 'handOrAnyDiscard': {
+      // Hand and own pile index as `handOrDiscard` does; past them, the opponent's pile.
+      const own = state.players[controller]
+      if (owner !== controller) return updatePlayer(state, owner, { discard: drop(p.discard, index - own.hand.length - own.discard.length) })
+      return index < p.hand.length
+        ? updatePlayer(state, owner, { hand: drop(p.hand, index) })
+        : updatePlayer(state, owner, { discard: drop(p.discard, index - p.hand.length) })
+    }
     case 'handOrResources': return index < p.hand.length
       ? updatePlayer(state, owner, { hand: drop(p.hand, index) })
       : updatePlayer(state, owner, { resources: p.resources.filter((_, i) => i !== index - p.hand.length) })
@@ -876,7 +884,7 @@ function playFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone
   // Where it came from, which "when you play a card from your resources" (Bail Organa) and "if you
   // play this unit from your hand" (Millennium Falcon) hear.
   const handSize = state.players[controller].hand.length
-  const inHand = zone === 'hand' || ((zone === 'handOrResources' || zone === 'handOrDiscard') && ref.index < handSize)
+  const inHand = zone === 'hand' || ((zone === 'handOrResources' || zone === 'handOrDiscard' || zone === 'handOrAnyDiscard') && ref.index < handSize)
   const inResources = zone === 'resources' || zone === 'opponentResources' || (zone === 'handOrResources' && ref.index >= handSize)
   const how: HowPlayed = { from: inHand ? 'hand' : inResources ? 'resources' : 'other', ...(tail?.usingSmuggle ? { smuggle: true } : {}) }
 
@@ -1023,6 +1031,7 @@ function runPlayFromTail(state: GameState, choice: Extract<PendingChoice, { kind
         kind: 'playCardFrom', id: choice.id, controller: choice.controller, zone: choice.zone,
         candidates: rest, optional: true,
         ...(choice.free ? { free: true } : {}), ...(choice.costDelta ? { costDelta: choice.costDelta } : {}),
+        ...(choice.traitCostDelta ? { traitCostDelta: choice.traitCostDelta } : {}),
         ...(choice.waive ? { waive: choice.waive } : {}), ...(choice.targetUnits ? { targetUnits: choice.targetUnits } : {}),
         ...(choice.plot ? { plot: true } : {}),
         then: { ...tail, ...(left === undefined ? {} : { againLimit: left }) },
@@ -2444,7 +2453,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (choice.piloting || (card.type === 'upgrade' && !isFortify(card))) {
           const targets = validPlayTargets(next, choice.controller, choice.zone, pick.index, pick.cardId, choice, choice.targetUnits)
           if (targets.length > 0) {
-            next = pushChoice(next, { kind: 'attachPlayedCard', id: `${choice.id}-attach`, controller: choice.controller, zone: choice.zone, index: pick.index, cardId: pick.cardId, targets, candidates: choice.candidates, targetUnits: choice.targetUnits, free: choice.free, costDelta: choice.costDelta, waive: choice.waive, ...(choice.piloting ? { piloting: true } : {}), ...(choice.plot ? { plot: true } : {}), then: choice.then })
+            next = pushChoice(next, { kind: 'attachPlayedCard', id: `${choice.id}-attach`, controller: choice.controller, zone: choice.zone, index: pick.index, cardId: pick.cardId, targets, candidates: choice.candidates, targetUnits: choice.targetUnits, free: choice.free, costDelta: choice.costDelta, traitCostDelta: choice.traitCostDelta, waive: choice.waive, ...(choice.piloting ? { piloting: true } : {}), ...(choice.plot ? { plot: true } : {}), then: choice.then })
           }
         } else {
           next = playFromZone(next, choice.controller, choice.zone, pick, choice, undefined, choice.then)

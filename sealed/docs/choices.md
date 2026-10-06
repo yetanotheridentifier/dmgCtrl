@@ -579,15 +579,21 @@ currency from ready resources). See `keywords-effects.md` "Credit tokens".
 **`playCardFrom` is the one door for a play that is not the Play a Card action**: a card of any type,
 out of `zone`, answered by `optionIndex` into its `candidates`. The zones are `hand`, `resources`,
 `opponentResources`, `deckTop`, `opponentDeckTop` (Vermillion: either player may play the top card
-of either deck), `discard` and `opponentDiscard`, plus three **paired** zones for a
-card offered out of either of two places at once: `handOrResources`, `handOrDiscard` and `anyDiscard`
-(both players' piles). A paired zone is one zone holding one list, in the order the card names them,
-so an index past the first half names the second.
+of either deck), `discard` and `opponentDiscard`, plus four **paired** zones for a
+card offered out of more than one place at once: `handOrResources`, `handOrDiscard`, `anyDiscard`
+(both players' piles) and `handOrAnyDiscard` (hand, own pile, then the opponent's: A Fine Addition).
+A paired zone is one zone holding one list, in the order the card names them, so an index past the
+first part names the next. **A card that plays one card out of several places raises one choice over
+a paired zone, never one choice per place**: two choices are two plays, and a mandatory one left
+behind with nothing affordable leaves the player no legal move.
 
 `free` bypasses the cost and the aspect penalty (CR 8.5), `costDelta` adjusts it, and `waive` forgives
 aspect penalties: all of them, the ones from named icons (Osha's Villainy), or exactly one of the
 named icons (the LAW bases' "1 of its Vigilance, Command, Aggression, or Cunning"). "One of" needs no
-pick from the player, since every penalty is the same 2 resources.
+pick from the player, since every penalty is the same 2 resources. `traitCostDelta` gives the cards
+of one printed trait their own delta in place of `costDelta`, so one play prices its candidates
+differently (Palpatine's Return: 6 less, or 8 less for a Force unit) and the affordability check
+reads each card at its own price.
 
 **A card played out of a zone somebody else owns is still theirs.** CR 1.5.2 ties ownership to the
 deck a card started in, and playing it does not move it: `zoneCardOwner` reads the owner off the zone
