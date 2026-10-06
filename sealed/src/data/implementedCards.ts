@@ -326,6 +326,9 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'JTL_002', name: 'Grand Admiral Thrawn', front: true, back: true },
   { id: 'LAW_014', name: 'Enfys Nest', front: true, back: true },
   { id: 'TWI_018', name: 'Quinlan Vos', front: true, back: true },
+  // Coordinate leaders: a gated front Action and a back that has Coordinate too.
+  { id: 'TWI_011', name: 'Ahsoka Tano', front: true, back: true },
+  { id: 'TWI_008', name: 'Padmé Amidala', front: true, back: true },
   { id: 'SHD_008', name: 'Boba Fett', front: true, back: true },
   { id: 'SHD_014', name: 'Cad Bane', front: true, back: true },
   { id: 'SOR_016', name: 'Grand Admiral Thrawn', front: true, back: true },
@@ -431,6 +434,7 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'LOF_238', name: "Darth Revan's Lightsabers" },
   { id: 'LOF_053', name: 'Heirloom Lightsaber' },
   { id: 'TWI_071', name: 'Unshakeable Will' },
+  { id: 'TWI_051', name: 'For The Republic' },
   { id: 'TWI_236', name: "Grievous's Wheel Bike" },
   { id: 'SOR_070', name: 'Devotion' },
   { id: 'SOR_166', name: "Infiltrator's Skill" },
@@ -2228,8 +2232,13 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'JTL_152', name: 'Tactical Heavy Bomber' },
   { id: 'JTL_138', name: 'Decimator of Dissidents' },
   { id: 'JTL_133', name: 'Allegiant General Pryde' },
-  // Coordinate (#472): the mechanic plus the TWI units that need nothing else.
+  // Coordinate: every TWI unit carrying the keyword.
   { id: 'TWI_240', name: '332nd Stalwart' },
+  { id: 'TWI_096', name: 'Aayla Secura' },
+  { id: 'TWI_064', name: 'Ki-Adi-Mundi' },
+  { id: 'TWI_147', name: 'Anakin Skywalker' },
+  { id: 'TWI_165', name: 'Kit Fisto' },
+  { id: 'TWI_192', name: 'Padmé Amidala' },
   { id: 'TWI_045', name: '41st Elite Corps' },
   { id: 'TWI_114', name: 'Clone Commander Cody' },
   { id: 'TWI_205', name: 'Clone Dive Trooper' },

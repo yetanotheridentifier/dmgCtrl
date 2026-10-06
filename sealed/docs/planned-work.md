@@ -303,14 +303,9 @@ Two phases:
   the same treatment every other conditional keyword/stat/aura grant already gets), not a new hook:
   a stat buff uses `statModifier`, a self-keyword grant uses `conditionalKeywords`, an effect on other
   units or the current defender uses `aura`, and a gated one-shot effect checks the condition inline.
-  15 of the 23 candidate cards shipped (recounted; the ticket's "unlocks 15" held, though which 15
-  moved: Sanctioner's Shuttle's capture half reused the existing primitive, so it's in this batch
-  in place of one whose second blocker was really a triage mis-parse). Left out: Aayla Secura needs
-  a new "prevent all combat damage for this attack" lasting-effect field; Ki-Adi-Mundi needs a new
-  "opponent's Nth card this phase" refinement of `whenPlayCard`; Ahsoka Tano and Padmé Amidala's
-  leader front are deployed-leader action abilities; Anakin Skywalker, Kit Fisto and Padmé Amidala's
-  unit are simple gated `onAttack` effects held back only for time, and so is For The Republic now
-  that the granted ability block has shipped (#464). All of these are on #730.
+  15 of the 23 candidate cards shipped with it, and the other 8 (Aayla Secura, Ki-Adi-Mundi, both
+  sides of Ahsoka Tano and Padmé Amidala's leaders, Anakin Skywalker, Kit Fisto, Padmé Amidala's unit
+  and For The Republic) with #730, so every TWI Coordinate card is built.
   **The Force's primitive is finished** (#462): a token capped at one per player (`PlayerState.forceToken`,
   a flag rather than Credit's count), "the Force is with you" a no-op while already held, "use the
   Force" always optional even where a card's own text omits "may" (CR 8.37.4). Two cost surfaces
@@ -337,8 +332,8 @@ Two phases:
   point, raised by the `readyUnit` primitive itself rather than a resolver call site so it hears every
   route a unit readies through). Foresight split again and shipped with #744, once the regroup phase's draw
   waited on `whenRegroupStarts` choices. Condemn shipped with #682; the pilot cards shipped with Piloting and the pilot leaders with #754, Boba Fett's front split to #756; Han's
-  Golden Dice, Targeted For Removal and Payroll Heist shipped with #719; Leia Organa on #733; For The Republic on
-  #730.
+  Golden Dice, Targeted For Removal and Payroll Heist shipped with #719; Leia Organa on #733; For The Republic shipped
+  with #730.
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
 (with the token units, #605), the Weakness-token cards (#649), the Fortify cards (#650), the When Played

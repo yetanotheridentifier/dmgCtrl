@@ -868,6 +868,8 @@ export interface LastingEffect {
   preventNext?: number
   /** Each time the unit would be dealt damage for the duration, prevent this much of it (Finn). Never spent. */
   preventEach?: number
+  /** Prevent all combat damage that would be dealt to the unit for the duration (Aayla Secura, with `untilEndOfAttack`). */
+  preventCombat?: boolean
   /** The unit can't be defeated by having no remaining HP for the duration (The Tragedy of Plagueis). */
   survivesNoHp?: boolean
   /**
