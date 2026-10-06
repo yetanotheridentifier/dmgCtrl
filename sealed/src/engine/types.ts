@@ -445,6 +445,18 @@ export interface NextUnitGrant {
   // "Each of the next N <cards> you play": the grant applies to N matching cards, one at a time,
   // instead of being spent by the first (Tranquility).
   uses?: number
+  /**
+   * The grant is for the next card of any type played USING PLOT (Chancellor Palpatine): only
+   * `costDelta` applies. It is never matched here, since which door a play came through is not a
+   * property of the card: `playFromCost` reads it for a Plot play (`PlayFromTerms.plot`) and
+   * `playFromZone` spends it.
+   */
+  viaPlot?: boolean
+}
+
+/** The `costDelta` the `viaPlot` grants waiting for `owner`'s next play using Plot add up to. */
+export function plotCostDelta(state: GameState, owner: PlayerId): number {
+  return (state.players[owner].nextUnitGrants ?? []).reduce((sum, g) => sum + (g.viaPlot ? g.costDelta ?? 0 : 0), 0)
 }
 
 /** `all` once a played card has spent `spent` (each a grant from `all`): a counted grant loses one use, the rest go. */
@@ -455,7 +467,7 @@ export function spendNextUnitGrants(all: NextUnitGrant[] | undefined, spent: Nex
 
 /** True if `card` is a unit satisfying a grant's filter. `state` and `owner` are needed only by a board-reading filter. */
 export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state?: GameState, owner?: PlayerId): boolean {
-  if (!card) return false
+  if (!card || grant.viaPlot) return false
   if (grant.anyCard ? card.type !== 'unit' && card.type !== 'event' : card.type !== (grant.event ? 'event' : 'unit')) return false
   // Traits the card has lost for the phase are gone here too (The First Legion). The card-level
   // grants `cardTraits` adds are not read here: this module sits below the registry, and no grant a
@@ -884,6 +896,8 @@ export interface LastingEffect {
   noCombatDamage?: boolean
   /** Units attacking this unit get this much power for the duration (I Have the High Ground: -4). */
   attackersPower?: number
+  /** The unit gets this much power while it is attacking a base, for the duration (Sly Moore: -2). */
+  attackingBasePower?: number
   /** The next time the unit would be dealt damage, prevent this much of it; then the effect is spent (Shien Flurry). */
   preventNext?: number
   /** Each time the unit would be dealt damage for the duration, prevent this much of it (Finn). Never spent. */
@@ -997,6 +1011,13 @@ export interface PhaseEvents {
   basesAttacked: PlayerId[]
   /** Instance ids of the units that attacked each player's base this phase (Qui-Gon Jinn). */
   baseAttackers?: Partial<Record<PlayerId, string[]>>
+  /**
+   * Whether each player's most recent action this phase attacked the enemy base, by any route (an
+   * attack action, an event's or ability's attack, Ambush). Cleared as the player starts their next
+   * action (`recordActionStarted`), so it describes exactly one action: "during their previous
+   * action" (Fully Armed and Operational).
+   */
+  lastActionAttackedBase?: Partial<Record<PlayerId, boolean>>
   /** Players whose base was DEALT DAMAGE this phase — combat or ability (Baylan Skoll). */
   basesDamaged: PlayerId[]
   /** Players who had an upgrade defeated this phase (Baylan Skoll). */
@@ -1514,12 +1535,13 @@ type ChoiceVariant =
   // carrying this choice's id, so the plays on offer are exactly the standing Smuggle ones at
   // `costDelta`, with a gained Smuggle and an additional cost included. `then` resumes the card.
   | { kind: 'playUsingSmuggle'; id: string; controller: PlayerId; costDelta: number; then?: IfYouDo }
-  | { kind: 'playCardFrom'; id: string; controller: PlayerId; zone: PlayFromZone; candidates: PlayFromRef[]; optional?: boolean; free?: boolean; costDelta?: number; waive?: AspectWaiver; piloting?: boolean; targetUnits?: string[]; then?: PlayFromTail; markUsed?: { instanceId: string; key: string } }
+  // `plot` marks the plays Plot offers (`PlayFromTerms.plot`).
+  | { kind: 'playCardFrom'; id: string; controller: PlayerId; zone: PlayFromZone; candidates: PlayFromRef[]; optional?: boolean; free?: boolean; costDelta?: number; waive?: AspectWaiver; piloting?: boolean; plot?: boolean; targetUnits?: string[]; then?: PlayFromTail; markUsed?: { instanceId: string; key: string } }
   // Follow-up: attach the upgrade picked above to one of `targets`, paying for it there. Mandatory.
   // `candidates` is the list the `playCardFrom` above offered, carried through so a `then.again`
   // re-offer can re-index what is left: an upgrade's play finishes HERE, not at the pick, so the
   // re-offer has to be able to fire from this step too (Kylo Ren's "any number of upgrades").
-  | { kind: 'attachPlayedCard'; id: string; controller: PlayerId; zone: PlayFromZone; index: number; cardId: string; targets: string[]; candidates?: PlayFromRef[]; targetUnits?: string[]; free?: boolean; costDelta?: number; waive?: AspectWaiver; piloting?: boolean; then?: PlayFromTail }
+  | { kind: 'attachPlayedCard'; id: string; controller: PlayerId; zone: PlayFromZone; index: number; cardId: string; targets: string[]; candidates?: PlayFromRef[]; targetUnits?: string[]; free?: boolean; costDelta?: number; waive?: AspectWaiver; piloting?: boolean; plot?: boolean; then?: PlayFromTail }
   // "You may resource a card from your hand" (Osha), answered by `handIndex`. Always a may.
   | { kind: 'mayResourceFromHand'; id: string; controller: PlayerId }
   // Optionally pay `cost` to draw `draw` cards (Mandalorian). `cost` 0 = a free "may draw".
@@ -1986,7 +2008,21 @@ export function recordBaseAttacked(state: GameState, owner: PlayerId, attackerId
   const basesAttacked = events.basesAttacked.includes(owner) ? events.basesAttacked : [...events.basesAttacked, owner]
   const attackers = events.baseAttackers?.[owner] ?? []
   const baseAttackers = attackers.includes(attackerId) ? events.baseAttackers : { ...events.baseAttackers, [owner]: [...attackers, attackerId] }
-  return { ...state, phaseEvents: { ...events, basesAttacked, baseAttackers } }
+  // The attack belongs to the action its attacker's controller is taking.
+  const lastActionAttackedBase = { ...events.lastActionAttackedBase, [opponentOf(owner)]: true }
+  return { ...state, phaseEvents: { ...events, basesAttacked, baseAttackers, lastActionAttackedBase } }
+}
+
+/** `player` starts a new action: what their previous one did is forgotten. */
+export function recordActionStarted(state: GameState, player: PlayerId): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  if (events.lastActionAttackedBase?.[player] !== true) return state
+  return { ...state, phaseEvents: { ...events, lastActionAttackedBase: { ...events.lastActionAttackedBase, [player]: false } } }
+}
+
+/** Whether `player`'s most recent action this phase attacked the enemy base (Fully Armed and Operational). */
+export function previousActionAttackedBase(state: GameState, player: PlayerId): boolean {
+  return state.phaseEvents?.lastActionAttackedBase?.[player] === true
 }
 
 /** Instance ids of the units that attacked `owner`'s base this phase. */

@@ -316,7 +316,7 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   // Front only ("search the top 5 for a card with Plot, reveal it, and draw it"). Back ("the next
   // card you play using Plot this phase costs 3 less") needs a new `NextUnitGrant` restriction plus
   // play-route context threaded into `effectiveCost`, split to a follow-up ticket.
-  { id: 'SEC_001', name: 'Chancellor Palpatine', front: true, back: false },
+  { id: 'SEC_001', name: 'Chancellor Palpatine', front: true, back: true },
   // Disclose (#603): both sides ask the same question (which aspect to disclose) and share one hook.
   { id: 'SEC_004', name: 'Leia Organa', front: true, back: true },
   // The Force (#462): front is the Action ability, back is the "while the Force is with you" grant.
@@ -1058,6 +1058,7 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SEC_183', name: 'Topple the Summit' },
   { id: 'SEC_235', name: 'The Wrong Ride' },
   { id: 'SEC_245', name: 'When Has Become Now' },
+  { id: 'SEC_194', name: 'Fully Armed and Operational' },
   { id: 'TS26_46', name: 'Secret Marriage' },
   // Indirect damage (#604): the events among the JTL cards that need nothing else.
   { id: 'JTL_181', name: 'Planetary Bombardment' },
@@ -2280,6 +2281,9 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SEC_203', name: 'Tala Durith' },
   { id: 'SEC_243', name: 'FN Trooper Corps' },
   { id: 'SEC_255', name: 'Remote Escort Tank' },
+  // Plot cards each needing one engine piece of their own.
+  { id: 'SEC_033', name: 'Sly Moore' },
+  { id: 'SEC_050', name: 'Vigil' },
   // Indirect damage (#604): the mechanic plus the JTL units that need nothing else.
   { id: 'JTL_165', name: 'Hunting Aggressor' },
   { id: 'JTL_143', name: 'Devastator' },

@@ -326,16 +326,6 @@ describe('Garindan (SEC_186) — When Played: name a card, look at hand and disc
   })
 })
 
-describe('Fully Armed and Operational (SEC_194): not built here — needs "previous action" sequencing, split out', () => {
-  it('is not registered', () => expect(getCardDefinition('SEC_194')).toBeUndefined())
-})
-describe('Sly Moore (SEC_033): not built here — needs a new phase-scoped attacking-a-base stat modifier, split out', () => {
-  it('is not registered', () => expect(getCardDefinition('SEC_033')).toBeUndefined())
-})
-describe('Vigil (SEC_050): not built here — needs new constant damage prevention/redirection primitives, split out', () => {
-  it('is not registered', () => expect(getCardDefinition('SEC_050')).toBeUndefined())
-})
-
 describe('One in a Million (SEC_053) — can\'t be played from hand; defeat a unit matching your ready resources', () => {
   const F = { ...CARDS, SEC_053: real('SEC_053') }
   it('is never offered as a play from hand', () => {
@@ -437,11 +427,5 @@ describe('Chancellor Palpatine, leader front (SEC_001) — Action: search top 5 
     const choice = used.pendingChoices![0]
     const done = resolve(used, { type: 'acceptChoice', choiceId: choice.id, deckIndex: (choice as { eligibleIndices: number[] }).eligibleIndices[0] })
     expect(done.players.player.hand).toContain('PLOT1')
-  })
-})
-
-describe('Chancellor Palpatine, back (When Deployed discount): not built here, split out to a follow-up', () => {
-  it('the leader is not registered with a back-side ability', () => {
-    expect(getCardDefinition('SEC_001')?.abilities ?? []).toEqual([])
   })
 })

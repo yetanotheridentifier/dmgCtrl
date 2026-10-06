@@ -61,6 +61,11 @@ function damageMultiplier(state: GameState, unit: UnitState): number {
   return m
 }
 
+/** Extra damage the unit's card and upgrades add to one instance it takes (Vigil). */
+function extraDamageTaken(state: GameState, unit: UnitState, ctx: DamagePreventionContext): number {
+  return abilityCardIds(state, unit).reduce((sum, cardId) => sum + (getCardDefinition(cardId)?.extraDamageTaken?.(state, unit, ctx) ?? 0), 0)
+}
+
 /**
  * Combat resolution and damage-dealing. Extracted from `resolve.ts` so
  * that card abilities can deal damage (via `dealDamageToUnit`) without importing
@@ -124,6 +129,9 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
         extra = Math.max(0, extra - preventNext.reduce((sum, e) => sum + (e.preventNext ?? 0), 0))
         preventNextSpent.push(u.instanceId)
       }
+      // "Deal that much damage plus 1 instead" (Vigil). The unit's controller orders replacement
+      // effects, so prevention goes first: damage prevented to nothing is never dealt.
+      if (extra > 0) extra += extraDamageTaken(state, u, { source, byCombat })
       if (extra > 0) damagedIds.push(u.instanceId)
     }
     let upgrades = u.upgrades

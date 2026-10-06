@@ -2,7 +2,7 @@ import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, HowPlayed, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef, UsedAbility } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed, upgradeSideId, PLAYED_FROM_HAND, PLAYED_ELSEWHERE } from './types'
-import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
+import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, recordActionStarted, markAbilityUsed, nextUnitGrantMatches, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { canTakePilot, effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, smuggleTerms, smuggleCostUnits, type PlayFromTerms } from './legalMoves'
 import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectAbilityUsed, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
@@ -31,7 +31,7 @@ export function resolve(state: GameState, action: Action): GameState {
   // Whose action this is, read before anything can move `activePlayer`. Answering a handed-over
   // choice is still the marked player's action, not the answerer's (see `rememberActor`).
   const actor = state.pendingResumeActive ?? state.activePlayer
-  const next = resolveAction(state, action)
+  const next = resolveAction(startsAction(state, action) ? recordActionStarted(state, actor) : state, action)
   // Advance the randomness stream once per action, whether or not this action consumed any.
   // Keeping the step here — rather than wherever a consumer happens to draw — is what makes a
   // move list replay to an identical state: the seed depends only on the sequence of actions.
@@ -41,6 +41,15 @@ export function resolve(state: GameState, action: Action): GameState {
   // resource (DJ), is settled here, once per action, rather than at each of the ways a unit can leave play.
   const swept = checkWin(sweepStateBasedDefeats(returnControlledResources(returnControlledUnits(stepped, false))))
   return rememberActor(settleChoiceControl(swept, actor), actor)
+}
+
+/**
+ * Whether `action` begins a new action-phase action, rather than answering a choice or a trigger
+ * left by the one in progress, or dealing with a concession (which is not a game action).
+ */
+function startsAction(state: GameState, action: Action): boolean {
+  return state.phase === 'action' && !hasPendingChoices(state) && (state.pendingTriggers ?? []).length === 0
+    && !['concede', 'offerConcession', 'acceptConcession', 'declineConcession'].includes(action.type)
 }
 
 /**
@@ -872,6 +881,11 @@ function playFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone
   const how: HowPlayed = { from: inHand ? 'hand' : inResources ? 'resources' : 'other', ...(tail?.usingSmuggle ? { smuggle: true } : {}) }
 
   let next = updatePlayer(state, controller, payCost(state.players[controller], cost, selfPayingResource(state, controller, zone, ref.index)))
+  // "The next card you play using Plot" (Chancellor Palpatine) is this one, whatever its type.
+  if (terms.plot) {
+    const plotGrants = (next.players[controller].nextUnitGrants ?? []).filter(g => g.viaPlot)
+    if (plotGrants.length > 0) next = updatePlayer(next, controller, { nextUnitGrants: spendNextUnitGrants(next.players[controller].nextUnitGrants, plotGrants) })
+  }
   next = removeFromZone(next, controller, zone, ref.index)
   // "Replace it with the top card of your deck" (Smuggle, Plot, The Armorer, LAW_066): CR 14.g puts
   // the replacement in as the card enters play, so it is there BEFORE the play's reactions fire and
@@ -1010,6 +1024,7 @@ function runPlayFromTail(state: GameState, choice: Extract<PendingChoice, { kind
         candidates: rest, optional: true,
         ...(choice.free ? { free: true } : {}), ...(choice.costDelta ? { costDelta: choice.costDelta } : {}),
         ...(choice.waive ? { waive: choice.waive } : {}), ...(choice.targetUnits ? { targetUnits: choice.targetUnits } : {}),
+        ...(choice.plot ? { plot: true } : {}),
         then: { ...tail, ...(left === undefined ? {} : { againLimit: left }) },
       })
     }
@@ -2429,7 +2444,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (choice.piloting || (card.type === 'upgrade' && !isFortify(card))) {
           const targets = validPlayTargets(next, choice.controller, choice.zone, pick.index, pick.cardId, choice, choice.targetUnits)
           if (targets.length > 0) {
-            next = pushChoice(next, { kind: 'attachPlayedCard', id: `${choice.id}-attach`, controller: choice.controller, zone: choice.zone, index: pick.index, cardId: pick.cardId, targets, candidates: choice.candidates, targetUnits: choice.targetUnits, free: choice.free, costDelta: choice.costDelta, waive: choice.waive, ...(choice.piloting ? { piloting: true } : {}), then: choice.then })
+            next = pushChoice(next, { kind: 'attachPlayedCard', id: `${choice.id}-attach`, controller: choice.controller, zone: choice.zone, index: pick.index, cardId: pick.cardId, targets, candidates: choice.candidates, targetUnits: choice.targetUnits, free: choice.free, costDelta: choice.costDelta, waive: choice.waive, ...(choice.piloting ? { piloting: true } : {}), ...(choice.plot ? { plot: true } : {}), then: choice.then })
           }
         } else {
           next = playFromZone(next, choice.controller, choice.zone, pick, choice, undefined, choice.then)
@@ -2895,11 +2910,11 @@ export function deployLeaderAsPilot(state: GameState, playerId: PlayerId, hostId
  */
 function offerPlotPlays(state: GameState, playerId: PlayerId, sourceId: string): GameState {
   // Plot is a keyword ability, gone from a card that has lost its abilities (Galen Erso).
-  const candidates = playFromCandidates(state, playerId, 'resources', {}, card => isPlot(card) && !(card && cardAbilitiesBlanked(state, card.id, playerId)))
+  const candidates = playFromCandidates(state, playerId, 'resources', { plot: true }, card => isPlot(card) && !(card && cardAbilitiesBlanked(state, card.id, playerId)))
   if (candidates.length === 0) return state
   return pushChoice(state, {
     kind: 'playCardFrom', id: `${sourceId}-plot`, controller: playerId, zone: 'resources', candidates,
-    optional: true, then: { resourceTop: playerId, again: true },
+    optional: true, plot: true, then: { resourceTop: playerId, again: true },
   })
 }
 

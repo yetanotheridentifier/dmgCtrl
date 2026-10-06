@@ -154,10 +154,8 @@ which wait on that blocker's ticket; Stolen AT-Hauler
   chosen unit a temporary keyword ability" primitive his Action needs, on #715),
   #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #686 (defeat by an enemy card ability, and Chancellor Palpatine,
-  the one leader that flips between two faces rather than deploying). Chancellor Palpatine's own
-  front (SEC_001, search for a card with Plot) shipped with Plot (#470); his back ("the next card
-  you play using Plot this phase costs 3 less") needs a new `NextUnitGrant` restriction plus
-  play-route context in `effectiveCost` and is not built.
+  the one leader that flips between two faces rather than deploying). The SEC leader Chancellor
+  Palpatine (SEC_001) is built on both sides with Plot (#470, #725).
   **Bases are finished** (#460), which completes Phase 1: the engine gained base abilities (an Epic
   Action once a game, an aura over units in play, and the two setup numbers a base can change), and
   the eight LAW bases that play any card type from hand went to #468, and Sundari Palace has shipped
@@ -213,9 +211,9 @@ which wait on that blocker's ticket; Stolen AT-Hauler
   29 sole-blocked per the triage aggregate, plus two the tool itself missed: Lurking Snub Fighter,
   whose source record ships no `Keywords` array at all despite printing the reminder in `FrontText`,
   and First Light, whose trigger head text isn't literal in `EXISTING_TRIGGERS` though the point it
-  needs already dispatches). Chancellor Palpatine's front (search for a card with Plot) shipped;
-  his back, Sly Moore, Vigil and Fully Armed and Operational each need a primitive beyond Plot and
-  are on **#726**. One in a Million (its only route into play, `cannotPlayFromHand`) and Trade Route
+  needs already dispatches). The last four, Chancellor Palpatine's back, Sly Moore, Vigil and Fully
+  Armed and Operational, each needed one engine piece of their own and shipped with #725, so every
+  SEC card that prints or reads Plot is built. One in a Million (its only route into play, `cannotPlayFromHand`) and Trade Route
   Taxation (`eventsBanned`, "that opponent can't play events this phase") each needed one small
   addition alongside the mechanic. One in a Million never shows as played by `--sweep`: it is an
   event whose only route is a choice rather than `playEvent`, the coverage tool's own documented

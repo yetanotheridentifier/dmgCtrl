@@ -7,7 +7,7 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { deployLeaderAsPilot, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, damagedBaseThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, discardedThisPhase, indirectDamageDealtThisPhase, baseHealedThisPhase, markAbilityUsed, updatePlayer, upgradeSideId, recordUnitDefeated } from './types'
+import { baseHostId, isFortify, isPlot, previousActionAttackedBase, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, damagedBaseThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, discardedThisPhase, indirectDamageDealtThisPhase, baseHealedThisPhase, markAbilityUsed, updatePlayer, upgradeSideId, recordUnitDefeated } from './types'
 import { canTakePilot, affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit, smuggleTerms, smuggleMoves, namedByOpponent } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost, readyResourceCount } from './resources'
@@ -12495,17 +12495,10 @@ registerCard('SEC_004', { // Leia Organa, Of A Secret Bloodline
 // Ferocity, SEC_226 Sneaking Suspicion (credited in `data/implementedCards.ts`'s
 // `PLAYABLE_AS_PRINTED` instead).
 //
-// Four cards from the same recount are NOT here, each blocked by something Plot does not touch:
-// SEC_046 Galen Erso needs "loses all abilities" (#682, open, commented there), SEC_033 Sly Moore
-// needs a phase-scoped "each enemy unit -2/-0 while attacking a base" modifier (no existing
-// LastingEffect shape reaches "while attacking a base" broadly, only a unit's own printed
-// statModifier), SEC_050 Vigil needs new constant damage-prevention/redirection primitives beyond
-// the existing per-phase ones, and SEC_194 Fully Armed and Operational needs "during their previous
-// action" sequencing (the engine tracks "attacked your base this phase", not "as the immediately
-// preceding action") — all four are split to a follow-up ticket with this analysis carried over.
-// SEC_001 Chancellor Palpatine's back ("the next card you play using Plot this phase costs 3 less")
-// needs a new `NextUnitGrant` restriction plus threading which door a play came through into
-// `effectiveCost`; its front (search for a card with Plot) needs nothing new and is built below.
+// Four cards below each need one piece of engine Plot itself does not touch: Sly Moore
+// (`LastingEffect.attackingBasePower`), Vigil (`extraDamageTaken`, beside the existing
+// `preventUnitDamage`), Fully Armed and Operational (`previousActionAttackedBase`) and Chancellor
+// Palpatine's back (a `viaPlot` grant, read through `PlayFromTerms.plot`).
 
 registerCard('SEC_189', whenPlayed('You may exhaust a unit.', (s, ctx) => // Lurking Snub Fighter
   targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, pickAny), true)))
@@ -12598,12 +12591,35 @@ registerCard('TS26_46', eachOfUpTo('Give a Shield token to each of up to 2 non-V
 registerCard('SEC_245', whenPlayed('Play a card with Plot from your resources (paying its cost). Put the top card of your deck into play as a resource.', (s, ctx) => // When Has Become Now
   playFromZoneChoice(s, ctx, { zone: 'resources', test: isPlot, then: { resourceTop: ctx.owner } })))
 
-registerCard('SEC_001', // Chancellor Palpatine — front only; the back's "next card played using Plot
-// costs 3 less" needs a NextUnitGrant restriction plus play-route context in effectiveCost, split out.
-  leaderFront('Search the top 5 cards of your deck for a card with Plot, reveal it, and draw it.', {
+registerCard('SEC_001', { // Chancellor Palpatine
+  ...leaderFront('Search the top 5 cards of your deck for a card with Plot, reveal it, and draw it.', {
     cost: 1,
     effect: (s, ctx) => searchDrawChoice(s, ctx, 5, isPlot),
-  }))
+  }),
+  // Resolved before the deploy offers its Plot plays, so those plays are what it discounts.
+  ...whenDeployed('The next card you play using Plot this phase costs 3 less.', (s, ctx) =>
+    grantNextUnit(s, ctx.owner, { viaPlot: true, costDelta: -3 })),
+})
+
+registerCard('SEC_033', whenPlayed("For this phase, each enemy unit gets -2/-0 while it's attacking a base.", (s, ctx) => // Sly Moore
+  // "Each enemy unit" is the units in play as this resolves; one that enters later is not affected.
+  s.players[opponentOf(ctx.owner)].units.reduce((acc, u) => addLastingEffect(acc, { targetInstanceId: u.instanceId, attackingBasePower: -2 }), s)))
+
+registerCard('SEC_050', { // Vigil
+  // "If damage would be dealt to another friendly unit, prevent 1 of that damage."
+  preventUnitDamage: (s, self, target, amount) =>
+    (target.instanceId !== self.instanceId && unitOwner(s, target) === unitOwner(s, self) ? Math.min(1, amount) : 0),
+  // "If damage would be dealt to this unit by another card, deal that much damage plus 1 instead."
+  extraDamageTaken: (_s, self, ctx) => (ctx.source?.instanceId === self.instanceId ? 0 : 1),
+})
+
+registerCard('SEC_194', whenPlayed('If an opponent attacked your base during their previous action this phase, play a unit from your hand. Give it Ambush for this phase.', (s, ctx) => { // Fully Armed and Operational
+  if (!previousActionAttackedBase(s, opponentOf(ctx.owner))) return s
+  const candidates = affordableHandUnits(s, ctx.owner, 0, 0)
+  return candidates.length
+    ? pushChoice(grantNextUnit(s, ctx.owner, { keywords: [KW.ambush] }), { kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta: 0, entersReady: false })
+    : s
+}))
 
 // ── Indirect damage (JTL) ───────────────────────────────────────
 //
