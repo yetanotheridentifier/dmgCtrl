@@ -415,7 +415,22 @@ action looks like a heal that never happened.
   except `peekTopDiscard` (its base answer picks whose deck to look at) and `mayPreventDamage` (a unit
   cost beside Prevent and Take buttons). The decline sits in the Action column, reading **Done** for a
   repeatable pick (`isRepeatable`: `multiPick`, `exploit`, the distributions, `damageAnyBases`), and
-  a distribution shows how much is allocated (`allocation`) above it.
+  a distribution shows how much is allocated (`allocation`) above it. The list is typed against
+  `PendingChoice['kind']`, so a kind that no longer exists cannot linger in it.
+- **Every board-target choice carries an `intent`** (`TargetIntent` in `types.ts`): what it does to
+  the unit or base picked, which the board shows as the highlight colour. `help` is a buff, a heal, a
+  Shield, Experience or Advantage token, or a ready; `harm` is damage, a debuff, Weakness or a
+  defeat; `cunning` is an exhaust, a capture, a return to hand, taking control, or choosing which unit
+  acts (the one that deals the damage, captures, or fires); `attach` puts a real upgrade card on the
+  unit, which may help or hurt. `pushChoice` stamps it for every kind whose effect follows from the
+  kind and its payload (`choiceIntent`: `mayLastingBuff` by the sign of its stats, `mayGiveTokens` and
+  `distributeTokens` by the token, `selectPair` and `multiPick` by their mode, `damageAnyBases` by
+  `heal`). `selectUnitThen` is generic, free text plus a continuation, so its raiser must state it:
+  the type requires `intent`, and `unitThen`, `unitThenWp`, `selectUnitWithDecline` and `UpToSpec`
+  take it as a required argument. A raiser can override a stamped intent by passing one. A targeted
+  leader action declares the same field (`LeaderActionAbilityDef.intent`). `targetIntent.test.ts`
+  pins that every board-target kind is stamped, and the coverage-deck sweep in
+  `choiceSource.test.ts` that every one a real game raises carries one.
 - **A choice answered with buttons is asked in a centre-screen overlay.** Kinds with a dedicated
   overlay (the ordering prompts, the card pickers, searches, naming) use it; whatever is left goes to
   `ButtonChoiceOverlay` with the `describeChoiceParts` prompt and one `describeAction` button per

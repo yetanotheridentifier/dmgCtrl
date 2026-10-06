@@ -44,10 +44,10 @@ beforeAll(() => {
     abilities: [{
       trigger: 'whenPlayed',
       description: 'A friendly unit deals damage equal to its power to an enemy unit.',
-      effect: (s, ctx) => pushChoice(s, { kind: 'selectUnitThen', id: 'dealer', controller: ctx.owner, targets: unitsOf(s, ctx.owner), text: 'choose the unit that deals the damage', then: { cardId: ctx.cardId, owner: ctx.owner, sourceInstanceId: ctx.sourceInstanceId, step: 'dealer' } }),
+      effect: (s, ctx) => pushChoice(s, { kind: 'selectUnitThen', id: 'dealer', controller: ctx.owner, targets: unitsOf(s, ctx.owner), text: 'choose the unit that deals the damage', intent: 'cunning', then: { cardId: ctx.cardId, owner: ctx.owner, sourceInstanceId: ctx.sourceInstanceId, step: 'dealer' } }),
     }],
     ifYouDo: (s, ctx) => ctx.step === 'dealer'
-      ? pushChoice(s, { kind: 'selectUnitThen', id: 'target', controller: ctx.owner, targets: unitsOf(s, other(ctx.owner)), text: 'choose the enemy unit to damage', then: { cardId: ctx.cardId, owner: ctx.owner, sourceInstanceId: ctx.sourceInstanceId, step: 'target', unit: ctx.targetInstanceId } })
+      ? pushChoice(s, { kind: 'selectUnitThen', id: 'target', controller: ctx.owner, targets: unitsOf(s, other(ctx.owner)), text: 'choose the enemy unit to damage', intent: 'harm', then: { cardId: ctx.cardId, owner: ctx.owner, sourceInstanceId: ctx.sourceInstanceId, step: 'target', unit: ctx.targetInstanceId } })
       : dealDamageToUnit(s, ctx.targetInstanceId!, 2),
   })
   // A "may return a unit" pick.
@@ -118,6 +118,8 @@ describe('unit and base picks answered on the board', () => {
     noChooseButtons()
     const [dealer] = unitsOn('player')
     expect(dealer).toHaveAttribute('data-target', 'true')
+    // The highlight colour is the intent the raiser stamped: picking the dealer is cunning (yellow).
+    expect(within(dealer).getAllByTestId('card-face')[0]).toHaveAttribute('data-highlight', 'yellow')
     expect(unitsOn('opponent')[0]).not.toHaveAttribute('data-target', 'true')
     await user.click(dealer)
 
@@ -126,6 +128,7 @@ describe('unit and base picks answered on the board', () => {
     noChooseButtons()
     const [enemy] = unitsOn('opponent')
     expect(enemy).toHaveAttribute('data-target', 'true')
+    expect(within(enemy).getAllByTestId('card-face')[0]).toHaveAttribute('data-highlight', 'red')
     // Mandatory: no decline offered.
     expect(screen.queryByTestId('decline-choice-btn')).toBeNull()
     const enemyId = enemy.getAttribute('data-testid')!
@@ -144,6 +147,8 @@ describe('unit and base picks answered on the board', () => {
     expect(screen.getByTestId('decline-choice-btn')).toHaveTextContent('Decline')
     const [enemy] = unitsOn('opponent')
     expect(enemy).toHaveAttribute('data-target', 'true')
+    // Returning a unit to hand is cunning: yellow.
+    expect(within(enemy).getAllByTestId('card-face')[0]).toHaveAttribute('data-highlight', 'yellow')
     const enemyId = enemy.getAttribute('data-testid')!
     await user.click(enemy)
     expect(screen.queryByTestId(enemyId)).toBeNull()
@@ -156,6 +161,8 @@ describe('unit and base picks answered on the board', () => {
     noChooseButtons()
     expect(screen.getByTestId('decline-choice-btn')).toHaveTextContent('Done')
     expect(screen.getByTestId('distribute-hud')).toHaveTextContent(/healing allocated 0 \/ 2/i)
+    // Healing your own base is good for it: green, not the red of an attack.
+    expect(within(screen.getByTestId('target-player-base')).getByTestId('card-face')).toHaveAttribute('data-highlight', 'green')
     await user.click(screen.getByTestId('target-player-base'))
     expect(screen.getByTestId('distribute-hud')).toHaveTextContent(/healing allocated 1 \/ 2/i)
     await user.click(screen.getByTestId('decline-choice-btn'))
@@ -181,6 +188,7 @@ describe('unit and base picks answered on the board', () => {
     expect(screen.getByTestId('decline-choice-btn')).toHaveTextContent('Done')
     // The base readout shows damage taken.
     expect(screen.getByTestId('opponent-base-hp')).toHaveTextContent(/^0$/)
+    expect(within(screen.getByTestId('target-opponent-base')).getByTestId('card-face')).toHaveAttribute('data-highlight', 'red')
     await user.click(screen.getByTestId('target-opponent-base'))
     expect(screen.getByTestId('opponent-base-hp')).toHaveTextContent(/^1$/)
     expect(screen.getByTestId('decline-choice-btn')).toHaveTextContent('Done')

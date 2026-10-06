@@ -401,23 +401,16 @@ extra ids for no extra work: each needs one line in `data/reprints.ts` naming it
 ## Player-facing UI (third stream)
 
 Both came out of play-testing the trigger-ordering work, and both sort the same ~72 pending-choice
-kinds, so **#552 first**: it has to classify every kind anyway, which is where #553's mapping then hangs.
+kinds, so **#552 first**: it has to classify every kind anyway.
 
 Coming after the card programme means the set of kinds is still growing while this is built, so the
 classification wants to be a rule read off the payload rather than a table of the kinds that exist on
-the day it ships. #553 already has to work that way for a different reason.
+the day it ships.
 
 - **#552 triggered choices belong in an overlay, not the action column.** A triggered choice reads as a
   centre-screen overlay when two abilities trigger and as small buttons beside Pass when one does. The
   split to aim for is by how a choice is answered: click-a-unit stays on the board, pick-a-button moves
   to an overlay. The action column keeps what the player initiates.
-- **#553 highlight colour should say what the effect does.** Today it says what kind of interaction it
-  is: every board target is red, so a heal, a buff and a lethal hit look alike, and healing your own
-  base paints it the same red as an enemy attacking it. The intended scheme is red for damage, debuff
-  and weakness, green for tokens and buffs, blue for heal, yellow for exhaust and capture, white for
-  attaching a real upgrade. Not a lookup table: green and blue are already spoken for, the palette is
-  two colours short, and one kind can carry either sign (Baylan's +2/+2 and Ezra's −3/−0 are both
-  `mayLastingBuff`), so the mapping reads the payload.
 - **#578 the log should say what changed, not just what was chosen.** Lowest of the three. The log
   is one entry per submitted action, so an effect that resolves without a choice of its own leaves no
   trace: a base healed and hit again before the player looks reads as a heal that never fired. A

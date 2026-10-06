@@ -1,4 +1,4 @@
-import type { Arena, CardDb, DelayedEffect, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeAttachment, UpgradeRef, UsedAbility } from './types'
+import type { Arena, CardDb, DelayedEffect, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeAttachment, UpgradeRef, UsedAbility, TargetIntent } from './types'
 import { attachmentAbilityId, carriedAbilityCardIds, baseAbilityCardIds, pushChoice } from './types'
 
 /**
@@ -625,6 +625,8 @@ export interface LeaderActionAbilityDef {
   useForceCost?: boolean
   /** Valid target-unit instance ids; omit for a target-less ability. */
   targets?: (state: GameState, owner: PlayerId) => string[]
+  /** What a targeted ability does to its target, for the highlight colour (`TargetIntent`). */
+  intent?: TargetIntent
   /** Gate for a target-less ability (defaults usable). */
   usable?: (state: GameState, owner: PlayerId) => boolean
   effect: (state: GameState, ctx: EffectContext) => GameState

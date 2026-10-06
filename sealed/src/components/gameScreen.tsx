@@ -3,8 +3,8 @@ import { nameableCardNames, nameableTraits, zoneCards } from '../engine/legalMov
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
-import type { CapturedCard, EngineCard, GameState, PendingChoice, PendingTrigger, PlayerId, UnitState, UpgradeAttachment } from '../engine/types'
-import { triggerAbility } from '../engine/abilities'
+import type { CapturedCard, EngineCard, GameState, PendingChoice, PendingTrigger, PlayerId, TargetIntent, UnitState, UpgradeAttachment } from '../engine/types'
+import { leaderActions, triggerAbility } from '../engine/abilities'
 import type { Action } from '../engine/actions'
 import { describeAction, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
@@ -20,6 +20,8 @@ import { isDev } from '../env'
 import { orderUnits } from './boardLayout'
 import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
+import { intentHighlight } from './highlight'
+import type { Highlight } from './highlight'
 import { CardGridOverlay } from './cardGridOverlay'
 import { OverlayShell, PANEL_BUTTON, PANEL_PRIMARY, PANEL_SECONDARY } from './overlayShell'
 import { CARD_WIDTH_PX } from './cardSizing'
@@ -49,8 +51,10 @@ export interface UnitInteraction {
   /** This friendly unit has at least one legal action — click to select it. */
   actionable: boolean
   selected: boolean
-  /** This enemy unit is a legal target of the selected attacker. */
+  /** This unit is a legal target of the selected attacker, leader ability or live choice. */
   isTarget: boolean
+  /** What targeting it does, which colours the highlight; absent for an attack (red). */
+  intent?: TargetIntent
   /** Valid target for the upgrade currently being placed from hand. */
   isUpgradeTarget?: boolean
   onClick?: () => void
@@ -164,12 +168,12 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
   const cardUpgrades = unit.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token')
   const captured = unit.captured ?? []
   const clickable = (interact.actionable || interact.isTarget || interact.isUpgradeTarget) && interact.onClick
-  const highlight: 'accent' | 'red' | 'accent-dim' | 'green' | undefined = interact.selected
+  const highlight: Highlight | undefined = interact.selected
     ? 'accent'
     : interact.isTarget
-      ? 'red'
+      ? intentHighlight(interact.intent)
       : interact.isUpgradeTarget
-        ? 'green'
+        ? intentHighlight('attach')
         : interact.actionable
           ? 'accent-dim'
           : undefined
@@ -804,11 +808,20 @@ function ArenaZone({ state, side, arena, unitInteraction, anchor }: {
   )
 }
 
+/**
+ * A base that can be clicked: attacked, picked by a choice, or chosen as an upgrade host. `intent` is
+ * what picking it does, which colours the highlight; absent for an attack (red).
+ */
+interface BaseTarget {
+  onClick: () => void
+  intent?: TargetIntent
+}
+
 /** A base card in the central strip, with an HP overlay; clickable when a target. */
-function BaseCard({ state, side, onAttack }: {
+function BaseCard({ state, side, target }: {
   state: GameState
   side: PlayerId
-  onAttack?: () => void
+  target?: BaseTarget
 }) {
   const p = state.players[side]
   const baseCard = state.cards[p.base.cardId]
@@ -825,7 +838,7 @@ function BaseCard({ state, side, onAttack }: {
   const label = countDown ? 'health remaining' : 'damage'
   const inner = (
     <div className="relative">
-      <CardFace card={baseCard} fallbackName={p.base.cardId} highlight={onAttack ? 'red' : undefined} />
+      <CardFace card={baseCard} fallbackName={p.base.cardId} highlight={target ? intentHighlight(target.intent) : undefined} />
       {/* Damage overlaid on the card, PWA game-screen style: light weight,
           accent glow + dark outline, ~50% of the card's height. Nudged up a
           little since the base art sits low, so the number reads centred on it. */}
@@ -861,10 +874,10 @@ function BaseCard({ state, side, onAttack }: {
   )
   return (
     <div ref={setAnchor} data-testid={`${side}-base-card`} {...bind} className="relative">
-      {onAttack ? (
+      {target ? (
         <button
           data-testid={`target-${side}-base`}
-          onClick={onAttack}
+          onClick={target.onClick}
           className="block cursor-pointer"
         >
           {inner}
@@ -1033,12 +1046,12 @@ function setupPrompt(state: GameState): DescribePart[] | undefined {
   return undefined
 }
 
-function Board({ state, playerInteraction, opponentInteraction, baseAction, leaderInteract, prompt }: {
+function Board({ state, playerInteraction, opponentInteraction, baseTarget, leaderInteract, prompt }: {
   state: GameState
   playerInteraction: (unit: UnitState) => UnitInteraction
   opponentInteraction: (unit: UnitState) => UnitInteraction
-  /** A click handler for a side's base when it's a valid target (attack, or a damage-target choice). */
-  baseAction?: (side: PlayerId) => (() => void) | undefined
+  /** A side's base when it can be clicked (an attack, a choice that picks a base, an upgrade host). */
+  baseTarget?: (side: PlayerId) => BaseTarget | undefined
   leaderInteract?: UnitInteraction
   /** What the current board highlights are asking for; absent for self-evident base actions. */
   prompt?: DescribePart[]
@@ -1061,7 +1074,7 @@ function Board({ state, playerInteraction, opponentInteraction, baseAction, lead
         {/* Opponent leader lives in their bar's centre column, so the strip
             holds only their base here. */}
         <div className="flex flex-col items-center gap-2">
-          <BaseCard state={state} side="opponent" onAttack={baseAction?.('opponent')} />
+          <BaseCard state={state} side="opponent" target={baseTarget?.('opponent')} />
         </div>
         <ArenaZone state={state} side="opponent" arena="ground" unitInteraction={opponentInteraction} anchor="bottom" />
       </div>
@@ -1094,7 +1107,7 @@ function Board({ state, playerInteraction, opponentInteraction, baseAction, lead
       <div className="items-start" style={cols}>
         <ArenaZone state={state} side="player" arena="space" unitInteraction={playerInteraction} anchor="top" />
         <div className="flex flex-col items-center gap-2">
-          <BaseCard state={state} side="player" onAttack={baseAction?.('player')} />
+          <BaseCard state={state} side="player" target={baseTarget?.('player')} />
           <LeaderCard state={state} side="player" interact={leaderInteract} />
         </div>
         <ArenaZone state={state} side="player" arena="ground" unitInteraction={playerInteraction} anchor="top" />
@@ -1346,6 +1359,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     }
     const declineChoice = targetChoice ? legal.find(a => a.type === 'skipTrigger' && a.choiceId === targetChoice.id) : undefined
     const boardTargetAction = (instanceId: string): Action | undefined => leaderTargetIds.get(instanceId) ?? choiceTargetIds.get(instanceId)
+    /** What a board target's action does to it, for the highlight colour: the leader ability's or the choice's intent. */
+    const boardTargetIntent = (action: Action): TargetIntent | undefined =>
+      action.type === 'useLeaderAbility' ? leaderActions(gameState.players.player.leader.cardId)[action.index]?.intent : targetChoice?.intent
 
     /**
      * What the board highlights are asking for (#370). Two sources: a pending choice raised by
@@ -1377,7 +1393,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // A unit that is a target of the selected leader ability or an active choice.
     const asBoardTarget = (instanceId: string): UnitInteraction | null => {
       const action = boardTargetAction(instanceId)
-      return action ? { actionable: false, selected: false, isTarget: true, onClick: () => actAndClear(action) } : null
+      return action ? { actionable: false, selected: false, isTarget: true, intent: boardTargetIntent(action), onClick: () => actAndClear(action) } : null
     }
 
     /**
@@ -1930,12 +1946,12 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
               : actionPrompt ?? (anyPlayerChoice ? describeChoiceParts(gameState, anyPlayerChoice) : undefined)}
           playerInteraction={playerInteraction}
           opponentInteraction={opponentInteraction}
-          baseAction={side => {
+          baseTarget={side => {
             // Step one of an upgrade pick: a base carrying a candidate (Fortify) is a host like a unit.
-            if (upgradePick && pickedHost === null && upgradeHosts.includes(baseHostId(side))) return () => setUpgradeHost(baseHostId(side))
-            if (side === 'opponent' && baseAttack) return () => actAndClear(baseAttack)
-            const dmg = baseTargetActions.get(side)
-            return dmg ? () => actAndClear(dmg) : undefined
+            if (upgradePick && pickedHost === null && upgradeHosts.includes(baseHostId(side))) return { onClick: () => setUpgradeHost(baseHostId(side)) }
+            if (side === 'opponent' && baseAttack) return { onClick: () => actAndClear(baseAttack) }
+            const pick = baseTargetActions.get(side)
+            return pick ? { onClick: () => actAndClear(pick), intent: targetChoice?.intent } : undefined
           }}
           leaderInteract={leaderInteract}
         />

@@ -731,6 +731,8 @@ describe('GameScreen', () => {
     await user.click(screen.getByTestId('hand-card-0'))
     const unitTile = within(screen.getByTestId('player-ground-units')).getByTestId(/^board-unit-u\d+$/)
     expect(unitTile).toHaveAttribute('data-upgrade-target', 'true')
+    // White: attaching a real upgrade card, which the player judges as help or harm.
+    expect(within(unitTile).getAllByTestId('card-face')[0]).toHaveAttribute('data-highlight', 'white')
     // …and the prompt says what the highlight is for (#370), naming the upgrade being placed.
     const prompt = screen.getByTestId('action-prompt')
     expect(prompt).toHaveTextContent(/choose a unit to attach/i)
