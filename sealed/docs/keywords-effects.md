@@ -384,6 +384,16 @@ many are held), the same as Greater Sarlacc's `resources` mode, since one Credit
 apart from another. A defeated Credit triggers nothing and, unlike a defeated ready resource, does not
 reduce what is left to pay with: it is a separate currency.
 
+An ability that plays a card from hand offers the step only where it raises it itself, as Count
+Dooku's front and Jabba the Hutt's deployed action do (`raiseExploit`). The `exploit` choice's
+`creditGrant` is what the played unit gains for the phase when at least one Credit paid for it
+(Jabba: Ambush): `finishExploit` turns it into a `nextUnitGrant` for that card id before the unit
+enters, so an entry keyword fires exactly as a printed one would.
+
+**"Defeat a friendly token" spans every kind a player can hold** (Alliance Outpost): a token upgrade
+they own on a unit, a token unit they control, a Credit token, or their Force token. The kind is asked
+first only when more than one is available, then which one where that matters (an upgrade or a unit).
+
 `createCreditTokens` records `phaseEvents.tokensCreated` like `giveTokens`/`createTokenUnits`, so "if
 you created a token this phase" (The Client) sees a Credit token too.
 

@@ -342,6 +342,13 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'JTL_015', name: 'Rio Durant', front: true, back: true },
   { id: 'JTL_017', name: 'Han Solo', front: true, back: true },
   { id: 'JTL_018', name: 'Kazuda Xiono', front: true, back: true },
+  // Credit tokens (#719): the leaders whose actions create them.
+  { id: 'LAW_002', name: 'Tobias Beckett', front: true, back: true },
+  { id: 'LAW_006', name: 'Vel Sartha', front: true, back: true },
+  { id: 'LAW_008', name: 'Director Krennic', front: true, back: true },
+  { id: 'LAW_013', name: 'Chewbacca', front: true, back: true },
+  { id: 'LAW_015', name: 'Jabba the Hutt', front: true, back: true },
+  { id: 'LAW_018', name: 'Lando Calrissian', front: true, back: true },
 ]
 
 /**
@@ -379,6 +386,8 @@ export const IMPLEMENTED_BASES: UpgradeStatus[] = [
   // The resource zone.
   { id: 'LAW_029', name: 'Citadel Research Center' },
   { id: 'TS26_12', name: 'Sundari Palace' },
+  // Credit tokens (#719): "defeat a friendly token" over every kind of token.
+  { id: 'LAW_019', name: 'Alliance Outpost' },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
@@ -571,6 +580,9 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'LAW_200', name: 'Salvaged Blaster' },
   { id: 'SHD_038', name: 'Brutal Traditions' },
   { id: 'TWI_068', name: 'Foresight' },
+  // Credit tokens (#719): an attached unit gains a Credit ability.
+  { id: 'LAW_225', name: "Han's Golden Dice" },
+  { id: 'LAW_141', name: 'Targeted For Removal' },
 ]
 
 /**
@@ -997,6 +1009,9 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LAW_244', name: 'Unmarked Credits' },
   { id: 'LAW_248', name: 'Windfall' },
   { id: 'LAW_247', name: 'Backed by the Hutts' },
+  // Credit tokens (#719): the rest of the set's Credit events.
+  { id: 'LAW_170', name: 'Double-Cross' },
+  { id: 'LAW_169', name: 'Payroll Heist' },
   // Disclose (#603): SEC's set mechanic, the 9 events among the 31 cards that need nothing else.
   { id: 'SEC_074', name: 'Relief Request' },
   { id: 'SEC_076', name: 'Charged with Murder' },
@@ -2134,6 +2149,13 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LAW_161', name: 'Partisan U-Wing' },
   { id: 'LAW_252', name: "Fett's Firespray" },
   { id: 'LAW_238', name: 'Scavenging Sandcrawler' },
+  // Credit tokens (#719): the units that needed wiring of their own.
+  { id: 'LAW_235', name: 'Lady Proxima' },
+  { id: 'LAW_156', name: 'Hunter For Hire' },
+  { id: 'LAW_140', name: 'Intimidator' },
+  { id: 'LAW_092', name: 'Two-Faced Troig' },
+  { id: 'LAW_080', name: 'Luke Skywalker' },
+  { id: 'LAW_215', name: 'Vermillion' },
   // Disclose (#603): SEC's set mechanic. 21 units; three (Cantwell Arrestor Cruiser, Syril Karn,
   // Chairman Papanoida, #721) needed a small primitive of their own beyond Disclose itself, the rest
   // need nothing else.

@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, actionAbilityKey, collectUnitTriggers, collectCardTriggers, abilityCardIds, usedAbilityOf } from './abilities'
-import { fireBatch, runAbilitiesAgain, thenAfterChoices, discardCards, discardTaken, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken } from './effects'
+import { fireBatch, runAbilitiesAgain, thenAfterChoices, discardCards, discardTaken, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken, defeatForceToken } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage, isDoomed } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -4750,15 +4750,21 @@ const stealTo = (s: GameState, to: PlayerId, id: string | undefined, until?: Uni
 }
 registerCard('SOR_224', unitThenWp('Take control of a non-leader unit. At the start of the regroup phase, its owner takes control of it.', nonLeader, 'take control of a non-leader unit', 'cunning', false, // Change of Heart
   (s, ctx) => stealTo(s, ctx.owner, ctx.targetInstanceId)))
-/** A friendly and then an enemy unit (`test` narrows both), then `swap` with the pair. */
-const swapPairWp = (description: string, test: Pick, until: UnitState['controlUntil']): CardDefinition => ({
+/**
+ * A friendly and then an enemy unit (`test` narrows both), then exchange control of the pair. `after`
+ * is whatever the card does once both trades have settled, told the friendly and the enemy unit's ids.
+ */
+const swapPairWp = (description: string, test: Pick, until: UnitState['controlUntil'],
+  after?: (s: GameState, ctx: IfYouDoContext, friendly: string, enemy: string) => GameState): CardDefinition => ({
   ...whenPlayed(description, (s, ctx) =>
     (pickedIds(s, ctx, pickAll(pickEnemy, test)).length
       ? unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, test)), 'choose a friendly unit to exchange', 'cunning', false, 'friendly')
       : s)),
-  ifYouDo: (s, ctx) => (ctx.step === 'friendly'
-    ? unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, test)), 'choose an enemy unit to exchange', 'cunning', false, 'enemy', ctx.targetInstanceId)
-    : stealTo(stealTo(s, opponentOf(ctx.owner), ctx.unitChosen, until), ctx.owner, ctx.targetInstanceId, until)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'friendly') return unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, test)), 'choose an enemy unit to exchange', 'cunning', false, 'enemy', ctx.targetInstanceId)
+    const swapped = stealTo(stealTo(s, opponentOf(ctx.owner), ctx.unitChosen, until), ctx.owner, ctx.targetInstanceId, until)
+    return after && ctx.unitChosen && ctx.targetInstanceId ? after(swapped, ctx, ctx.unitChosen, ctx.targetInstanceId) : swapped
+  },
 })
 registerCard('SHD_132', swapPairWp('Choose a friendly non-leader unit and an enemy non-leader unit. Exchange control of those units.', nonLeader, 'permanent')) // Choose Sides
 // "Takes control of each unit they own" at the regroup phase is the default duration.
@@ -11792,6 +11798,320 @@ registerCard('LAW_238', onAttack({ // Scavenging Sandcrawler
   }),
   ifYouDo: (s, ctx) => createCreditTokens(s, ctx.owner, 1),
 }))
+
+// ── Credit tokens: the cards with wiring of their own (#719) ─────────────────────────────────────────
+// Six leaders, a base Epic Action whose cost is any friendly token, "any player may use this ability",
+// a reveal-then-play-for-free chain, an exchange of control with a reward, and three cards that hand a
+// unit a Credit ability. None needs a new mechanism beyond two small extensions: a play out of the top
+// of the OPPONENT's deck (`opponentDeckTop`, Vermillion) and a grant the Credit payment step gives the
+// unit it paid for (`creditGrant`, Jabba the Hutt).
+
+/** True when `who` now controls `id`: "if they do" after a change of control that may not happen. */
+const controls = (s: GameState, who: PlayerId, id: string | undefined): boolean => findUnit(s, id ?? '')?.owner === who
+
+registerCard('LAW_235', { actionAbilities: [{ // Lady Proxima
+  description: 'Action [Exhaust]: Create a Credit token.',
+  exhaustCost: true,
+  effect: (s, ctx) => createCreditTokens(s, ctx.owner, 1),
+}] })
+
+registerCard('LAW_156', { actionAbilities: [{ // Hunter For Hire
+  description: 'Action [defeat a friendly Credit token]: Take control of this unit. Any player may use this ability.',
+  anyPlayer: true,
+  // The player asking (`activePlayer`) pays with a Credit token of their own. Its controller would gain
+  // nothing from it, so, like Mercenary Gunship, it is offered only to the other player.
+  usable: (s, self) => controllerOf(s, self) !== s.activePlayer && friendlyCreditTokens(s, s.activePlayer) > 0,
+  effect: (s, ctx) => stealTo(defeatCreditTokens(s, ctx.owner, 1), ctx.owner, ctx.sourceInstanceId, 'permanent'),
+}] })
+
+// "Their owner's hands": `returnResourceToHand` sends each resource to its own owner (CR 1.7.5).
+const intimidatorPick = (s: GameState, ctx: Resumable): GameState =>
+  resourceThen(s, ctx, { holder: ctx.owner, optional: true, step: 'intimidator', text: "return a friendly resource to its owner's hand and create a Credit token" })
+registerCard('LAW_140', { // Intimidator
+  ...whenPlayed("Return any number of friendly resources to their owner's hands. For each resource returned this way, create a Credit token.", intimidatorPick),
+  ifYouDo: (s, ctx) => {
+    const pick = resourcePicked(s, ctx)
+    return pick ? intimidatorPick(createCreditTokens(returnResourceToHand(s, pick.holder, pick.index), ctx.owner, 1), ctx) : s
+  },
+})
+
+registerCard('LAW_092', { // Two-Faced Troig — Sentinel is printed.
+  ...whenPlayed('You may have an opponent take control of this unit. If you do, create 2 Credit tokens.', (s, ctx) =>
+    pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'have an opponent take control of this unit, and create 2 Credit tokens', then: resume(ctx) })),
+  ifYouDo: (s, ctx) => {
+    const next = stealTo(s, opponentOf(ctx.owner), ctx.sourceInstanceId, 'permanent')
+    return controls(next, opponentOf(ctx.owner), ctx.sourceInstanceId) ? createCreditTokens(next, ctx.owner, 2) : next
+  },
+})
+
+registerCard('LAW_080', { // Luke Skywalker — the opponent picks the mode; Luke's controller resolves it.
+  ...whenPlayed('An opponent chooses one: They create a Credit token. Ready this unit. Or: You may deal 5 damage to a unit.', (s, ctx) =>
+    pushChoice(s, {
+      kind: 'chooseMode', id: `${ctx.sourceInstanceId}-luke`, controller: opponentOf(ctx.owner), modes: ['credit', 'damage'],
+      labels: ['You create a Credit token, and your opponent readies Luke Skywalker', 'Your opponent may deal 5 damage to a unit'],
+      then: resume(ctx),
+    })),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'damage') return damageChoice(s, ctx, 5, allUnits(s), [], true)
+    const next = createCreditTokens(s, opponentOf(ctx.owner), 1)
+    return findUnit(next, ctx.sourceInstanceId!) ? readyUnit(next, ctx.sourceInstanceId!) : next
+  },
+})
+
+/**
+ * Vermillion: its controller picks the deck and then the player; that player may play the revealed
+ * card for free, out of their own deck or the other player's, and the OTHER player (the only one
+ * "different" from them with two players) creates the Credit tokens. Each step carries what it needs
+ * in its `step`: `deck`, then `play:<deck owner>`, then the play's tail `credits:<player>:<count>`.
+ */
+registerCard('LAW_215', { // Vermillion
+  abilities: [{ trigger: 'onAttackEnd', description: 'If this unit survived, reveal the top card of a deck, then choose a player. They may play the revealed card for free. If they do, a different player creates Credit tokens equal to that card\'s cost.', effect: (s, ctx) => {
+    const candidates = BOTH_BASES.filter(p => s.players[p].deck.length > 0)
+    if (!selfOf(s, ctx) || candidates.length === 0) return s
+    return pushChoice(s, { kind: 'choosePlayerThen', id: `${ctx.sourceInstanceId}-deck`, controller: ctx.owner, text: "reveal the top card of a player's deck", candidates, then: resume({ ...ctx, cardId: 'LAW_215' }, 'deck') })
+  } }],
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'deck') {
+      const top = s.players[ctx.playerChosen!].deck[0]
+      if (!top) return s
+      return pushChoice(s, { kind: 'choosePlayerThen', id: `${ctx.sourceInstanceId}-player`, controller: ctx.owner, text: `choose a player who may play ${s.cards[top]?.name ?? top} for free`, then: resume(ctx, `play:${ctx.playerChosen}`) })
+    }
+    if (ctx.step?.startsWith('play:')) {
+      const deckOwner = ctx.step.slice('play:'.length) as PlayerId
+      const player = ctx.playerChosen!
+      const top = s.players[deckOwner].deck[0]
+      if (!top) return s
+      const cost = s.cards[top]?.cost ?? 0
+      return playFromZoneChoice(s, { ...ctx, owner: player }, {
+        id: `${ctx.sourceInstanceId}-vermillion`, zone: player === deckOwner ? 'deckTop' : 'opponentDeckTop', optional: true, free: true,
+        then: { ifYouDo: resume(ctx, `credits:${opponentOf(player)}:${cost}`) },
+      })
+    }
+    const [, who, count] = (ctx.step ?? '').split(':')
+    return Number(count) > 0 ? createCreditTokens(s, who as PlayerId, Number(count)) : s
+  },
+})
+
+registerCard('LAW_170', swapPairWp( // Double-Cross
+  "Choose a friendly non-leader unit and an enemy non-leader unit. Exchange control of those units. The player who takes control of the lower-cost unit creates Credit tokens equal to the difference between those units' costs.",
+  nonLeader, 'permanent', (s, ctx, friendly, enemy) => {
+    const mine = findUnit(s, friendly)
+    const theirs = findUnit(s, enemy)
+    if (!mine || !theirs) return s
+    const diff = printedCost(s, mine.unit) - printedCost(s, theirs.unit)
+    // The cheaper unit's new controller, read after both trades so a trade that did not happen pays nobody.
+    if (diff < 0 && mine.owner === opponentOf(ctx.owner)) return createCreditTokens(s, mine.owner, -diff)
+    if (diff > 0 && theirs.owner === ctx.owner) return createCreditTokens(s, theirs.owner, diff)
+    return s
+  }))
+
+const GRANT_PAYROLL_HEIST = 'GRANT_PAYROLL_HEIST'
+registerCard(GRANT_PAYROLL_HEIST, { sourceCardId: 'LAW_169', ...attacks('On Attack: Create a Credit token.', (s, ctx) => createCreditTokens(s, ctx.owner, 1)) })
+registerCard('LAW_169', whenPlayed('For this phase, each friendly unit gains: "On Attack: Create a Credit token."', (s, ctx) => // Payroll Heist
+  lastingOnEach(s, s.players[ctx.owner].units, { abilityCardIds: [GRANT_PAYROLL_HEIST] })))
+
+registerCard('LAW_225', attacks('Attached unit gains: "On Attack: Discard a card from your deck. If its cost is odd, create a Credit token."', (s, ctx) => { // Han's Golden Dice
+  const [next, milled] = millTop(s, ctx.owner, 1)
+  return milled.some(id => (next.cards[id]?.cost ?? 0) % 2 === 1) ? createCreditTokens(next, ctx.owner, 1) : next
+}))
+registerCard('LAW_141', whenDefeated('Attached unit gains: "When Defeated: An opponent creates Credit tokens equal to this unit\'s cost."', (s, ctx) => { // Targeted For Removal
+  const cost = ctx.defeatedUnit ? s.cards[ctx.defeatedUnit.cardId]?.cost ?? 0 : 0
+  return cost > 0 ? createCreditTokens(s, opponentOf(ctx.owner), cost) : s
+}))
+
+// Leaders. A front whose printed cost includes "defeat a friendly X" or "return a friendly X" asks for
+// it as the action's first step, after the C=N and the exhaust are paid, the way Emperor Palpatine's does.
+
+/** Chewbacca's "defeat a friendly resource" (front cost, deployed "may"), then the shared effect. */
+const chewiePick = (optional: boolean) => (s: GameState, ctx: Resumable): GameState =>
+  resourceThen(s, ctx, { holder: ctx.owner, optional, step: 'chewie', text: 'defeat a friendly resource to deal 2 damage to a unit and create a Credit token' })
+registerCard('LAW_013', { // Chewbacca
+  ...leaderFront('[C=1, Exhaust, defeat a friendly resource]: Deal 2 damage to a unit and create a Credit token.', {
+    cost: 1,
+    usable: (s, ctx) => s.players[ctx.owner].resources.length > 0,
+    effect: chewiePick(false),
+  }),
+  ...attacks('You may defeat a friendly resource. If you do, deal 2 damage to a unit and create a Credit token.', (s, ctx) => chewiePick(true)(s, { ...ctx, cardId: 'LAW_013' })),
+  ifYouDo: (s, ctx) => {
+    const pick = resourcePicked(s, ctx)
+    if (!pick) return s
+    const next = createCreditTokens(defeatResource(s, pick.holder, pick.index), ctx.owner, 1)
+    return damageChoice(next, ctx, 2, allUnits(next))
+  },
+})
+
+const krennicDeals = unitDealsWp('Another friendly unit deals damage equal to its power to an enemy unit.', pickAll(pickFriendly, pickOther), pickEnemy, (s, u) => effectivePower(s, u))
+registerCard('LAW_008', { // Director Krennic
+  ...leaderFront('[Exhaust, defeat a friendly unit]: Create a Credit token.', {
+    usable: anyUnitPasses(pickFriendly),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'defeat a friendly unit to create a Credit token', 'harm', false, 'krennic'),
+  }),
+  abilities: krennicDeals.abilities!.map(a => ({ ...a, trigger: 'whenDeployed' as const })),
+  ifYouDo: (s, ctx) => (ctx.step === 'krennic'
+    ? createCreditTokens(defeatUnits(s, [ctx.targetInstanceId!]), ctx.owner, 1)
+    : krennicDeals.ifYouDo!(s, ctx)),
+})
+
+/** Jabba's back: the Underworld units in hand he could play, Credit payment priced in. */
+const jabbaPlayable = (s: GameState, owner: PlayerId): number[] => s.players[owner].hand.flatMap((id, i) => {
+  const c = s.cards[id]
+  return c?.type === 'unit' && cardHasTrait(s, c.id, 'Underworld') && canAffordFromHand(s, owner, c) ? [i] : []
+})
+registerCard('LAW_015', { // Jabba the Hutt
+  ...leaderFront("[C=1, Exhaust, return a friendly Underworld unit to its owner's hand]: Create a Credit token.", {
+    cost: 1,
+    usable: anyUnitPasses(pickAll(pickFriendly, pickTrait('Underworld'))),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickTrait('Underworld'))), "return a friendly Underworld unit to its owner's hand to create a Credit token", 'cunning', false, 'jabba'),
+  }),
+  // Back: the play goes through the Play a Card payment step, so Credit tokens can pay for it, and
+  // `creditGrant` gives the unit Ambush as it enters when one did. Count Dooku's front is the precedent
+  // for an ability raising that step; with nothing to pay with, Done is its only answer.
+  actionAbilities: [{
+    description: 'Action: Play an Underworld unit from your hand. If you defeated a Credit while paying its cost, that unit gains Ambush for this phase.',
+    usable: (s, self) => jabbaPlayable(s, controllerOf(s, self)).length > 0,
+    effect: (s, ctx) => {
+      const handIndices = jabbaPlayable(s, ctx.owner)
+      return handIndices.length
+        ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices, text: 'play an Underworld unit; if a Credit pays for it, it gains Ambush for this phase', then: resume({ ...ctx, cardId: 'LAW_015' }, 'jabbaPlay') })
+        : s
+    },
+  }],
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'jabba') return createCreditTokens(returnUnitToHand(s, ctx.targetInstanceId!), ctx.owner, 1)
+    const c = ctx.cardChosen ? s.cards[ctx.cardChosen] : undefined
+    if (ctx.handIndex === undefined || !c) return s
+    const terms = exploitTerms(s, ctx.owner, c)
+    return raiseExploit(s, ctx.owner, c.id, ctx.handIndex, terms ? { ...terms, ...(terms.credit ? { creditGrant: [KW.ambush] } : {}) } : { limit: 0, discount: 2 })
+  },
+})
+
+const ASPECTS = ['Vigilance', 'Command', 'Aggression', 'Cunning', 'Villainy', 'Heroism']
+registerCard('LAW_018', { // Lando Calrissian
+  ...leaderFront('[C=1, Exhaust]: Choose an aspect, then discard a card from a deck. If it has the chosen aspect, create a Credit token.', {
+    cost: 1,
+    effect: (s, ctx) => pushChoice(s, { kind: 'chooseMode', id: `${ctx.sourceInstanceId}-aspect`, controller: ctx.owner, modes: ASPECTS, labels: ASPECTS, then: resume(ctx) }),
+  }),
+  ...whenDeployed('You may defeat a friendly Credit token. If you do, create 3 Credit tokens.', (s, ctx) =>
+    (friendlyCreditTokens(s, ctx.owner) > 0
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'defeat a friendly Credit token to create 3 Credit tokens', then: resume({ ...ctx, cardId: 'LAW_018' }, 'landoBack') })
+      : s)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'landoBack') return createCreditTokens(defeatCreditTokens(s, ctx.owner, 1), ctx.owner, 3)
+    if (ctx.step?.startsWith('lando:')) {
+      const [next, milled] = millTop(s, ctx.playerChosen!, 1)
+      return milled.some(id => printedAspect(next.cards[id], ctx.step!.slice('lando:'.length))) ? createCreditTokens(next, ctx.owner, 1) : next
+    }
+    const candidates = BOTH_BASES.filter(p => s.players[p].deck.length > 0)
+    return candidates.length
+      ? pushChoice(s, { kind: 'choosePlayerThen', id: `${ctx.sourceInstanceId}-deck`, controller: ctx.owner, text: `discard the top card of a player's deck (${ctx.step} creates a Credit token)`, candidates, then: resume(ctx, `lando:${ctx.step}`) })
+      : s
+  },
+})
+
+/** Tobias Beckett's back: the units `owner` owns that the other player controls. */
+const ownedNotControlled = (s: GameState, owner: PlayerId): string[] =>
+  s.players[opponentOf(owner)].units.filter(u => u.owner === owner).map(u => u.instanceId)
+/** "Defeat any number of ...": one pick at a time, carried in the step, and all defeated together at the end. */
+const tobiasPick = (s: GameState, ctx: Resumable, chosen: string[]): GameState => {
+  const targets = ownedNotControlled(s, ctx.owner).filter(id => !chosen.includes(id))
+  if (targets.length === 0) return tobiasDefeat(s, ctx, chosen)
+  return pushChoice(s, {
+    kind: 'selectUnitThen', intent: 'harm', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, hookOnDecline: true,
+    text: "defeat a unit you own but don't control; for each, create a Credit token and draw a card", then: resume(ctx, `tobias:${chosen.join(',')}`),
+  })
+}
+const tobiasDefeat = (s: GameState, ctx: Resumable, chosen: string[]): GameState => {
+  if (chosen.length === 0) return s
+  const n = chosen.filter(id => findUnit(s, id)).length
+  const next = defeatUnits(s, chosen.filter(id => findUnit(s, id)))
+  return n > 0 ? drawCards(createCreditTokens(next, ctx.owner, n), ctx.owner, n) : next
+}
+registerCard('LAW_002', { // Tobias Beckett
+  ...leaderFront('[Exhaust]: Choose a friendly unit. An opponent takes control of it. If they do, create a Credit token.', {
+    usable: anyUnitPasses(pickFriendly),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'choose a friendly unit; an opponent takes control of it and you create a Credit token', 'cunning', false, 'tobiasFront'),
+  }),
+  ...whenDeployed("Defeat any number of units you own but don't control. For each unit defeated this way, create a Credit token and draw a card.", (s, ctx) =>
+    (ownedNotControlled(s, ctx.owner).length ? tobiasPick(s, { ...ctx, cardId: 'LAW_002' }, []) : s)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'tobiasFront') {
+      const chosen = findUnit(s, ctx.targetInstanceId!)
+      if (!chosen) return s
+      // A leader unit that would change control is defeated instead (CR 3.4.6), so "they" never do.
+      if (isLeaderUnit(s, chosen.unit)) return defeatUnits(s, [chosen.unit.instanceId])
+      const next = stealTo(s, opponentOf(ctx.owner), ctx.targetInstanceId, 'permanent')
+      return controls(next, opponentOf(ctx.owner), ctx.targetInstanceId) ? createCreditTokens(next, ctx.owner, 1) : next
+    }
+    const chosen = (ctx.step ?? '').slice('tobias:'.length).split(',').filter(Boolean)
+    return ctx.targetInstanceId ? tobiasPick(s, ctx, [...chosen, ctx.targetInstanceId]) : tobiasDefeat(s, ctx, chosen)
+  },
+})
+
+registerCard('LAW_006', { // Vel Sartha
+  ...leaderFront('[Exhaust]: Give an Experience token to a unit. An opponent creates a Credit token.', {
+    usable: anyUnitPasses(pickAny),
+    effect: (s, ctx) => expChoice(createCreditTokens(s, opponentOf(ctx.owner), 1), ctx, pickedIds(s, ctx, pickAny)),
+  }),
+  ...attacks('You may give an Experience token to a unit. If you do, an opponent creates a Credit token.', (s, ctx) =>
+    unitThen(s, { ...ctx, cardId: 'LAW_006' }, pickedIds(s, ctx, pickAny), 'give an Experience token to a unit; an opponent creates a Credit token', 'help', true, 'vel')),
+  ifYouDo: (s, ctx) => createCreditTokens(giveToken(s, ctx.targetInstanceId!, TOKEN_EXPERIENCE, ctx.owner), opponentOf(ctx.owner), 1),
+})
+
+/**
+ * Alliance Outpost's cost, "defeat a friendly token", spans every kind of token a player can hold: a
+ * token upgrade they own on a unit, a token unit they control, a Credit token, or their Force token.
+ * The kind is asked first only when there is more than one, then which one where that matters.
+ */
+type OutpostCost = 'defeatUpgrade' | 'defeatUnit' | 'defeatCredit' | 'defeatForce'
+const outpostTokenUpgrades = (s: GameState, owner: PlayerId) => friendlyUpgradeCandidates(s, owner, 'unit').filter(r => isTokenCard(r.cardId))
+const outpostTokenUnits = (s: GameState, owner: PlayerId) => s.players[owner].units.filter(u => isTokenCard(u.cardId)).map(u => u.instanceId)
+const outpostCosts = (s: GameState, owner: PlayerId): OutpostCost[] => [
+  ...(outpostTokenUpgrades(s, owner).length ? ['defeatUpgrade' as const] : []),
+  ...(outpostTokenUnits(s, owner).length ? ['defeatUnit' as const] : []),
+  ...(friendlyCreditTokens(s, owner) > 0 ? ['defeatCredit' as const] : []),
+  ...(hasForceToken(s, owner) ? ['defeatForce' as const] : []),
+]
+const OUTPOST_COST_LABELS: Record<OutpostCost, string> = {
+  defeatUpgrade: 'Defeat a friendly token upgrade', defeatUnit: 'Defeat a friendly token unit',
+  defeatCredit: 'Defeat a friendly Credit token', defeatForce: 'Defeat your Force token',
+}
+const outpostPay = (s: GameState, ctx: Resumable, cost: OutpostCost): GameState => {
+  switch (cost) {
+    case 'defeatUpgrade': return selectUpgradeThen(s, ctx, outpostTokenUpgrades(s, ctx.owner), 'defeat a friendly token upgrade', false, 'outpostUpgrade')
+    case 'defeatUnit': return unitThen(s, ctx, outpostTokenUnits(s, ctx.owner), 'defeat a friendly token unit', 'harm', false, 'outpostUnit')
+    case 'defeatCredit': return outpostReward(defeatCreditTokens(s, ctx.owner, 1), ctx)
+    case 'defeatForce': return outpostReward(defeatForceToken(s, ctx.owner), ctx)
+  }
+}
+/** "Give an Experience or Shield token to a unit, or create a Credit token": a unit only where one is in play. */
+const outpostReward = (s: GameState, ctx: Resumable): GameState =>
+  (allUnits(s).length
+    ? pushChoice(s, {
+      kind: 'chooseMode', id: `${ctx.sourceInstanceId}-reward`, controller: ctx.owner, modes: ['experience', 'shield', 'credit'],
+      labels: ['Give an Experience token to a unit', 'Give a Shield token to a unit', 'Create a Credit token'], then: resume(ctx),
+    })
+    : createCreditTokens(s, ctx.owner, 1))
+registerCard('LAW_019', { // Alliance Outpost
+  ...baseEpic('[defeat a friendly token]: Give an Experience or Shield token to a unit, or create a Credit token.', {
+    usable: (s, ctx) => outpostCosts(s, ctx.owner).length > 0,
+    effect: (s, ctx) => {
+      const costs = outpostCosts(s, ctx.owner)
+      return costs.length === 1
+        ? outpostPay(s, ctx, costs[0])
+        : pushChoice(s, { kind: 'chooseMode', id: `${ctx.sourceInstanceId}-cost`, controller: ctx.owner, modes: costs, labels: costs.map(c => OUTPOST_COST_LABELS[c]), then: resume(ctx) })
+    },
+  }),
+  ifYouDo: (s, ctx) => {
+    switch (ctx.step) {
+      case 'defeatUpgrade': case 'defeatUnit': case 'defeatCredit': case 'defeatForce': return outpostPay(s, ctx, ctx.step)
+      case 'outpostUpgrade': return ctx.upgradeChosen ? outpostReward(defeatUpgradeAt(s, ctx.upgradeChosen.unitId, ctx.upgradeChosen.upgradeIndex), ctx) : s
+      case 'outpostUnit': return outpostReward(defeatUnits(s, [ctx.targetInstanceId!]), ctx)
+      case 'experience': return expChoice(s, ctx, allUnits(s).map(u => u.instanceId))
+      case 'shield': return shieldChoice(s, ctx, allUnits(s).map(u => u.instanceId), false)
+      default: return createCreditTokens(s, ctx.owner, 1)
+    }
+  },
+})
 
 // ── Disclose (SEC's set mechanic, #603) ──────────────────────────────────────────────────────────
 // "Disclose <aspect icons>" reveals cards from hand whose aspects, together, cover the printed list

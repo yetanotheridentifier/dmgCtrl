@@ -740,12 +740,12 @@ export interface PlayFromHandSpec {
  * second.
  */
 export type PlayFromZone =
-  | 'hand' | 'resources' | 'opponentResources' | 'deckTop' | 'handOrResources'
+  | 'hand' | 'resources' | 'opponentResources' | 'deckTop' | 'opponentDeckTop' | 'handOrResources'
   | 'discard' | 'opponentDiscard' | 'anyDiscard' | 'handOrDiscard'
 
 /** True if `zone` can hold a card somebody other than the player playing it owns. */
 export function zoneCrossesOwners(zone: PlayFromZone): boolean {
-  return zone === 'opponentResources' || zone === 'opponentDiscard' || zone === 'anyDiscard'
+  return zone === 'opponentResources' || zone === 'opponentDeckTop' || zone === 'opponentDiscard' || zone === 'anyDiscard'
 }
 
 /** A card offered for play, with its index in the zone it is played out of. */
@@ -1467,7 +1467,10 @@ type ChoiceVariant =
   // defeat this token. If you do, pay 1 less"), offered on top of whichever mode a card itself
   // declares (or with none at all) whenever the payer holds any. Picks are read by ordinal position
   // (there is nothing else to distinguish one Credit token from another), the same as `resources`.
-  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean }
+  // `creditGrant` is what the played unit gains for this phase if at least one Credit is defeated
+  // paying for it (Jabba the Hutt: "If you defeated a Credit while paying its cost, that unit gains
+  // Ambush for this phase"), given as it enters play so an entry keyword like Ambush still fires.
+  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean; creditGrant?: KeywordInstance[] }
   // The one door for playing a card out of somewhere other than the Play a Card action: any card
   // type, out of `zone`, answered by `optionIndex` into `candidates`. `free` bypasses the cost and
   // the aspect penalty (CR 8.5); `costDelta` adjusts it; `waive` forgives aspect penalties. An

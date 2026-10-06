@@ -750,6 +750,11 @@ function finishExploit(state: GameState, choice: Extract<PendingChoice, { kind: 
     // Credit's own rule: defeating it triggers nothing, and it does not reduce ready resources
     // (unlike `resources`, above), since it is a separate currency.
     next = defeatCreditTokens(next, owner, choice.picks.length)
+    // "If you defeated a Credit while paying its cost, that unit gains <keywords> for this phase"
+    // (Jabba the Hutt): a grant for this very card, which the play below consumes as the unit enters.
+    if (choice.creditGrant && choice.picks.length > 0 && card.type === 'unit') {
+      next = updatePlayer(next, owner, { nextUnitGrants: [...(next.players[owner].nextUnitGrants ?? []), { cardId: card.id, keywords: choice.creditGrant }] })
+    }
   } else if (choice.damage === undefined) {
     powers = chosen.map(u => effectivePower(state, u))
     ;({ state: next, owed } = defeatForCost(next, chosen.map(u => u.instanceId)))
@@ -809,7 +814,8 @@ function removeFromZone(state: GameState, controller: PlayerId, zone: PlayFromZo
     case 'hand': return updatePlayer(state, owner, { hand: drop(p.hand, index) })
     case 'resources':
     case 'opponentResources': return updatePlayer(state, owner, { resources: p.resources.filter((_, i) => i !== index) })
-    case 'deckTop': return updatePlayer(state, owner, { deck: p.deck.slice(1) })
+    case 'deckTop':
+    case 'opponentDeckTop': return updatePlayer(state, owner, { deck: p.deck.slice(1) })
     case 'discard':
     case 'opponentDiscard': return updatePlayer(state, owner, { discard: drop(p.discard, index) })
     case 'anyDiscard': return updatePlayer(state, owner, {
