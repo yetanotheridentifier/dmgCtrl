@@ -32,7 +32,11 @@ export type Action =
   // replaced with the top card of the deck. A standing permission read straight off the card, like
   // `playFromDiscard`, rather than a raised choice: `resourceIndex` addresses it in the player's own
   // resource zone, and `targetInstanceId` supplies the host when the smuggled card is an upgrade.
-  | { type: 'smuggle'; resourceIndex: number; targetInstanceId?: string }
+  // `granted` takes the Smuggle a card gains (Tech) rather than the one it prints: CR 14.b makes each
+  // an independent ability. `costUnitId` is the friendly unit an additional cost on the bracket lands
+  // on (First Light: "deal 4 damage to a friendly unit"). `choiceId` is set when an ability made the
+  // play ("Play a card using Smuggle. It costs 2 less", Lando Calrissian): the move answers that choice.
+  | { type: 'smuggle'; resourceIndex: number; targetInstanceId?: string; granted?: boolean; costUnitId?: string; choiceId?: string }
   // `choiceId` is set when this attack is how a pending choice is ANSWERED (Ambush, Support,
   // "you may attack"). Without it the resolver had to guess which choice the attack belonged to,
   // and guessed the queue head, consuming the wrong one when several were outstanding.

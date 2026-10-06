@@ -251,6 +251,12 @@ export interface ResourceState {
    * goes to when it leaves the zone, and whose card it is if it is played out of the zone.
    */
   owner?: PlayerId
+  /**
+   * For a resource taken from its owner, the unit whose leaving play hands it back (DJ: "When this
+   * unit leaves play, that resource's owner takes control of it"), as `UnitState.controlUntil` is for
+   * a unit. Settled by `returnControlledResources`.
+   */
+  controlUntil?: string
 }
 
 export interface LeaderState {
@@ -753,6 +759,19 @@ export function zoneCrossesOwners(zone: PlayFromZone): boolean {
   return zone === 'opponentResources' || zone === 'opponentDeckTop' || zone === 'opponentDiscard' || zone === 'anyDiscard'
 }
 
+/**
+ * Where a played card came from, as the abilities that read it need it: "when you play a card from
+ * your resources" (Bail Organa), "when you play a card using Smuggle" (Hondo Ohnaka) and "if you play
+ * this unit from your hand" (Millennium Falcon). `other` is every other zone: a deck, a search, a
+ * discard pile. `smuggle` marks a play out of the resource zone using Smuggle.
+ */
+export interface HowPlayed {
+  from: 'hand' | 'resources' | 'other'
+  smuggle?: boolean
+}
+export const PLAYED_FROM_HAND: HowPlayed = { from: 'hand' }
+export const PLAYED_ELSEWHERE: HowPlayed = { from: 'other' }
+
 /** A card offered for play, with its index in the zone it is played out of. */
 export interface PlayFromRef {
   index: number
@@ -1149,6 +1168,8 @@ export interface TriggerContext {
   playingPlayer?: PlayerId
   /** `whenPlayCard`: the card was played out of a resource zone ("when you play a card from your resources", Bail Organa). */
   playedFromResources?: boolean
+  /** `whenPlayCard`: the card was played using Smuggle ("when you play a card using Smuggle", Hondo Ohnaka). */
+  playedUsingSmuggle?: boolean
   /**
    * `whenUnitAttacks`: whose unit is attacking. The point fires on both players, so every
    * registration compares this against `ctx.owner` ("a friendly unit attacks" or "an enemy unit attacks").
@@ -1489,6 +1510,10 @@ type ChoiceVariant =
   // triggers already see it spent (L3-37 replaying an event does not offer a third play).
   // `piloting` plays a Pilot as an upgrade for its Piloting cost (Wedge Antilles), so it goes on to the
   // attach step too.
+  // "Play a card using Smuggle. It costs 2 less." (Lando Calrissian): answered by a `smuggle` action
+  // carrying this choice's id, so the plays on offer are exactly the standing Smuggle ones at
+  // `costDelta`, with a gained Smuggle and an additional cost included. `then` resumes the card.
+  | { kind: 'playUsingSmuggle'; id: string; controller: PlayerId; costDelta: number; then?: IfYouDo }
   | { kind: 'playCardFrom'; id: string; controller: PlayerId; zone: PlayFromZone; candidates: PlayFromRef[]; optional?: boolean; free?: boolean; costDelta?: number; waive?: AspectWaiver; piloting?: boolean; targetUnits?: string[]; then?: PlayFromTail; markUsed?: { instanceId: string; key: string } }
   // Follow-up: attach the upgrade picked above to one of `targets`, paying for it there. Mandatory.
   // `candidates` is the list the `playCardFrom` above offered, carried through so a `then.again`

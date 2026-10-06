@@ -16,12 +16,8 @@ import type { EngineCard } from './types'
 export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   ASH_081: { arena: 'space' }, // Nebulon-C Frigate — a Space capital ship; the source ships Ground
 
-  // Millennium Falcon gains Ambush "if you play this unit from your hand". Nothing records how a unit
-  // was played, so it keeps Ambush, which `toKeywords` would drop: right when played from hand, the
-  // usual way, and wrong only when smuggled.
-  SHD_204: { keywords: [{ name: 'Ambush' }, { name: 'Smuggle' }] },
-
   // A printed keyword the source omits.
+  SHD_005: { keywords: [{ name: 'Raid', value: 1 }] }, // Hondo Ohnaka (leader): printed on his back, absent from the source
   HMW_018: { keywords: [{ name: 'Ambush' }, { name: 'Raid', value: 1 }] }, // The Warrior: both printed on her back, neither in the source
   SEC_189: { keywords: [{ name: 'Plot' }] }, // Lurking Snub Fighter: the source ships no Keywords array at all, though FrontText prints the full Plot reminder
   SHD_007: { keywords: [{ name: 'Overwhelm' }] }, // Moff Gideon (leader)
