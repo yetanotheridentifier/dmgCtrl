@@ -267,6 +267,11 @@ export interface BaseState {
   /** The base's "Epic Action" has been used: once each game, like a leader's deploy (CR 2.5). */
   epicActionUsed?: boolean
   /**
+   * Each use this game of a base "Action:" with a per-game limit (Mystic Monastery: "no more than 3 times
+   * each game"), one `baseActionKey` per use. Absent means none.
+   */
+  actionsUsed?: string[]
+  /**
    * Upgrades attached to the base (Fortify: "Attach this to your base, not a unit"). Absent means none.
    * Each gives the base its ability, which belongs to the base's controller: see `baseAbilityCardIds`.
    * A card upgrade goes to its owner's discard pile when defeated, as one on a unit does.

@@ -17,12 +17,7 @@ import type { Action } from '../engine/actions'
  * 28 of #462's Force-token cards: the ones needing nothing beyond the primitive itself (create,
  * optional use, and the passive "while the Force is with you" grant), covering all three shapes
  * `mayUseForceWp`/`useForceCost`/`conditionalKeywords` are built for. See `forceTokens.test.ts` for
- * the primitive itself.
- *
- * Left for a follow-up (see the ticket comment): the 8 identical "friendly Force unit attacks" bases
- * plus 3 more bases (a new `baseAbilities` primitive), the touched cards needing a context extension
- * or a new trigger point, Shatterpoint and Impossible Escape (alternate-cost shapes), and Leia
- * Organa (her own gated Action).
+ * the primitive itself, and `forceCards2.test.ts` for the rest of LOF's Force cards.
  */
 
 const POOL = poolFor(['LOF'])

@@ -9,7 +9,7 @@ import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, 
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, discardCards, discardTaken, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, defeatForceToken } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, discardCards, discardTaken, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, forceUse } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, cardHasTrait, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
@@ -1880,15 +1880,17 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'selectFriendlyUnit':
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) next = hotshotManeuver(next, choice.controller, targetInstanceId, choice.id)
       break
-    case 'mayPayThen':
+    case 'mayPayThen': {
       // The cost first, then the rest of the ability. Revealing an event is its own cost: the card
-      // stays in hand. "Use the Force" (#462) defeats the Force token instead of paying resources.
+      // stays in hand. "Use the Force" uses the Force instead of paying resources, which "When you use
+      // the Force" hears once the rest of the ability has resolved.
+      const rest = (s: GameState): GameState =>
+        runIfYouDo(choice.damageSelf && choice.then.sourceInstanceId ? dealDamageToUnit(s, choice.then.sourceInstanceId, choice.damageSelf) : s, choice.then)
       next = choice.useForce
-        ? defeatForceToken(next, choice.controller)
-        : updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
-      if (choice.damageSelf && choice.then.sourceInstanceId) next = dealDamageToUnit(next, choice.then.sourceInstanceId, choice.damageSelf)
-      next = runIfYouDo(next, choice.then)
+        ? forceUse(next, choice.controller, rest)
+        : rest(updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost)))
       break
+    }
     case 'mayCollectBounty': {
       const before = next
       next = runBountyCollection(next, choice.cardId, choice.abilityIndex, choice.controller, choice.sourceInstanceId, choice.ctx)
@@ -2651,6 +2653,10 @@ function useBaseUpgradeAction(state: GameState, cardId: string, index: number): 
   let next = state
   if (offered.ability.defeatsSelf) next = defeatBaseUpgrade(next, owner, cardId)
   if (offered.ability.oncePerPhase) next = recordBaseActionUsed(next, owner, baseActionKey(cardId, index))
+  if (offered.ability.usesEachGame !== undefined) {
+    const b = next.players[owner].base
+    next = updatePlayer(next, owner, { base: { ...b, actionsUsed: [...(b.actionsUsed ?? []), baseActionKey(cardId, index)] } })
+  }
   const ctx = { owner, cardId, sourceInstanceId: baseSourceId(cardId) }
   next = runAttributed(next, { cardId, controller: owner }, s => offered.ability.effect(s, ctx))
   next = checkWin(next)
@@ -2677,7 +2683,6 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
   let next = state
   if (ability.cost) next = updatePlayer(next, owner, payCost(next.players[owner], ability.cost))
   if (ability.exhaustCost) next = exhaustUnit(next, instanceId) // pay the "[Exhaust]" cost
-  if (ability.useForceCost) next = defeatForceToken(next, owner) // pay the "[use the Force]" cost (#462)
   if (ability.oncePerRound) {
     const key = actionAbilityKey(cardId, index)
     next = updatePlayer(next, found.owner, {
@@ -2686,7 +2691,9 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
       ),
     })
   }
-  next = runAttributed(next, { cardId, controller: owner, instanceId }, s => ability.effect(s, { owner, cardId, sourceInstanceId: instanceId }))
+  const run = (s: GameState) => runAttributed(s, { cardId, controller: owner, instanceId }, s2 => ability.effect(s2, { owner, cardId, sourceInstanceId: instanceId }))
+  // A "[use the Force]" cost is paid by using the Force, which "When you use the Force" hears once the ability has resolved.
+  next = ability.useForceCost ? forceUse(next, owner, run) : run(next)
   next = checkWin(next)
   if (next.winner !== null) return next
   return hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
@@ -2706,8 +2713,8 @@ function useLeaderAbility(state: GameState, index: number, targetInstanceId?: st
 
   const paid = ability.cost ? payCost(p, ability.cost) : p
   let next = updatePlayer(state, owner, { ...paid, leader: { ...p.leader, exhausted: true } })
-  if (ability.useForceCost) next = defeatForceToken(next, owner) // pay the "[use the Force]" cost (#462)
-  next = runAttributed(next, { cardId: p.leader.cardId, controller: owner }, s => ability.effect(s, { owner, cardId: p.leader.cardId, targetInstanceId }))
+  const run = (s: GameState) => runAttributed(s, { cardId: p.leader.cardId, controller: owner }, s2 => ability.effect(s2, { owner, cardId: p.leader.cardId, targetInstanceId }))
+  next = ability.useForceCost ? forceUse(next, owner, run) : run(next) // the "[use the Force]" cost, as above
   next = checkWin(next)
   if (next.winner !== null) return next
   next = handOffOpponentChoice(next, owner)

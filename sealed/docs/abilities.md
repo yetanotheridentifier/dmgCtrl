@@ -141,7 +141,15 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenDamageDealt`, `whenEnemyAttacksBase`,
 `whenFriendlyAttackEnds`, `whenDeployed`, `whenPlayUpgrade`, `whenPlayCard`, `whenUnitEntersPlay`,
-`whenActionPhaseStarts`, `whenAbilityUsed`, `bounty`.
+`whenActionPhaseStarts`, `whenAbilityUsed`, `whenUseForce`, `bounty`.
+
+`whenUseForce` ("when you use the Force", Yoda, The Father) is raised by `forceUse` (`effects.ts`),
+the one route every use of the Force takes: a "[use the Force]" action cost and an accepted
+`mayPayThen.useForce` both go through it, and an ability that uses the Force as part of its own effect
+(Shatterpoint, Impossible Escape) calls it directly. It fires after the rest of the using ability has
+run, so a choice that ability raised is answered first. Only the user hears it: their undeployed leader,
+base and units. Defeating the token any other way ("defeat your Force token", Alliance Outpost) is not a
+use and raises nothing.
 
 `whenPlayUpgrade` ("when you play an upgrade") fires on the player's undeployed leader, base and units,
 with the card in `ctx.playedCardId` and, unless it went on a base, the unit it went on in
@@ -558,6 +566,13 @@ belongs to the player whose base zone holds it:
 Epic Actions are written through `baseEpic` in `cardDefinitions.ts`, with `basePlay` for the ones that
 play a unit from hand. The effect's source is `<cardId>-base`, so every choice it raises has a stable
 id and "another unit" excludes nothing.
+
+A base's own printed triggered ability or "Action:" needs nothing beyond what an upgrade on the base
+uses (below), because `baseAbilityCardIds` starts with the base card itself: a "When ...:" is an
+ordinary `abilities` entry collected by `collectBaseTriggers` (the Force bases: "When a friendly Force
+unit attacks", Vergence Temple's regroup start), and an "Action:" is a `baseAbilities.actions` entry
+(Tomb of Eilram, Mystic Monastery). `usesEachGame` caps an action at N uses a game ("use this ability no
+more than 3 times each game"), counted in `BaseState.actionsUsed`.
 
 ### Upgrades on a base (Fortify)
 
