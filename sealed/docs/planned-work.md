@@ -306,21 +306,14 @@ which wait on that blocker's ticket; Stolen AT-Hauler
   15 of the 23 candidate cards shipped with it, and the other 8 (Aayla Secura, Ki-Adi-Mundi, both
   sides of Ahsoka Tano and Padmé Amidala's leaders, Anakin Skywalker, Kit Fisto, Padmé Amidala's unit
   and For The Republic) with #730, so every TWI Coordinate card is built.
-  **The Force's primitive is finished** (#462): a token capped at one per player (`PlayerState.forceToken`,
+  **The Force is finished** (#462, #733): a token capped at one per player (`PlayerState.forceToken`,
   a flag rather than Credit's count), "the Force is with you" a no-op while already held, "use the
   Force" always optional even where a card's own text omits "may" (CR 8.37.4). Two cost surfaces
   extend existing machinery rather than adding new ones: `mayPayThen.useForce` (a fourth mode beside
-  `cost`/`damageSelf`/`revealEvent`) and `useForceCost` on an action ability (beside `exhaustCost`).
-  28 of the 57 sole-blocked cards shipped (recounted against `registeredCardIds()`; the ticket's
-  "unlocks 57" holds once a triage false-positive on two cards that merely mention losing the Force
-  *trait* is discounted). Left for a follow-up ticket: the 8 identical "When a friendly Force unit
-  attacks" bases plus 3 more (12 cards, needing a new `baseAbilities` primitive for a base's own
-  printed ability, nothing today covers one); a new `whenUseForce` player-level trigger point (Yoda,
-  The Father); a Force-gated option inside a "Choose one:" (Shatterpoint); an exhaust-OR-use-the-Force
-  alternate cost (Impossible Escape); Leia Organa (her own gated Action, no longer blocked, #464);
-  Chirrut Îmwe (the `onDefense` context now carries the attacker, #464); a `whenUpgradeAttached`
-  context read (Kylo Ren); filtering "play another unit" down to unique units (Luke Skywalker); a new
-  "damage dealt to your base" trigger point (The Daughter). All on #733.
+  `cost`/`damageSelf`/`revealEvent`) and `useForceCost` on an action ability (beside `exhaustCost`),
+  and both pay through `forceUse`, which raises `whenUseForce` (Yoda, The Father). A base's own
+  printed trigger or "Action:" needed no new primitive, only a per-game use cap (Mystic Monastery).
+  All 66 LOF cards that print the Force are built (#462 shipped 28, #733 the other 38).
   **Granted ability blocks are finished** (#464): "Attached unit gains: ...", "for this phase, each
   friendly unit gains: ..." and "each other friendly unit gains: ..." needed no new hook, since an
   upgrade's abilities are its host's, a phase grant is a lasting effect and an aura grant is
@@ -332,7 +325,7 @@ which wait on that blocker's ticket; Stolen AT-Hauler
   point, raised by the `readyUnit` primitive itself rather than a resolver call site so it hears every
   route a unit readies through). Foresight split again and shipped with #744, once the regroup phase's draw
   waited on `whenRegroupStarts` choices. Condemn shipped with #682; the pilot cards shipped with Piloting and the pilot leaders with #754, Boba Fett's front split to #756; Han's
-  Golden Dice, Targeted For Removal and Payroll Heist shipped with #719; Leia Organa on #733; For The Republic shipped
+  Golden Dice, Targeted For Removal and Payroll Heist shipped with #719; Leia Organa with #733; For The Republic shipped
   with #730.
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards

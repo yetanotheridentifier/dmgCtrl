@@ -1029,10 +1029,15 @@ never offered without a token held.
 
 - **`PlayerState.forceToken?: boolean`** (a flag, not a count) with `hasForceToken`/
   `createForceToken`/`defeatForceToken` (`effects.ts`), mirroring Credit's shape.
+- **`forceUse(state, owner, then)`** is every use of the Force: it defeats the token, runs the rest
+  of the using ability, and then raises `whenUseForce` ("When you use the Force", Yoda, The Father) for
+  the user's leader, base and units. Both cost surfaces below pay through it, and so does an ability
+  that uses the Force inside its own effect (Shatterpoint's second mode, Impossible Escape's second
+  cost). `defeatForceToken` alone is a defeat, not a use (Alliance Outpost's "defeat your Force token").
 - **Two cost surfaces, both extensions of existing machinery, not new mechanisms:**
   - `mayPayThen.useForce`, a fourth mode of the choice `cost`/`damageSelf`/`revealEvent` already
     share, for "You may use the Force. If you do, <effect>". `legalMoves.ts` offers `acceptChoice`
-    only while the controller holds a token; accepting defeats it instead of paying resources.
+    only while the controller holds a token; accepting uses the Force instead of paying resources.
     `mayUseForceWp` (`cardDefinitions.ts`) wraps `whenPlayed` the way `mayPayWp` does, and its
     `declineStep` runs the `ifYouDo` hook on a decline too, at that step, for a card that goes on
     either way regardless of the answer (Savage Opress: "if you don't, deal 9 damage to your base";
@@ -1045,20 +1050,25 @@ never offered without a token held.
   feeding `conditionalKeywords`/`statModifier`/`aura`, with `toKeywords` leaving out a bundled
   conditional keyword the source lists as permanent (Jedi Sentinel's
   Sentinel, Plo Koon's Grit, Darth Tyranus's Ambush — its unconditional Shielded stays).
-- **28 of the 57 sole-blocked cards shipped** (recounted against `registeredCardIds()` via
-  `--triage LOF`; the ticket's "unlocks 57" is correct once LOF_033's false-positive match is
-  discounted, see "Triage tooling" below). Everything shipped needed nothing beyond the primitive
-  above. Left for a follow-up: the 8 identical "When a friendly Force unit attacks" bases plus 3 more
-  bases, all needing a new `baseAbilities` primitive for a base's own printed ability (nothing today
-  covers a base's own triggered or action ability beyond `epicAction`/`aura`/upgrade-granted
-  actions/`interceptDamage`); a new `whenUseForce` player-level trigger point (Yoda, The Father); a
-  Force-gated option inside a "Choose one:" (Shatterpoint); an exhaust-a-unit-OR-use-the-Force
-  alternate cost (Impossible Escape); Leia Organa's own gated Action; Chirrut Îmwe, whose `onDefense`
-  context now carries the attacker's id; a `whenUpgradeAttached` context read (Kylo
-  Ren); filtering "when you play another unit" down to unique units (Luke Skywalker); and a new "when
-  damage is dealt to your base" trigger point (The Daughter).
-- **Triage tooling**: `bench/triage.ts`'s `force-token` regex (`/\bthe Force\b|\bForce token\b/i`)
-  also matches LOF_033 and SEC_054, whose printed text is about a unit **losing the Force trait**
-  ("Each enemy unit loses the Force trait for this phase"), which needs trait removal and has nothing
-  to do with the token. A false positive, not a real blocker; the real sole count for LOF is 57 once
-  it is discounted.
+- **A "you may use the Force" heard at another point** is the When Played helper moved to that point
+  with a `hears` that also requires a token held (`heardAt` with `withForce`): Chirrut Îmwe on
+  `onDefense` (the attacker is `ctx.attackerInstanceId`, given -2/-0 `untilEndOfAttack`), Kylo Ren on
+  `whenUpgradeAttached` read with `youPlayedUpgradeOnThis`, Luke Skywalker and Eighth Brother on
+  `whenPlayUnit` (Luke filtered to a unique played unit), The Daughter on `whenDamageDealt` filtered to
+  her own base.
+- **A base's own ability is a plain registration** (see Bases in [abilities.md](abilities.md)): the eight
+  "When a friendly Force unit attacks" bases hear `whenUnitAttacks` for an attacker of their own
+  side with the Force trait; Temple of Destruction hears `whenDamageDealt` for 3 or more combat damage a
+  friendly unit dealt to an enemy base; Vergence Temple is a `whenRegroupStarts`; Mystic Monastery and
+  Tomb of Eilram are base actions, not offered while the token is already held, so neither is ever
+  spent for nothing. Tomb of Eilram's "[exhaust a friendly unit]" cost is a pick of a ready friendly
+  unit before the token is made, and the action is offered only while one exists.
+- **A use of the Force that is one of two ways to pay** is a `chooseMode` over the ways that can be
+  paid: Shatterpoint offers its Force mode only while a token is held, and Impossible Escape ("you may
+  either exhaust a friendly unit or use the Force") offers each cost it can pay plus "Do neither".
+- **Every LOF card that prints the Force is built**: the 66 cards `--triage LOF` marks with the Force,
+  each registered.
+- **Triage tooling**: `bench/triage.ts`'s `force-token` probe leaves out "the Force trait" (LOF_033,
+  SEC_054: "Each enemy unit loses the Force trait for this phase"), which is trait removal and has
+  nothing to do with the token. It still marks every other card that prints the Force as blocked, though
+  the token is built, so a set's Force cards read as blocked in its triage.

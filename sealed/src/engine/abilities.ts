@@ -91,7 +91,7 @@ export type TriggerPoint =
   // controller's leader and units. `ctx.usedAbility` is the ability's handle, which
   // `runAbilitiesAgain` runs a second time. Reading which point it was is the hearing card's job.
   | 'whenAbilityUsed'
-  // "When you use the Force" (Yoda, The Father): raised by `useTheForce`, the one route every use of the
+  // "When you use the Force" (Yoda, The Father): raised by `forceUse`, the one route every use of the
   // Force takes, once the ability that used it has resolved. Heard by the user's undeployed leader, base
   // and units only, since every card that reads it says "you".
   | 'whenUseForce'

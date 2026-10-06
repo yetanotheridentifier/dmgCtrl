@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, actionAbilityKey, collectUnitTriggers, collectCardTriggers, abilityCardIds, usedAbilityOf } from './abilities'
-import { fireBatch, runAbilitiesAgain, thenAfterChoices, discardCards, discardTaken, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken, defeatForceToken, useTheForce } from './effects'
+import { fireBatch, runAbilitiesAgain, thenAfterChoices, discardCards, discardTaken, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken, defeatForceToken, forceUse } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage, isDoomed } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -6149,6 +6149,8 @@ const leaderSide = (cardId: string): string => `${cardId}-leader`
 interface FrontSpec {
   /** The action's "C=N". */
   cost?: number
+  /** "Action [Exhaust, use the Force]". */
+  useForceCost?: boolean
   /** Offered only while this holds, so the action is never used for nothing. */
   usable?: When
   effect: (s: GameState, ctx: Resumable) => GameState
@@ -6159,6 +6161,7 @@ const leaderFront = (description: string, spec: FrontSpec): CardDefinition => ({
     actions: [{
       description,
       ...(spec.cost ? { cost: spec.cost } : {}),
+      ...(spec.useForceCost ? { useForceCost: true } : {}),
       usable: (s, owner) => spec.usable?.(s, { owner }) ?? true,
       effect: (s, ctx) => spec.effect(s, { owner: ctx.owner, cardId: ctx.cardId, sourceInstanceId: leaderSide(ctx.cardId) }),
     }],
@@ -12662,21 +12665,8 @@ registerCard('JTL_133', allOf( // Allegiant General Pryde
 // while already held, `createForceToken`); "Use the Force" is ALWAYS optional, even where a card's
 // own text omits "may" (`mayUseForceWp`, `useForceCost`, both defined earlier alongside `mayPayWp`/
 // `exhaustCost`). "While the Force is with you" grants get the same live-board-read treatment as
-// Coordinate (#472): a continuously checked condition, not a cached flag.
-//
-// 28 of the 57 sole-blocked cards shipped here: the ones needing nothing beyond the primitive.
-// Left for a follow-up (see the ticket comment, new ticket filed alongside this one): the 8 identical
-// "When a friendly Force unit attacks" bases plus LOF_019/022/025/028 (12 cards total, all needing a
-// new `baseAbilities` primitive for a base's own printed ability — nothing today covers a base's own
-// "When X:"/"Action:"); LOF_101 Yoda and LOF_260 The Father (a new `whenUseForce` player-level trigger
-// point — NOT shipping Yoda's simple When Played half alone, the same half-registration mistake #707
-// called out for Jabba the Hutt); LOF_079 Shatterpoint (a Force-gated option inside "Choose one");
-// LOF_218 Impossible Escape (an exhaust-a-unit-OR-use-the-Force alternate cost); LOF_098 Leia Organa
-// (her gated "Action [use the Force]" is her own `actionAbilities` with `usable`); LOF_067 Chirrut Îmwe
-// (`onDefense` now carries `attackerInstanceId`); LOF_229 Kylo Ren (needs a `whenUpgradeAttached` ctx
-// read, JTL_202 precedent on #680); LOF_249 Luke Skywalker (needs "when you play ANOTHER UNIQUE unit"
-// filtering on the existing "play another unit" trigger); LOF_252 The Daughter (needs a "when damage
-// is dealt to your base" trigger point).
+// Coordinate (#472): a continuously checked condition, not a cached flag. The cards that need more than
+// the token (bases, "When you use the Force", a use heard at another point) follow further down.
 const unitHasForce = (s: GameState, u: UnitState): boolean => {
   const o = unitOwner(s, u)
   return o !== undefined && hasForceToken(s, o)
@@ -12789,7 +12779,7 @@ registerCard('LOF_014', { // Grand Inquisitor — front: Action [Exhaust, use th
 // ── The Force: bases, "When you use the Force", and abilities heard at other points ───────────────
 // A base's own printed ability needs nothing of its own: a triggered one is an `abilities` entry, which
 // `collectBaseTriggers` collects for the base's controller, and an "Action:" is a `baseAbilities.actions`
-// entry, offered by `usableBaseActions`. Every use of the Force goes through `useTheForce`, which fires
+// entry, offered by `usableBaseActions`. Every use of the Force goes through `forceUse`, which fires
 // `whenUseForce` once the ability that used it has resolved.
 
 /** A When Played helper's abilities, fired at `trigger` instead and collected only while `hears` holds. */
@@ -12858,7 +12848,7 @@ registerCard('LOF_079', { // Shatterpoint
       ...(hasForceToken(s, ctx.owner) ? [['force', 'Use the Force. If you do, defeat a non-leader unit.'] as [string, string]] : []),
     ])),
   ifYouDo: (s, ctx) => (ctx.step === 'force'
-    ? useTheForce(s, ctx.owner, used => targetChoice(used, ctx, 'selectUnitToDefeat', nonLeaderIds(used)))
+    ? forceUse(s, ctx.owner, used => targetChoice(used, ctx, 'selectUnitToDefeat', nonLeaderIds(used)))
     : targetChoice(s, ctx, 'selectUnitToDefeat', nonLeaderIds(s, u => remainingHp(s, u) <= 3))),
 })
 registerCard('LOF_218', { // Impossible Escape
@@ -12875,7 +12865,7 @@ registerCard('LOF_218', { // Impossible Escape
     switch (ctx.step) {
       case 'exhaust': return unitThen(s, ctx, readyFriendlyIds(s, ctx.owner), 'exhaust a friendly unit', 'cunning', false, 'exhausted')
       case 'exhausted': return escape(exhaustUnit(s, ctx.targetInstanceId!))
-      case 'force': return useTheForce(s, ctx.owner, escape)
+      case 'force': return forceUse(s, ctx.owner, escape)
       default: return s
     }
   },
@@ -12910,6 +12900,151 @@ registerCard('LOF_249', heardAt('whenPlayUnit', withForce(playedUniqueUnit), may
   'give an Experience token and a Shield token to this unit', (s, ctx) => giveToken(giveToken(s, ctx.sourceInstanceId!, TOKEN_EXPERIENCE), ctx.sourceInstanceId!, TOKEN_SHIELD))))
 registerCard('LOF_252', heardAt('whenDamageDealt', withForce((_s, ctx) => friendlyBaseDamaged(ctx)), mayUseForceWp( // The Daughter
   'When damage is dealt to your base: You may use the Force (lose your Force token). If you do, heal 2 damage from your base.', 'heal 2 damage from your base', (s, ctx) => healBase(s, ctx.owner, 2))))
+registerCard('LOF_087', heardAt('whenPlayUnit', withForce(() => true), mayUseForceWp( // Eighth Brother (Ambush is printed)
+  'When you play another unit: You may use the Force (lose your Force token). If you do, give a unit +2/+2 for this phase.', 'give a unit +2/+2 for this phase', (s, ctx) =>
+    lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { power: 2, hp: 2 }))))
+
+// Leaders whose front is "Action [Exhaust, use the Force]", each with its back alongside.
+const SENTINEL_FOR_PHASE: Buff = { keywords: [{ name: 'Sentinel' }] }
+registerCard('LOF_003', allOf( // Ahsoka Tano (Sentinel on her back is printed)
+  leaderFront('Action [Exhaust, use the Force]: Give a friendly unit Sentinel for this phase.', {
+    useForceCost: true, usable: anyUnitPasses(pickFriendly),
+    effect: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickFriendly), SENTINEL_FOR_PHASE),
+  }),
+  attacks('On Attack: You may give a friendly unit Sentinel for this phase.', (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickFriendly), SENTINEL_FOR_PHASE, true)),
+))
+/** A leader whose front is "Action [Exhaust, use the Force]: play ..." and whose back is the same as "Action [use the Force]". */
+const forcePlayLeader = (front: string, back: string, o: PlayFromZoneOptions): CardDefinition => ({
+  ...leaderFront(front, { useForceCost: true, usable: (s, ctx) => canPlayFromZone(s, ctx.owner, o), effect: (s, ctx) => playFromZoneChoice(s, ctx, o) }),
+  actionAbilities: [{
+    description: back, useForceCost: true,
+    usable: (s, u) => { const owner = unitOwner(s, u); return owner !== undefined && canPlayFromZone(s, owner, o) },
+    effect: (s, ctx) => playFromZoneChoice(s, ctx, o),
+  }],
+})
+const villainyNonUnit: PlayFromZoneOptions = { zone: 'hand', test: c => c !== undefined && !printedUnit(c) && printedAspect(c, 'Villainy'), waive: { all: true } }
+registerCard('LOF_018', forcePlayLeader( // Anakin Skywalker
+  'Action [Exhaust, use the Force]: Play a Villainy non-unit card from your hand, ignoring its aspect penalties.',
+  'Action [use the Force]: Play a Villainy non-unit card from your hand, ignoring its aspect penalties.', villainyNonUnit))
+registerCard('LOF_013', forcePlayLeader( // Barriss Offee
+  'Action [Exhaust, use the Force]: Play an event from your hand. It costs 1 less.',
+  'Action [use the Force]: Play an event from your hand. It costs 1 less.', { zone: 'hand', test: c => c?.type === 'event', costDelta: -1 }))
+/** "An opponent chooses a ready unit they control. Exhaust that unit." */
+const opponentExhaustsOwn = (s: GameState, ctx: EventCtx): GameState => {
+  const opp = opponentOf(ctx.owner)
+  return targetChoice(s, { ...ctx, owner: opp }, 'mayExhaustUnit', readyFriendlyIds(s, opp))
+}
+registerCard('LOF_015', allOf( // Cal Kestis
+  leaderFront('Action [Exhaust, use the Force]: An opponent chooses a ready unit they control. Exhaust that unit.', {
+    useForceCost: true, usable: (s, ctx) => readyFriendlyIds(s, opponentOf(ctx.owner)).length > 0, effect: opponentExhaustsOwn,
+  }),
+  attacks('On Attack: An opponent chooses a ready unit they control. Exhaust that unit.', opponentExhaustsOwn),
+))
+registerCard('LOF_009', { // Darth Maul: the first unit is dealt its 1 as it is picked, then the different unit is picked
+  ...allOf(
+    leaderFront('Action [Exhaust, use the Force]: Deal 1 damage to a unit and 1 damage to a different unit.', {
+      useForceCost: true, usable: anyUnitPasses(pickAny), effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'deal 1 damage to a unit', 'harm', false),
+    }),
+    attacks('On Attack: Deal 1 damage to a unit and 1 damage to a different unit.', (s, ctx) => unitThen(s, ctx as Resumable, pickedIds(s, ctx, pickAny), 'deal 1 damage to a unit', 'harm', false)),
+  ),
+  ifYouDo: (s, ctx) => {
+    const first = ctx.targetInstanceId!
+    const hit = dealDamageToUnit(s, first, 1, { cardId: ctx.cardId, controller: ctx.owner })
+    return damageChoice(hit, ctx, 1, allUnits(hit).filter(u => u.instanceId !== first))
+  },
+})
+const withoutExperience: Pick = (_s, u) => !u.upgrades.some(t => t.cardId === TOKEN_EXPERIENCE)
+registerCard('LOF_008', allOf( // Obi-Wan Kenobi
+  leaderFront('Action [Exhaust, use the Force]: Give an Experience token to a unit without an Experience token on it.', {
+    useForceCost: true, usable: anyUnitPasses(withoutExperience), effect: (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, withoutExperience)),
+  }),
+  attacks('On Attack: You may give an Experience token to another unit without an Experience token on it.', (s, ctx) =>
+    expChoice(s, ctx, pickedIds(s, ctx, pickAll(pickOther, withoutExperience)), 1, true)),
+))
+/** Qui-Gon Jinn's return, then the free play its `ifYouDo` raises. */
+const quiGonReturn = (s: GameState, ctx: Resumable, optional: boolean): GameState =>
+  unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, nonLeader)), "return a friendly non-leader unit to its owner's hand", 'cunning', optional)
+registerCard('LOF_016', {
+  ...leaderFront("Action [Exhaust, use the Force]: Return a friendly non-leader unit to its owner's hand. Play a non-Villainy unit that costs less than the returned unit from your hand for free.", {
+    useForceCost: true, usable: anyUnitPasses(pickAll(pickFriendly, nonLeader)), effect: (s, ctx) => quiGonReturn(s, ctx, false),
+  }),
+  abilities: [{ trigger: 'onAttackEnd', description: "When this unit completes an attack (and survives): You may return a friendly non-leader unit to its owner's hand. Play a non-Villainy unit that costs less than the returned unit from your hand for free.",
+    effect: (s, ctx) => quiGonReturn(s, ctx as Resumable, true) }],
+  ifYouDo: (s, ctx) => {
+    const returned = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!returned) return s
+    const cost = printedCost(s, returned)
+    return playFromZoneChoice(returnUnitToHand(s, returned.instanceId), ctx, {
+      zone: 'hand', free: true, test: c => printedUnit(c) && !printedAspect(c, 'Villainy') && (c?.cost ?? 0) < cost,
+    })
+  },
+})
+
+// Units.
+registerCard('LOF_094', { actionAbilities: [{ // Jedi Consular
+  description: 'Action [Exhaust, use the Force]: Play a unit from your hand. It costs 2 less.',
+  exhaustCost: true, useForceCost: true,
+  usable: (s, u) => { const owner = unitOwner(s, u); return owner !== undefined && canPlayFromZone(s, owner, { zone: 'hand', test: printedUnit, costDelta: -2 }) },
+  effect: (s, ctx) => playFromZoneChoice(s, ctx, { zone: 'hand', test: printedUnit, costDelta: -2 }),
+}] })
+const costsAtMost4: Pick = (s, u) => printedCost(s, u) <= 4
+registerCard('LOF_185', mayUseForceWp( // Baylan Skoll (Hidden is printed)
+  "When Played: You may use the Force. If you do, return a non-leader unit that costs 4 or less to its owner's hand. Then, its owner may play it for free.",
+  "return a non-leader unit that costs 4 or less to its owner's hand", (s, ctx) => (ctx.step === 'returned'
+    ? returnThenOwnerMayPlayFree(s, ctx, false)
+    : unitThen(s, ctx, pickedIds(s, ctx, pickAll(nonLeader, costsAtMost4)), "return a non-leader unit that costs 4 or less to its owner's hand", 'cunning', false, 'returned'))))
+registerCard('LOF_115', alsoAt(mayUseForceWp( // Dagoyan Master
+  'When Played/When Defeated: You may use the Force (lose your Force token). If you do, search the top 5 cards of your deck for a Force unit, reveal it, and draw it.',
+  'search the top 5 cards of your deck for a Force unit', (s, ctx) => searchDrawChoice(s, ctx, 5, c => printedUnit(c) && printedTrait(c, 'Force'))), 'whenDefeated'))
+registerCard('LOF_039', mayUseForceWp( // Darth Sidious (Restore 2 is printed)
+  'When Played: You may use the Force. If you do, defeat each non-Sith unit with 3 or less remaining HP.', 'defeat each non-Sith unit with 3 or less remaining HP', s =>
+    defeatUnits(s, allUnits(s).filter(u => !unitHasTrait(s, u, 'Sith') && remainingHp(s, u) <= 3).map(u => u.instanceId))))
+const PRIESTESS_SHIELDS: UpToSpec = { text: 'give a unit a Shield token (up to 5)', intent: 'help', test: pickAny, apply: shieldEach }
+const priestessPicks = eachOfUpTo('', 5, PRIESTESS_SHIELDS).ifYouDo!
+registerCard('LOF_072', mayUseForceWp( // Priestesses of the Force
+  'When Played: You may use the Force (lose your Force token). If you do, give a Shield token to each of up to 5 units.', 'give a Shield token to each of up to 5 units', (s, ctx) =>
+    (ctx.step === undefined ? upToOffer(s, ctx, PRIESTESS_SHIELDS, { left: 5, chosen: [] }) : priestessPicks(s, ctx))))
+
+// Events.
+const FORESEEN: PlayFromZoneOptions = { zone: 'deckTop', costDelta: -4 }
+registerCard('LOF_188', { // As I Have Foreseen: the top card is named in the prompt, which is the look
+  ...whenPlayed('Look at the top card of your deck. You may use the Force (lose your Force token). If you do, play that card. It costs 4 less.', (s, ctx) => {
+    const top = s.players[ctx.owner].deck[0]
+    return top !== undefined && hasForceToken(s, ctx.owner) && canPlayFromZone(s, ctx.owner, FORESEEN)
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, useForce: true, text: `play ${s.cards[top]?.name ?? 'the top card of your deck'} from the top of your deck for 4 less`, then: resume(ctx) })
+      : s
+  }),
+  ifYouDo: (s, ctx) => playFromZoneChoice(s, ctx, FORESEEN),
+})
+registerCard('LOF_189', mayUseForceWp( // Liberated by Darkness
+  'Use the Force (lose your Force token). If you do, take control of a non-leader unit. At the start of the regroup phase, its owner takes control of it.',
+  'take control of a non-leader unit', (s, ctx) => (ctx.step === 'chosen'
+    ? stealTo(s, ctx.owner, ctx.targetInstanceId)
+    : unitThen(s, ctx, pickedIds(s, ctx, nonLeader), 'take control of a non-leader unit', 'cunning', false, 'chosen'))))
+registerCard('LOF_227', { // The Will of the Force: "that player" is the owner of the returned unit
+  ...whenPlayed("Return a non-leader unit to its owner's hand. You may use the Force (lose your Force token). If you do, that player discards a random card from their hand.", (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, nonLeader), "return a non-leader unit to its owner's hand", 'cunning', false, 'returned')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step?.startsWith('discard:')) return discardAtRandom(s, ctx.step.slice('discard:'.length) as PlayerId)
+    const found = findUnit(s, ctx.targetInstanceId ?? '')
+    if (ctx.step !== 'returned' || !found) return s
+    const who = found.unit.owner ?? found.owner
+    const back = returnUnitToHand(s, found.unit.instanceId)
+    return hasForceToken(back, ctx.owner)
+      ? pushChoice(back, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, useForce: true, text: 'that player discards a random card from their hand', then: resume(ctx, `discard:${who}`) })
+      : back
+  },
+})
+const GRANT_TRUST_YOUR_INSTINCTS = 'GRANT_TRUST_YOUR_INSTINCTS'
+registerCard(GRANT_TRUST_YOUR_INSTINCTS, { sourceCardId: 'LOF_221', statModifier: (_s, _u, ctx) => (ctx.attacking ? { power: 2 } : {}), dealsDamageFirst: () => true })
+const TRUST_ATTACK: AttackOffer = { grantCardId: GRANT_TRUST_YOUR_INSTINCTS }
+registerCard('LOF_221', { // Trust Your Instincts: not offered when no unit could attack, so the Force is never used for nothing
+  ...whenPlayed('Use the Force (lose your Force token). If you do, attack with a unit. It gets +2/+0 for this attack and deals its combat damage before the defender.', (s, ctx) =>
+    (hasForceToken(s, ctx.owner) && canOfferAttack(s, ctx.owner, TRUST_ATTACK)
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, useForce: true, text: 'attack with a unit at +2/+0, dealing its combat damage first', then: resume(ctx) })
+      : s)),
+  ifYouDo: (s, ctx) => offerAttack(s, ctx.owner, ctx.sourceInstanceId!, TRUST_ATTACK),
+})
 
 // ── Granted ability blocks: "Attached unit gains: ...", "each friendly unit gains: ..." ──────────────
 // A card that hands a unit a whole ability block needs no plumbing of its own. An upgrade's abilities

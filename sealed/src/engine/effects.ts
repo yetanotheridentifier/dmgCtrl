@@ -423,7 +423,7 @@ export function defeatForceToken(state: GameState, owner: PlayerId): GameState {
  * ability raised is answered first, since the queue drains nothing while a choice is open (CR 7.6).
  * Defeating the token by any other route ("defeat your Force token") is not a use and fires nothing.
  */
-export function useTheForce(state: GameState, owner: PlayerId, then: (s: GameState) => GameState = s => s): GameState {
+export function forceUse(state: GameState, owner: PlayerId, then: (s: GameState) => GameState = s => s): GameState {
   if (!hasForceToken(state, owner)) return state
   const used = then(defeatForceToken(state, owner))
   return fireBatch(used, [...collectPlayerTriggers(used, 'whenUseForce', owner), ...collectUnitsTrigger(used, 'whenUseForce', owner)])

@@ -51,7 +51,7 @@ const F: Record<string, EngineCard> = {
   UPG: card({ id: 'UPG', type: 'upgrade', cost: 1, power: 1, hp: 1 }),
   VILE: card({ id: 'VILE', type: 'event', cost: 2, aspects: ['Villainy'] }),
   VILU: card({ id: 'VILU', arena: 'ground', cost: 2, power: 2, hp: 2, aspects: ['Villainy'] }),
-  EV: card({ id: 'EV', type: 'event', cost: 2, aspects: ['Command'] }),
+  EV: card({ id: 'EV', type: 'event', cost: 2 }),
   RET: card({ id: 'RET', arena: 'ground', cost: 4, power: 2, hp: 5, aspects: ['Command'] }),
   CHEAP: card({ id: 'CHEAP', arena: 'ground', cost: 2, power: 2, hp: 2, aspects: ['Command'] }),
   SITH: card({ id: 'SITH', arena: 'ground', cost: 2, power: 2, hp: 2, traits: ['Sith'] }),
@@ -452,7 +452,7 @@ describe('Leaders whose front is an "Action [Exhaust, use the Force]"', () => {
   })
 
   it('LOF_008 Obi-Wan Kenobi: front gives an Experience token to a unit without one', () => {
-    const xp = { cardId: TOKEN_EXPERIENCE }
+    const xp = { cardId: TOKEN_EXPERIENCE, owner: 'player' as const }
     let s = withToken(board({ player: { leader: undeployed('LOF_008'), units: [unit('u0', 'FILLER'), unit('u1', 'FILLER', { upgrades: [xp] })] } }))
     s = resolve(s, LEADER)
     expect(choice(s)).toMatchObject({ kind: 'mayGiveTokens', targets: ['u0'] })
@@ -476,7 +476,7 @@ describe('Leaders whose front is an "Action [Exhaust, use the Force]"', () => {
     expect(readyCount(s)).toBe(10)
   })
   it('LOF_016 back: when this unit completes an attack, may do the same', () => {
-    const s = attackBase(board({ player: { units: [unit('a0', 'LOF_016'), unit('r0', 'RET')], hand: ['CHEAP'] } }), 'a0')
+    const s = attackBase(board({ player: { units: [unit('a0', 'LOF_016', { isLeader: true }), unit('r0', 'RET')], hand: ['CHEAP'] } }), 'a0')
     expect(choice(s)).toMatchObject({ kind: 'selectUnitThen', optional: true, targets: ['r0'] })
   })
 })
@@ -496,7 +496,7 @@ describe('Units that use the Force', () => {
     expect(choice(s)).toMatchObject({ kind: 'selectUnitThen', targets: ['e0', 'e1'] })
     s = accept(s, { targetInstanceId: 'e0' })
     expect(U(s, 'e0')).toBeUndefined()
-    expect(choice(s)).toMatchObject({ kind: 'playCardFrom', controller: 'opponent', free: true })
+    expect(choice(s)).toMatchObject({ kind: 'playUnitFromHand', controller: 'opponent' })
   })
   it('LOF_115 Dagoyan Master: When Played and When Defeated, may use the Force to search the top 5 for a Force unit', () => {
     let s = playUnit(withToken(board({ player: { ...rich, hand: ['LOF_115'], deck: ['TST_U1', 'FORCEU', 'TST_U1'] } })))
@@ -537,11 +537,12 @@ describe('Units that use the Force', () => {
 describe('Events that use the Force', () => {
   it('LOF_188 As I Have Foreseen: may use the Force to play the top card of the deck for 4 less', () => {
     let s = playEvent(withToken(board({ player: { hand: ['LOF_188'], deck: ['RET', 'TST_U1'] } })))
-    expect(choice(s)).toMatchObject({ kind: 'mayPayThen', useForce: true })
+    expect(choice(s)).toMatchObject({ kind: 'mayPayThen', useForce: true, text: expect.stringContaining('RET') })
+    const afterEvent = readyCount(s)
     s = accept(s)
     s = accept(s, { optionIndex: 0 })
     expect(s.players.player.units.some(u => u.cardId === 'RET')).toBe(true)
-    expect(readyCount(s)).toBe(10 - 1 - 0) // the event's own cost; RET costs 4 less, so nothing
+    expect(readyCount(s)).toBe(afterEvent) // RET costs 4, less 4
   })
   it('LOF_188 does nothing without the token', () => {
     const s = playEvent(board({ player: { hand: ['LOF_188'], deck: ['RET'] } }))
