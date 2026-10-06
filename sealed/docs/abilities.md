@@ -388,6 +388,12 @@ constant hook or a second printed ability at a third point rides along untouched
 A card whose effect closes over the trigger name, to keep the two copies' choice ids apart, declares
 its abilities explicitly instead, since `alsoAt` hands both copies one closure.
 
+The card's `ifYouDo` hook is shared by every copy, so a block with several steps (a choice, then
+"if you do", then a second choice) is written once and resumes the same way at each point. A step that
+needs "this unit" reads it through `ctx.sourceInstanceId`, which on a When Defeated copy is a unit that
+has already left play: "another friendly unit" excludes it for free, but anything that acts on the unit
+itself has to check it is still there.
+
 `onAttack` and `defeated` are the same retargeting for a block printed at **one** point that is not
 When Played; they move the ability rather than copying it.
 

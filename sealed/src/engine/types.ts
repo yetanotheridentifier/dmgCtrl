@@ -999,6 +999,8 @@ export interface PhaseEvents {
   defeatedWhileAttacking?: PlayerId[]
   /** Instance ids of units healed this phase (Barriss Offee). */
   healedUnits?: string[]
+  /** Players whose base was healed this phase (Dooku's Solar Sailer). */
+  basesHealed?: PlayerId[]
   /**
    * Instance ids whose incoming damage a prevention effect has stopped this phase, for the
    * once-a-phase preventions (Umbaran Mobile Cannon). Recorded for every prevention, since only a
@@ -2097,6 +2099,18 @@ export function recordUnitHealed(state: GameState, instanceId: string): GameStat
 /** Instance ids of units healed this phase (Barriss Offee). */
 export function healedThisPhase(state: GameState): string[] {
   return state.phaseEvents?.healedUnits ?? []
+}
+
+/** Note that `owner`'s base was healed this phase. Idempotent. */
+export function recordBaseHealed(state: GameState, owner: PlayerId): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  const healed = events.basesHealed ?? []
+  return healed.includes(owner) ? state : { ...state, phaseEvents: { ...events, basesHealed: [...healed, owner] } }
+}
+
+/** Whether any base has been healed this phase (Dooku's Solar Sailer). */
+export function baseHealedThisPhase(state: GameState): boolean {
+  return (state.phaseEvents?.basesHealed?.length ?? 0) > 0
 }
 
 /** Note that damage headed for `instanceId` was prevented this phase. Idempotent. */

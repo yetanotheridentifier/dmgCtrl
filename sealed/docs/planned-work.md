@@ -146,7 +146,8 @@ Two phases:
   (Phantom II) or are on #686; Fives, borrowing another unit's When Played abilities, shipped with #683. **When Defeated units are
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
   shared with another trigger point ("When Played/When Defeated") is built on the compound-head framework
-(#463) as its groups ship, with the groups still outstanding on #674; Stolen AT-Hauler
+(#463), whose groups are all shipped (#674), less the compound-head cards blocked by something else,
+which wait on that blocker's ticket; Stolen AT-Hauler
   (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 26 not built across all sets (19 in
   rotation, as `SET_PROGRESS` counts them) are on the ticket of what blocks them, #467 Bounty (Bossk is fully shipped; Jabba the Hutt's back reads capture too, but #707 already built
   its chosen-guardian-and-target shape — what's left blocking the whole leader is an unbuilt "grant a

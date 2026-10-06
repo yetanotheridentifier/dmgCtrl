@@ -7,7 +7,7 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
 import { deployLeaderAsPilot, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
-import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, discardedThisPhase, indirectDamageDealtThisPhase, markAbilityUsed, updatePlayer, upgradeSideId, recordUnitDefeated } from './types'
+import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, discardedThisPhase, indirectDamageDealtThisPhase, baseHealedThisPhase, markAbilityUsed, updatePlayer, upgradeSideId, recordUnitDefeated } from './types'
 import { canTakePilot, affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost, readyResourceCount } from './resources'
@@ -6594,6 +6594,12 @@ registerCard('LAW_004', allOf( // Aurra Sing
   whenDeployed('You may defeat a non-leader unit with 5 or less remaining HP.', (s, ctx) =>
     targetChoice(s, ctx, 'selectUnitToDefeat', pickedIds(s, ctx, remainingAtMost(5)), true)),
 ))
+/** "Discard your hand. If you do, draw `n` cards" (Rey, Black One). */
+const discardHandThenDraw = (s: GameState, owner: PlayerId, n: number): GameState => {
+  let next = s
+  while (next.players[owner].hand.length > 0) next = discardFromHand(next, owner, 0)
+  return drawCards(next, owner, n)
+}
 registerCard('LOF_012', { // Rey
   ...leaderFront('If you played a non-unit Force card this phase, deal 1 damage to a unit.', {
     usable: both(playedCardThisPhase(c => c?.type !== 'unit' && printedTrait(c, 'Force')), anyUnitPasses(pickAny)),
@@ -6601,11 +6607,7 @@ registerCard('LOF_012', { // Rey
   }),
   ...whenDeployed('You may discard your hand. If you do, draw 2 cards.', (s, ctx) =>
     (s.players[ctx.owner].hand.length ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'discard your hand and draw 2 cards', then: resume(ctx) }) : s)),
-  ifYouDo: (s, ctx) => {
-    let next = s
-    while (next.players[ctx.owner].hand.length > 0) next = discardFromHand(next, ctx.owner, 0)
-    return drawCards(next, ctx.owner, 2)
-  },
+  ifYouDo: (s, ctx) => discardHandThenDraw(s, ctx.owner, 2),
 })
 const damagedEnemy = pickAll(pickEnemy, damaged)
 registerCard('TWI_013', { // Mace Windu
@@ -13591,17 +13593,19 @@ const rogueLook = (s: GameState, ctx: Resumable, left: number): GameState => {
   const top = s.players[ctx.owner].deck.slice(0, left)
   return top.length ? cardThen(s, ctx, top, 'put a card on the bottom of your deck', true, `bottom:${top.length}`) : s
 }
+/** The rest of `rogueLook`: each card the player sends to the bottom, then the order of what stays. */
+const rogueLookStep = (s: GameState, ctx: IfYouDoContext): GameState => {
+  const deck = s.players[ctx.owner].deck
+  if (ctx.step === 'top') return ctx.optionIndex === 1 ? updatePlayer(s, ctx.owner, { deck: [deck[1], deck[0], ...deck.slice(2)] }) : s
+  const left = Number(splitStep(ctx.step, 'bottom:')[0])
+  const i = ctx.optionIndex
+  if (i === undefined) return left === 2 ? cardThen(s, ctx, deck.slice(0, 2), 'choose the card to leave on top of your deck', false, 'top') : s
+  const moved = updatePlayer(s, ctx.owner, { deck: [...deck.slice(0, i), ...deck.slice(i + 1), deck[i]] })
+  return left > 1 ? rogueLook(moved, ctx, left - 1) : moved
+}
 registerCard('LAW_119', { // Rogue One
   abilities: [{ trigger: 'whenFriendlyUnitDefeated', description: 'When a friendly unit is defeated: Look at the top 2 cards of your deck. Put any number of them on the bottom of your deck and the rest on top in any order.', effect: (s, ctx) => rogueLook(s, ctx, 2) }],
-  ifYouDo: (s, ctx) => {
-    const deck = s.players[ctx.owner].deck
-    if (ctx.step === 'top') return ctx.optionIndex === 1 ? updatePlayer(s, ctx.owner, { deck: [deck[1], deck[0], ...deck.slice(2)] }) : s
-    const left = Number(splitStep(ctx.step, 'bottom:')[0])
-    const i = ctx.optionIndex
-    if (i === undefined) return left === 2 ? cardThen(s, ctx, deck.slice(0, 2), 'choose the card to leave on top of your deck', false, 'top') : s
-    const moved = updatePlayer(s, ctx.owner, { deck: [...deck.slice(0, i), ...deck.slice(i + 1), deck[i]] })
-    return left > 1 ? rogueLook(moved, ctx, left - 1) : moved
-  },
+  ifYouDo: rogueLookStep,
 })
 
 registerCard('LAW_088', { // Anakin Skywalker
@@ -14316,3 +14320,254 @@ registerCard('JTL_126', { // Eject
     return drawCards(up ? moveAttachmentToGround(s, up.unitId, up.upgradeIndex) : s, ctx.owner, 1)
   },
 })
+
+// ── Compound trigger heads, continued ─────────────────────────────────────────────────────────────
+// The rest of the `When Played/On Attack:` and `When Played/When Defeated:` blocks, built with `alsoAt`
+// as the first groups were. They sit at the end of the module because several build on helpers declared
+// late in it (Bounty, the aspect list, Rogue One's look, the "may" yes/no). Grouped by effect.
+
+/** A yes/no that resumes the card's `ifYouDo` at `step`. */
+const mayStep = (s: GameState, ctx: Resumable, text: string, step?: string): GameState =>
+  pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text, then: resume(ctx, step) })
+const topCardName = (s: GameState, owner: PlayerId): string | undefined => {
+  const top = s.players[owner].deck[0]
+  return top === undefined ? undefined : s.cards[top]?.name ?? top
+}
+/** Discard every card named `name` from `who`'s hand and deck, then shuffle that deck (Annihilator). */
+const discardEveryNamed = (s: GameState, who: PlayerId, name: string | undefined): GameState => {
+  const matching = (zone: string[]) => zone.flatMap((id, i) => (name !== undefined && s.cards[id]?.name === name ? [i] : []))
+  const fromHand = discardCards(s, who, 'hand', matching(s.players[who].hand))
+  const fromDeck = discardCards(fromHand, who, 'deck', matching(fromHand.players[who].deck))
+  return { ...updatePlayer(fromDeck, who, { deck: seededShuffle(fromDeck.players[who].deck, fromDeck.rngSeed) }), rngSeed: nextSeed(fromDeck.rngSeed) }
+}
+/**
+ * "(You may) [take control of and] attach an upgrade on a unit to a different eligible unit": the
+ * upgrade, then where it goes. `targets` is where a chosen upgrade may go; an upgrade with nowhere to
+ * go is never offered.
+ */
+const moveUpgradeWp = (description: string, text: string, candidates: (s: GameState, ctx: EventCtx) => UpgradeRef[],
+  targets: (s: GameState, up: UpgradeRef, ctx: EventCtx) => string[], take: boolean): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) => selectUpgradeThen(s, ctx, candidates(s, ctx).filter(up => targets(s, up, ctx).length > 0), text, true)),
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    if (!up) return s
+    if (!ctx.targetInstanceId) {
+      return pushChoice(s, { kind: 'selectUnitThen', intent: 'attach', id: ctx.sourceInstanceId!, controller: ctx.owner, targets: targets(s, up, ctx), text: `attach ${s.cards[up.cardId]?.name ?? 'the upgrade'} to a different unit`, then: { ...resume(ctx), upgrade: up } })
+    }
+    return moveUpgrade(s, up, ctx.targetInstanceId, take ? ctx.owner : undefined)
+  },
+})
+const notLeaderUpgrade = (s: GameState, up: UpgradeRef): boolean => s.cards[up.cardId]?.type !== 'leader'
+const isBattleDroidToken: Pick = (_s, u) => u.cardId === TOKEN_BATTLE_DROID
+
+// E: decks and hands
+registerCard('SOR_147', alsoAt({ // Black One
+  ...whenPlayed('You may discard your hand. If you do, draw 3 cards.', (s, ctx) =>
+    (s.players[ctx.owner].hand.length ? mayStep(s, ctx, 'discard your hand and draw 3 cards') : s)),
+  ifYouDo: (s, ctx) => discardHandThenDraw(s, ctx.owner, 3),
+}, 'whenDefeated'))
+registerCard('SOR_031', alsoAt({ // Inferno Four
+  ...whenPlayed('Look at the top 2 cards of your deck. Put any number of them on the bottom of your deck and the rest on top in any order.', (s, ctx) => rogueLook(s, ctx, 2)),
+  ifYouDo: rogueLookStep,
+}, 'whenDefeated'))
+registerCard('SOR_236', alsoAt({ // R2-D2
+  ...whenPlayed('Look at the top card of your deck. You may put it on the bottom of your deck.', (s, ctx) => {
+    const name = topCardName(s, ctx.owner)
+    return name === undefined ? s : mayStep(s, ctx, `put ${name} on the bottom of your deck`)
+  }),
+  ifYouDo: (s, ctx) => {
+    const deck = s.players[ctx.owner].deck
+    return deck.length ? updatePlayer(s, ctx.owner, { deck: [...deck.slice(1), deck[0]] }) : s
+  },
+}, 'onAttack'))
+registerCard('SOR_119', alsoAt({ // Reinforcement Walker
+  ...whenPlayed('Look at the top card of your deck. Either draw that card or discard it and heal 3 damage from your base.', (s, ctx) => {
+    const name = topCardName(s, ctx.owner)
+    return name === undefined ? s : chooseModeThen(s, ctx, ctx.sourceInstanceId!, [['draw', `Draw ${name}`], ['discard', `Discard ${name} and heal 3 damage from your base`]])
+  }),
+  ifYouDo: (s, ctx) => (ctx.step === 'draw' ? drawCards(s, ctx.owner, 1) : healBase(discardCards(s, ctx.owner, 'deck', [0]), ctx.owner, 3)),
+}, 'onAttack'))
+registerCard('SOR_238', alsoAt({ // C-3P0
+  ...whenPlayed('Choose a number, then look at the top card of your deck. If its cost is the chosen number, you may reveal and draw it.', (s, ctx) => {
+    const deck = s.players[ctx.owner].deck
+    // Any number may be named; the highest cost in your own deck is the last one that could match.
+    return deck.length ? chooseNumberUpTo(s, ctx, Math.max(1, ...deck.map(id => s.cards[id]?.cost ?? 0)), 'choose a number, then look at the top card of your deck', 'number') : s
+  }),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'draw') return drawCards(s, ctx.owner, 1)
+    const top = s.players[ctx.owner].deck[0]
+    return top !== undefined && (s.cards[top]?.cost ?? 0) === ctx.optionIndex ? mayStep(s, ctx, `reveal and draw ${s.cards[top]?.name ?? top}`, 'draw') : s
+  },
+}, 'onAttack'))
+registerCard('LAW_237', alsoAt({ // Qui-Gon Jinn
+  ...whenPlayed('Look at the top 3 cards of your deck. You may discard 1 of them. Put the rest back on top in any order.', (s, ctx) => {
+    const top = s.players[ctx.owner].deck.slice(0, 3)
+    return top.length ? pushChoice(s, { kind: 'selectCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: top, optional: true, text: 'discard 1 of the top 3 cards of your deck', then: resume(ctx) }) : s
+  }),
+  // The rest stay on top in the order they were in: the reorder is not offered, as for For a Cause I Believe In.
+  ifYouDo: (s, ctx) => (ctx.optionIndex === undefined ? s : discardCards(s, ctx.owner, 'deck', [ctx.optionIndex])),
+}, 'onAttack'))
+registerCard('TWI_146', alsoAt({ // Steela Gerrera
+  ...whenPlayed('You may deal 2 damage to your base. If you do, search the top 8 cards of your deck for a Tactic card, reveal it, and draw it.', (s, ctx) =>
+    mayStep(s, ctx, 'deal 2 damage to your base to search the top 8 cards of your deck for a Tactic card')),
+  ifYouDo: (s, ctx) => searchDrawChoice(dealDamageToBase(s, ctx.owner, 2), ctx, 8, c => printedTrait(c, 'Tactic')),
+}, 'whenDefeated'))
+registerCard('JTL_154', alsoAt({ // Profundity
+  ...whenPlayed('Choose a player. They discard a card from their hand. Then, if they have more cards in their hand than you, they discard a card from their hand.', (s, ctx) =>
+    choosePlayer(s, ctx, 'discard a card from their hand (and another if they then hold more cards than you)', 'chosen')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'chosen') return discards(s, ctx.playerChosen!, 1, ctx.sourceInstanceId!, resume(ctx, `again:${ctx.playerChosen}`))
+    const who = ctx.step!.slice('again:'.length) as PlayerId
+    return s.players[who].hand.length > s.players[ctx.owner].hand.length ? discards(s, who, 1, `${ctx.sourceInstanceId}-again`) : s
+  },
+}, 'whenDefeated'))
+registerCard('JTL_041', alsoAt(unitThenWp("You may defeat an enemy unit. If you do, search its controller's deck and hand for each card with that unit's name and discard them.", // Annihilator
+  pickEnemy, "defeat an enemy unit, then discard every card of its name from its controller's deck and hand", 'harm', true, (s, ctx) => {
+    const found = findUnit(s, ctx.targetInstanceId!)
+    if (!found) return s
+    const defeated = defeatUnit(s, found.unit.instanceId)
+    // Not defeated (it can't be), so "if you do" has not happened.
+    return findUnit(defeated, found.unit.instanceId) ? defeated : discardEveryNamed(defeated, found.owner, cardOf(s, found.unit)?.name)
+  }), 'whenDefeated'))
+
+// F: upgrades moved and taken
+registerCard('LAW_195', alsoAt(mayDefeatUpgradeWp('You may defeat an upgrade attached to a space unit.', // Overcharged Transport
+  (s, up) => findUnit(s, up.unitId)?.unit.arena === 'space'), 'whenDefeated'))
+registerCard('JTL_242', alsoAt(moveUpgradeWp('You may take control of a token upgrade on a unit and attach it to a different eligible unit.', // Shuttle ST-149
+  'take control of a token upgrade on a unit',
+  s => upgradeCandidates(s, { on: 'unit' }).filter(up => up.cardId in TOKEN_CARDS),
+  (s, up, ctx) => moveTargets(s, up, ctx.owner), true), 'whenDefeated'))
+registerCard('SHD_064', alsoAt(moveUpgradeWp('You may attach an upgrade on a unit to another eligible unit controlled by the same player.', // Survivors' Gauntlet
+  'move an upgrade to another unit its controller controls',
+  s => upgradeCandidates(s, { on: 'unit' }).filter(up => notLeaderUpgrade(s, up)),
+  (s, up) => {
+    const host = findUnit(s, up.unitId)
+    return host ? s.players[host.owner].units.filter(u => u.instanceId !== up.unitId && canMoveOnto(s, up, u, host.owner)).map(u => u.instanceId) : []
+  }, false), 'onAttack'))
+registerCard('SHD_142', alsoAt({ // Pre Vizsla
+  ...whenPlayed("You may pay the cost of an upgrade attached to another non-Vehicle unit. If you do, take control of that upgrade and attach it to this unit, if able. If it can't attach to this unit, defeat it instead.", (s, ctx) =>
+    selectUpgradeThen(s, ctx, upgradeCandidates(s, { on: 'unit' }).filter(up => {
+      const host = findUnit(s, up.unitId)?.unit
+      return host !== undefined && host.instanceId !== ctx.sourceInstanceId && nonVehicle(s, host) && notLeaderUpgrade(s, up) &&
+        canAfford(s.players[ctx.owner], s.cards[up.cardId]?.cost ?? 0)
+    }), 'pay the cost of an upgrade on another non-Vehicle unit to take it', true)),
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    if (!up) return s
+    const paid = payResources(s, ctx.owner, s.cards[up.cardId]?.cost ?? 0)
+    const self = findUnit(paid, ctx.sourceInstanceId!)?.unit
+    return self && canMoveOnto(paid, up, self, ctx.owner) ? moveUpgrade(paid, up, self.instanceId, ctx.owner) : defeatUpgradeAt(paid, up.unitId, up.upgradeIndex)
+  },
+}, 'onAttack'))
+registerCard('LAW_224', alsoAt(unitThenWp("Exhaust an enemy unit and return all upgrades on it that cost 4 or less to their owner's hands.", // Liberty
+  pickEnemy, 'exhaust an enemy unit and return its upgrades that cost 4 or less', 'cunning', false, (s, ctx) => {
+    const id = ctx.targetInstanceId!
+    const ups = findUnit(s, id)?.unit.upgrades ?? []
+    // Highest index first, so each return leaves the indices still to come where they were.
+    const back = ups.flatMap((up, i) => ((s.cards[up.cardId]?.cost ?? 0) <= 4 ? [i] : [])).reverse()
+    return back.reduce((acc, i) => returnUpgradeToHand(acc, id, i), exhaustUnit(s, id))
+  }), 'onAttack'))
+
+// G: units returned, readied and defeated
+registerCard('SOR_040', alsoAt(whenPlayed('An opponent chooses a non-leader unit they control. Defeat that unit.', (s, ctx) => { // Avenger
+  const opp = opponentOf(ctx.owner)
+  return targetChoice(s, { ...ctx, owner: opp }, 'selectUnitToDefeat', s.players[opp].units.filter(u => nonLeader(s, u)).map(u => u.instanceId))
+}), 'onAttack'))
+registerCard('TWI_198', alsoAt(targetWp("You may return an enemy non-leader unit with less power than this unit to its owner's hand.", 'selectUnitToReturn', // Enfys Nest
+  pickAll(pickEnemy, nonLeader, (s, u, ctx) => { const self = selfOf(s, ctx); return self !== undefined && effectivePower(s, u) < effectivePower(s, self) }), true), 'onAttack'))
+registerCard('SHD_191', alsoAt(unitThenWp("You may return another friendly non-leader Underworld unit to its owner's hand. If you do, exhaust an enemy unit or resource.", // Xanadu Blood
+  pickAll(pickFriendly, pickOther, nonLeader, pickTrait('Underworld')), "return another friendly Underworld unit to its owner's hand", 'cunning', true, (s, ctx) => {
+    const opp = opponentOf(ctx.owner)
+    const readyEnemies = (st: GameState) => st.players[opp].units.filter(u => !u.exhausted).map(u => u.instanceId)
+    if (ctx.step === 'unit') return targetChoice(s, ctx, 'mayExhaustUnit', readyEnemies(s))
+    if (ctx.step === 'resource') return exhaustReadyResource(s, opp)
+    const returned = returnUnitToHand(s, ctx.targetInstanceId!)
+    if (findUnit(returned, ctx.targetInstanceId!)) return returned
+    // Only the halves that would exhaust something are offered, as for Leia Organa.
+    const modes: [string, string][] = []
+    if (readyEnemies(returned).length) modes.push(['unit', 'Exhaust an enemy unit'])
+    if (returned.players[opp].resources.some(r => !r.exhausted)) modes.push(['resource', 'Exhaust an enemy resource'])
+    return chooseModeThen(returned, ctx, ctx.sourceInstanceId!, modes)
+  }), 'onAttack'))
+registerCard('LAW_185', alsoAt(unitThenWp("Ready another friendly unit. It can't be attacked this phase.", // Ben Solo
+  pickAll(pickFriendly, pickOther), "ready another friendly unit; it can't be attacked this phase", 'help', false,
+  (s, ctx) => addLastingEffect(readyUnit(s, ctx.targetInstanceId!), { targetInstanceId: ctx.targetInstanceId!, cannotBeAttacked: true })), 'whenDefeated'))
+registerCard('JTL_219', alsoAt(whenPlayed('Deal 1 damage to a friendly unit and ready a resource.', (s, ctx) => // Rafa Martez
+  damageChoice(readyResource(s, ctx.owner), ctx, 1, picked(s, ctx, pickFriendly))), 'onAttack'))
+
+// H: targets chosen by a rule rather than by the player
+registerCard('SEC_244', alsoAt({ // Darth Nihilus
+  ...whenPlayed("Deal 3 damage to the unit with the least remaining HP among other units. (If multiple units are tied, choose one.) If it's a non-Vehicle unit, give an Experience token to this unit.", (s, ctx) => {
+    const others = picked(s, ctx, pickOther)
+    if (!others.length) return s
+    const least = Math.min(...others.map(u => remainingHp(s, u)))
+    return unitThen(s, ctx, others.filter(u => remainingHp(s, u) === least).map(u => u.instanceId), 'deal 3 damage to the unit with the least remaining HP', 'harm', false)
+  }),
+  ifYouDo: (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!target) return s
+    const hit = dealDamageToUnit(s, target.instanceId, 3)
+    return nonVehicle(s, target) && findUnit(hit, ctx.sourceInstanceId!) ? giveToken(hit, ctx.sourceInstanceId!, TOKEN_EXPERIENCE) : hit
+  },
+}, 'onAttack'))
+registerCard('TWI_151', alsoAt({ // Resolute
+  costModifier: (s, playerId) => -Math.floor(s.players[playerId].base.damage / 5),
+  ...unitThenWp('Deal 2 damage to an enemy unit and each other enemy unit with the same name as that unit.', pickEnemy,
+    'deal 2 damage to an enemy unit and each other enemy unit with its name', 'harm', false, (s, ctx) => {
+      const chosen = findUnit(s, ctx.targetInstanceId!)?.unit
+      if (!chosen) return s
+      const name = cardOf(s, chosen)?.name
+      const hit = picked(s, ctx, pickAll(pickEnemy, (st, u) => u.instanceId === chosen.instanceId || cardOf(st, u)?.name === name))
+      return hit.reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 2), s)
+    }),
+}, 'onAttack'))
+registerCard('LAW_101', alsoAt({ // Lawbringer
+  ...whenPlayed('Choose an aspect. Give each enemy unit with that aspect -2/-2 for this phase.', (s, ctx) =>
+    chooseModeThen(s, ctx, ctx.sourceInstanceId!, ASPECTS.map(a => [a, a] as [string, string]))),
+  ifYouDo: (s, ctx) => lastingOnEach(s, picked(s, ctx, pickAll(pickEnemy, pickAspect(ctx.step!))), { power: -2, hp: -2 }),
+}, 'onAttack'))
+registerCard('LAW_178', alsoAt({ // Persecutor
+  // The arena is chosen whatever happens; only the damage is a "may".
+  ...whenPlayed('Choose an arena. You may deal 3 damage to each unit in that arena.', (s, ctx) => chooseArena(s, ctx, 'choose an arena, then you may deal 3 damage to each unit in it')),
+  ifYouDo: (s, ctx) => (ctx.step?.startsWith('deal:')
+    ? allUnits(s).filter(u => u.arena === ctx.step!.slice('deal:'.length)).reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 3), s)
+    : mayStep(s, ctx, `deal 3 damage to each unit in the ${ctx.arenaChosen} arena`, `deal:${ctx.arenaChosen}`)),
+}, 'onAttack'))
+registerCard('SHD_171', alsoAt(damageWp('You may deal 2 damage to a unit with a Bounty.', hasBounty, 2, true), 'onAttack')) // Covetous Rivals
+const rancorEnemy = (s: GameState, ctx: EventCtx): GameState => damageChoice(s, ctx, 3, picked(s, ctx, pickAll(pickEnemy, pickGround)))
+registerCard('SHD_091', alsoAt({ // Jabba's Rancor
+  costModifier: (s, playerId) => (playerControlsNamed(s, playerId, 'Jabba the Hutt') ? -1 : 0),
+  ...whenPlayed('Deal 3 damage to another friendly ground unit and 3 damage to an enemy ground unit.', (s, ctx) => {
+    const mine = pickedIds(s, ctx, pickAll(pickFriendly, pickOther, pickGround))
+    return mine.length ? unitThen(s, ctx, mine, 'deal 3 damage to another friendly ground unit', 'harm', false) : rancorEnemy(s, ctx)
+  }),
+  ifYouDo: (s, ctx) => rancorEnemy(dealDamageToUnit(s, ctx.targetInstanceId!, 3), ctx),
+}, 'onAttack'))
+
+// I: the rest
+registerCard('SHD_103', alsoAt(unitThenWp('Choose a friendly unit. If it has Sentinel, give an Experience token to it. Otherwise, it gains Sentinel for this phase.', // General Rieekan
+  pickFriendly, 'choose a friendly unit: an Experience token if it has Sentinel, Sentinel for this phase otherwise', 'help', false, (s, ctx) => {
+    const u = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!u) return s
+    return unitHasKeyword(s, u, 'Sentinel') ? giveToken(s, u.instanceId, TOKEN_EXPERIENCE) : addLastingEffect(s, { targetInstanceId: u.instanceId, keywords: [KW.sentinel] })
+  }), 'onAttack'))
+registerCard('LOF_082', alsoAt(unitThenWp('You may defeat an Experience token on a friendly unit. If you do, give an Experience token to a friendly unit.', // Vaneé
+  pickAll(pickFriendly, (_s, u) => hasToken(u.upgrades, TOKEN_EXPERIENCE)), 'defeat an Experience token on a friendly unit', 'harm', true, (s, ctx) => {
+    const spent = defeatUpgrade(s, ctx.targetInstanceId!, TOKEN_EXPERIENCE)
+    return expChoice(spent, ctx, pickedIds(spent, ctx, pickFriendly), 1, false, `${ctx.sourceInstanceId}-exp`)
+  }), 'onAttack'))
+registerCard('LAW_158', alsoAt(whenPlayed('The next Underworld unit you play this phase costs 1 less.', (s, ctx) => // Khetanna
+  grantNextUnit(s, ctx.owner, { costDelta: -1, trait: 'Underworld' })), 'onAttack'))
+registerCard('TS26_38', alsoAt(expWp('If a base was healed this phase, give an Experience token to another Separatist unit.', // Dooku's Solar Sailer
+  pickAll(pickOther, pickTrait('Separatist')), 1, false, s => baseHealedThisPhase(s)), 'onAttack'))
+registerCard('TS26_49', alsoAt({ // Separatist Council
+  ...whenPlayed('Choose one: Create a Battle Droid token. Give 2 Experience tokens to a Battle Droid token.', (s, ctx) =>
+    chooseModeThen(s, ctx, ctx.sourceInstanceId!, [
+      ['droid', 'Create a Battle Droid token.'],
+      // Offered only while there is a Battle Droid token to give them to.
+      ...(picked(s, ctx, isBattleDroidToken).length ? [['exp', 'Give 2 Experience tokens to a Battle Droid token.'] as [string, string]] : []),
+    ])),
+  ifYouDo: (s, ctx) => (ctx.step === 'droid'
+    ? createTokenUnit(s, ctx.owner, TOKEN_BATTLE_DROID)
+    : expChoice(s, ctx, pickedIds(s, ctx, isBattleDroidToken), 2, false, `${ctx.sourceInstanceId}-exp`)),
+}, 'onAttack'))
