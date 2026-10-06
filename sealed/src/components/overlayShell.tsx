@@ -68,6 +68,46 @@ export function OverlayShell({ testId, panelTestId, size, tone = 'accent', onDis
   )
 }
 
+/*
+ * The overlay's contents, shared so every overlay reads the same: a header (the question, and an optional
+ * line under it), panel buttons in a row, and notes in the header's second-line type. An overlay keeps
+ * only what is particular to it (a list, a search box, cards) and builds the rest from these.
+ */
+
+/** The question an overlay asks, in the button choice prompt's type. */
+export const OVERLAY_TITLE = 'text-lg text-ink first-letter:uppercase'
+/** Everything said in passing: the header's second line, a note under the buttons, a list's heading. */
+export const OVERLAY_DETAIL = 'text-sm text-ink-dim'
+
+/**
+ * The overlay's header: its title, and `detail` under it. `banner` is the game-over screen's outcome
+ * (larger, semibold, in the colour class given), the one title that is a result rather than a question.
+ */
+export function OverlayHeader({ title, detail, banner, testId, detailTestId }: {
+  title: ReactNode
+  detail?: ReactNode
+  banner?: string
+  testId?: string
+  detailTestId?: string
+}) {
+  return (
+    <header className="px-6 text-center">
+      <p data-testid={testId} data-overlay-part="title" className={banner ? `text-2xl font-semibold ${banner}` : OVERLAY_TITLE}>
+        {title}
+      </p>
+      {detail && <p data-testid={detailTestId} className={`mt-1 ${OVERLAY_DETAIL}`}>{detail}</p>}
+    </header>
+  )
+}
+
+/**
+ * The overlay's buttons: a centred, wrapping row. `stacked` puts one per line at full width, for
+ * answers too long to sit side by side (an ability's text).
+ */
+export function OverlayButtons({ stacked, children }: { stacked?: boolean; children: ReactNode }) {
+  return <div className={stacked ? 'flex w-full flex-col gap-2' : 'flex flex-wrap justify-center gap-3'}>{children}</div>
+}
+
 /** The panel's buttons: the game-over screen's, primary in the accent colour and the rest muted. */
 export const PANEL_BUTTON = 'rounded-xl border-2 px-5 py-2 text-sm'
 export const PANEL_PRIMARY = `${PANEL_BUTTON} border-accent text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10`

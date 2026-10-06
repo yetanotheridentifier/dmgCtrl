@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { EngineCard } from '../engine/types'
-import { OverlayShell } from './overlayShell'
+import { OverlayButtons, OverlayHeader, OverlayShell, PANEL_PRIMARY } from './overlayShell'
 import CardFace from './cardFace'
 import { ZOOM_WIDTH_PX } from './cardSizing'
 import { useCardZoom } from './useCardZoom'
@@ -23,7 +23,8 @@ export interface CardGridItem {
 
 /**
  * The one centre-screen "set of cards" overlay: the shared `OverlayShell` at its `cards` size, holding
- * an optional prompt, a grid of cards, and an optional footer (buttons / a counter). Consolidates the
+ * an optional prompt (the shared header), a grid of cards, and an optional footer (its buttons, set in
+ * the shared button row). Consolidates the
  * previous card-choice / card-select / search-reveal / discard overlays. `idPrefix` reproduces each
  * caller's testids (`${idPrefix}-overlay`, `${idPrefix}-prompt`, `${idPrefix}-overlay-content`).
  * `onBackdropClick` dismisses view-only overlays (clicks inside the panel are ignored).
@@ -47,7 +48,7 @@ function GridCardCell({ item, card, width }: { item: CardGridItem; card: EngineC
         <div ref={setAnchor} {...bind} className="relative w-fit">{face}{zoom}</div>
       )}
       {item.actionLabel && item.onSelect && (
-        <button data-testid={item.testId} onClick={item.onSelect} className="rounded-xl border-2 border-accent px-3 py-1.5 text-xs text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10">
+        <button data-testid={item.testId} onClick={item.onSelect} className={PANEL_PRIMARY}>
           {item.actionLabel}
         </button>
       )}
@@ -73,11 +74,11 @@ export function CardGridOverlay({
   const width = cardWidthPx ?? (fullWidthCards ? ZOOM_WIDTH_PX : Math.round(ZOOM_WIDTH_PX * 0.8))
   return (
     <OverlayShell testId={`${idPrefix}-overlay`} size="cards" onBackdropClick={onBackdropClick} onDismiss={onDismiss} dismissLabel={dismissLabel}>
-      {prompt && <p data-testid={`${idPrefix}-prompt`} className="px-8 text-center text-xs uppercase tracking-[0.14em] text-ink-dim">{prompt}</p>}
+      {prompt && <OverlayHeader testId={`${idPrefix}-prompt`} title={prompt} />}
       <div data-testid={`${idPrefix}-overlay-content`} className="flex max-w-4xl flex-wrap justify-center gap-4">
         {items.map(item => <GridCardCell key={item.key} item={item} card={cardsById[item.cardId]} width={width} />)}
       </div>
-      {footer}
+      {footer && <OverlayButtons>{footer}</OverlayButtons>}
     </OverlayShell>
   )
 }

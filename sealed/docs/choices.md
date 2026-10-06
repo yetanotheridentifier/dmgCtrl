@@ -442,6 +442,14 @@ action looks like a heal that never happened.
   screen with a board-target choice.
 - **All of them share `OverlayShell`**, the game-over screen's frame: `panel` size for the ones
   answered with buttons, `cards` for the card pickers.
+- **And one appearance inside it.** Every overlay, the game-over screen included, builds its contents
+  from the pieces next to the shell: `OverlayHeader` (the question in the button choice prompt's
+  type, an optional second line under it; the game-over outcome is its `banner` variant),
+  `OverlayButtons` (a centred row, or `stacked` for answers as long as an ability's text) holding
+  `PANEL_PRIMARY` and `PANEL_SECONDARY` buttons, and `OVERLAY_DETAIL` for anything said in passing.
+  An overlay keeps only what is particular to it (the ordering overlay's two lists of waiting
+  abilities, the name search box, the cards), and information it lists is plain text, never boxed
+  like a button. `overlayOneLook.test.tsx` pins this for each overlay.
 - **Dismissing an overlay on your own trigger cancels the action** (`cancelChoice`, see the undo
   section of `architecture.md`). Where that is refused, the dedicated overlays block until answered,
   and the button overlay can only be put aside to read the board: the floating prompt then carries
