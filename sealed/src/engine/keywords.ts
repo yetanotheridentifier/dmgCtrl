@@ -219,15 +219,21 @@ export function unitCannotAttack(state: GameState, unit: UnitState): boolean {
  * True if the unit currently can't be attacked. **The one read of every "can't be attacked"**: Hidden,
  * a lasting protection, the unit's own cards (Tatooine Repulsor Train) and its controller's undeployed
  * leader (Cassian Andor). `enemyAttackTargets` asks it for each candidate, so every source of an attack
- * honours all of them. Each one that prints "unless it has Sentinel" checks that itself, since some
- * protections (Muckraker Crab Droid, Dooku) hold against Sentinel too.
+ * honours all of them. **Sentinel overrides every one** (CR Sentinel: "Abilities this unit has or gains
+ * can't prevent this unit from being attacked"), whether or not the card repeats the exception, so no
+ * protection checks Sentinel itself. Sentinel is read only once a protection holds, which keeps the
+ * common, unprotected case to the cheap reads.
  */
 export function unitCannotBeAttacked(state: GameState, unit: UnitState): boolean {
-  // Hidden: until the next phase, unless the unit has Sentinel.
-  if (unit.hidden && !unitHasKeyword(state, unit, 'Sentinel')) return true
-  // A lasting protection aimed at this unit (Dooku; On Top of Things only while it lacks Sentinel).
-  const lasting = (state.lastingEffects ?? []).filter(e => e.cannotBeAttacked && e.targetInstanceId === unit.instanceId)
-  if (lasting.some(e => !e.unlessSentinel) || (lasting.length > 0 && !unitHasKeyword(state, unit, 'Sentinel'))) return true
+  return isProtectedFromAttack(state, unit) && !unitHasKeyword(state, unit, 'Sentinel')
+}
+
+/** True if any "can't be attacked" protection holds on the unit, before Sentinel overrides it. */
+function isProtectedFromAttack(state: GameState, unit: UnitState): boolean {
+  // Hidden: until the next phase.
+  if (unit.hidden) return true
+  // A lasting protection aimed at this unit (On Top of Things, Go Into Hiding, Dooku, Ben Solo).
+  if ((state.lastingEffects ?? []).some(e => e.cannotBeAttacked && e.targetInstanceId === unit.instanceId)) return true
   if (abilityCardIds(state, unit).some(id => getCardDefinition(id)?.cannotBeAttacked?.(state, unit) ?? false)) return true
   // An undeployed leader is not a unit, so it protects its controller's units from outside play.
   return (['player', 'opponent'] as const).some(owner => {

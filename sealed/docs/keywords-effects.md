@@ -227,7 +227,7 @@ same guard since a pair of Kelleran Beqs blew the stack.
 ```ts
 GameState.lastingEffects?: LastingEffect[]
 // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, untilRoundEnd?, abilityCardIds?,
-//   cannotAttack?, cannotAttackBases?, cannotBeAttacked?, unlessSentinel?, removeKeywords?,
+//   cannotAttack?, cannotAttackBases?, cannotBeAttacked?, removeKeywords?,
 //   losesAllAbilities?, noCombatDamage?, attackersPower?, cannotReady?, whileSourceInPlay?, preventNext?, preventEach?,
 //   preventCombat?, survivesNoHp?, redirectDamageTo?, printedHp? }
 ```
@@ -256,8 +256,8 @@ Cruiser's "that unit can't ready while this unit is in play").
 `cannotAttack: true` is a prohibition rather than a stat: "it can't attack your base or units you
 control for this phase" (Chaotic Diversion). `unitCannotAttack` reads it alongside the printed
 `cannotAttack` hook, so it closes every source of an attack at once, exactly as Loth-Wolf's does.
-`cannotBeAttacked: true` is the defending half (Dooku), read by `unitCannotBeAttacked`, and
-`unlessSentinel` lifts it while the unit has Sentinel (On Top of Things). `removeKeywords` takes
+`cannotBeAttacked: true` is the defending half (Dooku, On Top of Things), read by
+`unitCannotBeAttacked`, where Sentinel overrides it as it does every protection. `removeKeywords` takes
 keywords away for the duration (SpecForce Soldier's Sentinel, Tusken Tracker's Hidden), applied with
 the other removals after every grant. Hidden also protects through the unit's `hidden` mark, so an
 effect that takes Hidden away clears the mark as well.
@@ -472,10 +472,13 @@ each candidate defender. It gathers four sources: Hidden (the unit's `hidden` ma
 protection (Dooku, On Top of Things, Go Into Hiding, Ben Solo), the unit's own cards' `cannotBeAttacked`
 (Tatooine Repulsor Train, Muckraker Crab Droid, both Sabine Wrens) and its controller's undeployed
 leader's `leaderAbilities.cannotBeAttacked` (Cassian Andor, over friendly units that damaged an
-opponent's base this phase). A protected unit is not a target and not a forced Sentinel target. Each
-protection carries its own Sentinel exception where the card prints one ("unless it has Sentinel":
-Hidden, the Train, both Sabines, On Top of Things, Go Into Hiding, Cassian Andor); Muckraker Crab
-Droid, Dooku and Ben Solo print none, so they hold against Sentinel too and the unit does not force.
+opponent's base this phase). A protected unit is not a target and not a forced Sentinel target.
+**Sentinel overrides every one of them**, checked once in `unitCannotBeAttacked` rather than by each
+protection: "Abilities this unit has or gains can't prevent this unit from being attacked" is part of
+Sentinel, not of the card, so it binds equally where the card repeats it (the Train, both Sabines,
+On Top of Things) and where it does not (Muckraker Crab Droid, Dooku, Ben Solo). A unit with Sentinel,
+printed or gained, is always attackable and forces the attack as usual. Sentinel is read only once a
+protection holds, so the unprotected case costs no keyword read.
 
 `attackMoves` is the single enumeration built on that answer, and every source of an attack goes
 through it: the action phase, Ambush, Support and the two "attack with a unit" choices. They differ
