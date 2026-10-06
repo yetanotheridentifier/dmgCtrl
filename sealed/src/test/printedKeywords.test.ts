@@ -97,12 +97,11 @@ describe('the cards #767 reported', () => {
   })
 
   /**
-   * Millennium Falcon gains Ambush "if you play this unit from your hand". Nothing records how a unit
-   * was played, so it keeps Ambush: right when played from hand, which is the usual way, and wrong
-   * only when smuggled. Dropping it would be wrong in the usual case instead.
+   * Millennium Falcon gains Ambush "if you play this unit from your hand": a keyword it gains for that
+   * play (`fromHandKeywords`, see smuggle2.test.ts), so not one it prints.
    */
-  it('keeps the Millennium Falcon\'s Ambush as a stated exception', () => {
-    expect(keywordsOf('SHD_204')).toContain('Ambush')
+  it('drops the Millennium Falcon\'s Ambush, which it only gains when played from hand', () => {
+    expect(keywordsOf('SHD_204')).not.toContain('Ambush')
   })
 })
 

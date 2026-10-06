@@ -1,7 +1,8 @@
 import type { Action } from '../engine/actions'
 import type { GameState, PlayerId } from '../engine/types'
 import { opponentOf, activeChoice, findChoice } from '../engine/types'
-import { effectiveCost, playFromCost } from '../engine/legalMoves'
+import { effectiveCost, playFromCost, smuggleTerms } from '../engine/legalMoves'
+import { getCardDefinition } from '../engine/abilities'
 import { upgradeHostName } from './upgradeHosts'
 
 function unitName(state: GameState, owner: PlayerId, instanceId: string): string {
@@ -153,9 +154,16 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
     case 'smuggle': {
       const cardId = state.players[by].resources[action.resourceIndex]?.cardId
       const card = cardId ? state.cards[cardId] : undefined
-      if (!card?.smuggle) return 'Smuggle a card'
+      const term = cardId ? smuggleTerms(state, by, cardId).find(t => (t.granted === true) === (action.granted === true)) : undefined
+      if (!card || !term) return 'Smuggle a card'
       const onto = action.targetInstanceId ? ` onto ${anyUnitName(state, action.targetInstanceId) ?? 'a unit'}` : ''
-      return `Smuggle ${card.name}${onto} (${playFromCost(state, by, card, { altCost: card.smuggle })})`
+      const choice = action.choiceId ? findChoice(state, action.choiceId) : undefined
+      const costDelta = choice?.kind === 'playUsingSmuggle' ? choice.costDelta : 0
+      const host = [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === action.targetInstanceId)
+      const damage = getCardDefinition(card.id)?.smuggleDamagesFriendly
+      const extra = action.costUnitId && damage ? `, ${damage} damage to ${anyUnitName(state, action.costUnitId) ?? 'a unit'}` : ''
+      const via = action.granted ? ' (gained Smuggle)' : ''
+      return `Smuggle ${card.name}${onto}${via} (${playFromCost(state, by, card, { altCost: term, costDelta }, host)}${extra})`
     }
     case 'playBaseUpgrade': {
       const card = state.cards[state.players[by].hand[action.handIndex]]

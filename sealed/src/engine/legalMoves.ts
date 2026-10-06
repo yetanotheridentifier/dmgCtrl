@@ -507,27 +507,79 @@ function zonePlayMoves(state: GameState, playerId: PlayerId, zone: PlayFromZone,
   return canPlayFrom(state, playerId, zone, ref, terms) ? [move()] : []
 }
 
+/** One Smuggle a resource has: its own printed bracket, or one it gains (`granted`, Tech). */
+export interface SmuggleTerm {
+  cost: number
+  aspects: string[]
+  /** An additional cost printed after the resources (First Light), as raw text: see `smuggleCostUnits`. */
+  extra?: string
+  granted?: boolean
+}
+
 /**
- * Smuggle (CR 14): the plays `playerId`'s own resource zone offers right now, one per card carrying
- * the keyword whose smuggle cost the zone can afford, or one per legal host where it is an upgrade.
- * Unlike a `DiscardPlayGrant`, there is nothing standing to look up: each card's `smuggle` bracket
- * (parsed in cardDb.ts) is its own terms, read fresh here exactly the way a grant's terms are.
+ * Every Smuggle the resource `cardId` has while `controller` controls it. CR 14.b makes each an
+ * independent ability, so a card that prints one and gains another may be played using either: its
+ * own bracket (parsed in cardDb.ts), and the one a friendly Tech gives every resource, at the card's
+ * cost plus 2 and its own aspect icons. A gained one identical to the printed one is the same play,
+ * so it is left out. Smuggle is a keyword ability, gone from a card that has lost its abilities
+ * (Galen Erso).
  */
-function smuggleMoves(state: GameState, playerId: PlayerId, forbiddenNames: Set<string>): Action[] {
+export function smuggleTerms(state: GameState, controller: PlayerId, cardId: string): SmuggleTerm[] {
+  const card = state.cards[cardId]
+  if (!card || cardAbilitiesBlanked(state, card.id, controller)) return []
+  const terms: SmuggleTerm[] = card.smuggle ? [card.smuggle] : []
+  const granted = state.players[controller].units.some(u => abilityCardIds(state, u).some(id => getCardDefinition(id)?.grantsResourceSmuggle))
+  if (granted) {
+    const gained: SmuggleTerm = { cost: card.cost + 2, aspects: card.aspects, granted: true }
+    const same = terms.some(t => t.extra === undefined && t.cost === gained.cost && t.aspects.join() === gained.aspects.join())
+    if (!same) terms.push(gained)
+  }
+  return terms
+}
+
+/**
+ * The friendly units a Smuggle's additional cost could be paid with ("deal 4 damage to a friendly
+ * unit", First Light): `undefined` when the bracket has no additional cost, and empty when it cannot
+ * be paid, which is also the answer for an additional cost no card definition resolves.
+ */
+export function smuggleCostUnits(state: GameState, controller: PlayerId, cardId: string, term: SmuggleTerm): string[] | undefined {
+  if (term.extra === undefined) return undefined
+  if (!getCardDefinition(cardId)?.smuggleDamagesFriendly) return []
+  return state.players[controller].units.map(u => u.instanceId)
+}
+
+/**
+ * Smuggle (CR 14): the plays `playerId`'s own resource zone offers right now, one per Smuggle a card
+ * has (`smuggleTerms`) whose cost the zone can afford, times one per legal host where it is an
+ * upgrade, times one per friendly unit an additional cost could land on. Unlike a `DiscardPlayGrant`,
+ * there is nothing standing to look up: each card's terms are read fresh here.
+ *
+ * `costDelta` and `choiceId` are for an ability that makes the play ("Play a card using Smuggle. It
+ * costs 2 less", Lando Calrissian): the same moves, cheaper, each answering that ability's choice.
+ */
+export function smuggleMoves(state: GameState, playerId: PlayerId, forbiddenNames: Set<string>, costDelta = 0, choiceId?: string): Action[] {
   const moves: Action[] = []
   state.players[playerId].resources.forEach((resource, resourceIndex) => {
     const card = state.cards[resource.cardId]
-    // Smuggle is a keyword ability, gone from a card that has lost its abilities (Galen Erso).
-    if (!card?.smuggle || forbiddenNames.has(card.name) || cardAbilitiesBlanked(state, card.id, playerId)) return
-    const terms: PlayFromTerms = { altCost: card.smuggle }
-    if (card.type === 'upgrade' && !isFortify(card)) {
-      for (const id of validPlayTargets(state, playerId, 'resources', resourceIndex, card.id, terms)) {
-        moves.push({ type: 'smuggle', resourceIndex, targetInstanceId: id })
+    if (!card || forbiddenNames.has(card.name)) return
+    for (const term of smuggleTerms(state, playerId, card.id)) {
+      const payers = smuggleCostUnits(state, playerId, card.id, term)
+      if (payers?.length === 0) continue
+      const terms: PlayFromTerms = { altCost: term, ...(costDelta !== 0 ? { costDelta } : {}) }
+      const hosts: (string | undefined)[] = card.type === 'upgrade' && !isFortify(card)
+        ? validPlayTargets(state, playerId, 'resources', resourceIndex, card.id, terms)
+        : canPlayFrom(state, playerId, 'resources', { index: resourceIndex, cardId: card.id }, terms) ? [undefined] : []
+      for (const host of hosts) {
+        for (const payer of payers ?? [undefined]) {
+          moves.push({
+            type: 'smuggle', resourceIndex,
+            ...(host !== undefined ? { targetInstanceId: host } : {}),
+            ...(term.granted ? { granted: true } : {}),
+            ...(payer !== undefined ? { costUnitId: payer } : {}),
+            ...(choiceId !== undefined ? { choiceId } : {}),
+          })
+        }
       }
-      return
-    }
-    if (canPlayFrom(state, playerId, 'resources', { index: resourceIndex, cardId: card.id }, terms)) {
-      moves.push({ type: 'smuggle', resourceIndex })
     }
   })
   return moves
@@ -995,6 +1047,15 @@ function choiceMoves(state: GameState): Action[] {
         for (const u of state.players[choice.controller].units) {
           if (!choice.picks.includes(u.instanceId)) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: u.instanceId })
         }
+        break
+      }
+      case 'playUsingSmuggle': {
+        // "Play a card using Smuggle. It costs 2 less" (Lando Calrissian): the standing Smuggle moves,
+        // cheaper, each answering this choice. The ability is only usable with one on offer, so the
+        // decline is there only for a board that has changed since.
+        const offered = smuggleMoves(state, choice.controller, namedByOpponent(state, choice.controller), choice.costDelta, choice.id)
+        moves.push(...offered)
+        if (offered.length === 0) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'playCardFrom': {

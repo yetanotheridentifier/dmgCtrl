@@ -285,6 +285,9 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'LOF_017', name: 'Darth Revan', front: true, back: true },
   // "When you play an upgrade".
   { id: 'SHD_018', name: 'The Mandalorian', front: true, back: true },
+  // "When you play a card using Smuggle", and "Action: play a card using Smuggle".
+  { id: 'SHD_005', name: 'Hondo Ohnaka', front: true, back: true },
+  { id: 'SHD_017', name: 'Lando Calrissian', front: true, back: true },
   // "When a friendly unit is defeated while attacking".
   { id: 'SEC_013', name: 'Luthen Rael', front: true, back: true },
   // The damage event: "when you deal 4 or more", "when non-combat damage is dealt to a friendly unit
@@ -2255,6 +2258,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SHD_217', name: 'Tobias Beckett' },
   { id: 'SHD_086', name: 'Warbird Stowaway' },
   { id: 'SHD_203', name: 'Zorii Bliss' },
+  // Smuggle: the units with engine work of their own (a gained Smuggle, an additional cost, a play
+  // from hand, a resource taken).
+  { id: 'SHD_213', name: 'DJ' },
+  { id: 'SHD_036', name: 'First Light' },
+  { id: 'SHD_204', name: 'Millennium Falcon' },
+  { id: 'SHD_248', name: 'Tech' },
   // Plot (#470): the mechanic plus the SEC/TS26 cards that need nothing else.
   { id: 'SEC_034', name: 'Cad Bane' },
   { id: 'SEC_082', name: 'Chancellor Palpatine' },

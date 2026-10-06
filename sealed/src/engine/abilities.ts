@@ -566,6 +566,23 @@ export interface CardDefinition {
    * Consulted by `playUnitCard`, alongside Ambush and the `nextUnitGrants` enters-ready grant.
    */
   entersReady?: (state: GameState, owner: PlayerId) => boolean
+  /**
+   * "If you play this unit from your hand, it gains Ambush" (Millennium Falcon): keywords the unit
+   * gains for a play from hand only, by the Play a Card action or an ability. Read by `playUnitCard`.
+   */
+  fromHandKeywords?: KeywordInstance[]
+  /**
+   * "Each friendly resource gains Smuggle. The gained Smuggle cost is that card's cost plus 2 and its
+   * aspect icons" (Tech): while a unit with this is in play, every resource its controller controls
+   * has that Smuggle as well as any it prints. Read by `smuggleTerms` (legalMoves.ts).
+   */
+  grantsResourceSmuggle?: boolean
+  /**
+   * The additional cost a card's own Smuggle bracket prints after the resources, "deal N damage to a
+   * friendly unit" (First Light), resolved here because `cardDb.ts` keeps it as raw text
+   * (`EngineCard.smuggle.extra`). A bracket with an `extra` this does not resolve is never offered.
+   */
+  smuggleDamagesFriendly?: number
   /** Custom epic-action deploy gate; default is `resources ≥ leader.cost`. */
   deployCondition?: (state: GameState, owner: PlayerId) => boolean
   /**

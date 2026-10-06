@@ -330,6 +330,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       const price = choice.free ? ' for free' : choice.costDelta ? ` for ${Math.abs(choice.costDelta)} less` : ''
       return [`choose a card to play from ${playFromZoneName(choice.zone)}${price}`]
     }
+    case 'playUsingSmuggle':
+      return [`choose a card to play from your resources using Smuggle${choice.costDelta < 0 ? ` for ${-choice.costDelta} less` : ''}`]
     case 'mayResourceFromHand':
       return ['choose a card to resource from your hand, or keep them all']
     case 'chooseOne':

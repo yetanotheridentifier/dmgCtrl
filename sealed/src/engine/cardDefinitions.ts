@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, actionAbilityKey, collectUnitTriggers, collectCardTriggers, abilityCardIds, usedAbilityOf } from './abilities'
-import { fireBatch, runAbilitiesAgain, thenAfterChoices, discardCards, discardTaken, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken, defeatForceToken, forceUse } from './effects'
+import { fireBatch, runAbilitiesAgain, thenAfterChoices, discardCards, discardTaken, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken, defeatForceToken, forceUse, takeControlOfResource } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage, isDoomed } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -8,7 +8,7 @@ import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_
 import { deployLeaderAsPilot, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
 import { baseHostId, isFortify, isPlot, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, damagedBaseThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, discardedThisPhase, indirectDamageDealtThisPhase, baseHealedThisPhase, markAbilityUsed, updatePlayer, upgradeSideId, recordUnitDefeated } from './types'
-import { canTakePilot, affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit } from './legalMoves'
+import { canTakePilot, affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit, smuggleTerms, smuggleMoves, namedByOpponent } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost, readyResourceCount } from './resources'
 import { cardHasTrait, cardTraits, unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywords, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
@@ -11240,7 +11240,8 @@ registerCard('SHD_114', whenPlayed('Reveal 3 enemy resources. Defeat each resour
   const opp = opponentOf(ctx.owner)
   const [next, seen] = threeResources(s, opp)
   const zone = next.players[opp].resources
-  const smuggled = seen.filter(i => (next.cards[zone[i].cardId]?.keywords ?? []).some(k => k.name === 'Smuggle'))
+  // A resource has Smuggle if it prints the keyword (CR 14.d) or gains it (Tech).
+  const smuggled = seen.filter(i => (next.cards[zone[i].cardId]?.keywords ?? []).some(k => k.name === 'Smuggle') || smuggleTerms(next, opp, zone[i].cardId).length > 0)
   return smuggled.reduce(acc => resourceTopOfDeck(acc, opp), defeatResources(next, opp, smuggled))
 }))
 
@@ -11342,6 +11343,70 @@ registerCard('SHD_201', onAttack(whenPlayed('You may exhaust a ground unit.', (s
 
 registerCard('SHD_113', whenPlayed('When played using Smuggle: Give 3 Experience tokens to this unit.', (s, ctx) =>
   (selfOf(s, ctx)?.playedUsingSmuggle ? giveTokens(s, ctx.sourceInstanceId!, TOKEN_EXPERIENCE, 3, ctx.owner) : s))) // Privateer Crew
+
+// A facedown resource is the same as any other to the player taking it, apart from being ready or
+// not, so a ready one is taken where there is one. A DJ that has already left play takes nothing.
+registerCard('SHD_213', whenPlayed("When played using Smuggle: Take control of an enemy resource. When this unit leaves play, that resource's owner takes control of it.", (s, ctx) => { // DJ
+  if (!selfOf(s, ctx)?.playedUsingSmuggle) return s
+  const opp = opponentOf(ctx.owner)
+  const zone = s.players[opp].resources
+  if (zone.length === 0) return s
+  const ready = zone.findIndex(r => !r.exhausted)
+  return takeControlOfResource(s, opp, ctx.owner, ready === -1 ? 0 : ready, ctx.sourceInstanceId)
+}))
+
+// The Smuggle every friendly resource gains is read by `smuggleTerms`; Tech's own bracket is printed.
+registerCard('SHD_248', { grantsResourceSmuggle: true }) // Tech
+
+// Its own Grit is printed; the additional cost on its Smuggle bracket is paid by `takeSmuggle`.
+registerCard('SHD_036', { // First Light
+  smuggleDamagesFriendly: 4,
+  ...friendlyAura((s, u) => !isLeaderUnit(s, u), { keywords: [KW.grit] }, true),
+})
+
+// "From your hand" is the Play a Card action or an ability playing it out of a hand, never Smuggle.
+registerCard('SHD_204', { fromHandKeywords: [KW.ambush] }) // Millennium Falcon
+
+registerCard('SHD_005', { // Hondo Ohnaka
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenPlayCard',
+      description: 'When you play a card using Smuggle: You may exhaust this leader. If you do, give an Experience token to a unit.',
+      effect: (s, ctx) => (ctx.playingPlayer === ctx.owner && ctx.playedUsingSmuggle && leaderCanExhaust(s, ctx.owner)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.cardId}-front`, controller: ctx.owner, cost: 0, text: 'exhaust Hondo Ohnaka (leader) to give a unit an Experience token', then: resume(ctx) })
+        : s),
+    }],
+  },
+  abilities: [{ trigger: 'whenPlayCard', description: 'When you play a card using Smuggle: You may give an Experience token to a unit.', effect: (s, ctx) =>
+    (ctx.playingPlayer === ctx.owner && ctx.playedUsingSmuggle ? expChoice(s, ctx, allUnits(s).map(u => u.instanceId), 1, true) : s) }],
+  // The front has no unit in play, so its choice takes the leader's side id.
+  ifYouDo: (s, ctx) => expChoice(exhaustLeader(s, ctx.owner), { owner: ctx.owner, sourceInstanceId: `${ctx.cardId}-front` }, allUnits(s).map(u => u.instanceId)),
+})
+
+// Lando Calrissian: the play is a `playUsingSmuggle` choice, answered by the same moves the standing
+// Smuggle offers, 2 cheaper. "Defeat a resource you own and control" follows it, so a resource taken
+// from an opponent (DJ) is not on offer.
+const LANDO_SMUGGLE_DELTA = -2
+const landoCanSmuggle = (s: GameState, owner: PlayerId): boolean => smuggleMoves(s, owner, namedByOpponent(s, owner), LANDO_SMUGGLE_DELTA).length > 0
+const landoSmuggle = (s: GameState, ctx: Resumable): GameState =>
+  pushChoice(s, { kind: 'playUsingSmuggle', id: ctx.sourceInstanceId!, controller: ctx.owner, costDelta: LANDO_SMUGGLE_DELTA, then: resume(ctx) })
+registerCard('SHD_017', { // Lando Calrissian
+  ...leaderFront('Play a card using Smuggle. It costs 2 less. Defeat a resource you own and control.', {
+    usable: (s, ctx) => landoCanSmuggle(s, ctx.owner),
+    effect: landoSmuggle,
+  }),
+  actionAbilities: [{
+    description: 'Play a card using Smuggle. It costs 2 less. Defeat a resource you own and control. Use this ability only once each round.',
+    oncePerRound: true,
+    usable: (s) => landoCanSmuggle(s, s.activePlayer),
+    effect: landoSmuggle,
+  }],
+  ifYouDo: (s, ctx) => {
+    if (ctx.step?.startsWith('defeat')) return defeatPicked(s, ctx)
+    const owned = s.players[ctx.owner].resources.flatMap((r, i) => (r.owner === undefined || r.owner === ctx.owner ? [i] : []))
+    return resourceThen(s, ctx, { holder: ctx.owner, indices: owned, step: 'defeat', text: 'defeat a resource you own and control' })
+  },
+})
 
 registerCard('SHD_160', whenPlayed('Deal 1 damage to each base.', s => BOTH_BASES.reduce((acc, p) => dealDamageToBase(acc, p, 1), s))) // Reckless Gunslinger
 

@@ -1,4 +1,4 @@
-import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, DiscardedFrom, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState, UpgradeAttachment, UsedAbility } from './types'
+import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, DiscardedFrom, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, ResourceState, TriggerContext, UnitState, UpgradeAttachment, UsedAbility } from './types'
 import { baseHostId, upgradeSideId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseDamagedBy, recordBaseDamaged, recordCardsDrawn, recordDiscarded, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordBaseHealed, recordUnitLeftPlay, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
@@ -182,6 +182,41 @@ export function returnControlledUnits(state: GameState, atRegroup: boolean): Gam
   for (const controller of ['player', 'opponent'] as PlayerId[]) {
     for (const u of next.players[controller].units.filter(x => x.owner !== undefined && x.owner !== controller && ended(x))) {
       next = takeControlOfUnit(next, controller, u.owner!, u.instanceId)
+    }
+  }
+  return next
+}
+
+/**
+ * Move the resource at `index` of `from`'s zone to `to`'s, keeping its ready or exhausted state (CR
+ * 27.1.c). `owner` is kept as `takeControlOfUnit` keeps it, and `until` names the unit whose leaving
+ * play hands it back (DJ). A resource going home to its owner drops both.
+ */
+export function takeControlOfResource(state: GameState, from: PlayerId, to: PlayerId, index: number, until?: string): GameState {
+  const resource = state.players[from].resources[index]
+  if (!resource || from === to) return state
+  const cardOwner = resource.owner ?? from
+  const moved: ResourceState = { cardId: resource.cardId, exhausted: resource.exhausted, ...(cardOwner !== to ? { owner: cardOwner } : {}), ...(cardOwner !== to && until ? { controlUntil: until } : {}) }
+  const without = updatePlayer(state, from, { resources: state.players[from].resources.filter((_, i) => i !== index) })
+  return updatePlayer(without, to, { resources: [...without.players[to].resources, moved] })
+}
+
+/**
+ * Hand back every resource whose taker has left play (DJ), the resource counterpart of
+ * `returnControlledUnits`, swept at the same moment.
+ */
+export function returnControlledResources(state: GameState): GameState {
+  const inPlay = new Set([...state.players.player.units, ...state.players.opponent.units].map(u => u.instanceId))
+  let next = state
+  for (const controller of ['player', 'opponent'] as PlayerId[]) {
+    for (;;) {
+      const zone = next.players[controller].resources
+      const i = zone.findIndex(r => r.controlUntil !== undefined && !inPlay.has(r.controlUntil))
+      if (i === -1) break
+      const owner = zone[i].owner
+      next = owner !== undefined && owner !== controller
+        ? takeControlOfResource(next, controller, owner, i)
+        : updatePlayer(next, controller, { resources: zone.map((r, n) => (n === i ? { cardId: r.cardId, exhausted: r.exhausted } : r)) })
     }
   }
   return next
