@@ -615,7 +615,9 @@ playable, so a player still sees what they looked at and the decline's tail stil
 **Plot (CR 14, #470) raises this same `playCardFrom` choice from a game event rather than from a
 card's own ability**: `deployLeader` calls it directly once the leader is in play, offering every
 Plot card in the deploying player's own resources at once (`resourceTop`/`again`, exactly Endless
-Legions' shape), at full printed cost with no `altCost`. No card registers a `whenDeployed` for
+Legions' shape), at full printed cost with no `altCost`. The choice carries `plot: true`, a
+`PlayFromTerms` field copied to the attach step and the re-offer, which is how a "next card you
+play using Plot" discount reaches the cost of those plays and no others. No card registers a `whenDeployed` for
 this: the reaction belongs to the deploy event, not to any one Plot card sitting inert in the
 resource zone. See `keywords-effects.md` "Plot" for which cards need only the keyword and which need
 more.

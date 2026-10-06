@@ -428,6 +428,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `statModifier` | power/HP deltas, folded into `effectivePower`/`effectiveHp` |
 | `aura` | power/HP/keywords granted to **other** units |
 | `damageMultiplier` | scales each incoming damage instance |
+| `extraDamageTaken` | adds to an incoming damage instance after prevention ("that much damage plus 1", Vigil) |
 | `negatesOverwhelm` | defender-side, cancels trample |
 | `preventBaseDamage` | caps an instance of base damage |
 | `makesDamageUnpreventable` | ignores Shields and prevention |

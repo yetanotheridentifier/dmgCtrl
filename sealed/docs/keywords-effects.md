@@ -228,7 +228,7 @@ same guard since a pair of Kelleran Beqs blew the stack.
 GameState.lastingEffects?: LastingEffect[]
 // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, untilRoundEnd?, abilityCardIds?,
 //   cannotAttack?, cannotAttackBases?, cannotBeAttacked?, removeKeywords?,
-//   losesAllAbilities?, noCombatDamage?, attackersPower?, cannotReady?, whileSourceInPlay?, preventNext?, preventEach?,
+//   losesAllAbilities?, noCombatDamage?, attackersPower?, attackingBasePower?, cannotReady?, whileSourceInPlay?, preventNext?, preventEach?,
 //   preventCombat?, survivesNoHp?, redirectDamageTo?, printedHp? }
 ```
 
@@ -267,7 +267,9 @@ The other prohibitions follow the same pattern, each read beside the printed hoo
 `unitCannotReady`, and `noCombatDamage` (Betrayed Trust) by the combat step, which deals nothing for that
 unit while it still attacks and defends. `attackersPower` sits on a defender and changes the power of any
 unit attacking it (I Have the High Ground's -4/-0), read by `effectivePower` from the attacker's combat
-context. `survivesNoHp` keeps a unit in play at damage ≥ HP (The Tragedy of Plagueis); when it expires,
+context. `attackingBasePower` sits on the attacker instead and applies only while it attacks a base:
+"for this phase, each enemy unit gets -2/-0 while it's attacking a base" (Sly Moore) puts one on each
+enemy unit in play as the ability resolves, so a unit that enters later is unaffected. `survivesNoHp` keeps a unit in play at damage ≥ HP (The Tragedy of Plagueis); when it expires,
 the state-based check below defeats the unit. A card can say the same of itself with the static hook of
 that name (Chirrut Îmwe, during the action phase only), which the regroup sweep then catches. `preventNext` stops that much of the next instance of
 damage to the unit and is then spent (see Damage prevention).
@@ -535,6 +537,13 @@ dealt to that unit, prevent 1 of that damage") is counted with the cards and nev
 applies to every instance for its duration. A `preventCombat` lasting effect (Aayla Secura: "prevent
 all combat damage that would be dealt to this unit for this attack", set with `untilEndOfAttack`) is
 counted there too and stops the whole of any combat instance, leaving ability damage alone.
+
+The opposite replacement, "if damage would be dealt to this unit by another card, deal that much
+damage plus 1 instead" (Vigil), is the unit's own `extraDamageTaken` hook, asked in the same place
+**after** prevention and before the Shield: the unit's controller orders replacement effects, so
+damage prevented to nothing is never dealt and gains nothing, and a Shield still soaks the whole
+instance. Vigil's other line, "prevent 1 of damage dealt to another friendly unit", is an ordinary
+`preventUnitDamage`.
 
 Unpreventable damage ignores both kinds, and ignores Shields entirely: the token is not even spent.
 
@@ -927,10 +936,23 @@ with no bracket to parse).
   `ctx.defenderDefeated`) already dispatches. Both are a source-data/trigger-matching gap in the
   triage tool, not its own lists, a fourth and fifth class of triage inaccuracy alongside the
   reminder-text, built-keywords-list and bracketed-cost gaps #711/#713/#469 already found.
-- **Chancellor Palpatine (SEC_001), front only**: "search the top 5 cards of your deck for a card
-  with Plot, reveal it, and draw it" needs nothing beyond `isPlot` as a `searchDraw` predicate. His
-  back ("the next card you play using Plot this phase costs 3 less") needs a new `NextUnitGrant`
-  restriction plus threading which door a play came through into `effectiveCost`, and is not built.
+- **Chancellor Palpatine (SEC_001)**: his front ("search the top 5 cards of your deck for a card
+  with Plot, reveal it, and draw it") is `isPlot` as a `searchDraw` predicate. His back ("When
+  Deployed: the next card you play using Plot this phase costs 3 less") leaves a `NextUnitGrant` with
+  `viaPlot`, which `nextUnitGrantMatches` never matches: whether a play is using Plot is a property
+  of the play, not the card. The Plot choice carries `plot: true`, a `PlayFromTerms` field, so
+  `playFromCost` adds `plotCostDelta` for exactly those plays (any card type) and `playFromZone`
+  spends the grant. His When Deployed resolves before the deploy offers its Plot plays, so those are
+  what it discounts, including a card only the discount makes affordable. A card with Plot played
+  from hand, or by When Has Become Now (which plays a card *with* Plot, not *using* it), pays full.
+- **Sly Moore (SEC_033)** is a `LastingEffect.attackingBasePower` (Lasting effects, above), **Vigil
+  (SEC_050)** an `extraDamageTaken` beside a `preventUnitDamage` (Damage prevention, above).
+- **Fully Armed and Operational (SEC_194)**: "if an opponent attacked your base during their previous
+  action this phase" reads `previousActionAttackedBase`, from `phaseEvents.lastActionAttackedBase`:
+  `recordBaseAttacked` sets it for the attacking player, by any route (an attack action, an event's
+  attack, Ambush), and `resolve` clears a player's flag as they start a new action (any action-phase
+  move made with nothing pending, a pass included). So it describes exactly one action, the
+  opponent's latest, and goes with the phase. The play itself is Timely Intervention's.
 - **When Has Become Now (SEC_245)** plays a Plot card from resources itself (a `whenPlayed` ability,
   not the leader-deploy reaction), reusing `playFromZoneChoice` with `{ zone: 'resources', test:
   isPlot, then: { resourceTop } }` exactly as the reaction does, just raised from a different trigger.
@@ -948,13 +970,8 @@ with no bracket to parse).
   (`plot.test.ts`) exercises the same path. The card genuinely plays; the sweep's own documented
   blind spot just cannot see it, and no other shipped card yet has an event with no route but a
   choice, so this is the first permanent instance of it rather than an occasional miss.
-- **Not shipped, each needing something Plot itself does not touch, on #726**: Sly Moore (SEC_033,
-  needs a phase-scoped "-2/-0 while attacking a base" modifier no existing `LastingEffect` shape
-  reaches), Vigil (SEC_050, needs constant damage-prevention/redirection primitives beyond the
-  existing per-phase ones), Fully Armed and Operational (SEC_194, needs "as their immediately
-  preceding action" sequencing, which the engine does not track), and Chancellor Palpatine's back,
-  above. Galen Erso (SEC_046) plays by Plot like any other card; his own ability is one of the
-  "loses all abilities" sources (Losing all abilities, above).
+- **Galen Erso (SEC_046)** plays by Plot like any other card; his own ability is one of the "loses
+  all abilities" sources (Losing all abilities, above).
 
 ## Indirect damage
 
