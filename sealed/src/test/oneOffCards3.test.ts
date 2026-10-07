@@ -155,6 +155,8 @@ describe('SOR_199 Bamboozle: discard a Cunning card instead of paying; exhaust a
     expect(legalMoves(board({ hand: ['SOR_199', 'PLAIN'], resources: [] }, { units: [target] })).some(m => m.type === 'playEvent')).toBe(false)
     expect(legalMoves(board({ hand: ['SOR_199', 'SOR_199'], resources: [] }, { units: [target] })).some(m => m.type === 'playEvent')).toBe(true) // the other copy
     expect(legalMoves(board({ hand: ['SOR_199'], resources: [] }, { units: [target] })).some(m => m.type === 'playEvent')).toBe(false)
+    // A search's modelled draw sits in the hand with no card behind it, and is not a Cunning card.
+    expect(legalMoves(board({ hand: ['SOR_199', 'UNSEEN'], resources: [] }, { units: [target] })).some(m => m.type === 'playEvent')).toBe(false)
   })
 })
 

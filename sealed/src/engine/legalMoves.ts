@@ -369,7 +369,11 @@ export function discardForCostIndices(state: GameState, playerId: PlayerId, hand
   const hand = state.players[playerId].hand
   const test = cardAbilitiesBlanked(state, hand[handIndex], playerId) ? undefined : getCardDefinition(hand[handIndex])?.discardInsteadOfCost
   if (!test) return []
-  return hand.flatMap((id, i) => (i !== handIndex && test(state.cards[id]!) ? [i] : []))
+  // A hand entry with no card (a search's modelled draw) is never a candidate.
+  return hand.flatMap((id, i) => {
+    const card = state.cards[id]
+    return i !== handIndex && card && test(card) ? [i] : []
+  })
 }
 
 /**
