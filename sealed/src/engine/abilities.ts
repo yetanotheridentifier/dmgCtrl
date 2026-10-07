@@ -85,6 +85,10 @@ export type TriggerPoint =
   // by a Shield/Advantage token being spent as part of combat resolution, which happens inside
   // damage application, where raising a choice would interrupt a half-applied combat.
   | 'whenFriendlyUpgradeDefeated'
+  // An upgrade's OWN "When Defeated" (Roger Roger): collected off the upgrade card itself, under the
+  // player who owns it, once it has reached their discard pile, whether it was defeated alone or with
+  // its host. Distinct from `whenDefeated`, which an upgrade carries for the unit it is attached to.
+  | 'whenThisUpgradeDefeated'
   | 'onDefense'
   // "When you use a <point> ability" (Grand Admiral Thrawn, Enfys Nest): raised by the trigger queue
   // once a collected ability has resolved, including any "Then, ..." it owed, and heard by its
@@ -119,9 +123,9 @@ export type TriggerPoint =
   // players' bases only, since no unit or leader reads it; `ctx.targetInstanceId` is the unit.
   | 'whenUnitEntersPlay'
   // "When the action phase starts" (Beast Lair, on a base): fired for every unit and each player's
-  // leader and base as the next round's action phase begins, alongside the `actionPhaseStart` delayed
-  // effects. The game's FIRST action phase raises nothing, which is right for every card that can
-  // read it: each has to be played during an action phase to be in play at all.
+  // leader and base as each action phase begins, alongside the `actionPhaseStart` delayed effects. The
+  // game's FIRST action phase reaches only leaders and bases, since nothing else is in play yet, and
+  // a card printed "when the FIRST action phase starts" reads `state.round` (Nabat Village).
   | 'whenActionPhaseStarts'
   // Bounty (CR 13): "Bounty - <reward>. (When this unit is defeated or captured, your opponent
   // collects its bounty.)" Collected at BOTH points a Bounty unit can leave play that way — combat's
@@ -552,6 +556,29 @@ export interface CardDefinition {
    * reads their side of the board, not yours.
    */
   cardTraits?: (state: GameState, owner: PlayerId) => string[]
+  /**
+   * Traits this unit gives OTHER cards of its controller's, wherever those are: units they control and
+   * cards they own out of play (Malakili: "each friendly Creature unit and each Creature unit you own
+   * that isn't in play gains Underworld"), or their leader in the base zone (Mythosaur). Read by
+   * `cardTraits` for every card `owner` holds while the unit is in play with its abilities.
+   */
+  grantsCardTraits?: (state: GameState, source: UnitState, cardId: string, owner: PlayerId) => string[]
+  /**
+   * Damage an OPPONENT deals to their own base as an additional cost to play `card` (Saw Gerrera: "As
+   * an additional cost for each opponent to play an event, they must deal 2 damage to their base").
+   */
+  enemyPlayBaseDamage?: (state: GameState, source: UnitState, card: EngineCard) => number
+  /**
+   * When the card may be played at all ("Play only as your first action in the action phase",
+   * Confidence in Victory). Asked of a play from hand and of a play out of any other zone.
+   */
+  playableOnlyIf?: (state: GameState, player: PlayerId) => boolean
+  /**
+   * The hand cards this event may be paid for by discarding one of, instead of its cost (Bamboozle: "You
+   * may discard a Cunning card from your hand instead of paying this event's cost"). Offered as it is
+   * played from hand, and required when the cost can't be paid.
+   */
+  discardInsteadOfCost?: (card: EngineCard) => boolean
   /** Traits this card takes away from its unit, printed or granted (Abandoned the Order: loses Jedi). */
   removedTraits?: (state: GameState, unit: UnitState) => string[]
   /** True if this card makes its unit a leader unit — The Darksaber. */
@@ -593,6 +620,22 @@ export interface CardDefinition {
   smuggleDamagesFriendly?: number
   /** Custom epic-action deploy gate; default is `resources ≥ leader.cost`. */
   deployCondition?: (state: GameState, owner: PlayerId) => boolean
+  /**
+   * The units in play this unit may enter play as a copy of (Clone). Asked as it is played, through an
+   * `enterAsCopy` choice; see `UnitState.physicalCardId`.
+   */
+  entersAsCopyOf?: (state: GameState, unit: UnitState) => boolean
+  /**
+   * "There is an additional regroup phase after the first regroup phase each round" (Max Rebo): while
+   * a unit with this is in play as a round's first regroup phase ends, a second one follows.
+   */
+  extraRegroupPhase?: boolean
+  /**
+   * Which of its controller's units may be exhausted to pay costs as if they were resources (Vuutun
+   * Palaa: "Each friendly Droid unit"). Offered as the paying step of a card played from hand, the
+   * step Credit tokens use, each unit exhausted paying 1.
+   */
+  unitPaysCosts?: (state: GameState, unit: UnitState) => boolean
   /**
    * Constant/aura ability: while `source` (a unit with this card, or an upgrade)
    * is in play, it contributes power/HP and/or keywords to OTHER units. Called for each
@@ -638,6 +681,11 @@ export interface LeaderAbilities {
   cannotBeAttacked?: (state: GameState, owner: PlayerId, target: UnitState) => boolean
   /** "Ignore the aspect penalty on <cards> you play" while undeployed (Hera Syndulla). */
   waivesAspectPenalty?: (state: GameState, owner: PlayerId, ctx: CostDiscountContext) => boolean
+  /**
+   * The aspect icons the leader provides, where they depend on which face is up (Chancellor Palpatine
+   * // Darth Sidious, `LeaderState.flipped`). Absent, the card's printed aspects.
+   */
+  aspects?: (state: GameState, owner: PlayerId) => string[]
 }
 
 /**
@@ -686,6 +734,8 @@ export interface BaseAbilities {
   aura?: (state: GameState, owner: PlayerId, target: UnitState, sameController: boolean, combat?: CombatContext) => AuraContribution | undefined
   /** Cards drawn in the starting hand, relative to the usual six (Colossus: -1). */
   startingHandDelta?: number
+  /** "You can't take a mulligan" (Nabat Village): the setup offers its controller only keeping the hand. */
+  noMulligan?: boolean
   /** Cards the deck must hold, relative to the usual minimum (Data Vault: +10). */
   deckMinimumDelta?: number
   /**
@@ -862,9 +912,20 @@ const blankerRegistry = { version: 0 }
  * keeps the announcement to a set lookup on the many boards where nobody is listening.
  */
 const useHearers = new Set<string>()
+/**
+ * Card ids with a `grantsCardTraits` hook, so a trait read on a board with none of them in play (every
+ * board but a handful) costs a set lookup per unit rather than a definition lookup.
+ */
+const traitGranters = new Set<string>()
+
+/** True if this card gives traits to other cards (`grantsCardTraits`). */
+export function isTraitGranter(cardId: string): boolean {
+  return traitGranters.has(cardId)
+}
 
 /** Register (merging) a card's definition — abilities append, static hooks overwrite. */
 export function registerCard(cardId: string, def: CardDefinition): void {
+  if (def.grantsCardTraits) traitGranters.add(cardId)
   if (def.blanksHost) { hostBlankers.add(cardId); blankerRegistry.version++ }
   if (def.blanksCard) { cardBlankers.add(cardId); blankerRegistry.version++ }
   if ([...(def.abilities ?? []), ...(def.leaderAbilities?.abilities ?? [])].some(a => a.trigger === 'whenAbilityUsed')) useHearers.add(cardId)

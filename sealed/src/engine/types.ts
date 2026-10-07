@@ -240,6 +240,19 @@ export interface UnitState {
    * (BD-1, Huyang). Read by the card's own aura, so the effect ends when either unit leaves play.
    */
   chosenUnitId?: string
+  /**
+   * The card this unit really is, when it entered play as a copy of another unit (Clone: "enter play
+   * as a copy of a non-leader, non-Vehicle unit in play, except it gains the Clone trait and is not
+   * unique"). `cardId` is then the copied card, so its printed attributes and abilities are read off
+   * that one, and this card is what leaves play: to a discard pile, a hand or a guardian
+   * (`physicalCardOf`). Its own printed traits stay with the unit, and it is not unique.
+   */
+  physicalCardId?: string
+}
+
+/** The card a unit in play really is: its own, or the copier's (`UnitState.physicalCardId`). */
+export function physicalCardOf(unit: UnitState): string {
+  return unit.physicalCardId ?? unit.cardId
 }
 
 export interface ResourceState {
@@ -265,6 +278,11 @@ export interface LeaderState {
   deployed: boolean
   epicActionUsed: boolean
   exhausted: boolean
+  /**
+   * A leader that flips between two faces instead of deploying shows its other face (Chancellor
+   * Palpatine // Darth Sidious). Absent is the face it starts the game with.
+   */
+  flipped?: boolean
 }
 
 export interface BaseState {
@@ -438,8 +456,11 @@ export interface NextUnitGrant {
   sharesKeywordWithFriendly?: boolean
   // The grant is for the next EVENT played instead of the next unit (Rex): only `costDelta` applies.
   event?: boolean
-  // The grant is for the next CARD played, unit or event ("the next Separatist card you play").
+  // The grant is for the next CARD played, of any type: a unit, an event or an upgrade ("the next
+  // Separatist card you play").
   anyCard?: boolean
+  // The card must have none of these aspect icons ("the next non-Heroism, non-Villainy card", Bendu).
+  withoutAspects?: string[]
   // The matching card gains Exploit this many (Count Dooku), read by `exploitTerms` as it is played.
   exploit?: number
   // "Each of the next N <cards> you play": the grant applies to N matching cards, one at a time,
@@ -468,7 +489,8 @@ export function spendNextUnitGrants(all: NextUnitGrant[] | undefined, spent: Nex
 /** True if `card` is a unit satisfying a grant's filter. `state` and `owner` are needed only by a board-reading filter. */
 export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state?: GameState, owner?: PlayerId): boolean {
   if (!card || grant.viaPlot) return false
-  if (grant.anyCard ? card.type !== 'unit' && card.type !== 'event' : card.type !== (grant.event ? 'event' : 'unit')) return false
+  if (grant.anyCard ? card.type !== 'unit' && card.type !== 'event' && card.type !== 'upgrade' : card.type !== (grant.event ? 'event' : 'unit')) return false
+  if (grant.withoutAspects && card.aspects.some(a => grant.withoutAspects!.includes(a))) return false
   // Traits the card has lost for the phase are gone here too (The First Legion). The card-level
   // grants `cardTraits` adds are not read here: this module sits below the registry, and no grant a
   // card makes itself has ever been what a "your next <Trait> unit" discount turned on.
@@ -588,7 +610,15 @@ export interface GameState {
    */
   // `prevented` collects units whose incoming combat damage a prevention effect has cancelled
   // (The Mandalorian) — decided at the `prevent` stage, honoured when damage is dealt.
-  pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage'; viaAmbush?: boolean; preventAsked?: string[]; prevented?: string[] }
+  // `defenderStrikesFirst` and `secondDefenderId` are set by the attacker's own On Attack choices, so
+  // they are read when the damage is dealt: "you may have the defending unit deal combat damage before
+  // this unit" (The Stranger), and "this unit can attack 2 units instead of 1" (Darth Maul).
+  pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage'; viaAmbush?: boolean; preventAsked?: string[]; prevented?: string[]; defenderStrikesFirst?: boolean; secondDefenderId?: string }
+  /**
+   * The round whose additional regroup phase has been taken ("There is an additional regroup phase
+   * after the first regroup phase each round", Max Rebo), so it is taken once.
+   */
+  extraRegroupRound?: number
   /**
    * The unit attacking right now, from the declaration to the end of the attack (cleared with the
    * other per-attack state by `clearAttackGrants`). For a card whose ability holds only "while
@@ -784,9 +814,27 @@ export function zoneCrossesOwners(zone: PlayFromZone): boolean {
 export interface HowPlayed {
   from: 'hand' | 'resources' | 'other'
   smuggle?: boolean
+  /**
+   * How many resources were exhausted to play it, which only the door that paid knows ("if that
+   * opponent paid less than the card's cost to play it", Lux Bonteri). Absent means none: a free play.
+   */
+  paid?: number
 }
 export const PLAYED_FROM_HAND: HowPlayed = { from: 'hand' }
 export const PLAYED_ELSEWHERE: HowPlayed = { from: 'other' }
+
+/**
+ * A unit play held while its player says what it enters play as (`enterAsCopy`, Clone): everything
+ * `playUnitCard` was handed, as plain data, so the play resumes exactly where it stopped.
+ */
+export interface EnterAsCopyPlay {
+  ready?: boolean
+  resourcesPaid: number
+  cardOwner?: PlayerId
+  exploited?: { owed: PendingTrigger[]; powers: number[]; borrowed?: string[] }
+  how: HowPlayed
+  fate?: { defeat: true } | { capturedBy: string }
+}
 
 /** A card offered for play, with its index in the zone it is played out of. */
 export interface PlayFromRef {
@@ -1028,6 +1076,17 @@ export interface PhaseEvents {
    * action" (Fully Armed and Operational).
    */
   lastActionAttackedBase?: Partial<Record<PlayerId, boolean>>
+  /**
+   * Players who have started an action this phase, a pass included (`recordActionStarted`): "play
+   * only as your first action in the action phase" (Confidence in Victory).
+   */
+  acted?: PlayerId[]
+  /**
+   * "Its controller's next action this phase must be an attack action with that unit, if able. It
+   * must attack a unit, if able" (Give In to Your Anger): a constraint `legalMoves` applies to
+   * `player`'s next action, gone once that action starts.
+   */
+  forcedAttack?: { player: PlayerId; instanceId: string }
   /** Players whose base was DEALT DAMAGE this phase — combat or ability (Baylan Skoll). */
   basesDamaged: PlayerId[]
   /** Players who had an upgrade defeated this phase (Baylan Skoll). */
@@ -1201,6 +1260,8 @@ export interface TriggerContext {
   playedFromResources?: boolean
   /** `whenPlayCard`: the card was played using Smuggle ("when you play a card using Smuggle", Hondo Ohnaka). */
   playedUsingSmuggle?: boolean
+  /** `whenPlayCard`: the resources exhausted to play the card, 0 for a free play ("paid less than the card's cost", Lux Bonteri). */
+  paidToPlay?: number
   /**
    * `whenUnitAttacks`: whose unit is attacking. The point fires on both players, so every
    * registration compares this against `ctx.owner` ("a friendly unit attacks" or "an enemy unit attacks").
@@ -1308,8 +1369,11 @@ export function choiceIntent(choice: PendingChoice): TargetIntent | undefined {
     case 'selectHealTarget': case 'healForAdvantage': case 'distributeHealing': case 'selectUnitToReady':
       return 'help'
     case 'mayDamage': case 'mayDamageExhaust': case 'selectDamageTarget': case 'distributeDamage': case 'distributeIndirectDamage':
-    case 'variableStrike': case 'selectUnitToDefeat': case 'selectUniqueUnitToDefeat': case 'exploit':
+    case 'variableStrike': case 'selectUnitToDefeat': case 'selectUniqueUnitToDefeat':
       return 'harm'
+    case 'exploit':
+      return choice.droids ? 'cunning' : 'harm' // Vuutun Palaa's Droids are exhausted, not defeated
+    case 'enterAsCopy':
     case 'mayExhaustLeaderExhaustUnit': case 'mayExhaustUnit': case 'selectUnitToExhaust': case 'returnFriendlyUnit':
     case 'selectUnitToReturn': case 'selectUnitToSteal': case 'selectFriendlyUnit': case 'selectDistributeSource':
       return 'cunning'
@@ -1535,7 +1599,13 @@ type ChoiceVariant =
   // `creditGrant` is what the played unit gains for this phase if at least one Credit is defeated
   // paying for it (Jabba the Hutt: "If you defeated a Credit while paying its cost, that unit gains
   // Ambush for this phase"), given as it enters play so an entry keyword like Ambush still fires.
-  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean; creditGrant?: KeywordInstance[] }
+  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean; creditGrant?: KeywordInstance[]; droids?: boolean }
+  /**
+   * "You may have this unit enter play as a copy of a non-leader, non-Vehicle unit in play" (Clone):
+   * asked as the unit enters, before anything reacts to it. `play` is the rest of the play, resumed
+   * with the copied card (an accepted `targetInstanceId`) or as itself (declined).
+   */
+  | { kind: 'enterAsCopy'; id: string; controller: PlayerId; cardId: string; targets: string[]; play: EnterAsCopyPlay }
   // The one door for playing a card out of somewhere other than the Play a Card action: any card
   // type, out of `zone`, answered by `optionIndex` into `candidates`. `free` bypasses the cost and
   // the aspect penalty (CR 8.5); `costDelta` adjusts it; `waive` forgives aspect penalties. An
@@ -2030,8 +2100,27 @@ export function recordBaseAttacked(state: GameState, owner: PlayerId, attackerId
 /** `player` starts a new action: what their previous one did is forgotten. */
 export function recordActionStarted(state: GameState, player: PlayerId): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
-  if (events.lastActionAttackedBase?.[player] !== true) return state
-  return { ...state, phaseEvents: { ...events, lastActionAttackedBase: { ...events.lastActionAttackedBase, [player]: false } } }
+  const attacked = events.lastActionAttackedBase?.[player] === true
+  const first = !(events.acted ?? []).includes(player)
+  const forced = events.forcedAttack?.player === player
+  if (!attacked && !first && !forced) return state
+  const next: PhaseEvents = { ...events }
+  if (attacked) next.lastActionAttackedBase = { ...events.lastActionAttackedBase, [player]: false }
+  if (first) next.acted = [...(events.acted ?? []), player]
+  // The constraint binds this one action, which `legalMoves` has already shaped.
+  if (forced) delete next.forcedAttack
+  return { ...state, phaseEvents: next }
+}
+
+/** Whether `player` has yet to take an action this phase ("play only as your first action"). */
+export function noActionYetThisPhase(state: GameState, player: PlayerId): boolean {
+  return !(state.phaseEvents?.acted ?? []).includes(player)
+}
+
+/** Bind `player`'s next action this phase to an attack with `instanceId` (Give In to Your Anger). */
+export function forceNextAttack(state: GameState, player: PlayerId, instanceId: string): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  return { ...state, phaseEvents: { ...events, forcedAttack: { player, instanceId } } }
 }
 
 /** Whether `player`'s most recent action this phase attacked the enemy base (Fully Armed and Operational). */

@@ -1,5 +1,5 @@
 import type { DamageDealt, DamageSource, GameState, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayerId, UnitState } from './types'
-import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordDamagePrevented, recordUnitLeftPlay, recordDefeatedWhileAttacking, pushChoice, recordIndirectDamageDealt } from './types'
+import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordDamagePrevented, recordUnitLeftPlay, recordDefeatedWhileAttacking, pushChoice, recordIndirectDamageDealt, physicalCardOf } from './types'
 import type { DamagePreventionContext } from './abilities'
 import { enqueueTriggers, drainTriggers } from './triggerQueue'
 import { effectiveHp } from './stats'
@@ -210,8 +210,8 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
   // A defeated card goes to its OWNER's discard, which is not always its controller's: a unit
   // taken with Rehabilitation is defeated back to the player it was stolen from.
   const cardsFor = (side: PlayerId) => defeated
-    .filter(u => !u.isLeader && !isTokenCard(u.cardId) && !replaced.has(u) && (u.owner ?? owner) === side)
-    .map(u => u.cardId)
+    .filter(u => !u.isLeader && !isTokenCard(physicalCardOf(u)) && !replaced.has(u) && (u.owner ?? owner) === side)
+    .map(physicalCardOf)
 
   let result = updatePlayer(state, owner, {
     units: survivors,
@@ -241,7 +241,8 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
   // Upgrades go down with their host, and a shield is defeated by soaking the hit:
   // "when a friendly upgrade is defeated" (Zeb Orrelios) covers both.
   const lostUpgradeOwners = [...defeated.flatMap(u => u.upgrades).filter(a => !escapesDefeat(a)).map(a => a.owner), ...spentShieldOwners]
-  if (lostUpgradeOwners.length > 0) result = fireUpgradesDefeated(result, lostUpgradeOwners)
+  const lostCards = defeated.flatMap(u => u.upgrades).filter(a => !escapesDefeat(a) && state.cards[a.cardId]?.type !== 'token')
+  if (lostUpgradeOwners.length > 0) result = fireUpgradesDefeated(result, lostUpgradeOwners, lostCards)
 
   for (const { unit, targets } of replacements) {
     result = pushChoice(result, {

@@ -171,7 +171,8 @@ export function canTakePilot(state: GameState, host: UnitState, cardId: string):
 export function effectiveCost(state: GameState, playerId: PlayerId, card: EngineCard, target?: UnitState, waive?: AspectWaiver, altCost?: { cost: number; aspects: string[] }): number {
   const p = state.players[playerId]
   const provided: string[] = [
-    ...(state.cards[p.leader.cardId]?.aspects ?? []),
+    // A leader whose aspects depend on its face (Chancellor Palpatine // Darth Sidious) says which.
+    ...(getCardDefinition(p.leader.cardId)?.leaderAbilities?.aspects?.(state, playerId) ?? state.cards[p.leader.cardId]?.aspects ?? []),
     ...(state.cards[p.base.cardId]?.aspects ?? []),
   ]
   // A unit may provide its aspect icons while its controller pays costs — The Darksaber.
@@ -247,7 +248,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
  * `resources` makes the picks ready resources rather than units (Greater Sarlacc), and `fromDiscard`
  * unit cards in the discard pile costing at most `maxCost` (Vernestra Rwoh).
  */
-export interface ExploitTerms { limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean; creditGrant?: KeywordInstance[] }
+export interface ExploitTerms { limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean; creditGrant?: KeywordInstance[]; droids?: boolean }
 
 /**
  * Where in `playerId`'s discard pile the unit cards costing at most `maxCost` are: the picks Vernestra
@@ -301,12 +302,27 @@ export function exploitTerms(state: GameState, playerId: PlayerId, card: EngineC
  * has Credit tokens, so combining the two in one step is left unbuilt rather than guessed at.
  */
 function creditExploitTerms(state: GameState, playerId: PlayerId): ExploitTerms | undefined {
+  // Units paying as resources (Vuutun Palaa's Droids) take the same step, each exhausted paying 1. A
+  // player with both those and Credit tokens is offered the units: the step is built for one kind.
+  const payers = unitCostPayers(state, playerId)
+  if (payers.length > 0) return { limit: payers.length, discount: 1, droids: true }
   const held = friendlyCreditTokens(state, playerId)
   if (held === 0) return undefined
   // "Enemy Credit tokens lose all abilities" (Conveyex Security Captain): theirs can't pay.
   const enemy = opponentOf(playerId)
   if (state.players[enemy].units.some(u => abilityCardIds(state, u, enemy).some(id => getCardDefinition(id)?.suppressesEnemyCredits?.(state, u) ?? false))) return undefined
   return { limit: held, discount: 1, credit: true }
+}
+
+/** `playerId`'s ready units that a friendly card lets them exhaust to pay costs (Vuutun Palaa's Droids). */
+export function unitCostPayers(state: GameState, playerId: PlayerId): string[] {
+  const units = state.players[playerId].units
+  const tests = units.flatMap(u => abilityCardIds(state, u, playerId).flatMap(id => {
+    const test = getCardDefinition(id)?.unitPaysCosts
+    return test ? [test] : []
+  }))
+  if (tests.length === 0) return []
+  return units.filter(u => !u.exhausted && tests.some(t => t(state, u))).map(u => u.instanceId)
 }
 
 /**
@@ -323,6 +339,7 @@ export function raiseExploit(state: GameState, owner: PlayerId, cardId: string, 
     ...(terms.fromDiscard ? { fromDiscard: true, maxCost: terms.maxCost } : {}),
     ...(terms.credit ? { credit: true } : {}),
     ...(terms.credit && terms.creditGrant ? { creditGrant: terms.creditGrant } : {}),
+    ...(terms.droids ? { droids: true } : {}),
     source: { cardId, controller: owner },
   })
 }
@@ -342,6 +359,21 @@ export function canAffordFromHand(state: GameState, playerId: PlayerId, card: En
   if (!terms.resources) return Math.max(0, cost - terms.limit * terms.discount) <= readyNow
   for (let k = 0; k <= terms.limit; k++) if (Math.max(0, cost - k * terms.discount) <= readyNow - k) return true
   return false
+}
+
+/**
+ * The other hand cards `playerId` may discard instead of paying for the card at `handIndex`
+ * (`discardInsteadOfCost`, Bamboozle), or none for a card without that alternative.
+ */
+export function discardForCostIndices(state: GameState, playerId: PlayerId, handIndex: number): number[] {
+  const hand = state.players[playerId].hand
+  const test = cardAbilitiesBlanked(state, hand[handIndex], playerId) ? undefined : getCardDefinition(hand[handIndex])?.discardInsteadOfCost
+  if (!test) return []
+  // A hand entry with no card (a search's modelled draw) is never a candidate.
+  return hand.flatMap((id, i) => {
+    const card = state.cards[id]
+    return i !== handIndex && card && test(card) ? [i] : []
+  })
 }
 
 /**
@@ -686,6 +718,7 @@ export function validPlayTargets(state: GameState, controller: PlayerId, zone: P
 export function canPlayFrom(state: GameState, controller: PlayerId, zone: PlayFromZone, ref: PlayFromRef, terms: PlayFromTerms, targetUnits?: string[], extraCost = 0): boolean {
   const card = state.cards[ref.cardId]
   if (!card || zoneCards(state, controller, zone)[ref.index] !== ref.cardId) return false
+  if (getCardDefinition(card.id)?.playableOnlyIf?.(state, controller) === false) return false
   if (terms.piloting || (card.type === 'upgrade' && !isFortify(card))) return validPlayTargets(state, controller, zone, ref.index, ref.cardId, terms, targetUnits, extraCost).length > 0
   return playFromCost(state, controller, card, terms) <= playFromBudget(state, controller, extraCost)
 }
@@ -727,6 +760,8 @@ export function legalMoves(state: GameState): Action[] {
 function setupMoves(state: GameState): Action[] {
   // CR 5.2.1e: first, each player decides whether to take their one mulligan.
   if (state.setupStage === 'mulligan') {
+    // "You can't take a mulligan" (Nabat Village).
+    if (getCardDefinition(state.players[state.activePlayer].base.cardId)?.baseAbilities?.noMulligan) return [{ type: 'keepHand' }]
     return [{ type: 'mulligan' }, { type: 'keepHand' }]
   }
   // CR 5.2.1f: then each player resources two cards, one pick at a time.
@@ -744,6 +779,16 @@ function actionPhaseMoves(state: GameState): Action[] {
   const p = state.players[playerId]
   const enemy = state.players[opponentOf(playerId)]
 
+  // "Its controller's next action this phase must be an attack action with that unit, if able. It must
+  // attack a unit, if able" (Give In to Your Anger). Unable, the action is free.
+  const forced = state.phaseEvents?.forcedAttack
+  if (forced?.player === playerId) {
+    const bound = p.units.find(u => u.instanceId === forced.instanceId)
+    const attacks = bound && !bound.exhausted ? attackMoves(state, bound) : []
+    const onUnits = attacks.filter(m => m.type === 'attack' && m.target.kind === 'unit')
+    if (attacks.length > 0) return onUnits.length > 0 ? onUnits : attacks
+  }
+
   // A Ryder Azadi the opponent controls forbids us from playing cards with the named names.
   const forbiddenNames = namedByOpponent(state, playerId)
 
@@ -753,8 +798,9 @@ function actionPhaseMoves(state: GameState): Action[] {
     if (!card || (card.type !== 'unit' && card.type !== 'event')) return
     if (forbiddenNames.has(card.name)) return
     if (getCardDefinition(cardId)?.cannotPlayFromHand) return
+    if (getCardDefinition(cardId)?.playableOnlyIf?.(state, playerId) === false) return
     if (card.type === 'event' && eventsBannedFor(state, playerId)) return
-    if (!canAffordFromHand(state, playerId, card)) return
+    if (!canAffordFromHand(state, playerId, card) && discardForCostIndices(state, playerId, handIndex).length === 0) return
     moves.push(card.type === 'unit' ? { type: 'playUnit', handIndex } : { type: 'playEvent', handIndex })
   })
 
@@ -1068,6 +1114,12 @@ function choiceMoves(state: GameState): Action[] {
           }
           break
         }
+        if (choice.droids) {
+          for (const id of unitCostPayers(state, choice.controller)) {
+            if (!choice.picks.includes(id)) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+          }
+          break
+        }
         for (const u of state.players[choice.controller].units) {
           if (!choice.picks.includes(u.instanceId)) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: u.instanceId })
         }
@@ -1334,6 +1386,13 @@ function choiceMoves(state: GameState): Action[] {
         choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
         if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
+      case 'enterAsCopy': {
+        // Clone: a unit still in play to copy, or enter as itself.
+        const inPlay = new Set([...state.players.player.units, ...state.players.opponent.units].map(u => u.instanceId))
+        for (const id of choice.targets) if (inPlay.has(id)) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'choosePlayerThen': {
         // Option 0 is the opponent, option 1 the controller, restricted to `candidates` when given
         // ("defeat a Credit token belonging to any player", #602 — only a player who holds one).

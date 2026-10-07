@@ -1,10 +1,10 @@
 import type { Action, AttackTarget } from './actions'
-import type { Arena, GameState, PlayerId, UnitState } from './types'
+import type { Arena, EngineCard, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, HowPlayed, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef, UsedAbility } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed, upgradeSideId, PLAYED_FROM_HAND, PLAYED_ELSEWHERE } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, recordActionStarted, markAbilityUsed, nextUnitGrantMatches, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { canTakePilot, effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, smuggleTerms, smuggleCostUnits, type PlayFromTerms } from './legalMoves'
+import { canTakePilot, effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, discardForCostIndices, canAffordFromHand, unitCostPayers, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, smuggleTerms, smuggleCostUnits, type PlayFromTerms } from './legalMoves'
 import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectAbilityUsed, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
@@ -437,7 +437,12 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
   if (playerId === next.initiative) {
     return { ...next, activePlayer: opponentOf(playerId) }
   }
-  return { ...next, phase: 'action', activePlayer: next.initiative }
+  // The first action phase starts. Only leaders and bases are in play to hear it ("When the first
+  // action phase starts", Nabat Village), and play begins with the initiative holder once whatever
+  // they raised is answered.
+  const started = checkWin(fireForAllUnits({ ...next, phase: 'action', activePlayer: next.initiative }, 'whenActionPhaseStarts'))
+  if (started.winner !== null || !hasPendingChoices(started)) return { ...started, activePlayer: started.initiative }
+  return { ...started, activePlayer: firstDecider(started, started.initiative), pendingRoundStart: true }
 }
 
 // ---------------------------------------------------------------------------
@@ -461,7 +466,23 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
  * `fate` is what the ability playing the unit does to it before its own When Played resolves: defeats
  * it (Maul) or has another unit capture it (DJ).
  */
-function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0, cardOwner?: PlayerId, exploited?: Exploited, how: HowPlayed = PLAYED_ELSEWHERE, fate?: EntryFate): GameState {
+function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0, cardOwner?: PlayerId, exploited?: Exploited, how: HowPlayed = PLAYED_ELSEWHERE, fate?: EntryFate, copy?: { of?: string }): GameState {
+  // "You may have this unit enter play as a copy of ..." (Clone): settled before it enters, so the play
+  // is held in the choice and resumed here with `copy` once it is answered.
+  if (copy === undefined) {
+    const copiable = cardAbilitiesBlanked(state, cardId, owner) ? undefined : getCardDefinition(cardId)?.entersAsCopyOf
+    const targets = copiable ? inPlayUnits(state).filter(u => copiable(state, u)).map(u => u.instanceId) : []
+    if (targets.length > 0) {
+      return pushChoice(state, {
+        kind: 'enterAsCopy', id: `copy-${cardId}-${state.instanceCounter}`, controller: owner, cardId, targets,
+        play: { ...(ready !== undefined ? { ready } : {}), resourcesPaid, ...(cardOwner ? { cardOwner } : {}), ...(exploited ? { exploited } : {}), how, ...(fate ? { fate } : {}) },
+      })
+    }
+  }
+  // A copy is the copied card in every respect but its traits, its uniqueness, and where it goes as it
+  // leaves play (`physicalCardId`).
+  const physicalCardId = copy?.of !== undefined ? cardId : undefined
+  if (copy?.of !== undefined) cardId = copy.of
   // First, after the cost, so "first X each phase" sees this one as the first and nothing below reads
   // a record that is missing it.
   state = recordCardPlayed(state, owner, cardId)
@@ -502,6 +523,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
     // array a unit sits in. `UnitState.owner` is only set where the two differ, as it is for a unit
     // whose control has changed hands. The permanent form, since nothing hands the card back.
     ...(cardOwner !== undefined && cardOwner !== owner ? { owner: cardOwner, controlUntil: 'permanent' as const } : {}),
+    ...(physicalCardId ? { physicalCardId } : {}),
   }
 
   let next = updatePlayer(state, owner, { units: [...state.players[owner].units, newUnit] })
@@ -556,7 +578,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // the time a "give a Shield to another friendly unit" in the same batch picks its targets (#529).
   // The units exploited to pay for it trigger in this same batch (CR 7.5.16.d).
   const keywordCtx = ready === true || grantEntersReady ? { ambushStaysReady: true } : undefined
-  const arrivals = [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities, how, exploited?.borrowed, keywordCtx)]
+  const arrivals = [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities, { ...how, paid: resourcesPaid }, exploited?.borrowed, keywordCtx)]
   if (fate) {
     // "Play a unit from your hand … Then, defeat it. (When Played abilities resolve after the unit is
     // defeated.)" (Maul), and "The chosen unit captures it. (When Played abilities resolve after the
@@ -583,6 +605,12 @@ interface Exploited { owed: PendingTrigger[]; powers: number[]; borrowed?: strin
 
 /** What the ability playing a unit does to it before its own When Played resolves. */
 type EntryFate = { defeat: true } | { capturedBy: string }
+
+/** Finish a unit play an `enterAsCopy` choice held: as a copy of `copiedCardId`, or as itself. */
+function resumeHeldPlay(state: GameState, choice: Extract<PendingChoice, { kind: 'enterAsCopy' }>, copiedCardId: string | undefined): GameState {
+  const p = choice.play
+  return checkWin(playUnitCard(state, choice.controller, choice.cardId, p.ready, p.resourcesPaid, p.cardOwner, p.exploited, p.how, p.fate, copiedCardId !== undefined ? { of: copiedCardId } : {}))
+}
 
 /**
  * Everything that triggers off a unit arriving, as one batch: any upgrades it entered with attaching
@@ -627,6 +655,7 @@ function collectPlayCard(state: GameState, playerId: PlayerId, cardId: string, h
     ...(how.from === 'resources' ? { playedFromResources: true } : {}),
     ...(how.smuggle ? { playedUsingSmuggle: true } : {}),
     ...(playedUnitId ? { targetInstanceId: playedUnitId } : {}),
+    paidToPlay: how.paid ?? 0,
   }
   return [playerId, opponentOf(playerId)].flatMap(p =>
     [...collectPlayerTriggers(state, 'whenPlayCard', p, ctx), ...collectUnitsTrigger(state, 'whenPlayCard', p, ctx)])
@@ -725,12 +754,42 @@ function playEvent(state: GameState, handIndex: number): GameState {
   if (!card || card.type !== 'event') {
     throw new Error(`playEvent: hand index ${handIndex} is not a playable event`)
   }
+  // "You may discard a Cunning card from your hand instead of paying this event's cost" (Bamboozle):
+  // asked before anything is paid, and not optional when the cost itself can't be paid. The card's
+  // `ifYouDo` answers it through `playEventFromHand`.
+  const instead = discardForCostIndices(state, playerId, handIndex)
+  if (instead.length > 0) {
+    return pushChoice(state, {
+      kind: 'selectCardThen', id: `${card.id}-instead`, controller: playerId, candidates: instead.map(i => p.hand[i]),
+      text: `discard a card instead of paying for ${card.name}`, hookOnDecline: true,
+      ...(canAffordFromHand(state, playerId, card) ? { optional: true } : {}),
+      then: { cardId: card.id, owner: playerId, step: `insteadOfCost:${handIndex}` },
+    })
+  }
   const exploit = exploitTerms(state, playerId, card)
   if (exploit) return raiseExploit(state, playerId, card.id, handIndex, exploit)
+  return playEventFromHand(state, playerId, handIndex)
+}
 
-  const paid = payCost(p, effectiveCost(state, playerId, card))
+/**
+ * Pay for the event at `handIndex` and play it: with its cost, or by discarding `insteadOf` (a card id
+ * among the rest of the hand) where the event allows that (Bamboozle). Nothing is paid either way
+ * beyond what is named.
+ */
+export function playEventFromHand(state: GameState, playerId: PlayerId, handIndex: number, insteadOf?: string): GameState {
+  const p = state.players[playerId]
+  const card = state.cards[p.hand[handIndex]]
+  if (card?.type !== 'event') return state
+  if (insteadOf !== undefined) {
+    const rest = updatePlayer(state, playerId, { hand: p.hand.filter((_, i) => i !== handIndex) })
+    const at = rest.players[playerId].hand.indexOf(insteadOf)
+    if (at === -1) return state
+    return playEventCard(discardFromHand(rest, playerId, at), playerId, card.id, undefined, [], { ...PLAYED_FROM_HAND, paid: 0 })
+  }
+  const cost = effectiveCost(state, playerId, card)
+  const paid = payCost(p, cost)
   const next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
-  return playEventCard(next, playerId, card.id, undefined, [], PLAYED_FROM_HAND)
+  return playEventCard(next, playerId, card.id, undefined, [], { ...PLAYED_FROM_HAND, paid: cost })
 }
 
 /** One more unit chosen: the step finishes by itself at its limit, and is offered again otherwise. */
@@ -741,7 +800,9 @@ function pickExploit(state: GameState, choice: Extract<PendingChoice, { kind: 'e
       ? Number(instanceId) < state.players[choice.controller].resources.length
       : choice.credit
         ? Number(instanceId) < friendlyCreditTokens(state, choice.controller)
-        : state.players[choice.controller].units.some(u => u.instanceId === instanceId)
+        : choice.droids
+          ? unitCostPayers(state, choice.controller).includes(instanceId)
+          : state.players[choice.controller].units.some(u => u.instanceId === instanceId)
   if (choice.picks.includes(instanceId) || !there) return pushChoice(state, choice)
   const next = { ...choice, picks: [...choice.picks, instanceId] }
   return next.picks.length >= next.limit ? finishExploit(state, next) : pushChoice(state, next)
@@ -788,6 +849,9 @@ function finishExploit(state: GameState, choice: Extract<PendingChoice, { kind: 
     if (choice.creditGrant && choice.picks.length > 0 && card.type === 'unit') {
       next = updatePlayer(next, owner, { nextUnitGrants: [...(next.players[owner].nextUnitGrants ?? []), { cardId: card.id, keywords: choice.creditGrant }] })
     }
+  } else if (choice.droids) {
+    // Vuutun Palaa: each chosen unit is exhausted to pay 1, as a resource would be.
+    for (const u of chosen) next = exhaustUnit(next, u.instanceId)
   } else if (choice.damage === undefined) {
     powers = chosen.map(u => effectivePower(state, u))
     ;({ state: next, owed } = defeatForCost(next, chosen.map(u => u.instanceId)))
@@ -800,7 +864,7 @@ function finishExploit(state: GameState, choice: Extract<PendingChoice, { kind: 
   if (at === -1) return next
   const paid = payCost(p, cost)
   next = updatePlayer(next, owner, { ...paid, hand: paid.hand.filter((_, i) => i !== at) })
-  if (card.type === 'event') return playEventCard(next, owner, card.id, undefined, owed, PLAYED_FROM_HAND)
+  if (card.type === 'event') return playEventCard(next, owner, card.id, undefined, owed, { ...PLAYED_FROM_HAND, paid: cost })
   return checkWin(playUnitCard(next, owner, card.id, undefined, cost, undefined, { owed, powers, ...(borrowed.length > 0 ? { borrowed } : {}) }, PLAYED_FROM_HAND))
 }
 
@@ -820,6 +884,13 @@ function playEventCard(state: GameState, playerId: PlayerId, cardId: string, car
   // when that was not the one playing it. The grants are still the player's own.
   const owner = cardOwner ?? playerId
   let next = updatePlayer(state, playerId, eventGrants.length ? { nextUnitGrants: spendNextUnitGrants(p.nextUnitGrants, eventGrants) } : {})
+  // "As an additional cost ... they must deal 2 damage to their base" (Saw Gerrera): paid with the
+  // rest of the cost, and dealt by nobody, as every cost a player pays with their own base is.
+  const baseCost = enemyPlayBaseDamage(next, playerId, card)
+  if (baseCost > 0) {
+    const { resolvingSource, ...unattributed } = next
+    next = { ...dealDamageToBase(unattributed, playerId, baseCost), ...(resolvingSource ? { resolvingSource } : {}) }
+  }
   next = updatePlayer(next, owner, { discard: [...next.players[owner].discard, card.id] })
   // After the cost, so Peli Motto's "first non-unit card each phase" counts this one as the first.
   next = recordCardPlayed(next, playerId, card.id)
@@ -834,6 +905,15 @@ function playEventCard(state: GameState, playerId: PlayerId, cardId: string, car
     ...collectPlayCard(next, playerId, card.id, how),
   ])
   return checkWin(next)
+}
+
+/** The base damage `playerId`'s opponents' units charge as an additional cost to play `card` (Saw Gerrera). */
+function enemyPlayBaseDamage(state: GameState, playerId: PlayerId, card: EngineCard): number {
+  let total = 0
+  for (const u of state.players[opponentOf(playerId)].units) {
+    for (const cid of abilityCardIds(state, u)) total += getCardDefinition(cid)?.enemyPlayBaseDamage?.(state, u, card) ?? 0
+  }
+  return total
 }
 
 /** Take the card at `index` out of the zone a `playCardFrom` played it from. */
@@ -909,7 +989,7 @@ function playFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone
   const handSize = state.players[controller].hand.length
   const inHand = zone === 'hand' || ((zone === 'handOrResources' || zone === 'handOrDiscard' || zone === 'handOrAnyDiscard') && ref.index < handSize)
   const inResources = zone === 'resources' || zone === 'opponentResources' || (zone === 'handOrResources' && ref.index >= handSize)
-  const how: HowPlayed = { from: inHand ? 'hand' : inResources ? 'resources' : 'other', ...(tail?.usingSmuggle ? { smuggle: true } : {}) }
+  const how: HowPlayed = { from: inHand ? 'hand' : inResources ? 'resources' : 'other', ...(tail?.usingSmuggle ? { smuggle: true } : {}), paid: cost }
 
   let next = updatePlayer(state, controller, payCost(state.players[controller], cost, selfPayingResource(state, controller, zone, ref.index)))
   // "The next card you play using Plot" (Chancellor Palpatine) is this one, whatever its type.
@@ -1217,7 +1297,7 @@ function resumePendingAttack(state: GameState): GameState {
     pa.target,
     pa.stage,
     pa.viaAmbush,
-    { preventAsked: pa.preventAsked, prevented: pa.prevented },
+    { preventAsked: pa.preventAsked, prevented: pa.prevented, defenderStrikesFirst: pa.defenderStrikesFirst, secondDefenderId: pa.secondDefenderId },
   )
   return next.winner !== null || hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
 }
@@ -1311,6 +1391,8 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   // AAT Incinerator: the ability goes on once its picks stop.
   if ((choice.kind === 'selectUnitThen' || choice.kind === 'selectCardThen' || choice.kind === 'selectUpgradeThen') && choice.hookOnDecline) next = runIfYouDo(next, choice.then)
   if (choice.kind === 'playUnitFromHand' && choice.thenDefeat) next = defeatUnits(next, choice.thenDefeat)
+  // Clone declining to copy anything still enters play, as itself.
+  if (choice.kind === 'enterAsCopy') next = resumeHeldPlay(next, choice, undefined)
   if (choice.kind === 'mayPayThen' && choice.declineStep !== undefined) next = runIfYouDo(next, { ...choice.then, step: choice.declineStep })
   // Elzar Mann: stopping early still triggers the follow-up, sized to what was distributed.
   if (choice.kind === 'distributeTokens') {
@@ -2007,6 +2089,12 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (pick !== undefined) next = runIfYouDo(next, choice.then, { cardChosen: pick, optionIndex })
       break
     }
+    case 'enterAsCopy': {
+      // Clone: the held play resumes, entering as a copy of the chosen unit's card.
+      const copied = targetInstanceId && choice.targets.includes(targetInstanceId) ? findUnit(next, targetInstanceId)?.unit : undefined
+      next = resumeHeldPlay(next, choice, copied?.cardId)
+      break
+    }
     case 'chooseArenaThen':
       next = runIfYouDo(next, choice.then, { arenaChosen: (optionIndex ?? 0) === 1 ? 'space' : 'ground' })
       break
@@ -2076,7 +2164,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const cost = Math.max(0, effectiveCost(next, owner, card, host.unit) - choice.discount)
         next = updatePlayer(next, owner, payCost(next.players[owner], cost))
         next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...choice.revealed.filter((_, i) => i !== idx)] })
-        next = playUpgradeCardOnto(next, owner, cardId, choice.unitId)
+        next = playUpgradeCardOnto(next, owner, cardId, choice.unitId, undefined, { ...PLAYED_ELSEWHERE, paid: cost })
       } else {
         next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...choice.revealed] })
       }
@@ -2600,10 +2688,12 @@ function uniqueUpgradeCheck(state: GameState, owner: PlayerId): GameState {
  * card id (a deck's duplicates share it), mirroring the upgrade rule.
  */
 function uniqueUnitCheck(state: GameState, owner: PlayerId): GameState {
-  const uniqueIds = state.players[owner].units.filter(u => state.cards[u.cardId]?.unique).map(u => u.cardId)
+  // A copy is not unique (Clone), so it neither counts nor can be chosen.
+  const unique = state.players[owner].units.filter(u => state.cards[u.cardId]?.unique && u.physicalCardId === undefined)
+  const uniqueIds = unique.map(u => u.cardId)
   const dupCardId = uniqueIds.find((id, i, arr) => arr.indexOf(id) !== i)
   if (!dupCardId) return state
-  const candidates = state.players[owner].units.filter(u => u.cardId === dupCardId).map(u => u.instanceId)
+  const candidates = unique.filter(u => u.cardId === dupCardId).map(u => u.instanceId)
   return pushChoice(state, { kind: 'selectUniqueUnitToDefeat', id: `unique-unit-${dupCardId}`, controller: owner, cardId: dupCardId, candidates })
 }
 
@@ -2627,8 +2717,9 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
   if (piloting) {
     const host = p.units.find(u => u.instanceId === targetInstanceId)
     if (!host || !canTakePilot(state, host, card.id)) throw new Error(`playUpgrade: ${targetInstanceId} cannot take ${card.id} as a Pilot`)
-    const paid = updatePlayer(state, playerId, payCost(p, effectiveCost(state, playerId, card, host, undefined, card.piloting)))
-    return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId, true)
+    const pilotCost = effectiveCost(state, playerId, card, host, undefined, card.piloting)
+    const paid = updatePlayer(state, playerId, payCost(p, pilotCost))
+    return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId, true, pilotCost)
   }
 
   const targetOwner = (['player', 'opponent'] as PlayerId[]).find(id =>
@@ -2639,19 +2730,21 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
   }
   const targetUnit = state.players[targetOwner].units.find(u => u.instanceId === targetInstanceId)
 
-  const paid = updatePlayer(state, playerId, payCost(p, effectiveCost(state, playerId, card, targetUnit)))
-  return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId)
+  const cost = effectiveCost(state, playerId, card, targetUnit)
+  const paid = updatePlayer(state, playerId, payCost(p, cost))
+  return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId, false, cost)
 }
 
 /**
  * Play the upgrade at `handIndex` of `playerId`'s hand onto `targetInstanceId`, its cost already dealt
- * with. The ordinary play pays first; an ability that plays one for free (Cin Drallig) calls this directly.
+ * with, `paid` resources having been exhausted for it. The ordinary play pays first; an ability that
+ * plays one for free (Cin Drallig) calls this directly.
  */
-export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex: number, targetInstanceId: string, unitCard = false): GameState {
+export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex: number, targetInstanceId: string, unitCard = false, paid = 0): GameState {
   const cardId = state.players[playerId].hand[handIndex]
   if ((unitCard ? !state.cards[cardId]?.piloting : state.cards[cardId]?.type !== 'upgrade') || !findUnit(state, targetInstanceId)) return state
   const next = updatePlayer(state, playerId, { hand: state.players[playerId].hand.filter((_, i) => i !== handIndex) })
-  return playUpgradeCardOnto(next, playerId, cardId, targetInstanceId, undefined, PLAYED_FROM_HAND, unitCard)
+  return playUpgradeCardOnto(next, playerId, cardId, targetInstanceId, undefined, { ...PLAYED_FROM_HAND, paid }, unitCard)
 }
 
 /**
@@ -2672,6 +2765,9 @@ function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: strin
   const owner = cardOwner ?? playerId
   let next = onBase ? attachToBase(state, playerId, card.id) : attachUpgrades(state, targetInstanceId!, [{ cardId: card.id, owner, ...(how.smuggle ? { usingSmuggle: true } : {}), ...(unitCard ? { unitCard: true } : {}) }], true)
   next = recordCardPlayed(next, playerId, card.id) // after the cost ("the first upgrade you play each phase")
+  // "The next <kind of> card you play" (Bendu, Tranquility): priced into the cost already paid, so spent now.
+  const cardGrants = (next.players[playerId].nextUnitGrants ?? []).filter(g => g.anyCard && nextUnitGrantMatches(card, g, next, playerId))
+  if (cardGrants.length > 0) next = updatePlayer(next, playerId, { nextUnitGrants: spendNextUnitGrants(next.players[playerId].nextUnitGrants, cardGrants) })
 
   // One upgrade arriving is one event: the host reacting to it attaching (Sabine Wren, and since this
   // is a play from whatever zone, "when you PLAY an upgrade on this unit" too, Gar Saxon) and the
@@ -2721,8 +2817,9 @@ function playBaseUpgrade(state: GameState, handIndex: number): GameState {
   const cardId = p.hand[handIndex]
   const card = cardId ? state.cards[cardId] : undefined
   if (!isFortify(card)) throw new Error(`playBaseUpgrade: hand index ${handIndex} is not a Fortify upgrade`)
-  const paid = updatePlayer(state, playerId, { ...payCost(p, effectiveCost(state, playerId, card!)), hand: p.hand.filter((_, i) => i !== handIndex) })
-  return playUpgradeCardOnto(paid, playerId, cardId, undefined, undefined, PLAYED_FROM_HAND)
+  const cost = effectiveCost(state, playerId, card!)
+  const paid = updatePlayer(state, playerId, { ...payCost(p, cost), hand: p.hand.filter((_, i) => i !== handIndex) })
+  return playUpgradeCardOnto(paid, playerId, cardId, undefined, undefined, { ...PLAYED_FROM_HAND, paid: cost })
 }
 
 /**
@@ -3149,8 +3246,11 @@ function runAttackStages(state: GameState, attackerId: string, target: AttackTar
   if (stage === 'onDefense' && target.kind === 'unit') {
     const defender = state.players[enemyId].units.find(u => u.instanceId === target.instanceId)
     if (defender) {
-      // The attacker is on the context, for "the attacker gets -2/-0" (Diplomatic Immunity).
-      const afterDefense = fireBatch(state, collectUnitTriggers(state, 'onDefense', defender, enemyId, { attackerInstanceId: attackerId, attackingPlayer: playerId }))
+      // The attacker is on the context, for "the attacker gets -2/-0" (Diplomatic Immunity). A second
+      // defender (Darth Maul) is attacked by the same attack, so its On Defense joins the batch.
+      const second = prevent.secondDefenderId ? state.players[enemyId].units.find(u => u.instanceId === prevent.secondDefenderId) : undefined
+      const heard = { attackerInstanceId: attackerId, attackingPlayer: playerId }
+      const afterDefense = fireBatch(state, [defender, ...(second ? [second] : [])].flatMap(d => collectUnitTriggers(state, 'onDefense', d, enemyId, heard)))
       if (batchOutstanding(state, afterDefense)) {
         // Hand control to the defender; resume at the damage stage.
         return { ...afterDefense, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage', viaAmbush, ...prevent }, activePlayer: enemyId }
@@ -3162,13 +3262,16 @@ function runAttackStages(state: GameState, attackerId: string, target: AttackTar
 }
 
 /**
- * How far the damage-prevention offers for one combat have got (The Mandalorian).
- * `preventAsked` are the units already offered a prevention this combat (so a declined offer isn't
- * re-raised on resume); `prevented` are those whose damage was actually cancelled.
+ * What a suspended combat carries to its damage step. `preventAsked` are the units already offered a
+ * prevention this combat (so a declined offer isn't re-raised on resume) and `prevented` those whose
+ * damage was actually cancelled (The Mandalorian). The attacker's own On Attack choices set the other
+ * two: the defender strikes first (The Stranger), and a second unit is attacked too (Darth Maul).
  */
 interface PreventionProgress {
   preventAsked?: string[]
   prevented?: string[]
+  defenderStrikesFirst?: boolean
+  secondDefenderId?: string
 }
 
 /**
@@ -3198,9 +3301,10 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   }
   // A unit that can't deal combat damage (Betrayed Trust) still attacks, with nothing to deal. Babu Frik's
   // Droid deals its remaining HP instead of its power, for this attack only.
-  const attackerPower = unitDealsNoCombatDamage(state, attacker) ? 0
-    : unitDealsCombatDamageByHp(state, attacker) ? Math.max(0, effectiveHp(state, attacker, attackerCtx) - attacker.damage)
-      : effectivePower(state, attacker, attackerCtx)
+  const powerOf = (s: GameState, a: UnitState): number => unitDealsNoCombatDamage(s, a) ? 0
+    : unitDealsCombatDamageByHp(s, a) ? Math.max(0, effectiveHp(s, a, attackerCtx) - a.damage)
+      : effectivePower(s, a, attackerCtx)
+  const attackerPower = powerOf(state, attacker)
 
   if (target.kind === 'base') {
     // Through `dealDamageToBase` so base-damage prevention applies (At Attin Safety Droid);
@@ -3226,35 +3330,40 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
 
   // Saboteur: when this unit attacks, defeat the defending unit's Shields before combat damage
   // (CR 6.3.2b) — not optional, so a shield can't soak the hit. (Sentinel-ignoring is in legalMoves.)
-  const preCombat = unitHasKeyword(state, attacker, 'Saboteur') && hasToken(defenderBefore.upgrades, TOKEN_SHIELD)
+  const saboteur = unitHasKeyword(state, attacker, 'Saboteur')
+  let preCombat = saboteur && hasToken(defenderBefore.upgrades, TOKEN_SHIELD)
     ? defeatTokensOn(state, enemyId, defenderBefore.instanceId, TOKEN_SHIELD)
     : state
+  // A second unit attacked by the same attack (Darth Maul), while it is still there to be attacked.
+  const secondId = prevent.secondDefenderId !== defenderBefore.instanceId ? prevent.secondDefenderId : undefined
+  const secondBefore = secondId ? preCombat.players[enemyId].units.find(u => u.instanceId === secondId) : undefined
+  if (secondBefore && saboteur && hasToken(secondBefore.upgrades, TOKEN_SHIELD)) preCombat = defeatTokensOn(preCombat, enemyId, secondBefore.instanceId, TOKEN_SHIELD)
   const defender = preCombat.players[enemyId].units.find(u => u.instanceId === target.instanceId)!
+  const second = secondBefore ? preCombat.players[enemyId].units.find(u => u.instanceId === secondBefore.instanceId) : undefined
+  const defenders = second ? [defender, second] : [defender]
 
   // Combat-conditional auras (Grogu) apply to the defender during damage resolution. `viaAmbush`
   // travels with the roles, since a card can read it about someone else's attack (Enfys Nest).
-  const combat = { attackerInstanceId: attackerId, defenderInstanceId: defender.instanceId, viaAmbush }
-  const defenderCtx = { combat, defending: true } // Palace Chef Droid: "+X while defending"
-  const counterPower = unitDealsNoCombatDamage(preCombat, defender) ? 0 : effectivePower(preCombat, defender, defenderCtx)
+  const combatWith = (d: UnitState) => ({ attackerInstanceId: attackerId, defenderInstanceId: d.instanceId, viaAmbush })
+  const defenderCtxOf = (d: UnitState) => ({ combat: combatWith(d), defending: true }) // Palace Chef Droid: "+X while defending"
+  const counterOf = (d: UnitState): number => (unitDealsNoCombatDamage(preCombat, d) ? 0 : effectivePower(preCombat, d, defenderCtxOf(d)))
 
   // Overwhelm: excess combat damage beyond the defender's remaining HP hits the
   // defending player's base (CR 1.9.11). A shielded defender takes no damage, so
   // there is no excess to trample.
-  const remainingHp = effectiveHp(preCombat, defender, defenderCtx) - defender.damage
+  const remainingOf = (d: UnitState): number => effectiveHp(preCombat, d, defenderCtxOf(d)) - d.damage
+  const remainingHp = remainingOf(defender)
   // The attacker's context, because Overwhelm can be gained for this combat alone (First Legion
   // Snowtrooper gains it while attacking a damaged unit).
-  const overwhelmExcess = unitHasKeyword(preCombat, attacker, 'Overwhelm', attackerCtx)
-    && !hasToken(defender.upgrades, TOKEN_SHIELD)
-    && !unitNegatesOverwhelm(preCombat, defender)
-    ? Math.max(0, attackerPower - remainingHp)
-    : 0
+  const overwhelms = unitHasKeyword(preCombat, attacker, 'Overwhelm', attackerCtx)
+  const tramples = (d: UnitState): boolean => overwhelms && !hasToken(d.upgrades, TOKEN_SHIELD) && !unitNegatesOverwhelm(preCombat, d)
 
   // Simultaneous combat damage (CR 1.9.10) — flagged as combat damage for whenDefeated. The
   // stat context goes through so combat-only debuffs count in the defeat check (Scion Shuttle).
   // Combat damage is attributed to the unit dealing it, so "damage dealt by friendly Underworld
   // cards is unpreventable" can see where it came from (Gorian Shard's Corsair).
   const attackerSource = { cardId: attacker.cardId, controller: playerId, instanceId: attackerId }
-  const counterSource = { cardId: defender.cardId, controller: enemyId, instanceId: defender.instanceId }
+  const sourceOf = (d: UnitState) => ({ cardId: d.cardId, controller: enemyId, instanceId: d.instanceId })
 
   // Damage prevention (The Mandalorian) is settled HERE — after the powers are known but
   // before anything is committed — so the logic below (first strike, Overwhelm, attack-end) still
@@ -3266,9 +3375,9 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // dealt by the defender, and prevented or soaked by the unit it now lands on.
   const counterTargetId = damageRecipient(preCombat, attacker.instanceId)
   for (const [targetId, amount, dmgSource] of [
-    [defender.instanceId, attackerPower, attackerSource],
-    [counterTargetId, counterPower, counterSource],
-  ] as const) {
+    ...defenders.map(d => [d.instanceId, attackerPower, attackerSource] as const),
+    ...defenders.map(d => [counterTargetId, counterOf(d), sourceOf(d)] as const),
+  ]) {
     if (amount <= 0 || asked.includes(targetId)) continue
     const offer = preventionOffer(preCombat, targetId, dmgSource)
     if (!offer) continue
@@ -3286,28 +3395,47 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     })
     return {
       ...withChoice,
-      pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage', viaAmbush, preventAsked: [...asked, targetId], prevented },
+      pendingAttack: {
+        attackerId, target, activePlayer: playerId, stage: 'damage', viaAmbush, preventAsked: [...asked, targetId], prevented,
+        ...(prevent.defenderStrikesFirst ? { defenderStrikesFirst: true } : {}), ...(secondId ? { secondDefenderId: secondId } : {}),
+      },
       // The unit's own controller decides; hand them control and come back to the attacker after.
       ...(offer.controller === playerId ? {} : { activePlayer: offer.controller, pendingResumeActive: playerId }),
     }
   }
   const damageTo = (id: string, amount: number) => (prevented.includes(id) ? 0 : amount)
 
-  // Both applications defer: the two units die to the same damage step, so their abilities are one
-  // simultaneous batch and the drain waits until both have been collected.
-  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, damageTo(defender.instanceId, attackerPower)]]), true, defenderCtx, attackerSource, true)
-  // "Deals combat damage before the defender" (Carson Teva): a defender defeated by that
-  // damage never strikes back. Without it, damage is simultaneous (CR 1.9.10) and both still land.
-  const defenderAfter = next.players[enemyId].units.find(u => u.instanceId === defender.instanceId)
-  const defenderSurvived = defenderAfter !== undefined
+  // Every application defers: the units die to the same damage step, so their abilities are one
+  // simultaneous batch and the drain waits until all have been collected.
+  const strike = (s: GameState, power: number): GameState => defenders.reduce((acc, d) =>
+    applyUnitDamage(acc, enemyId, new Map([[d.instanceId, damageTo(d.instanceId, power)]]), true, defenderCtxOf(d), attackerSource, true), s)
+  // Only the attacker itself is "attacking" for the defeat check and "defeated while attacking".
+  const strikeBack = (s: GameState): GameState => defenders.reduce((acc, d) => {
+    const counterCtx = counterTargetId === attacker.instanceId ? { combat: combatWith(d), attacking: true, viaAmbush } : {}
+    return applyUnitDamage(acc, playerId, new Map([[counterTargetId, damageTo(counterTargetId, counterOf(d))]]), true, counterCtx, sourceOf(d), true)
+  }, s)
+  let next: GameState
+  let power = attackerPower
+  if (prevent.defenderStrikesFirst) {
+    // "You may have the defending unit deal combat damage before this unit" (The Stranger): the attacker
+    // then strikes with what the hit left it (Grit counts the damage just taken), or not at all if the
+    // hit defeated it.
+    next = strikeBack(preCombat)
+    const survivor = next.players[playerId].units.find(u => u.instanceId === attackerId)
+    power = survivor ? powerOf(next, survivor) : 0
+    if (survivor) next = strike(next, power)
+  } else {
+    next = strike(preCombat, power)
+    // "Deals combat damage before the defender" (Carson Teva): a defender defeated by that
+    // damage never strikes back. Without it, damage is simultaneous (CR 1.9.10) and both still land.
+    const defenderSurvived = next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
+    if (defenderSurvived || !unitDealsDamageFirst(preCombat, attacker, { defender })) next = strikeBack(next)
+  }
   // What actually landed, for "if this unit dealt combat damage": a Shield or a prevention can soak
   // the whole hit, and then no damage was dealt at all. A defender the hit defeated took all of it.
-  const dealtToDefender = defenderAfter ? defenderAfter.damage - defender.damage : damageTo(defender.instanceId, attackerPower)
-  if (defenderSurvived || !unitDealsDamageFirst(preCombat, attacker, { defender })) {
-    // Only the attacker itself is "attacking" for the defeat check and "defeated while attacking".
-    const counterCtx = counterTargetId === attacker.instanceId ? { combat, attacking: true, viaAmbush } : {}
-    next = applyUnitDamage(next, playerId, new Map([[counterTargetId, damageTo(counterTargetId, counterPower)]]), true, counterCtx, counterSource, true)
-  }
+  const defenderAfter = next.players[enemyId].units.find(u => u.instanceId === defender.instanceId)
+  const dealtToDefender = defenderAfter ? defenderAfter.damage - defender.damage : damageTo(defender.instanceId, power)
+  const overwhelmExcess = defenders.reduce((sum, d) => sum + (tramples(d) ? Math.max(0, power - remainingOf(d)) : 0), 0)
   // The damage step is complete, so the batch it fired can be ordered and resolved.
   next = drainTriggers(next)
 
@@ -3318,7 +3446,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   if (overwhelmExcess > 0) next = dealDamageToBase(next, enemyId, overwhelmExcess, attackerSource, { attackerInstanceId: attackerId })
 
   // Wipe Them Out: the same excess may be aimed at another unit in the arena instead of the base.
-  const spillExcess = Math.max(0, damageTo(defender.instanceId, attackerPower) - remainingHp)
+  const spillExcess = Math.max(0, damageTo(defender.instanceId, power) - remainingHp)
   if (spillExcess > 0 && unitSpillsExcessToUnit(preCombat, attacker)) {
     const targets = inPlayUnits(next)
       .filter(u => u.arena === attacker.arena && u.instanceId !== defender.instanceId)
@@ -3330,12 +3458,14 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
 
   // Both units completed a combat — spend any Advantage on the survivors.
   next = consumeAdvantage(next, playerId, attackerId)
-  next = consumeAdvantage(next, enemyId, defender.instanceId)
-  // Pass the pre-combat attacker so its "When Attack Ends" fires even if it was defeated.
-  const defenderDefeated = !next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
+  for (const d of defenders) next = consumeAdvantage(next, enemyId, d.instanceId)
+  // Pass the pre-combat attacker so its "When Attack Ends" fires even if it was defeated. With two
+  // defenders (Darth Maul), "attacks and defeats a unit" reads the first that was defeated.
+  const defeated = defenders.find(d => !next.players[enemyId].units.some(u => u.instanceId === d.instanceId))
+  const defenderDefeated = defeated !== undefined
   // "Attacks and defeats a unit" cards read the unit itself (its cost, Drengir Spawn) and what the
   // hit had left over past its remaining HP (Blizzard Assault AT-AT).
-  const defeatedCtx = defenderDefeated ? { defeatedDefender: defender, excessCombatDamage: spillExcess } : {}
+  const defeatedCtx = defeated ? { defeatedDefender: defeated, excessCombatDamage: Math.max(0, damageTo(defeated.instanceId, power) - remainingOf(defeated)) } : {}
   next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmDealt, defenderDefeated, combatDamageToDefender: dealtToDefender, ...defeatedCtx }, attacker)
   return clearAttackGrants(checkWin(next))
 }
@@ -3588,7 +3718,19 @@ function regroupChoice(state: GameState, handIndex: number | null): GameState {
   if (!next.regroupResourced[other]) {
     return { ...next, activePlayer: other }
   }
+  // "There is an additional regroup phase after the first regroup phase each round" (Max Rebo): this
+  // one's ready step, then a second regroup phase, once a round. Round effects outlast both.
+  if (next.extraRegroupRound !== next.round && extraRegroupDue(next)) {
+    const readied = readyEverything(readyEverything(next, 'player'), 'opponent')
+    return enterRegroup({ ...readied, extraRegroupRound: next.round })
+  }
   return startNextRound(next)
+}
+
+/** Whether a unit in play calls for a second regroup phase this round (Max Rebo). */
+function extraRegroupDue(state: GameState): boolean {
+  return (['player', 'opponent'] as PlayerId[]).some(owner =>
+    state.players[owner].units.some(u => abilityCardIds(state, u, owner).some(id => getCardDefinition(id)?.extraRegroupPhase)))
 }
 
 function readyEverything(state: GameState, id: PlayerId): GameState {

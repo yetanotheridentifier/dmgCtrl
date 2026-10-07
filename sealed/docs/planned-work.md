@@ -239,7 +239,11 @@ which wait on that blocker's ticket; Stolen AT-Hauler
   return-to-hand and take-control sites, and documented in `keywords-effects.md`. Lurking TIE Phantom
   and Shadowed Intentions shipped with it, plus LAW_149 Rey and LOF_073 Mythosaur's prohibition clause
   from #701's matching group. SEC_061 Willrow Hood shipped for the upgrade-protection case, and
-  SEC_012 Cassian Andor (both sides). #701 keeps the rest of that group and its unrelated one-offs.
+  SEC_012 Cassian Andor (both sides).
+  **The one-offs no other ticket owned are finished** (#701): all nineteen, each with the small piece of
+  engine it needed (traits given to other cards, an upgrade's own When Defeated, a second defender,
+  the defender striking first, a leader that flips, a second regroup phase, a unit entering as a
+  copy, and the rest).
   **The trigger-head batch is finished** (#474, #680). Most heads needed only context on points that
   already fired; the damage points became one both-sides event (`whenDamageDealt`), and the heads no
   point raised got their own (a unit attacking, healing, the ready step, a card being drawn, a unit
@@ -346,10 +350,16 @@ moved to #704, all shipped), #684 replacement
 effects (5, all shipped), #685 cards that need only writing (22, all shipped) and #686 the one-offs no other ticket owns (23).
 **Homeworlds is complete: every HMW card is built.** Vernestra Rwoh, the last of them, shipped with
 #683. Jar Jar Binks, The First Legion, Zam Wesell and Maul's front shipped off #686; the rest of that
-ticket's one-offs moved to #701. Asajj Ventress shipped with #476.
+ticket's one-offs moved to #701, which built them all. Asajj Ventress shipped with #476.
+
+**Next: #793**, the twelve cards the set fixtures still hold unbuilt that no open ticket owns (each
+lifted to, or scoped by, a ticket that closed without it), two manifest entries that undercount
+built cards, and two limits #701 left: a trait one card gives another is not seen by a filter
+written over the printed row (`printedTrait`), and Vuutun Palaa's Droids pay only for a unit or event
+played from hand.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted to the ticket that owns its
-blocker (#701 for a one-off nothing else shares) and the batch ships without it. The classification is regex triage over ability prose: it catches new nouns but not
+blocker (#793 for a one-off nothing else shares) and the batch ships without it. The classification is regex triage over ability prose: it catches new nouns but not
 familiar nouns in an unfamiliar shape.
 
 Three findings that contradict the assumptions the programme started from:

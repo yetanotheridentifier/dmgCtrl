@@ -40,7 +40,9 @@ const EXPECTED_ATTACHES: Record<string, number> = {
   // playUpgradeCardOnto (the door, the one "played"), applyEntryKeywords' Shield on a Shielded unit entering, and
   // deployLeaderAsPilot: a leader deploying as a Pilot upgrade is deployed, not played (fires the attach reaction, not "played")
   'resolve.ts': 3,
-  'cardDefinitions.ts': 1, // moveUpgrade: Jocasta Nu and Evidence of the Crime moving an upgrade (fires the attach reaction, not "played")
+  // moveUpgrade: Jocasta Nu and Evidence of the Crime moving an upgrade, and Roger Roger attaching itself
+  // from the discard pile to a Battle Droid token (both fire the attach reaction, not "played")
+  'cardDefinitions.ts': 2,
 }
 
 const sources = readdirSync(join(process.cwd(), DIR))

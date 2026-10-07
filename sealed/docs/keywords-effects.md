@@ -156,24 +156,47 @@ unitTraits(state, unit)             // that, plus what is attached to the unit
 ```
 
 `cardTraits` is the read every trait question goes through, because a trait is a property of the
-**card**, not of the unit it happens to be on, and two effects address cards no unit hook can reach:
+**card**, not of the unit it happens to be on, and three effects address cards no unit hook can reach:
 
 - a card gives itself traits **wherever it is** (`CardDefinition.cardTraits`, Zam Wesell copies her
   controller's leader's Traits except Force, in hand and deck as well as in play);
+- a unit in play gives traits to **its controller's other cards**, wherever those are
+  (`grantsCardTraits`: Malakili gives Underworld to friendly Creature units and to the Creature unit
+  cards its controller owns out of play, Mythosaur gives Mandalorian to its controller's leader in the
+  base zone or deployed). The granters are indexed as they register, so a board with none of them in
+  play pays a set lookup per unit;
 - an effect takes a trait off **one player's whole card pool** for the phase
   (`GameState.traitsRemoved`, The First Legion names one, and it reaches cards not in play).
 
-Both need to know whose copy is being read, which is what `owner` is for: the grant reads that
+All three need to know whose copy is being read, which is what `owner` is for: the grants read that
 player's board, and the removal is aimed at one player's cards. A read with no owner gets the printed
 traits, which is all that can be said about a card nobody owns.
 
 `unitTraits` adds what an upgrade lends (`grantedTraits`, The Darksaber) and takes away
-(`removedTraits`). It looks the controller up only when a card-level rule is actually live, so the
-ordinary case costs what it always did.
+(`removedTraits`), and a copy's own printed traits (Clone, below). It looks the controller up only
+when a card-level rule is actually live, so the ordinary case costs what it always did.
 
 **A filter that takes an `EngineCard` rather than a card id reads the printed row** (`printedTrait`,
-and the `test` hooks on the play-from-hand and play-from-zone choices). Those see neither of the two
-effects above.
+and the `test` hooks on the play-from-hand and play-from-zone choices). Those see none of the three
+effects above: a Creature card in hand reads as Underworld to `cardHasTrait` while Malakili is in play,
+but not to a search or a "play an Underworld unit from your hand" filter written over the row.
+
+## A unit entering play as a copy
+
+Clone "may enter play as a copy of a non-leader, non-Vehicle unit in play, except it gains the Clone
+trait and is not unique. (Only the card's printed attributes are copied.)" The decision is made as it
+enters, before anything reacts to it, so `playUnitCard` holds the play in an `enterAsCopy` choice
+(`choices.md`) and resumes it with the answer. A copy is a unit whose `cardId` is the copied card, so
+its printed stats, keywords, aspects, name, cost and abilities (its When Played included) are read
+off that card by every existing reader, and `physicalCardId` names the card it really is:
+
+- `physicalCardOf(unit)` is what leaves play, to a discard pile, a hand (and so a deck) or a guardian;
+- its own printed traits stay with it (`unitTraits`), which is the Clone trait;
+- the unique rule leaves it out (`uniqueUnitCheck`).
+
+Declined, it enters as itself, a 0/0 the state-based sweep then defeats. A copy of a copy copies the
+copied card. A "play a unit, then <tail>" whose unit asks to copy loses the tail, since the unit it
+names is not yet in play when the tail is applied.
 
 ## Auras: constant effects on other units
 
@@ -301,7 +324,16 @@ are answered before play begins, like a whenReadies choice), or `takeInitiative`
 takes the initiative this phase (Premonition of Doom). At its moment each due effect is dropped and then
 run by its card's `delayed` hook, so none runs twice; a `takeInitiative` effect that never ran lapses as
 the regroup phase starts. "At the end of the phase" (Triple Dark Raid) is read as the start of the regroup
-phase that follows it.
+phase that follows it. A delayed effect may end the game: Confidence in Victory's sets `winner` when its
+owner alone controls units in the chosen arena, and the regroup phase stops there.
+
+## Grants for the next card played
+
+"Your next <kind of> unit / card costs less, gains a keyword, enters ready" is a `NextUnitGrant` on the
+player (`grantNextUnit`), priced into `effectiveCost` and spent by the play it applied to; unused ones
+lapse as the regroup phase starts. `anyCard` makes it "the next card", which is a unit, an event or an
+upgrade (Tranquility, Snap Wexley, Bendu), each door spending it as the card is played, and
+`withoutAspects` excludes cards with an aspect icon ("the next non-Heroism, non-Villainy card", Bendu).
 
 ## Experience tokens
 
@@ -385,6 +417,13 @@ Credit's discount. The `exploit` choice's `credit` flag reads picks by ordinal p
 many are held), the same as Greater Sarlacc's `resources` mode, since one Credit token cannot be told
 apart from another. A defeated Credit triggers nothing and, unlike a defeated ready resource, does not
 reduce what is left to pay with: it is a separate currency.
+
+**Units paying costs as resources take the same step** (Vuutun Palaa: "each friendly Droid unit may
+be exhausted to pay costs as if it were a resource"). A card in play with `unitPaysCosts` names which
+of its controller's units qualify (`unitCostPayers`), and the step's `droids` flag picks them by
+instance id on the board, each exhausted paying 1. They take the step ahead of Credit tokens, so a
+player holding both is offered the units. Being the Exploit step, it covers units and events played
+from hand: an upgrade, a play out of another zone and an ability's own cost are paid with resources.
 
 An ability that plays a card from hand offers the step only where it raises it itself, as Count
 Dooku's front and Jabba the Hutt's deployed action do (`raiseExploit`). The `exploit` choice's
@@ -506,6 +545,26 @@ player no legal move. `offerAttack` raises the choice and holds the gate: it ask
 who may attack ("a Vehicle unit", "a damaged unit", "even if it's exhausted") and then asks the same
 enumeration `choiceMoves` offers from, **with the rider lent**, so a rider that forbids bases cannot
 leave a unit that could only have hit a base counted as able.
+
+**"Its controller's next action this phase must be an attack action with that unit, if able. It must
+attack a unit, if able"** (Give In to Your Anger) is a constraint on `legalMoves`, held as
+`PhaseEvents.forcedAttack`: while it names the active player's unit, and that unit has an attack to
+make, the moves are that unit's attacks, only those on units when it has any. It is spent as the
+player's next action starts (`recordActionStarted`), whatever that action was, and lapses with the
+phase. A unit unable to attack leaves the action free.
+
+**Two defenders** (Darth Maul: "this unit can attack 2 units instead of 1") are one attack. The
+second is chosen as an On Attack choice over the rest of `enemyAttackTargets`, so Sentinel binds it as
+it binds the first, and is carried on `pendingAttack.secondDefenderId`. Both defenders' On Defense
+abilities are one batch, Saboteur defeats both Shields, each defender takes the attacker's full
+combat damage and deals its own to the attacker, all in one damage step, Overwhelm excess from both
+reaches the base, and both spend Advantage. "Attacks and defeats a unit" reads the first defender
+that was defeated.
+
+**The defender striking first** (The Stranger: "while attacking, you may have the defending unit deal
+combat damage before this unit") is also chosen as an On Attack choice, carried on
+`pendingAttack.defenderStrikesFirst`. The defender's damage lands, and the attacker then strikes with
+the power the hit left it, so Grit counts the damage just taken, or not at all if the hit defeated it.
 
 **Sentinel forces only from the attacker's own arena.** It reads "enemy units **in this arena** must
 attack a Sentinel when they attack you", so the forcing is scoped by where the attacker stands, not by

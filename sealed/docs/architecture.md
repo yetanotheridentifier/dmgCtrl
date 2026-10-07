@@ -48,8 +48,8 @@ the publisher's card list, and a test fails if a unit upgrade in a bundled set i
 gets wrong, read off the printed card (e.g. Moff Gideon unit cost, Nebulon-C Frigate arena); both
 drop out per-card once upstream is fixed), `initGame.ts` (setup per CR §5.2: shuffle, draw 6. The game opens in a SETUP
 phase with two stages resolved through legalMoves/resolve: mulligan decisions
-(CR 5.2.1e, initiative holder first), then each player picks which 2 hand
-cards become starting resources (CR 5.2.1f; all pairs enumerated as actions).
+(CR 5.2.1e, initiative holder first; a base can forbid one, Nabat Village), then each player picks
+which 2 hand cards become starting resources (CR 5.2.1f; all pairs enumerated as actions).
 The AI's setup choices come from `ai/setupAi.ts`: keep only with a turn-1
 play, resource to preserve the early curve),
 `resources.ts` (cost payment/readying).
@@ -84,7 +84,12 @@ mulligan), action phase/initiative (§1.15, §5.4), regroup (§5.5), attack timi
 (§6.3), empty deck (§8.6), Sealed deckbuilding (§10.2). `checkWin` evaluates both
 bases so a single action that defeats both is a **draw** (`winner: 'draw'`, §5.6.3).
 Every action hands the turn over through `advanceTurn`, which keeps it once for a player holding
-`extraActionBy` ("Take an extra action after this one", Kazuda Xiono).
+`extraActionBy` ("Take an extra action after this one", Kazuda Xiono). The first action phase starts
+as the setup ends, and fires "when the action phase starts" on the leaders and bases before the
+initiative holder acts. A round normally has one regroup phase; while a unit with
+`extraRegroupPhase` is in play as it ends (Max Rebo), its ready step is followed by a second regroup
+phase, once a round (`GameState.extraRegroupRound`). A search crosses the regroup in one modelled
+step and plays only the one.
 
 **Card behaviour**: the ability framework (`engine/abilities.ts`, see
 [abilities.md](abilities.md)) registers per-card effects by id, and unregistered cards play vanilla. A `CardDefinition` carries **triggered abilities**
