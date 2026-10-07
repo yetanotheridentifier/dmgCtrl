@@ -205,7 +205,7 @@ describe('SOR_056 Bendu: On Attack, the next non-Heroism, non-Villainy card you 
     expect(effectiveCost(attacked, 'player', F.EV1)).toBe(0)
     expect(effectiveCost(attacked, 'player', F.UPG, attacked.players.player.units[0])).toBe(1)
     expect(effectiveCost(attacked, 'player', F.HERO)).toBe(2)
-    expect(effectiveCost(attacked, 'player', F.VILL)).toBe(2)
+    expect(effectiveCost(attacked, 'player', F.VILL)).toBe(4) // printed 2 plus the Villainy penalty
   })
 
   it('is spent by the first matching card, including an upgrade, and not by a Heroism card', () => {
@@ -221,7 +221,7 @@ describe('SHD_144 Give In to Your Anger: deal 1 damage to an enemy unit; its con
   const angered = (mine: Side, theirs: Side) => {
     const s = board({ hand: ['SHD_144'], ...mine }, theirs)
     const p = play(s, 'SHD_144')
-    expect(targetsOf(p)).toEqual(theirs.units!.map(u => u.instanceId).sort())
+    expect(targetsOf(p)).toEqual((theirs?.units ?? []).map(u => u.instanceId).sort())
     return accept(p, { targetInstanceId: 'e' })
   }
 
@@ -263,7 +263,7 @@ describe('SHD_153 Poe Dameron: On Attack, discard up to 3 cards and choose a dif
     expect(s.players.player.discard).toHaveLength(2)
     expect(modesOf(s)).toHaveLength(3)
     s = mode(s, 'upgrade')
-    s = accept(s, { targetInstanceId: 'e' }) // the upgrade on it
+    s = accept(s, { optionIndex: 0 }) // the upgrade on it
     expect(U(s, 'e')!.upgrades).toHaveLength(0)
     expect(modesOf(s)).toHaveLength(2) // defeating an upgrade is not offered twice
     s = mode(s, 'discard')

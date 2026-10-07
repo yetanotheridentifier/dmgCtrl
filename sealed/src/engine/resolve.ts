@@ -1,5 +1,5 @@
 import type { Action, AttackTarget } from './actions'
-import type { Arena, GameState, PlayerId, UnitState } from './types'
+import type { Arena, EngineCard, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, HowPlayed, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef, UsedAbility } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed, upgradeSideId, PLAYED_FROM_HAND, PLAYED_ELSEWHERE } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, recordActionStarted, markAbilityUsed, nextUnitGrantMatches, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
@@ -556,7 +556,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // the time a "give a Shield to another friendly unit" in the same batch picks its targets (#529).
   // The units exploited to pay for it trigger in this same batch (CR 7.5.16.d).
   const keywordCtx = ready === true || grantEntersReady ? { ambushStaysReady: true } : undefined
-  const arrivals = [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities, how, exploited?.borrowed, keywordCtx)]
+  const arrivals = [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities, { ...how, paid: resourcesPaid }, exploited?.borrowed, keywordCtx)]
   if (fate) {
     // "Play a unit from your hand … Then, defeat it. (When Played abilities resolve after the unit is
     // defeated.)" (Maul), and "The chosen unit captures it. (When Played abilities resolve after the
@@ -627,6 +627,7 @@ function collectPlayCard(state: GameState, playerId: PlayerId, cardId: string, h
     ...(how.from === 'resources' ? { playedFromResources: true } : {}),
     ...(how.smuggle ? { playedUsingSmuggle: true } : {}),
     ...(playedUnitId ? { targetInstanceId: playedUnitId } : {}),
+    paidToPlay: how.paid ?? 0,
   }
   return [playerId, opponentOf(playerId)].flatMap(p =>
     [...collectPlayerTriggers(state, 'whenPlayCard', p, ctx), ...collectUnitsTrigger(state, 'whenPlayCard', p, ctx)])
@@ -728,9 +729,10 @@ function playEvent(state: GameState, handIndex: number): GameState {
   const exploit = exploitTerms(state, playerId, card)
   if (exploit) return raiseExploit(state, playerId, card.id, handIndex, exploit)
 
-  const paid = payCost(p, effectiveCost(state, playerId, card))
+  const cost = effectiveCost(state, playerId, card)
+  const paid = payCost(p, cost)
   const next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
-  return playEventCard(next, playerId, card.id, undefined, [], PLAYED_FROM_HAND)
+  return playEventCard(next, playerId, card.id, undefined, [], { ...PLAYED_FROM_HAND, paid: cost })
 }
 
 /** One more unit chosen: the step finishes by itself at its limit, and is offered again otherwise. */
@@ -800,7 +802,7 @@ function finishExploit(state: GameState, choice: Extract<PendingChoice, { kind: 
   if (at === -1) return next
   const paid = payCost(p, cost)
   next = updatePlayer(next, owner, { ...paid, hand: paid.hand.filter((_, i) => i !== at) })
-  if (card.type === 'event') return playEventCard(next, owner, card.id, undefined, owed, PLAYED_FROM_HAND)
+  if (card.type === 'event') return playEventCard(next, owner, card.id, undefined, owed, { ...PLAYED_FROM_HAND, paid: cost })
   return checkWin(playUnitCard(next, owner, card.id, undefined, cost, undefined, { owed, powers, ...(borrowed.length > 0 ? { borrowed } : {}) }, PLAYED_FROM_HAND))
 }
 
@@ -820,6 +822,13 @@ function playEventCard(state: GameState, playerId: PlayerId, cardId: string, car
   // when that was not the one playing it. The grants are still the player's own.
   const owner = cardOwner ?? playerId
   let next = updatePlayer(state, playerId, eventGrants.length ? { nextUnitGrants: spendNextUnitGrants(p.nextUnitGrants, eventGrants) } : {})
+  // "As an additional cost ... they must deal 2 damage to their base" (Saw Gerrera): paid with the
+  // rest of the cost, and dealt by nobody, as every cost a player pays with their own base is.
+  const baseCost = enemyPlayBaseDamage(next, playerId, card)
+  if (baseCost > 0) {
+    const { resolvingSource, ...unattributed } = next
+    next = { ...dealDamageToBase(unattributed, playerId, baseCost), ...(resolvingSource ? { resolvingSource } : {}) }
+  }
   next = updatePlayer(next, owner, { discard: [...next.players[owner].discard, card.id] })
   // After the cost, so Peli Motto's "first non-unit card each phase" counts this one as the first.
   next = recordCardPlayed(next, playerId, card.id)
@@ -834,6 +843,15 @@ function playEventCard(state: GameState, playerId: PlayerId, cardId: string, car
     ...collectPlayCard(next, playerId, card.id, how),
   ])
   return checkWin(next)
+}
+
+/** The base damage `playerId`'s opponents' units charge as an additional cost to play `card` (Saw Gerrera). */
+function enemyPlayBaseDamage(state: GameState, playerId: PlayerId, card: EngineCard): number {
+  let total = 0
+  for (const u of state.players[opponentOf(playerId)].units) {
+    for (const cid of abilityCardIds(state, u)) total += getCardDefinition(cid)?.enemyPlayBaseDamage?.(state, u, card) ?? 0
+  }
+  return total
 }
 
 /** Take the card at `index` out of the zone a `playCardFrom` played it from. */
@@ -909,7 +927,7 @@ function playFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone
   const handSize = state.players[controller].hand.length
   const inHand = zone === 'hand' || ((zone === 'handOrResources' || zone === 'handOrDiscard' || zone === 'handOrAnyDiscard') && ref.index < handSize)
   const inResources = zone === 'resources' || zone === 'opponentResources' || (zone === 'handOrResources' && ref.index >= handSize)
-  const how: HowPlayed = { from: inHand ? 'hand' : inResources ? 'resources' : 'other', ...(tail?.usingSmuggle ? { smuggle: true } : {}) }
+  const how: HowPlayed = { from: inHand ? 'hand' : inResources ? 'resources' : 'other', ...(tail?.usingSmuggle ? { smuggle: true } : {}), paid: cost }
 
   let next = updatePlayer(state, controller, payCost(state.players[controller], cost, selfPayingResource(state, controller, zone, ref.index)))
   // "The next card you play using Plot" (Chancellor Palpatine) is this one, whatever its type.
@@ -2076,7 +2094,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const cost = Math.max(0, effectiveCost(next, owner, card, host.unit) - choice.discount)
         next = updatePlayer(next, owner, payCost(next.players[owner], cost))
         next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...choice.revealed.filter((_, i) => i !== idx)] })
-        next = playUpgradeCardOnto(next, owner, cardId, choice.unitId)
+        next = playUpgradeCardOnto(next, owner, cardId, choice.unitId, undefined, { ...PLAYED_ELSEWHERE, paid: cost })
       } else {
         next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...choice.revealed] })
       }
@@ -2627,8 +2645,9 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
   if (piloting) {
     const host = p.units.find(u => u.instanceId === targetInstanceId)
     if (!host || !canTakePilot(state, host, card.id)) throw new Error(`playUpgrade: ${targetInstanceId} cannot take ${card.id} as a Pilot`)
-    const paid = updatePlayer(state, playerId, payCost(p, effectiveCost(state, playerId, card, host, undefined, card.piloting)))
-    return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId, true)
+    const pilotCost = effectiveCost(state, playerId, card, host, undefined, card.piloting)
+    const paid = updatePlayer(state, playerId, payCost(p, pilotCost))
+    return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId, true, pilotCost)
   }
 
   const targetOwner = (['player', 'opponent'] as PlayerId[]).find(id =>
@@ -2639,19 +2658,21 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
   }
   const targetUnit = state.players[targetOwner].units.find(u => u.instanceId === targetInstanceId)
 
-  const paid = updatePlayer(state, playerId, payCost(p, effectiveCost(state, playerId, card, targetUnit)))
-  return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId)
+  const cost = effectiveCost(state, playerId, card, targetUnit)
+  const paid = updatePlayer(state, playerId, payCost(p, cost))
+  return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId, false, cost)
 }
 
 /**
  * Play the upgrade at `handIndex` of `playerId`'s hand onto `targetInstanceId`, its cost already dealt
- * with. The ordinary play pays first; an ability that plays one for free (Cin Drallig) calls this directly.
+ * with, `paid` resources having been exhausted for it. The ordinary play pays first; an ability that
+ * plays one for free (Cin Drallig) calls this directly.
  */
-export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex: number, targetInstanceId: string, unitCard = false): GameState {
+export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex: number, targetInstanceId: string, unitCard = false, paid = 0): GameState {
   const cardId = state.players[playerId].hand[handIndex]
   if ((unitCard ? !state.cards[cardId]?.piloting : state.cards[cardId]?.type !== 'upgrade') || !findUnit(state, targetInstanceId)) return state
   const next = updatePlayer(state, playerId, { hand: state.players[playerId].hand.filter((_, i) => i !== handIndex) })
-  return playUpgradeCardOnto(next, playerId, cardId, targetInstanceId, undefined, PLAYED_FROM_HAND, unitCard)
+  return playUpgradeCardOnto(next, playerId, cardId, targetInstanceId, undefined, { ...PLAYED_FROM_HAND, paid }, unitCard)
 }
 
 /**
@@ -2672,6 +2693,9 @@ function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: strin
   const owner = cardOwner ?? playerId
   let next = onBase ? attachToBase(state, playerId, card.id) : attachUpgrades(state, targetInstanceId!, [{ cardId: card.id, owner, ...(how.smuggle ? { usingSmuggle: true } : {}), ...(unitCard ? { unitCard: true } : {}) }], true)
   next = recordCardPlayed(next, playerId, card.id) // after the cost ("the first upgrade you play each phase")
+  // "The next <kind of> card you play" (Bendu, Tranquility): priced into the cost already paid, so spent now.
+  const cardGrants = (next.players[playerId].nextUnitGrants ?? []).filter(g => g.anyCard && nextUnitGrantMatches(card, g, next, playerId))
+  if (cardGrants.length > 0) next = updatePlayer(next, playerId, { nextUnitGrants: spendNextUnitGrants(next.players[playerId].nextUnitGrants, cardGrants) })
 
   // One upgrade arriving is one event: the host reacting to it attaching (Sabine Wren, and since this
   // is a play from whatever zone, "when you PLAY an upgrade on this unit" too, Gar Saxon) and the
@@ -2721,8 +2745,9 @@ function playBaseUpgrade(state: GameState, handIndex: number): GameState {
   const cardId = p.hand[handIndex]
   const card = cardId ? state.cards[cardId] : undefined
   if (!isFortify(card)) throw new Error(`playBaseUpgrade: hand index ${handIndex} is not a Fortify upgrade`)
-  const paid = updatePlayer(state, playerId, { ...payCost(p, effectiveCost(state, playerId, card!)), hand: p.hand.filter((_, i) => i !== handIndex) })
-  return playUpgradeCardOnto(paid, playerId, cardId, undefined, undefined, PLAYED_FROM_HAND)
+  const cost = effectiveCost(state, playerId, card!)
+  const paid = updatePlayer(state, playerId, { ...payCost(p, cost), hand: p.hand.filter((_, i) => i !== handIndex) })
+  return playUpgradeCardOnto(paid, playerId, cardId, undefined, undefined, { ...PLAYED_FROM_HAND, paid: cost })
 }
 
 /**

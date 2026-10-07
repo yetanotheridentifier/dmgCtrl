@@ -1,6 +1,6 @@
 import type { GameState, KeywordInstance, PlayerId, UnitState, CombatContext } from './types'
 import { lastingEffectTotals, carriedAbilityCardIds, baseAbilityCardIds, traitsRemovedFrom } from './types'
-import { abilityBlank, abilityCardIds, getCardDefinition, leaderAbilitiesBlanked } from './abilities'
+import { abilityBlank, abilityCardIds, getCardDefinition, isTraitGranter, leaderAbilitiesBlanked } from './abilities'
 import type { AttackContext, AuraContribution, StatModContext } from './abilities'
 
 /** Keyword lookups against the static card db. */
@@ -264,10 +264,20 @@ export function unitAttacksEitherArena(state: GameState, unit: UnitState): boole
  */
 export function cardTraits(state: GameState, cardId: string, owner?: PlayerId): string[] {
   const printed = state.cards[cardId]?.traits ?? []
-  const granted = owner ? getCardDefinition(cardId)?.cardTraits?.(state, owner) ?? [] : []
+  const own = owner ? getCardDefinition(cardId)?.cardTraits?.(state, owner) ?? [] : []
+  // What the owner's units in play give their other cards (Malakili, Mythosaur).
+  const given = owner ? traitGrantersOf(state, owner).flatMap(u => getCardDefinition(u.cardId)?.grantsCardTraits?.(state, u, cardId, owner) ?? []) : []
+  const granted = given.length > 0 ? [...own, ...given] : own
   const out = granted.length > 0 ? [...printed, ...granted] : printed
   const lost = owner ? traitsRemovedFrom(state, owner) : undefined
   return lost && lost.size > 0 ? out.filter(t => !lost.has(t.toLowerCase())) : out
+}
+
+/** `owner`'s units in play that give traits to their other cards, while they have their abilities. */
+function traitGrantersOf(state: GameState, owner: PlayerId): UnitState[] {
+  const units = state.players[owner].units
+  if (!units.some(u => isTraitGranter(u.cardId))) return []
+  return units.filter(u => isTraitGranter(u.cardId) && !abilityBlank(state, u, owner))
 }
 
 /** Case-insensitive trait test for a card anywhere. See {@link cardTraits}. */
@@ -285,6 +295,7 @@ export function cardHasTrait(state: GameState, cardId: string, name: string, own
  */
 export function unitTraits(state: GameState, unit: UnitState): string[] {
   const cardLevel = state.traitsRemoved !== undefined || getCardDefinition(unit.cardId)?.cardTraits !== undefined
+    || [state.players.player.units, state.players.opponent.units].some(us => us.some(u => isTraitGranter(u.cardId)))
   const out = cardLevel
     ? [...cardTraits(state, unit.cardId, controllerOf(state, unit))]
     : [...(state.cards[unit.cardId]?.traits ?? [])]

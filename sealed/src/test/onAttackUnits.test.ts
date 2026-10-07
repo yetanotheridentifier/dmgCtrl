@@ -49,11 +49,9 @@ const SHIPPED = [
   // Bounty (#467) and covered in bountyCards.test.ts.
   'SHD_216', 'SHD_139',
 ]
-/**
- * Scoped by the triage but lifted out to the ticket that owns their blocker. `LOF_197` Qui-Gon Jinn's
- * Aethersprite has since shipped with using an ability again, and is tested in `useAgain.test.ts`.
- */
-const LIFTED = ['SHD_153', 'SOR_056']
+// Scoped by the triage but shipped elsewhere: `LOF_197` Qui-Gon Jinn's Aethersprite with using an
+// ability again (`useAgain.test.ts`), and `SHD_153` Poe Dameron and `SOR_056` Bendu with the last
+// one-offs (`oneOffCards2.test.ts`).
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
 const real = (id: string): EngineCard => {
@@ -159,9 +157,6 @@ const exhausted = (n: number) => Array.from({ length: n }, (_, i) => ({ cardId: 
 describe('On Attack coverage', () => {
   it('registers an On Attack ability on every shipped card', () => {
     for (const id of SHIPPED) expect(getCardDefinition(id)?.abilities?.some(a => a.trigger === 'onAttack'), id).toBe(true)
-  })
-  it('leaves the lifted cards unregistered', () => {
-    for (const id of LIFTED) expect(getCardDefinition(id), id).toBeUndefined()
   })
   it('corrects the keywords the source lists but the card only gains or gives', () => {
     for (const id of ['LAW_104', 'SOR_156', 'SOR_188', 'SOR_131', 'TS26_75']) expect(F[id].keywords, id).toEqual([])

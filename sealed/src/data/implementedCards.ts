@@ -612,6 +612,8 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   // Credit tokens (#719): an attached unit gains a Credit ability.
   { id: 'LAW_225', name: "Han's Golden Dice" },
   { id: 'LAW_141', name: 'Targeted For Removal' },
+  // The last one-offs
+  { id: 'SOR_122', name: 'Traitorous' },
 ]
 
 /**
@@ -1103,6 +1105,10 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'JTL_235', name: 'Commandeer' },
   { id: 'LAW_179', name: 'Fear and Dead Men' },
   { id: 'LAW_206', name: "That's a Rock" },
+  // The last one-offs
+  { id: 'SEC_077', name: 'Retaliation' },
+  { id: 'SHD_144', name: 'Give In to Your Anger' },
+  { id: 'SEC_145', name: 'Confidence in Victory' },
 ]
 
 /**
@@ -2443,6 +2449,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LAW_076', name: "Vult Skerris's Defender" },
   { id: 'LAW_176', name: "Sebulba's Podracer" },
   { id: 'SHD_163', name: 'Migs Mayfeld' },
+  // The last one-offs
+  { id: 'LAW_212', name: 'Malakili' },
+  { id: 'SOR_153', name: 'Saw Gerrera' },
+  { id: 'SOR_056', name: 'Bendu' },
+  { id: 'SHD_153', name: 'Poe Dameron' },
+  { id: 'TWI_210', name: 'Lux Bonteri' },
 ]
 
 /**

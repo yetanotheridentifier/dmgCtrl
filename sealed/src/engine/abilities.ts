@@ -552,6 +552,23 @@ export interface CardDefinition {
    * reads their side of the board, not yours.
    */
   cardTraits?: (state: GameState, owner: PlayerId) => string[]
+  /**
+   * Traits this unit gives OTHER cards of its controller's, wherever those are: units they control and
+   * cards they own out of play (Malakili: "each friendly Creature unit and each Creature unit you own
+   * that isn't in play gains Underworld"), or their leader in the base zone (Mythosaur). Read by
+   * `cardTraits` for every card `owner` holds while the unit is in play with its abilities.
+   */
+  grantsCardTraits?: (state: GameState, source: UnitState, cardId: string, owner: PlayerId) => string[]
+  /**
+   * Damage an OPPONENT deals to their own base as an additional cost to play `card` (Saw Gerrera: "As
+   * an additional cost for each opponent to play an event, they must deal 2 damage to their base").
+   */
+  enemyPlayBaseDamage?: (state: GameState, source: UnitState, card: EngineCard) => number
+  /**
+   * When the card may be played at all ("Play only as your first action in the action phase",
+   * Confidence in Victory). Asked of a play from hand and of a play out of any other zone.
+   */
+  playableOnlyIf?: (state: GameState, player: PlayerId) => boolean
   /** Traits this card takes away from its unit, printed or granted (Abandoned the Order: loses Jedi). */
   removedTraits?: (state: GameState, unit: UnitState) => string[]
   /** True if this card makes its unit a leader unit — The Darksaber. */
@@ -862,9 +879,20 @@ const blankerRegistry = { version: 0 }
  * keeps the announcement to a set lookup on the many boards where nobody is listening.
  */
 const useHearers = new Set<string>()
+/**
+ * Card ids with a `grantsCardTraits` hook, so a trait read on a board with none of them in play (every
+ * board but a handful) costs a set lookup per unit rather than a definition lookup.
+ */
+const traitGranters = new Set<string>()
+
+/** True if this card gives traits to other cards (`grantsCardTraits`). */
+export function isTraitGranter(cardId: string): boolean {
+  return traitGranters.has(cardId)
+}
 
 /** Register (merging) a card's definition — abilities append, static hooks overwrite. */
 export function registerCard(cardId: string, def: CardDefinition): void {
+  if (def.grantsCardTraits) traitGranters.add(cardId)
   if (def.blanksHost) { hostBlankers.add(cardId); blankerRegistry.version++ }
   if (def.blanksCard) { cardBlankers.add(cardId); blankerRegistry.version++ }
   if ([...(def.abilities ?? []), ...(def.leaderAbilities?.abilities ?? [])].some(a => a.trigger === 'whenAbilityUsed')) useHearers.add(cardId)

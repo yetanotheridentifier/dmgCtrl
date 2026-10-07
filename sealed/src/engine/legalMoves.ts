@@ -686,6 +686,7 @@ export function validPlayTargets(state: GameState, controller: PlayerId, zone: P
 export function canPlayFrom(state: GameState, controller: PlayerId, zone: PlayFromZone, ref: PlayFromRef, terms: PlayFromTerms, targetUnits?: string[], extraCost = 0): boolean {
   const card = state.cards[ref.cardId]
   if (!card || zoneCards(state, controller, zone)[ref.index] !== ref.cardId) return false
+  if (getCardDefinition(card.id)?.playableOnlyIf?.(state, controller) === false) return false
   if (terms.piloting || (card.type === 'upgrade' && !isFortify(card))) return validPlayTargets(state, controller, zone, ref.index, ref.cardId, terms, targetUnits, extraCost).length > 0
   return playFromCost(state, controller, card, terms) <= playFromBudget(state, controller, extraCost)
 }
@@ -744,6 +745,16 @@ function actionPhaseMoves(state: GameState): Action[] {
   const p = state.players[playerId]
   const enemy = state.players[opponentOf(playerId)]
 
+  // "Its controller's next action this phase must be an attack action with that unit, if able. It must
+  // attack a unit, if able" (Give In to Your Anger). Unable, the action is free.
+  const forced = state.phaseEvents?.forcedAttack
+  if (forced?.player === playerId) {
+    const bound = p.units.find(u => u.instanceId === forced.instanceId)
+    const attacks = bound && !bound.exhausted ? attackMoves(state, bound) : []
+    const onUnits = attacks.filter(m => m.type === 'attack' && m.target.kind === 'unit')
+    if (attacks.length > 0) return onUnits.length > 0 ? onUnits : attacks
+  }
+
   // A Ryder Azadi the opponent controls forbids us from playing cards with the named names.
   const forbiddenNames = namedByOpponent(state, playerId)
 
@@ -753,6 +764,7 @@ function actionPhaseMoves(state: GameState): Action[] {
     if (!card || (card.type !== 'unit' && card.type !== 'event')) return
     if (forbiddenNames.has(card.name)) return
     if (getCardDefinition(cardId)?.cannotPlayFromHand) return
+    if (getCardDefinition(cardId)?.playableOnlyIf?.(state, playerId) === false) return
     if (card.type === 'event' && eventsBannedFor(state, playerId)) return
     if (!canAffordFromHand(state, playerId, card)) return
     moves.push(card.type === 'unit' ? { type: 'playUnit', handIndex } : { type: 'playEvent', handIndex })

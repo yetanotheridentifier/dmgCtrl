@@ -438,8 +438,11 @@ export interface NextUnitGrant {
   sharesKeywordWithFriendly?: boolean
   // The grant is for the next EVENT played instead of the next unit (Rex): only `costDelta` applies.
   event?: boolean
-  // The grant is for the next CARD played, unit or event ("the next Separatist card you play").
+  // The grant is for the next CARD played, of any type: a unit, an event or an upgrade ("the next
+  // Separatist card you play").
   anyCard?: boolean
+  // The card must have none of these aspect icons ("the next non-Heroism, non-Villainy card", Bendu).
+  withoutAspects?: string[]
   // The matching card gains Exploit this many (Count Dooku), read by `exploitTerms` as it is played.
   exploit?: number
   // "Each of the next N <cards> you play": the grant applies to N matching cards, one at a time,
@@ -468,7 +471,8 @@ export function spendNextUnitGrants(all: NextUnitGrant[] | undefined, spent: Nex
 /** True if `card` is a unit satisfying a grant's filter. `state` and `owner` are needed only by a board-reading filter. */
 export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state?: GameState, owner?: PlayerId): boolean {
   if (!card || grant.viaPlot) return false
-  if (grant.anyCard ? card.type !== 'unit' && card.type !== 'event' : card.type !== (grant.event ? 'event' : 'unit')) return false
+  if (grant.anyCard ? card.type !== 'unit' && card.type !== 'event' && card.type !== 'upgrade' : card.type !== (grant.event ? 'event' : 'unit')) return false
+  if (grant.withoutAspects && card.aspects.some(a => grant.withoutAspects!.includes(a))) return false
   // Traits the card has lost for the phase are gone here too (The First Legion). The card-level
   // grants `cardTraits` adds are not read here: this module sits below the registry, and no grant a
   // card makes itself has ever been what a "your next <Trait> unit" discount turned on.
@@ -784,6 +788,11 @@ export function zoneCrossesOwners(zone: PlayFromZone): boolean {
 export interface HowPlayed {
   from: 'hand' | 'resources' | 'other'
   smuggle?: boolean
+  /**
+   * How many resources were exhausted to play it, which only the door that paid knows ("if that
+   * opponent paid less than the card's cost to play it", Lux Bonteri). Absent means none: a free play.
+   */
+  paid?: number
 }
 export const PLAYED_FROM_HAND: HowPlayed = { from: 'hand' }
 export const PLAYED_ELSEWHERE: HowPlayed = { from: 'other' }
@@ -1028,6 +1037,17 @@ export interface PhaseEvents {
    * action" (Fully Armed and Operational).
    */
   lastActionAttackedBase?: Partial<Record<PlayerId, boolean>>
+  /**
+   * Players who have started an action this phase, a pass included (`recordActionStarted`): "play
+   * only as your first action in the action phase" (Confidence in Victory).
+   */
+  acted?: PlayerId[]
+  /**
+   * "Its controller's next action this phase must be an attack action with that unit, if able. It
+   * must attack a unit, if able" (Give In to Your Anger): a constraint `legalMoves` applies to
+   * `player`'s next action, gone once that action starts.
+   */
+  forcedAttack?: { player: PlayerId; instanceId: string }
   /** Players whose base was DEALT DAMAGE this phase — combat or ability (Baylan Skoll). */
   basesDamaged: PlayerId[]
   /** Players who had an upgrade defeated this phase (Baylan Skoll). */
@@ -1201,6 +1221,8 @@ export interface TriggerContext {
   playedFromResources?: boolean
   /** `whenPlayCard`: the card was played using Smuggle ("when you play a card using Smuggle", Hondo Ohnaka). */
   playedUsingSmuggle?: boolean
+  /** `whenPlayCard`: the resources exhausted to play the card, 0 for a free play ("paid less than the card's cost", Lux Bonteri). */
+  paidToPlay?: number
   /**
    * `whenUnitAttacks`: whose unit is attacking. The point fires on both players, so every
    * registration compares this against `ctx.owner` ("a friendly unit attacks" or "an enemy unit attacks").
@@ -2030,8 +2052,27 @@ export function recordBaseAttacked(state: GameState, owner: PlayerId, attackerId
 /** `player` starts a new action: what their previous one did is forgotten. */
 export function recordActionStarted(state: GameState, player: PlayerId): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
-  if (events.lastActionAttackedBase?.[player] !== true) return state
-  return { ...state, phaseEvents: { ...events, lastActionAttackedBase: { ...events.lastActionAttackedBase, [player]: false } } }
+  const attacked = events.lastActionAttackedBase?.[player] === true
+  const first = !(events.acted ?? []).includes(player)
+  const forced = events.forcedAttack?.player === player
+  if (!attacked && !first && !forced) return state
+  const next: PhaseEvents = { ...events }
+  if (attacked) next.lastActionAttackedBase = { ...events.lastActionAttackedBase, [player]: false }
+  if (first) next.acted = [...(events.acted ?? []), player]
+  // The constraint binds this one action, which `legalMoves` has already shaped.
+  if (forced) delete next.forcedAttack
+  return { ...state, phaseEvents: next }
+}
+
+/** Whether `player` has yet to take an action this phase ("play only as your first action"). */
+export function noActionYetThisPhase(state: GameState, player: PlayerId): boolean {
+  return !(state.phaseEvents?.acted ?? []).includes(player)
+}
+
+/** Bind `player`'s next action this phase to an attack with `instanceId` (Give In to Your Anger). */
+export function forceNextAttack(state: GameState, player: PlayerId, instanceId: string): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  return { ...state, phaseEvents: { ...events, forcedAttack: { player, instanceId } } }
 }
 
 /** Whether `player`'s most recent action this phase attacked the enemy base (Fully Armed and Operational). */
