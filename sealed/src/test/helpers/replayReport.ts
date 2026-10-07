@@ -23,7 +23,7 @@ import warriorAmbushDecline from '../fixtures/reports/warriorAmbushDecline.json'
 import { buildCardDb } from '../../engine/cardDb'
 import { resolve } from '../../engine/resolve'
 import '../../engine/cardDefinitions' // side-effect: registers every implemented card
-import type { SwuCard } from '../../data/cards'
+import { cardId as cardIdOf, type SwuCard } from '../../data/cards'
 import type { GameState, PlayerId, CardDb } from '../../engine/types'
 import type { Action } from '../../engine/actions'
 
@@ -172,4 +172,32 @@ export function loadReport(name: keyof typeof REPORTS | string): Report {
   const report = REPORTS[name]
   if (!report) throw new Error(`replayReport: no fixture named "${name}" (have: ${Object.keys(REPORTS).join(', ')})`)
   return report as Report
+}
+
+/**
+ * Replay a report with an INERT copy of `cardId` in its place: same printed card, a new id nothing has
+ * registered. For a report recorded while that card did nothing, which registering it later broke: a
+ * leader whose When Deployed now raises a choice the reporter never saw, long before the move the
+ * report is about. Where the new behaviour is beside the point, this keeps the game as it was played.
+ * Returns the rewritten report and the card data to pass as `extra` (which already includes `pool`).
+ */
+export function withInertCard(report: Report, cardId: string, pool: SwuCard[]): { report: Report; extra: SwuCard[] } {
+  const row = pool.find(c => cardIdOf(c.Set, c.Number) === cardId)
+  if (!row) throw new Error(`withInertCard: ${cardId} is not in the pool`)
+  const standInNumber = `${row.Number}-inert`
+  const standIn = cardIdOf(row.Set, standInNumber)
+  const swap = (id: string) => (id === cardId ? standIn : id)
+  const side = (p: Report['initialState']['players'][PlayerId]) => ({
+    ...p,
+    leader: { ...p.leader, cardId: swap(p.leader.cardId) },
+    hand: p.hand.map(swap),
+    deck: p.deck.map(swap),
+    discard: p.discard.map(swap),
+    units: p.units.map(u => ({ ...u, cardId: swap(u.cardId) })),
+  })
+  const { players } = report.initialState
+  return {
+    report: { ...report, initialState: { ...report.initialState, players: { player: side(players.player), opponent: side(players.opponent) } } },
+    extra: [...pool, { ...row, Number: standInNumber }],
+  }
 }

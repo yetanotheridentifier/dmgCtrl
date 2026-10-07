@@ -104,9 +104,10 @@ describe('SEC_106 Dismantle the Conspiracy: a friendly unit captures any number 
   it('captures what was picked when the player stops, and nothing when they stop at once', () => {
     const s = board({ hand: ['SEC_106'], units: [unit('g', 'BIG')] }, theirs)
     const g = accept(played(s, 'SEC_106'), { targetInstanceId: 'g' })
-    const stopped = skip(accept(g, { targetInstanceId: 'c' }))
+    const stopped = skip(accept(g, { targetInstanceId: 'a' })) // b would still fit
     noChoice(stopped)
-    expect(capturedBy(stopped, 'g')).toEqual(['HP5'])
+    expect(capturedBy(stopped, 'g')).toEqual(['HP3'])
+    expect(U(stopped, 'b')).toBeDefined()
     const none = skip(g)
     noChoice(none)
     expect(capturedBy(none, 'g')).toEqual([])
@@ -205,13 +206,16 @@ describe('SEC_018 DJ: a friendly unit captures the unit he plays, before its Whe
     const chosen = accept(used, { targetInstanceId: 'g' })
     expect(choice(chosen).kind).toBe('playUnitFromHand')
     const done = accept(chosen, { handIndex: 0 })
-    expect(done.players.player.resources.filter(r => r.exhausted)).toHaveLength(F.SHD_120.cost - 1)
+    expect(done.players.player.resources.filter(r => r.exhausted)).toHaveLength(effectiveCost(s, 'player', F.SHD_120) - 1)
     expect(capturedBy(done, 'g')).toEqual(['SHD_120'])
     expect(done.players.player.units.map(u => u.cardId)).toEqual(['BIG'])
     expect(cardsPlayedThisPhase(done, 'player')).toContain('SHD_120')
     expect(done.players.player.leader.exhausted).toBe(true)
-    // Discerning Veteran's When Played is still owed, on a board it has already left: it captures nothing.
-    const wp = done.pendingChoices?.length ? accept(done, { targetInstanceId: 'e' }) : done
+    // Discerning Veteran's When Played is still owed, raised on a board it has already left: answering
+    // it captures nothing, since its capturer is no longer in play.
+    expect(choice(done).kind).toBe('selectUnitThen')
+    expect(choice(done).source?.cardId).toBe('SHD_120')
+    const wp = accept(done, { targetInstanceId: 'e' })
     expect(U(wp, 'e')).toBeDefined()
   })
 

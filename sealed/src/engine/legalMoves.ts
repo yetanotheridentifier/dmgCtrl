@@ -1,5 +1,5 @@
 import type { Action } from './actions'
-import type { AspectWaiver, AttackerFilter, DiscardPlayGrant, EngineCard, GameState, HandCardRef, KeywordInstance, PendingChoice, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
+import type { AspectWaiver, AttackerFilter, CapturedCard, DiscardPlayGrant, EngineCard, GameState, HandCardRef, KeywordInstance, PendingChoice, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
 import { opponentOf, hasPendingChoices, nextUnitGrantMatches, plotCostDelta, pushChoice, isFortify, upgradeSideId } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { cardHasTrait, keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
@@ -433,7 +433,13 @@ export function zoneCards(state: GameState, controller: PlayerId, zone: PlayFrom
     case 'anyDiscard': return [...p.discard, ...theirs.discard]
     case 'handOrDiscard': return [...p.hand, ...p.discard]
     case 'handOrAnyDiscard': return [...p.hand, ...p.discard, ...theirs.discard]
+    case 'captured': return capturedUnderFriendly(p.units).map(c => c.cardId)
   }
+}
+
+/** Every card held under `units`, unit by unit: the `captured` zone's order. */
+function capturedUnderFriendly(units: UnitState[]): CapturedCard[] {
+  return units.flatMap(u => u.captured ?? [])
 }
 
 /** Whose zone holds the card at `index` of `zone`: the player playing it, or the opponent. */
@@ -454,6 +460,7 @@ export function zoneHolder(state: GameState, controller: PlayerId, zone: PlayFro
  * player whose zone holds it (CR 1.7.5).
  */
 export function zoneCardOwner(state: GameState, controller: PlayerId, zone: PlayFromZone, index: number): PlayerId {
+  if (zone === 'captured') return capturedUnderFriendly(state.players[controller].units)[index]?.owner ?? controller
   const holder = zoneHolder(state, controller, zone, index)
   const p = state.players[holder]
   const resource = zone === 'resources' || zone === 'opponentResources' ? p.resources[index]

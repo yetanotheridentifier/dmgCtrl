@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { poolFor } from '../bench/setPools'
-import { loadReport, replayUpTo } from './helpers/replayReport'
+import { loadReport, replayUpTo, withInertCard } from './helpers/replayReport'
 import type { GameState, PendingChoice } from '../engine/types'
 import '../engine/cardDefinitions'
 
@@ -12,9 +12,12 @@ import '../engine/cardDefinitions'
  *
  * Move 95 plays the event with Maul (SHD_090, a Force unit) and other units in the pile; move 96 is
  * the player's pick of a non-Force unit. The card plays ONE unit, so that pick must end the event.
+ *
+ * Both players lead with Jabba the Hutt (SHD_006), inert when the game was played. His When Deployed
+ * capture now raises a choice at move 46 that the recorded moves never answer, so he is replayed as an
+ * inert copy, which is the game as it was played.
  */
-const report = loadReport('palpatinesReturnTwoPlays')
-const SHD = poolFor(['SHD'])
+const { report, extra: SHD } = withInertCard(loadReport('palpatinesReturnTwoPlays'), 'SHD_006', poolFor(['SHD']))
 const AFTER_PLAYING_IT = 96
 const palpatine = (s: GameState): PendingChoice[] =>
   (s.pendingChoices ?? []).filter(c => c.kind === 'playCardFrom')

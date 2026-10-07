@@ -239,6 +239,10 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SOR_004', name: 'Chirrut Îmwe', front: true, back: true },
   { id: 'TS26_6', name: 'Rex', front: true, back: true },
   { id: 'SEC_002', name: 'Jabba the Hutt', front: true, back: true },
+  // Capture, wave 3: a capture ordered before an embedded play's When Played (DJ), and a Bounty
+  // granted to a chosen unit for the phase beside a deployed capture (Jabba the Hutt).
+  { id: 'SEC_018', name: 'DJ', front: true, back: true },
+  { id: 'SHD_006', name: 'Jabba the Hutt', front: true, back: true },
   // Experience tokens: G, both sides grant the token
   { id: 'LOF_006', name: 'Supreme Leader Snoke', front: true, back: true },
   { id: 'SHD_004', name: 'Rey', front: true, back: true },
@@ -1030,6 +1034,9 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SHD_106', name: 'Rule with Respect' },
   { id: 'SHD_076', name: 'Unexpected Escape' },
   { id: 'SHD_243', name: 'Altering the Deal' },
+  // Capture, wave 3: a budgeted multi-target capture, and a base guardian with a scheduled rescue.
+  { id: 'SEC_106', name: 'Dismantle the Conspiracy' },
+  { id: 'SEC_195', name: 'Arrest' },
   // Credit tokens (#602): the 20 that need nothing beyond the token and its payment path.
   { id: 'LAW_244', name: 'Unmarked Credits' },
   { id: 'LAW_248', name: 'Windfall' },
@@ -2188,6 +2195,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SEC_193', name: 'Grand Admiral Thrawn' },
   { id: 'SHD_088', name: 'Ephant Mon' },
   { id: 'TS26_27', name: 'Fortune and Glory' },
+  // Capture, wave 3: a budgeted capture, a loop of guardians, playing a captured card, and a Bounty
+  // granted to a chosen unit for the phase.
+  { id: 'TWI_187', name: 'Cad Bane' },
+  { id: 'SHD_092', name: 'Finalizer' },
+  { id: 'SHD_192', name: 'Dryden Vos' },
+  { id: 'SHD_031', name: 'The Client' },
   // Enemy-ability immunity (#708): "can't be captured/damaged/defeated/exhausted/returned/taken
   // control of by enemy card abilities", and the cards from #701's matching group it also lands.
   { id: 'SHD_187', name: 'Lurking TIE Phantom' },

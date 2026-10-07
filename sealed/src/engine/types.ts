@@ -761,15 +761,18 @@ export interface PlayFromHandSpec {
  * paired zones (`handOrResources`, `handOrDiscard`, `anyDiscard`, and `handOrAnyDiscard`, which is
  * hand, own pile, then the opponent's) are each ONE zone for ONE play out of any part, listed in the
  * order a card names them, so an index past the first part names the next.
+ *
+ * `captured` is every card held under a unit the player controls (Dryden Vos), unit by unit in board
+ * order. Each card keeps its own owner (`CapturedCard.owner`), who need not be the player playing it.
  */
 export type PlayFromZone =
   | 'hand' | 'resources' | 'opponentResources' | 'deckTop' | 'opponentDeckTop' | 'handOrResources'
-  | 'discard' | 'opponentDiscard' | 'anyDiscard' | 'handOrDiscard' | 'handOrAnyDiscard'
+  | 'discard' | 'opponentDiscard' | 'anyDiscard' | 'handOrDiscard' | 'handOrAnyDiscard' | 'captured'
 
 /** True if `zone` can hold a card somebody other than the player playing it owns. */
 export function zoneCrossesOwners(zone: PlayFromZone): boolean {
   return zone === 'opponentResources' || zone === 'opponentDeckTop' || zone === 'opponentDiscard' || zone === 'anyDiscard'
-    || zone === 'handOrAnyDiscard'
+    || zone === 'handOrAnyDiscard' || zone === 'captured'
 }
 
 /**
@@ -986,6 +989,12 @@ export interface DelayedEffect {
   upgradeCardId?: string
   /** The arena the effect is about, when it has one (the arena Seismic Detonation chose). */
   arena?: Arena
+  /**
+   * The captured card the effect is about, held under `owner`'s base (Arrest: "at the start of the
+   * regroup phase, its owner rescues it"). A captured card has no instance id, so it is named by card
+   * id: copies of one card under one guardian are indistinguishable, so rescuing any one is the same.
+   */
+  capturedCardId?: string
 }
 
 /**
@@ -1498,11 +1507,14 @@ type ChoiceVariant =
   // `thenDefeatIt` defeats the unit just played, as part of the same ability, before its own When Played
   // resolves ("Then, defeat it. (When Played abilities resolve after the unit is defeated.)", Maul).
   // Distinct from `thenDefeat`, which names OTHER units and runs after the play is complete.
+  // `thenCaptureBy` is the same ordering for a capture: the named unit captures the unit just played
+  // before its own When Played resolves ("The chosen unit captures it. (When Played abilities resolve
+  // after the unit is captured.)", DJ).
   // `then` is the card's own follow-up, run once the unit is on the board and paid for, with the
   // played card in `cardChosen` ("Play 2 units from your hand, one at a time" — General Grievous
   // offers the second play from the state the first one left, so its cost is read against what is
   // still ready). It does not run when the play is declined.
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenTokens?: string[]; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; thenLasting?: Omit<LastingEffect, 'targetInstanceId'>; thenDefeat?: string[]; thenDefeatIt?: boolean; then?: IfYouDo }
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenTokens?: string[]; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; thenLasting?: Omit<LastingEffect, 'targetInstanceId'>; thenDefeat?: string[]; thenDefeatIt?: boolean; thenCaptureBy?: string; then?: IfYouDo }
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }

@@ -1,6 +1,6 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext, TriggerPoint } from './abilities'
 import { registerCard, getCardDefinition, actionAbilityKey, collectUnitTriggers, collectCardTriggers, abilityCardIds, usedAbilityOf } from './abilities'
-import { fireBatch, runAbilitiesAgain, thenAfterChoices, discardCards, discardTaken, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken, defeatForceToken, forceUse, takeControlOfResource } from './effects'
+import { fireBatch, runAbilitiesAgain, thenAfterChoices, discardCards, discardTaken, takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, attachUnitAsUpgrade, attachCardAsUnitUpgrade, moveAttachmentToGround, upgradeAt, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, defeatTokensOn, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, exhaustLeader, resourceTopOfDeck, defeatBaseUpgrade, addResource, defeatResource, defeatResources, returnResourceToHand, captureUnit, baseCapturesUnit, rescueCaptured, discardCaptured, createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens, hasForceToken, createForceToken, defeatForceToken, forceUse, takeControlOfResource } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage, isDoomed } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -4830,6 +4830,8 @@ type PlayFromHandOptions = {
   thenDamageIt?: number
   /** "Then, defeat it": the unit just played, before its own When Played resolves (Maul). */
   thenDefeatIt?: boolean
+  /** "The chosen unit captures it": the unit just played, before its own When Played resolves (DJ). */
+  thenCaptureBy?: string
   /** "It gains <keywords> for this phase": granted to the next unit played, so an Ambush or Hidden takes effect as it enters. */
   gains?: KeywordInstance[]
   /** The card's own follow-up, run once the unit is in play and paid for (Grievous's second play). */
@@ -4850,6 +4852,7 @@ const playFromHand = (s: GameState, ctx: EventCtx, o: PlayFromHandOptions): Game
     ...(o.thenTokens ? { thenTokens: o.thenTokens } : {}), ...(o.thenDamageOwnBase ? { thenDamageOwnBase: true } : {}),
     ...(o.thenDamageIt ? { thenDamageIt: o.thenDamageIt } : {}),
     ...(o.thenDefeatIt ? { thenDefeatIt: true } : {}),
+    ...(o.thenCaptureBy ? { thenCaptureBy: o.thenCaptureBy } : {}),
     ...(o.then ? { then: o.then } : {}),
   })
 }
@@ -6981,12 +6984,8 @@ const costsAtMost = (n: number): Pick => (s, u) => printedCost(s, u) <= n
 // rescue/discard actions built on #466's `rescueCaptured`/`discardCaptured`. Everything here reuses
 // the existing `selectUnitThen`/`selectCardThen` choice kinds through the `IfYouDo`/`step`/`unit`
 // chaining `unitDealsWp` and SEC_030 Death Trooper already use for "pick one thing, then another" —
-// no new choice kind, so nothing new is owed in legalMoves.ts. Cards needing a genuinely new
-// primitive (a budgeted "any number/up to N" pick, capture ordered before an embedded play's own When
-// Played, a scheduled rescue off a base, or playing a captured card outright) are on the follow-up
-// ticket named in planned-work.md, along with SHD_006 Jabba the Hutt's back (its capture half is this
-// wave's shape, but the card as a whole also needs an unbuilt "grant a chosen unit a temporary
-// Bounty" primitive that capture doesn't touch).
+// no new choice kind, so nothing new is owed in legalMoves.ts. The capture cards needing a piece of
+// their own are wave 3, below.
 
 /**
  * "Choose a friendly unit. It captures a[n] ... unit ...": the guardian chosen first, then its
@@ -7163,6 +7162,164 @@ registerCard('SHD_243', { // Altering the Deal
     }
     return discardCaptured(s, { kind: 'unit', instanceId: ctx.unitChosen! }, ctx.cardChosen!)
   },
+})
+
+// ── Capture, wave 3: the capture cards that each need a piece of their own ─────────────────────────
+
+/**
+ * "<guardian> captures (up to `max`) enemy non-leader units with a total of `budget` or less remaining
+ * HP": one `selectUnitThen` pick at a time, each offering only the units that still fit what is left of
+ * the budget, with Done from the first ("any number", "up to"). The picks so far ride in the step and
+ * the guardian in `unit`. Nothing is captured until the picks stop (Done, `max` reached, or nothing
+ * left fits), so every pick's remaining HP is read off the same board.
+ */
+const capturePicks = (s: GameState, guardianId: string, picks: string[]): GameState =>
+  picks.reduce((acc, id) => captureUnit(acc, guardianId, id), s)
+const budgetCapture = (s: GameState, ctx: Resumable, guardianId: string, picks: string[], budget: number, max: number): GameState => {
+  const hpOf = (id: string) => { const u = findUnit(s, id)?.unit; return u ? remainingHp(s, u) : 0 }
+  const left = budget - picks.reduce((n, id) => n + hpOf(id), 0)
+  const fits = picks.length < max
+    ? pickedIds(s, ctx, pickAll(pickEnemy, nonLeader, (st, u) => !picks.includes(u.instanceId) && remainingHp(st, u) <= left))
+    : []
+  return fits.length
+    ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets: fits, text: `choose an enemy unit to capture (${left} remaining HP left to spend)`, intent: 'cunning', optional: true, hookOnDecline: true, then: resume(ctx, picksStep(picks), guardianId) })
+    : capturePicks(s, guardianId, picks)
+}
+/** The card's hook for the picks above: one more, or Done (no unit), which captures what was picked. */
+const budgetCaptureNext = (s: GameState, ctx: Parameters<NonNullable<CardDefinition['ifYouDo']>>[1], budget: number, max: number): GameState => {
+  const picks = picksOf(ctx.step)
+  return ctx.targetInstanceId
+    ? budgetCapture(s, ctx, ctx.unitChosen!, [...picks, ctx.targetInstanceId], budget, max)
+    : capturePicks(s, ctx.unitChosen!, picks)
+}
+const DISMANTLE_BUDGET = 7
+registerCard('SEC_106', { // Dismantle the Conspiracy
+  ...whenPlayed('A friendly unit captures any number of enemy non-leader units with a total of 7 or less remaining HP.', (s, ctx) =>
+    (youControl(s, ctx) && picked(s, ctx, pickAll(pickEnemy, nonLeader, (st, u) => remainingHp(st, u) <= DISMANTLE_BUDGET)).length > 0
+      ? unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'choose a friendly unit to capture with', 'cunning', false, 'guardian')
+      : s)),
+  ifYouDo: (s, ctx) => (ctx.step === 'guardian'
+    ? budgetCapture(s, ctx, ctx.targetInstanceId!, [], DISMANTLE_BUDGET, Infinity)
+    : budgetCaptureNext(s, ctx, DISMANTLE_BUDGET, Infinity)),
+})
+const CAD_BANE_BUDGET = 8
+registerCard('TWI_187', { // Cad Bane, Hostage Taker
+  abilities: [
+    ...whenPlayed('This unit captures up to 3 enemy non-leader units with a total of 8 or less remaining HP.', (s, ctx) =>
+      budgetCapture(s, ctx, ctx.sourceInstanceId!, [], CAD_BANE_BUDGET, 3)).abilities!,
+    // "The defending player" is always the opponent: every unit and base Cad Bane can attack is theirs.
+    // "Draw 2 cards" has no subject, so it is his controller's, the price of the rescue.
+    ...attacks('The defending player may rescue a card they own guarded by this unit. If they do, draw 2 cards.', (s, ctx) => {
+      const opp = opponentOf(ctx.owner)
+      const theirs = (findUnit(s, ctx.sourceInstanceId!)?.unit.captured ?? []).filter(c => c.owner === opp)
+      return theirs.length
+        ? pushChoice(s, { kind: 'selectCardThen', id: `${ctx.sourceInstanceId}-rescue`, controller: opp, candidates: theirs.map(c => c.cardId), optional: true, text: 'rescue a card Cad Bane is guarding (his controller draws 2 cards)', then: resume(ctx, 'rescue') })
+        : s
+    }).abilities!,
+  ],
+  ifYouDo: (s, ctx) => (ctx.step === 'rescue'
+    ? drawCards(rescueCaptured(s, { kind: 'unit', instanceId: ctx.sourceInstanceId! }, ctx.cardChosen!), ctx.owner, 2)
+    : budgetCaptureNext(s, ctx, CAD_BANE_BUDGET, 3)),
+})
+
+/**
+ * Finalizer: "Choose any number of friendly units. Each of those units captures an enemy non-leader unit
+ * in the same arena." A loop of guardian-then-target pairs: each guardian pick is optional (Done ends it)
+ * and offers only friendly units not yet used that have something in their arena to capture, and its
+ * target pick is mandatory. The guardians used so far ride in the step.
+ */
+const usedOf = (step: string | undefined): string[] => (step ?? '').slice(2).split(',').filter(Boolean)
+const finalizerGuardian = (s: GameState, ctx: Resumable, used: string[]): GameState =>
+  unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, (st, u) =>
+    !used.includes(u.instanceId) && picked(st, ctx, pickAll(pickEnemy, nonLeader, sameArenaAs(st, u.instanceId))).length > 0)),
+  'choose a friendly unit to capture an enemy unit in its arena', 'cunning', true, `g:${used.join(',')}`)
+registerCard('SHD_092', { // Finalizer
+  ...whenPlayed('Choose any number of friendly units. Each of those units captures an enemy non-leader unit in the same arena.', (s, ctx) =>
+    finalizerGuardian(s, ctx, [])),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step?.startsWith('g:')) {
+      const guardianId = ctx.targetInstanceId!
+      return unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, nonLeader, sameArenaAs(s, guardianId))), 'choose an enemy unit for it to capture', 'cunning', false, `t:${[...usedOf(ctx.step), guardianId].join(',')}`, guardianId)
+    }
+    return finalizerGuardian(captureUnit(s, ctx.unitChosen!, ctx.targetInstanceId!), ctx, usedOf(ctx.step))
+  },
+})
+
+registerCard('SEC_018', { // DJ, Need a Lift?
+  // Front: the capture is part of the play, ordered before the played unit's own When Played
+  // (`thenCaptureBy`), so a When Played about "this unit" finds it already gone.
+  ...leaderFront('Choose a friendly unit. If you do, play a unit from your hand. It costs 1 less. The chosen unit captures it. (When Played abilities resolve after the unit is captured.)', {
+    usable: both(anyUnitPasses(pickFriendly), (s, ctx) => playableFromHand(s, ctx.owner, { costDelta: -1 }).length > 0),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'choose a friendly unit to capture the unit you play', 'cunning', false),
+  }),
+  ifYouDo: (s, ctx) => playFromHand(s, ctx, { costDelta: -1, thenCaptureBy: ctx.targetInstanceId!, id: `${ctx.cardId}-playCapture` }),
+  // Back: Saboteur is printed; "Friendly units that are rescued enter play ready."
+  rescuedEnterReady: () => true,
+})
+
+registerCard('SEC_195', { // Arrest
+  ...unitThenWp('Your base captures an enemy non-leader unit. At the start of the regroup phase, its owner rescues it.', pickAll(pickEnemy, nonLeader), 'choose an enemy unit for your base to capture', 'cunning', false, (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!target) return s
+    const held = (st: GameState) => st.players[ctx.owner].base.captured?.length ?? 0
+    const next = baseCapturesUnit(s, ctx.owner, target.instanceId)
+    // Only a card the base actually holds is rescued later: a token is set aside, a protected unit stays.
+    return held(next) > held(s) ? addDelayedEffect(next, { cardId: 'SEC_195', owner: ctx.owner, when: 'regroupStart', capturedCardId: target.cardId }) : next
+  }),
+  delayed: (s, e) => (e.capturedCardId ? rescueCaptured(s, { kind: 'base', owner: e.owner }, e.capturedCardId) : s),
+})
+
+// Choosing the card and the "may" are one pick: choosing does nothing until it is played.
+registerCard('SHD_192', whenPlayed('Choose a captured card guarded by a unit you control. You may play it for free under your control.', (s, ctx) => // Dryden Vos
+  playFromZoneChoice(s, ctx, { zone: 'captured', free: true, optional: true })))
+
+/**
+ * "Choose a unit. For this phase, it gains: 'Bounty - <reward>.'" The reward is a carrier card's own
+ * `bounty` ability, lent for the phase by a lasting effect, which also gives the unit the Bounty keyword
+ * so a card asking for "a unit with a Bounty" sees it. Collected like a printed one, at a defeat or a
+ * capture, by the unit's opponent (Jabba the Hutt, The Client).
+ */
+const grantBountyForPhase = (s: GameState, unitId: string, grantCardId: string): GameState =>
+  addLastingEffect(s, { targetInstanceId: unitId, keywords: [{ name: 'Bounty' }], abilityCardIds: [grantCardId] })
+const bountyGrantPick = (s: GameState, ctx: Resumable, step?: string): GameState =>
+  unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'choose a unit to gain a Bounty for this phase', 'cunning', false, step)
+const nextUnitBounty = (id: string, n: number) => registerCard(id, {
+  sourceCardId: 'SHD_006',
+  ...bounty(whenPlayed(`The next unit you play this phase costs ${n} less.`, (s, ctx) => grantNextUnit(s, ctx.owner, { costDelta: -n }))),
+})
+const GRANT_JABBA_BOUNTY_FRONT = 'GRANT_JABBA_BOUNTY_FRONT'
+const GRANT_JABBA_BOUNTY_BACK = 'GRANT_JABBA_BOUNTY_BACK'
+nextUnitBounty(GRANT_JABBA_BOUNTY_FRONT, 1)
+nextUnitBounty(GRANT_JABBA_BOUNTY_BACK, 2)
+const jabbaDeployCapture = captureGuardianTargetWp('Another friendly unit captures an enemy non-leader unit.', pickAll(pickFriendly, pickOther), () => pickAll(pickEnemy, nonLeader), false)
+registerCard('SHD_006', { // Jabba the Hutt, His High Exaltedness
+  ...leaderFront('Choose a unit. For this phase it gains: "Bounty - The next unit you play this phase costs 1 less."', {
+    usable: anyUnitPasses(pickAny),
+    effect: (s, ctx) => bountyGrantPick(s, ctx, 'front'),
+  }),
+  abilities: jabbaDeployCapture.abilities!.map(a => ({ ...a, trigger: 'whenDeployed' as const })),
+  actionAbilities: [{
+    description: 'Choose a unit. For this phase, it gains "Bounty - The next unit you play this phase costs 2 less."',
+    exhaustCost: true,
+    usable: s => allUnits(s).length > 0,
+    effect: (s, ctx) => bountyGrantPick(s, ctx, 'back'),
+  }],
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'front') return grantBountyForPhase(s, ctx.targetInstanceId!, GRANT_JABBA_BOUNTY_FRONT)
+    if (ctx.step === 'back') return grantBountyForPhase(s, ctx.targetInstanceId!, GRANT_JABBA_BOUNTY_BACK)
+    return jabbaDeployCapture.ifYouDo!(s, ctx)
+  },
+})
+const GRANT_CLIENT_BOUNTY = 'GRANT_CLIENT_BOUNTY'
+registerCard(GRANT_CLIENT_BOUNTY, { sourceCardId: 'SHD_031', ...bounty(whenPlayed('Heal 5 damage from a base.', (s, ctx) => healChoice(s, ctx, 5, [], BOTH_BASES))) })
+registerCard('SHD_031', { // The Client
+  actionAbilities: [{
+    description: 'Choose a unit. For this phase, it gains: "Bounty - Heal 5 damage from a base."',
+    exhaustCost: true,
+    usable: s => allUnits(s).length > 0,
+    effect: (s, ctx) => bountyGrantPick(s, ctx),
+  }],
+  ifYouDo: (s, ctx) => grantBountyForPhase(s, ctx.targetInstanceId!, GRANT_CLIENT_BOUNTY),
 })
 
 // A: targets, draws and base damage
@@ -11648,9 +11805,8 @@ registerCard('JTL_047', { // Admiral Yularen
 // written with the existing When Played helpers and wrapped in `bounty()`, which remaps the trigger
 // exactly as `defeated()` does for When Defeated.
 //
-// TS26_27 Fortune and Glory and SHD_006 Jabba the Hutt's back both need a CHOSEN guardian AND a
-// chosen target in one capture action, which #707 owns, not this ticket — commented there rather
-// than half-registered. SHD_010 Bossk's back ("When you collect a BOUNTY: you may collect that
+// TS26_27 Fortune and Glory is with the capture cards, and so are SHD_006 Jabba the Hutt and SHD_031
+// The Client, whose Bounty is granted to a chosen unit for the phase (`grantBountyForPhase`). SHD_010 Bossk's back ("When you collect a BOUNTY: you may collect that
 // BOUNTY again") is registered in the "Using an ability again" section below, alongside the
 // `whenAbilityUsed` idiom it reacts to.
 
