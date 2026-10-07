@@ -149,9 +149,7 @@ Two phases:
 (#463), whose groups are all shipped (#674), less the compound-head cards blocked by something else,
 which wait on that blocker's ticket; Stolen AT-Hauler
   (an opponent may play it from the discard pile) shipped with #471. **Leaders are finished** on both sides (#458): the 26 not built across all sets (19 in
-  rotation, as `SET_PROGRESS` counts them) are on the ticket of what blocks them, #467 Bounty (Bossk is fully shipped; Jabba the Hutt's back reads capture too, but #707 already built
-  its chosen-guardian-and-target shape — what's left blocking the whole leader is an unbuilt "grant a
-  chosen unit a temporary keyword ability" primitive his Action needs, on #715),
+  rotation, as `SET_PROGRESS` counts them) are on the ticket of what blocks them, #467 Bounty (Bossk and Jabba the Hutt are fully shipped, Jabba with the last capture cards, #715),
   #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #686 (defeat by an enemy card ability, and Chancellor Palpatine,
   the one leader that flips between two faces rather than deploying). The SEC leader Chancellor
@@ -173,9 +171,9 @@ which wait on that blocker's ticket; Stolen AT-Hauler
   collected under the unit's own opponent at both a defeat and a capture, always optional, dispatched
   through a `mayCollectBounty` choice (`keywords-effects.md` "Bounty"). 24 cards, Trandoshan Hunters
   among them (its own Experience token is conditional on reading one). TS26_27 Fortune and Glory was a
-  chosen-guardian-and-target capture and shipped with #707; Jabba the Hutt's leader waits on #715 for
-  an unbuilt keyword-grant primitive his Action needs, beyond the capture shape #707 already built for
-  his back. Bossk's leader is fully shipped, both sides.
+  chosen-guardian-and-target capture and shipped with #707; Jabba the Hutt's leader and The Client, whose
+  Bounty is granted to a chosen unit for the phase, shipped with #715. Bossk's leader is fully shipped,
+  both sides.
   **Playing a card out of a discard pile is finished**
   (#471): the discard piles became zones on the existing `playCardFrom` door, the unit-only
   `mayPlayUnitFromDiscard` it duplicated was retired onto it, and "for this phase you may play that
@@ -227,11 +225,11 @@ which wait on that blocker's ticket; Stolen AT-Hauler
   `captureTargetGuardianWp`, two ordinary `selectUnitThen` picks chained the way `unitDealsWp` already
   chains dealer-then-target — no new choice kind. 13 cards shipped (Lando Calrissian, Libertine,
   Relentless Pursuit, Take Captive plus its reprint, Encircle, Prisoner of War, Grand Admiral Thrawn,
-  Ephant Mon, Fortune and Glory, Rule with Respect, Unexpected Escape and Altering the Deal). A
-  budgeted or "each-guardian" multi-target capture, a capture ordered before an embedded play's own
-  When Played, a base guardian with a scheduled rescue, playing a captured card outright, and Jabba the
-  Hutt's leader (which needs an unbuilt "grant a chosen unit a temporary keyword ability" primitive as
-  well as capture) are on #715. 17 more that only needed Bounty's "When Captured" half shipped once
+  Ephant Mon, Fortune and Glory, Rule with Respect, Unexpected Escape and Altering the Deal). **Wave 3
+  is finished** (#715), so every capture card is built: a budgeted multi-target capture (Dismantle the
+  Conspiracy, Cad Bane), a loop of guardians (Finalizer), a capture ordered before an embedded play's
+  own When Played (DJ), a base guardian with a scheduled rescue (Arrest), playing a captured card
+  (Dryden Vos), and a Bounty granted to a chosen unit for the phase (Jabba the Hutt, The Client). 17 more that only needed Bounty's "When Captured" half shipped once
   Bounty landed (#467). L3-37 shipped with Smuggle (#469); Sanctioner's Shuttle shipped with
   Coordinate (#472); Charged with Corruption shipped with Disclose (#603).
   **The enemy-ability protection primitive is finished** (#708): `cannotBeTargetedByEnemyAbility`
