@@ -1052,10 +1052,12 @@ export function appendCaptured(state: GameState, holder: CaptureHolder, captured
  * On Attack, and any other targeted rescue). No-op if `holder` isn't guarding that card. Matches the
  * first entry with this `cardId`: two captured copies of the same non-unique card under one guardian
  * are otherwise indistinguishable, which is the same "first match" the discard pile already lives with.
+ * `owner` narrows it to a card that player owns ("a card they own", Cad Bane), since one guardian can
+ * hold copies of one card from both sides.
  */
-export function rescueCaptured(state: GameState, holder: CaptureHolder, cardId: string): GameState {
+export function rescueCaptured(state: GameState, holder: CaptureHolder, cardId: string, owner?: PlayerId): GameState {
   const list = capturedListAt(state, holder)
-  const idx = list.findIndex(c => c.cardId === cardId)
+  const idx = list.findIndex(c => c.cardId === cardId && (owner === undefined || c.owner === owner))
   if (idx === -1) return state
   const next = setCapturedListAt(state, holder, [...list.slice(0, idx), ...list.slice(idx + 1)])
   return enterCapturedCard(next, list[idx])

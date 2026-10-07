@@ -7218,7 +7218,7 @@ registerCard('TWI_187', { // Cad Bane, Hostage Taker
     }).abilities!,
   ],
   ifYouDo: (s, ctx) => (ctx.step === 'rescue'
-    ? drawCards(rescueCaptured(s, { kind: 'unit', instanceId: ctx.sourceInstanceId! }, ctx.cardChosen!), ctx.owner, 2)
+    ? drawCards(rescueCaptured(s, { kind: 'unit', instanceId: ctx.sourceInstanceId! }, ctx.cardChosen!, opponentOf(ctx.owner)), ctx.owner, 2)
     : budgetCaptureNext(s, ctx, CAD_BANE_BUDGET, 3)),
 })
 

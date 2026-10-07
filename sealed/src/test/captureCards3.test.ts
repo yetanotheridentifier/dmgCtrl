@@ -153,6 +153,14 @@ describe('TWI_187 Cad Bane: captures up to 3 enemy non-leader units with a total
     expect(declined.players.player.hand).toHaveLength(0)
   })
 
+  it('rescues the defending player\'s own copy when he guards copies of one card from both sides', () => {
+    const cad = unit('cad', 'TWI_187', { captured: [{ cardId: 'HP3', owner: 'player' }, { cardId: 'HP3', owner: 'opponent' }] })
+    const attacked = resolve(board({ units: [cad], deck: ['HP1', 'HP1'] }), { type: 'attack', attackerId: 'cad', target: { kind: 'base' } })
+    const rescued = accept(attacked, { optionIndex: 0 })
+    expect(rescued.players.opponent.units.map(u => u.cardId)).toEqual(['HP3'])
+    expect(U(rescued, 'cad')?.captured).toEqual([{ cardId: 'HP3', owner: 'player' }])
+  })
+
   it('offers nothing on attack when he guards no card the defending player owns', () => {
     const s = board({ units: [unit('cad', 'TWI_187', { captured: [{ cardId: 'HP3', owner: 'player' }] })] })
     noChoice(resolve(s, { type: 'attack', attackerId: 'cad', target: { kind: 'base' } }))
