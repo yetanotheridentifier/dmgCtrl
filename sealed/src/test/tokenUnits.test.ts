@@ -43,8 +43,8 @@ const SHIPPED = [
   // D: leaders
   'HMW_010', 'HMW_012', 'JTL_016', 'SEC_011', 'SEC_014', 'TS26_1', 'TWI_002', 'TWI_007',
 ]
-/** Scoped by the triage or by comment, but lifted out to the ticket that owns their blocker. */
-const LIFTED = ['TWI_069', 'TWI_017'] // JTL_006 Darth Vader has shipped, covered in `pilotLeaders.test.ts`
+// Scoped by the triage or by comment but shipped elsewhere: JTL_006 Darth Vader in `pilotLeaders.test.ts`,
+// and TWI_069 Roger Roger and TWI_017 Chancellor Palpatine in `oneOffCards3.test.ts`.
 
 const POOL = poolFor(['SEC', 'JTL', 'TWI', 'TS26', 'HMW'])
 const real = (id: string): EngineCard => {
@@ -159,9 +159,8 @@ const useFront = (s: GameState) => resolve(s, { type: 'useLeaderAbility', index:
 const baseDamage = (s: GameState, who: PlayerId) => s.players[who].base.damage
 
 describe('Token units: the scope and the tokens', () => {
-  it('registers an ability for every shipped card and none for the lifted ones', () => {
+  it('registers an ability for every shipped card', () => {
     for (const id of SHIPPED) expect(getCardDefinition(id), id).toBeDefined()
-    for (const id of LIFTED) expect(getCardDefinition(id), id).toBeUndefined()
   })
 
   it('each token unit carries its printed stats', () => {

@@ -240,6 +240,19 @@ export interface UnitState {
    * (BD-1, Huyang). Read by the card's own aura, so the effect ends when either unit leaves play.
    */
   chosenUnitId?: string
+  /**
+   * The card this unit really is, when it entered play as a copy of another unit (Clone: "enter play
+   * as a copy of a non-leader, non-Vehicle unit in play, except it gains the Clone trait and is not
+   * unique"). `cardId` is then the copied card, so its printed attributes and abilities are read off
+   * that one, and this card is what leaves play: to a discard pile, a hand or a guardian
+   * (`physicalCardOf`). Its own printed traits stay with the unit, and it is not unique.
+   */
+  physicalCardId?: string
+}
+
+/** The card a unit in play really is: its own, or the copier's (`UnitState.physicalCardId`). */
+export function physicalCardOf(unit: UnitState): string {
+  return unit.physicalCardId ?? unit.cardId
 }
 
 export interface ResourceState {
@@ -265,6 +278,11 @@ export interface LeaderState {
   deployed: boolean
   epicActionUsed: boolean
   exhausted: boolean
+  /**
+   * A leader that flips between two faces instead of deploying shows its other face (Chancellor
+   * Palpatine // Darth Sidious). Absent is the face it starts the game with.
+   */
+  flipped?: boolean
 }
 
 export interface BaseState {
@@ -592,7 +610,15 @@ export interface GameState {
    */
   // `prevented` collects units whose incoming combat damage a prevention effect has cancelled
   // (The Mandalorian) — decided at the `prevent` stage, honoured when damage is dealt.
-  pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage'; viaAmbush?: boolean; preventAsked?: string[]; prevented?: string[] }
+  // `defenderStrikesFirst` and `secondDefenderId` are set by the attacker's own On Attack choices, so
+  // they are read when the damage is dealt: "you may have the defending unit deal combat damage before
+  // this unit" (The Stranger), and "this unit can attack 2 units instead of 1" (Darth Maul).
+  pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage'; viaAmbush?: boolean; preventAsked?: string[]; prevented?: string[]; defenderStrikesFirst?: boolean; secondDefenderId?: string }
+  /**
+   * The round whose additional regroup phase has been taken ("There is an additional regroup phase
+   * after the first regroup phase each round", Max Rebo), so it is taken once.
+   */
+  extraRegroupRound?: number
   /**
    * The unit attacking right now, from the declaration to the end of the attack (cleared with the
    * other per-attack state by `clearAttackGrants`). For a card whose ability holds only "while
@@ -796,6 +822,19 @@ export interface HowPlayed {
 }
 export const PLAYED_FROM_HAND: HowPlayed = { from: 'hand' }
 export const PLAYED_ELSEWHERE: HowPlayed = { from: 'other' }
+
+/**
+ * A unit play held while its player says what it enters play as (`enterAsCopy`, Clone): everything
+ * `playUnitCard` was handed, as plain data, so the play resumes exactly where it stopped.
+ */
+export interface EnterAsCopyPlay {
+  ready?: boolean
+  resourcesPaid: number
+  cardOwner?: PlayerId
+  exploited?: { owed: PendingTrigger[]; powers: number[]; borrowed?: string[] }
+  how: HowPlayed
+  fate?: { defeat: true } | { capturedBy: string }
+}
 
 /** A card offered for play, with its index in the zone it is played out of. */
 export interface PlayFromRef {
@@ -1330,8 +1369,11 @@ export function choiceIntent(choice: PendingChoice): TargetIntent | undefined {
     case 'selectHealTarget': case 'healForAdvantage': case 'distributeHealing': case 'selectUnitToReady':
       return 'help'
     case 'mayDamage': case 'mayDamageExhaust': case 'selectDamageTarget': case 'distributeDamage': case 'distributeIndirectDamage':
-    case 'variableStrike': case 'selectUnitToDefeat': case 'selectUniqueUnitToDefeat': case 'exploit':
+    case 'variableStrike': case 'selectUnitToDefeat': case 'selectUniqueUnitToDefeat':
       return 'harm'
+    case 'exploit':
+      return choice.droids ? 'cunning' : 'harm' // Vuutun Palaa's Droids are exhausted, not defeated
+    case 'enterAsCopy':
     case 'mayExhaustLeaderExhaustUnit': case 'mayExhaustUnit': case 'selectUnitToExhaust': case 'returnFriendlyUnit':
     case 'selectUnitToReturn': case 'selectUnitToSteal': case 'selectFriendlyUnit': case 'selectDistributeSource':
       return 'cunning'
@@ -1557,7 +1599,13 @@ type ChoiceVariant =
   // `creditGrant` is what the played unit gains for this phase if at least one Credit is defeated
   // paying for it (Jabba the Hutt: "If you defeated a Credit while paying its cost, that unit gains
   // Ambush for this phase"), given as it enters play so an entry keyword like Ambush still fires.
-  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean; creditGrant?: KeywordInstance[] }
+  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean; creditGrant?: KeywordInstance[]; droids?: boolean }
+  /**
+   * "You may have this unit enter play as a copy of a non-leader, non-Vehicle unit in play" (Clone):
+   * asked as the unit enters, before anything reacts to it. `play` is the rest of the play, resumed
+   * with the copied card (an accepted `targetInstanceId`) or as itself (declined).
+   */
+  | { kind: 'enterAsCopy'; id: string; controller: PlayerId; cardId: string; targets: string[]; play: EnterAsCopyPlay }
   // The one door for playing a card out of somewhere other than the Play a Card action: any card
   // type, out of `zone`, answered by `optionIndex` into `candidates`. `free` bypasses the cost and
   // the aspect penalty (CR 8.5); `costDelta` adjusts it; `waive` forgives aspect penalties. An

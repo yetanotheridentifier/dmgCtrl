@@ -5,10 +5,10 @@ import { dealDamageToUnit, defeatUnit, defeatUnits, dealIndirectDamage, isDoomed
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_CARDS, hasToken } from './tokenUpgrades'
-import { deployLeaderAsPilot, playUpgradeOnto } from './resolve'
+import { deployLeaderAsPilot, playUpgradeOnto, playEventFromHand } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
 import { baseHostId, isFortify, isPlot, previousActionAttackedBase, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, damagedBaseThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, discardedThisPhase, indirectDamageDealtThisPhase, baseHealedThisPhase, markAbilityUsed, updatePlayer, upgradeSideId, recordUnitDefeated, noActionYetThisPhase, forceNextAttack } from './types'
-import { canTakePilot, affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit, smuggleTerms, smuggleMoves, namedByOpponent } from './legalMoves'
+import { canTakePilot, affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit, smuggleTerms, smuggleMoves, namedByOpponent, enemyAttackTargets } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
 import { canAfford, payCost, readyResourceCount } from './resources'
 import { cardHasTrait, cardTraits, unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywords, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
@@ -15179,4 +15179,129 @@ registerCard('TWI_210', { // Lux Bonteri — Renegade Separatist
     if (ctx.step === 'exhaustIt') return exhaustUnit(s, ctx.targetInstanceId!)
     return s
   },
+})
+
+registerCard('TWI_069', { // Roger Roger
+  // The upgrade's own When Defeated, heard from its owner's discard pile, alone or with its host.
+  abilities: [{
+    trigger: 'whenThisUpgradeDefeated',
+    description: 'When Defeated: Attach this upgrade to a friendly Battle Droid token.',
+    effect: (s, ctx) => (s.players[ctx.owner].discard.includes(ctx.cardId)
+      ? unitThen(s, ctx, s.players[ctx.owner].units.filter(u => u.cardId === TOKEN_BATTLE_DROID).map(u => u.instanceId), 'attach Roger Roger to a friendly Battle Droid token', 'attach', false)
+      : s),
+  }],
+  ifYouDo: (s, ctx) => {
+    const discard = s.players[ctx.owner].discard
+    const at = discard.lastIndexOf(ctx.cardId)
+    if (at === -1 || !findUnit(s, ctx.targetInstanceId!)) return s
+    // Attached, not played: it leaves the pile and the host hears an upgrade attach.
+    const taken = updatePlayer(s, ctx.owner, { discard: discard.filter((_, i) => i !== at) })
+    return fireUpgradeAttached(attachUpgrades(taken, ctx.targetInstanceId!, [{ cardId: ctx.cardId, owner: ctx.owner }]), ctx.targetInstanceId!, false, ctx.cardId)
+  },
+})
+
+registerCard('SOR_199', { // Bamboozle
+  // "You may discard a Cunning card from your hand instead of paying this event's cost": `playEvent`
+  // asks, and the answer comes back here to be played through `playEventFromHand`.
+  discardInsteadOfCost: c => c.aspects.includes('Cunning'),
+  ...whenPlayed("Exhaust a unit and return each upgrade on it to its owner's hand.", (s, ctx) =>
+    unitThen(s, ctx, allUnits(s).map(u => u.instanceId), "exhaust a unit and return each upgrade on it to its owner's hand", 'cunning', false, 'bamboozle')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step?.startsWith('insteadOfCost:')) return playEventFromHand(s, ctx.owner, Number(ctx.step.slice('insteadOfCost:'.length)), ctx.cardChosen)
+    const id = ctx.targetInstanceId!
+    let next = exhaustUnit(s, id)
+    // From the last, so each index still names the upgrade it did. A token is defeated instead.
+    for (let i = (findUnit(next, id)?.unit.upgrades.length ?? 0) - 1; i >= 0; i--) next = returnUpgradeToHand(next, id, i)
+    return next
+  },
+})
+
+registerCard('LAW_072', { extraRegroupPhase: true }) // Max Rebo — Encore!
+
+// The Stranger and Darth Maul decide as they attack, so each is an On Attack choice whose answer the
+// suspended combat carries to its damage step (`pendingAttack`).
+const onPendingAttack = (s: GameState, attackerId: string | undefined, patch: Partial<NonNullable<GameState['pendingAttack']>>): GameState =>
+  (s.pendingAttack && s.pendingAttack.attackerId === attackerId ? { ...s, pendingAttack: { ...s.pendingAttack, ...patch } } : s)
+registerCard('LAW_086', { // The Stranger — No Survivors. Ambush and Grit are printed.
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'While attacking, you may have the defending unit deal combat damage before this unit.',
+    hears: (_s, ctx) => ctx.attackTarget?.kind === 'unit',
+    effect: (s, ctx) => pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-stranger`, controller: ctx.owner, cost: 0, text: 'have the defending unit deal its combat damage first', then: resume(ctx) }),
+  }],
+  ifYouDo: (s, ctx) => onPendingAttack(s, ctx.sourceInstanceId, { defenderStrikesFirst: true }),
+})
+registerCard('TWI_135', { // Darth Maul — Revenge At Last
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'This unit can attack 2 units instead of 1. (This unit deals its combat damage to both defenders and they both deal their combat damage to this unit. All damage is dealt simultaneously.)',
+    hears: (_s, ctx) => ctx.attackTarget?.kind === 'unit',
+    effect: (s, ctx) => {
+      const self = selfOf(s, ctx)
+      const first = ctx.attackTarget
+      if (!self || first?.kind !== 'unit') return s
+      // Any other unit he could have attacked, so a Sentinel still binds the second pick.
+      const others = enemyAttackTargets(s, self, ctx.owner).targets.filter(u => u.instanceId !== first.instanceId).map(u => u.instanceId)
+      return unitThen(s, ctx, others, 'choose a second unit for Darth Maul to attack', 'harm', true)
+    },
+  }],
+  ifYouDo: (s, ctx) => (ctx.targetInstanceId ? onPendingAttack(s, ctx.sourceInstanceId, { secondDefenderId: ctx.targetInstanceId }) : s),
+})
+
+const nabatBottom = (s: GameState, ctx: Resumable, left: number): GameState => {
+  const hand = s.players[ctx.owner].hand
+  return left > 0 && hand.length > 0
+    ? pushChoice(s, { kind: 'selectCardThen', id: `${ctx.sourceInstanceId}-bottom`, controller: ctx.owner, candidates: hand, text: `put a card from your hand on the bottom of your deck (${left} to go)`, then: resume(ctx, String(left)) })
+    : s
+}
+registerCard('JTL_028', { // Nabat Village
+  baseAbilities: { startingHandDelta: 3, noMulligan: true },
+  // The game's first action phase is round 1's: the only one a base hears that is the first.
+  abilities: [{
+    trigger: 'whenActionPhaseStarts',
+    description: 'When the first action phase starts: Put 3 cards from your hand on the bottom of your deck in any order.',
+    hears: s => s.round === 1,
+    effect: (s, ctx) => nabatBottom(s, ctx, 3),
+  }],
+  ifYouDo: (s, ctx) => {
+    const hand = s.players[ctx.owner].hand
+    const card = ctx.optionIndex === undefined ? undefined : hand[ctx.optionIndex]
+    if (card === undefined) return s
+    const moved = updatePlayer(s, ctx.owner, { hand: hand.filter((_, i) => i !== ctx.optionIndex), deck: [...s.players[ctx.owner].deck, card] })
+    return nabatBottom(moved, ctx, Number(ctx.step) - 1)
+  },
+})
+
+// Chancellor Palpatine // Darth Sidious: a leader that flips between two faces instead of deploying.
+// Each face's action is offered only while that face is up (`LeaderState.flipped`), and the face says
+// which aspects the leader provides.
+const flipLeader = (s: GameState, owner: PlayerId): GameState =>
+  updatePlayer(s, owner, { leader: { ...s.players[owner].leader, flipped: !s.players[owner].leader.flipped } })
+const hasAspect = (s: GameState, cardId: string, aspect: string): boolean => (s.cards[cardId]?.aspects ?? []).includes(aspect)
+registerCard('TWI_017', {
+  deployCondition: () => false,
+  leaderAbilities: {
+    aspects: (s, owner) => (s.players[owner].leader.flipped ? ['Cunning', 'Villainy'] : ['Cunning', 'Heroism']),
+    actions: [
+      {
+        description: 'If a friendly Heroism unit was defeated this phase, draw a card, heal 2 damage from your base, then flip this leader.',
+        usable: (s, owner) => !s.players[owner].leader.flipped && defeatedThisPhase(s, owner).some(id => hasAspect(s, id, 'Heroism')),
+        effect: (s, ctx) => flipLeader(healBase(drawCards(s, ctx.owner, 1), ctx.owner, 2), ctx.owner),
+      },
+      {
+        description: 'Darth Sidious: If you played a Villainy card this phase, create a Clone Trooper token, deal 2 damage to each enemy base, then flip this leader.',
+        usable: (s, owner) => s.players[owner].leader.flipped === true && cardsPlayedThisPhase(s, owner).some(id => hasAspect(s, id, 'Villainy')),
+        effect: (s, ctx) => flipLeader(dealDamageToBase(createTokenUnit(s, ctx.owner, TOKEN_CLONE_TROOPER), opponentOf(ctx.owner), 2), ctx.owner),
+      },
+    ],
+  },
+})
+
+registerCard('SEC_122', { // Vuutun Palaa — Droid Control Ship
+  costModifier: (s, playerId) => -s.players[playerId].units.filter(u => unitHasTrait(s, u, 'Droid')).length,
+  unitPaysCosts: (s, u) => unitHasTrait(s, u, 'Droid'),
+})
+
+registerCard('TWI_116', { // Clone: "Only the card's printed attributes are copied", so the copy is a card id.
+  entersAsCopyOf: (s, u) => !isLeaderUnit(s, u) && !unitHasTrait(s, u, 'Vehicle'),
 })

@@ -431,6 +431,7 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
         // An additional cost, not a discount: it saves nothing, so the prompt says what it buys.
         return [`put units that cost ${choice.maxCost} or less from your discard pile on the bottom of your deck to play ${cardName(state, choice.cardId)} with their "When Played" abilities (${left} more at most), or Done`]
       }
+      if (choice.droids) return [`exhaust friendly units to pay for ${cardName(state, choice.cardId)} as if they were resources, 1 each (${left} more at most), or Done`]
       const each = choice.damage === undefined ? 'defeat' : `deal ${choice.damage} damage to`
       const what = choice.resources ? 'ready resources you control' : 'friendly units'
       return [`${each} ${what} while playing ${cardName(state, choice.cardId)}, ${choice.discount} less each (${left} more at most), or Done`]
@@ -439,6 +440,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return [choice.heal ? `heal ${choice.amount} damage from a base, or stop` : `deal ${choice.amount} damage to a base, or stop`]
     case 'mayCollectBounty':
       return ['you may collect this Bounty']
+    case 'enterAsCopy':
+      return [`you may have ${cardName(state, choice.cardId)} enter play as a copy of a unit, or Decline`]
 
     default: {
       // EXHAUSTIVE. Every choice kind above names what it is asking, so this is unreachable and TS

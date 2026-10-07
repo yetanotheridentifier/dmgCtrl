@@ -299,6 +299,8 @@ export function unitTraits(state: GameState, unit: UnitState): string[] {
   const out = cardLevel
     ? [...cardTraits(state, unit.cardId, controllerOf(state, unit))]
     : [...(state.cards[unit.cardId]?.traits ?? [])]
+  // A copy keeps the traits of the card it really is: "except it gains the Clone trait" (Clone).
+  if (unit.physicalCardId) out.push(...(state.cards[unit.physicalCardId]?.traits ?? []))
   const removed = new Set<string>()
   // Every card it carries, including one whose abilities it has lost: a trait is not an ability, so
   // "loses all abilities" leaves the Underworld trait Leia's Disguise gave it.

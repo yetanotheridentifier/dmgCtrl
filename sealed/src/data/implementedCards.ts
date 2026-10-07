@@ -364,6 +364,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'LAW_013', name: 'Chewbacca', front: true, back: true },
   { id: 'LAW_015', name: 'Jabba the Hutt', front: true, back: true },
   { id: 'LAW_018', name: 'Lando Calrissian', front: true, back: true },
+  // A leader that flips between two faces instead of deploying: "back" is the Darth Sidious face.
+  { id: 'TWI_017', name: 'Chancellor Palpatine', front: true, back: true },
 ]
 
 /**
@@ -416,6 +418,7 @@ export const IMPLEMENTED_BASES: UpgradeStatus[] = [
   { id: 'LOF_019', name: 'Vergence Temple' },
   { id: 'LOF_022', name: 'Mystic Monastery' },
   { id: 'LOF_028', name: 'Tomb of Eilram' },
+  { id: 'JTL_028', name: 'Nabat Village' },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
@@ -614,6 +617,7 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'LAW_141', name: 'Targeted For Removal' },
   // The last one-offs
   { id: 'SOR_122', name: 'Traitorous' },
+  { id: 'TWI_069', name: 'Roger Roger' },
 ]
 
 /**
@@ -1109,6 +1113,7 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SEC_077', name: 'Retaliation' },
   { id: 'SHD_144', name: 'Give In to Your Anger' },
   { id: 'SEC_145', name: 'Confidence in Victory' },
+  { id: 'SOR_199', name: 'Bamboozle' },
 ]
 
 /**
@@ -2455,6 +2460,11 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SOR_056', name: 'Bendu' },
   { id: 'SHD_153', name: 'Poe Dameron' },
   { id: 'TWI_210', name: 'Lux Bonteri' },
+  { id: 'LAW_072', name: 'Max Rebo' },
+  { id: 'LAW_086', name: 'The Stranger' },
+  { id: 'SEC_122', name: 'Vuutun Palaa' },
+  { id: 'TWI_116', name: 'Clone' },
+  { id: 'TWI_135', name: 'Darth Maul' },
 ]
 
 /**

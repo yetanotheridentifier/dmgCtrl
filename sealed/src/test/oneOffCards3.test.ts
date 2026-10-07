@@ -205,8 +205,8 @@ describe('LAW_086 The Stranger: while attacking, you may have the defending unit
 })
 
 describe('JTL_028 Nabat Village: 3 more starting cards, no mulligan, and 3 cards to the bottom as the first action phase starts', () => {
-  const nabatDeck = { leader: 'TWI_017', base: 'JTL_028', cards: [{ id: 'PLAIN', count: 20 }] }
-  const plainDeck = { leader: 'TWI_017', base: 'TST_B', cards: [{ id: 'PLAIN', count: 20 }] }
+  const nabatDeck = { name: 'nabat', leader: 'TWI_017', base: 'JTL_028', cards: [{ id: 'PLAIN', count: 20 }] }
+  const plainDeck = { name: 'plain', leader: 'TWI_017', base: 'TST_B', cards: [{ id: 'PLAIN', count: 20 }] }
 
   it('deals 9 cards and offers no mulligan', () => {
     const s = initGame(nabatDeck, plainDeck, F, { firstPlayer: 'player', shuffle: x => [...x], rngSeed: 1 })

@@ -67,11 +67,12 @@ const SHIPPED = [
  * `plot.test.ts` (front) and `plot2.test.ts` (back).
  *
  * SHD_006 Jabba the Hutt and SEC_018 DJ are built on both sides and covered with the last capture
- * cards, in `captureCards3.test.ts`.
+ * cards, in `captureCards3.test.ts`, and TWI_017 Chancellor Palpatine // Darth Sidious, a leader that
+ * flips rather than deploys, with the last one-offs in `oneOffCards3.test.ts`.
  */
 // The JTL Pilot leaders lifted from here have shipped and are covered in `pilotLeaders.test.ts`.
 const LIFTED = [
-  'TWI_017', 'LAW_017',
+  'LAW_017',
 ]
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])

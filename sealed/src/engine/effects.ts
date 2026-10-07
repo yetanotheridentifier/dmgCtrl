@@ -1,5 +1,5 @@
 import type { CaptureHolder, CapturedCard, DamageDealt, DamageSource, DiscardedFrom, GameState, IfYouDo, NextUnitGrant, PendingTrigger, PlayerId, ResourceState, TriggerContext, UnitState, UpgradeAttachment, UsedAbility } from './types'
-import { baseHostId, upgradeSideId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseDamagedBy, recordBaseDamaged, recordCardsDrawn, recordDiscarded, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordBaseHealed, recordUnitLeftPlay, baseAbilityCardIds } from './types'
+import { baseHostId, upgradeSideId, baseHostOwner, opponentOf, updatePlayer, pushChoice, recordBaseDamagedBy, recordBaseDamaged, recordCardsDrawn, recordDiscarded, recordTokenCreated, recordTokenUpgradeGiven, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordBaseHealed, recordUnitLeftPlay, baseAbilityCardIds, physicalCardOf } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint, ProtectedAction } from './abilities'
@@ -361,8 +361,8 @@ export function attachUnitAsUpgrade(state: GameState, unitId: string, hostId: st
   const { owner: controller, unit } = found
   let next = updatePlayer(state, controller, { units: state.players[controller].units.filter(u => u.instanceId !== unitId) })
   for (const up of unit.upgrades) next = sendAttachmentFromPlay(next, up, 'discard')
-  const upgradeOwners = unit.upgrades.filter(up => state.cards[up.cardId]?.type !== 'token' && !escapesDefeat(up)).map(up => up.owner)
-  if (upgradeOwners.length > 0) next = fireUpgradesDefeated(next, upgradeOwners)
+  const lost = unit.upgrades.filter(up => state.cards[up.cardId]?.type !== 'token' && !escapesDefeat(up))
+  if (lost.length > 0) next = fireUpgradesDefeated(next, lost.map(up => up.owner), lost)
   next = releaseCaptured(next, unit.captured ?? [])
   return attachCardAsUnitUpgrade(next, unit.cardId, controller, hostId)
 }
@@ -370,7 +370,7 @@ export function attachUnitAsUpgrade(state: GameState, unitId: string, hostId: st
 /** Defeat one upgrade already off its host: where it goes, then "when a friendly upgrade is defeated" unless it escaped. */
 function defeatAttachment(state: GameState, up: UpgradeAttachment): GameState {
   const next = sendAttachmentFromPlay(state, up, 'discard')
-  return escapesDefeat(up) ? next : fireUpgradesDefeated(next, [up.owner])
+  return escapesDefeat(up) ? next : fireUpgradesDefeated(next, [up.owner], state.cards[up.cardId]?.type === 'token' ? [] : [up])
 }
 
 /** Attach a single token upgrade. See {@link giveTokens} for why the count-many form exists. */
@@ -621,7 +621,7 @@ export function collectDamageDealt(state: GameState, event: DamageDealt): Pendin
  * An upgrade belongs to whoever PLAYED it, not to the host's controller (#378), so a mixed stack
  * reaches each side's watchers separately.
  */
-export function fireUpgradesDefeated(state: GameState, upgradeOwners: PlayerId[]): GameState {
+export function fireUpgradesDefeated(state: GameState, upgradeOwners: PlayerId[], defeated: readonly UpgradeAttachment[] = []): GameState {
   let next = state
   // One batch, not one per upgrade: they are defeated by the same event, so their reactions are
   // simultaneous and belong in one ordering question rather than nested under each other.
@@ -629,6 +629,10 @@ export function fireUpgradesDefeated(state: GameState, upgradeOwners: PlayerId[]
   for (const owner of upgradeOwners) {
     next = recordUpgradeDefeated(next, owner)
     owed.push(...collectUnitsTrigger(next, 'whenFriendlyUpgradeDefeated', owner))
+  }
+  // Each defeated card upgrade's own "When Defeated" (Roger Roger), heard from its owner's discard pile.
+  for (const up of defeated) {
+    if (!up.unitCard) owed.push(...collectCardTriggers('whenThisUpgradeDefeated', up.cardId, up.owner, `${up.cardId}-defeated`))
   }
   return fireBatch(next, owed)
 }
@@ -950,8 +954,8 @@ export function returnUnitToHand(state: GameState, instanceId: string): GameStat
     // The card returns to its OWNER's hand, which may not be its controller (a stolen unit).
     const cardOwner = u.owner ?? owner
     let next = updatePlayer(state, owner, { units: state.players[owner].units.filter(x => x.instanceId !== instanceId) })
-    if (!isTokenCard(u.cardId)) {
-      next = updatePlayer(next, cardOwner, { hand: [...next.players[cardOwner].hand, u.cardId] })
+    if (!isTokenCard(physicalCardOf(u))) {
+      next = updatePlayer(next, cardOwner, { hand: [...next.players[cardOwner].hand, physicalCardOf(u)] })
     }
     for (const up of u.upgrades) next = sendAttachmentFromPlay(next, up, 'discard')
     next = recordUnitLeftPlay(next, owner, u.cardId, u.isLeader)
@@ -1095,8 +1099,8 @@ function attemptCapture(state: GameState, targetInstanceId: string, guardianOwne
   }
   let next = updatePlayer(state, controller, { units: state.players[controller].units.filter(u => u.instanceId !== targetInstanceId) })
   for (const up of target.upgrades) next = sendAttachmentFromPlay(next, up, 'discard')
-  const upgradeOwners = target.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token' && !escapesDefeat(u)).map(u => u.owner)
-  if (upgradeOwners.length > 0) next = fireUpgradesDefeated(next, upgradeOwners)
+  const lostUpgrades = target.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token' && !escapesDefeat(u))
+  if (lostUpgrades.length > 0) next = fireUpgradesDefeated(next, lostUpgrades.map(u => u.owner), lostUpgrades)
   next = recordUnitLeftPlay(next, controller, target.cardId, target.isLeader)
   next = releaseCaptured(next, target.captured ?? [])
   next = fireBatch(next, collectLeavesPlay(next, target, controller))
@@ -1105,8 +1109,8 @@ function attemptCapture(state: GameState, targetInstanceId: string, guardianOwne
   // an enemy unit can capture a friendly one). #466 built no capture trigger point; this is it, added
   // for #467 rather than speculatively, since nothing else needs "when this unit is captured" yet.
   next = fireBatch(next, collectUnitTriggers(next, 'bounty', target, opponentOf(cardOwner), { bountyUnit: target }))
-  if (isTokenCard(target.cardId)) return { state: next } // CR 33.5: set aside, nothing to guard
-  return { state: next, captured: { cardId: target.cardId, owner: cardOwner } }
+  if (isTokenCard(physicalCardOf(target))) return { state: next } // CR 33.5: set aside, nothing to guard
+  return { state: next, captured: { cardId: physicalCardOf(target), owner: cardOwner } }
 }
 
 /** `capturerInstanceId`'s unit captures `targetInstanceId` (CR 33). No-op if the capturer itself has
