@@ -554,6 +554,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Choose ${target ?? 'unit'}`
       }
+      if (choice.kind === 'enterAsCopy') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Enter play as a copy of ${target ?? 'unit'}`
+      }
       if (choice.kind === 'selectDistributeSource') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Take from ${target ?? 'unit'}`

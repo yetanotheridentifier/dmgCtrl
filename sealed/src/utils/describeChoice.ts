@@ -42,7 +42,7 @@ export const BOARD_TARGET_KINDS = [
   'returnFriendlyUnit', 'selectPair', 'exploit',
   'selectUnitThen', 'selectUnitToReady', 'selectUnitToReturn', 'selectUnitToSteal', 'selectFriendlyUnit',
   'selectDistributeSource', 'attachPlayedCard', 'mayPlayUpgradeFree',
-  'distributeHealing', 'distributeIndirectDamage', 'damageAnyBases',
+  'distributeHealing', 'distributeIndirectDamage', 'damageAnyBases', 'enterAsCopy',
 ] as const satisfies readonly PendingChoice['kind'][]
 
 /** Board-target kinds picked again and again until Done (or until the amount is spent). */

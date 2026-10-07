@@ -138,7 +138,7 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 `whenPlayed`, `onAttack`, `whenUnitAttacks`, `onAttackEnd`, `onDefense`, `whenHealed`, `whenDefeated`, `whenReadies`,
 `whenReadyStep`, `whenEnemyUnitReadies`, `whenDrawn`, `whenDiscard`, `whenDiscarded`, `whenUnitLeavesPlay`, `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
 `whenUpgradeAttached`,
-`whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
+`whenFriendlyUpgradeDefeated`, `whenThisUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenDamageDealt`, `whenEnemyAttacksBase`,
 `whenFriendlyAttackEnds`, `whenDeployed`, `whenPlayUpgrade`, `whenPlayCard`, `whenUnitEntersPlay`,
 `whenActionPhaseStarts`, `whenAbilityUsed`, `whenUseForce`, `bounty`.
@@ -162,7 +162,10 @@ covers a card of **any** type, so it fires from all three play doors; the card i
 players' leaders, bases and units, the playing player's first, with who played in
 `ctx.playingPlayer`, because the point is also printed from the far side ("when an opponent plays an
 event", Saw Gerrera). As with `whenDrawCards`, every registration at this point compares
-`ctx.playingPlayer` against `ctx.owner`. A card played out of a resource zone carries
+`ctx.playingPlayer` against `ctx.owner`. `ctx.paidToPlay` is the resources exhausted to play it, 0
+for a free play ("if that opponent paid less than the card's cost to play it", Lux Bonteri): each
+door that pays records it in `HowPlayed.paid`, the way a unit's `resourcesPaidToPlay` is. A card
+played out of a resource zone carries
 `ctx.playedFromResources` ("when you play a card from your resources", Bail Organa), and one played
 using Smuggle carries `ctx.playedUsingSmuggle` ("when you play a card using Smuggle", Hondo Ohnaka). A played unit is
 already in play when the point is collected, so it hears its own play; `ctx.targetInstanceId` names it,
@@ -246,10 +249,18 @@ record's `leftPlay` is written: a defeat (in the defeat batch) and a return to h
 players' undeployed leaders, bases and units, with the unit and its controller in `ctx.unitLeftPlay`.
 
 `whenActionPhaseStarts` ("when the action phase starts", Beast Lair) fires for every unit in play and
-each player's leader and base as the next round's action phase begins, on the same boundary as an
-`actionPhaseStart` delayed effect and before play resumes. The game's **first** action phase raises
-nothing, which is right for every card that can read it: a card has to be played during an action
-phase to be in play to read the next one.
+each player's leader and base as each action phase begins, on the same boundary as an
+`actionPhaseStart` delayed effect and before play resumes. At the game's **first** action phase only
+leaders and bases are in play to hear it, and a card printed "when the **first** action phase starts"
+(Nabat Village) states `round === 1` in its `hears`. A choice it raises is answered before the
+initiative holder takes the first action (`pendingRoundStart`), as a later round's are.
+
+`whenThisUpgradeDefeated` is an upgrade's **own** "When Defeated" (Roger Roger: "attach this upgrade
+to a friendly Battle Droid token"), collected off the upgrade card under the player who owns it once it
+has reached their discard pile, whether it was defeated alone or went down with its host. It is not
+`whenDefeated`: an upgrade's `whenDefeated` is an ability it gives the unit it is attached to, and fires
+when that unit is defeated. `fireUpgradesDefeated` raises it, told the defeated card upgrades, in the
+same batch as "when a friendly upgrade is defeated".
 
 `bounty` ("Bounty - \<reward\>. (When this unit is defeated or captured, your opponent collects its
 bounty.)", CR 13) is collected under the unit's own **opponent**, the reverse of every point above,
@@ -464,6 +475,13 @@ Card-type-agnostic, all on `CardDefinition`:
 | `grantsAbilities` | an aura handing other units a carrier card's triggered and Action abilities (see Granted ability blocks in [keywords-effects.md](keywords-effects.md)) |
 | `grantedTraits` | extra traits, e.g. The Darksaber granting Mandalorian |
 | `cardTraits` | extra traits the card has **wherever it is**, in play or not (Zam Wesell copies her leader's) |
+| `grantsCardTraits` | traits a unit in play gives its controller's **other** cards, in play or not (Malakili, Mythosaur); see Traits in [keywords-effects.md](keywords-effects.md) |
+| `enemyPlayBaseDamage` | damage an opponent deals to their own base as an additional cost to play a card (Saw Gerrera: 2 per event) |
+| `playableOnlyIf` | when the card may be played at all, from hand or any zone (Confidence in Victory: as the player's first action of the phase) |
+| `discardInsteadOfCost` | the hand cards an event may be paid for by discarding instead (Bamboozle); see [choices.md](choices.md) |
+| `entersAsCopyOf` | the units this card may enter play as a copy of (Clone); see [keywords-effects.md](keywords-effects.md) |
+| `extraRegroupPhase` | a second regroup phase after the first each round, while in play (Max Rebo) |
+| `unitPaysCosts` | which of its controller's units may be exhausted to pay costs (Vuutun Palaa's Droids), as the paying step of a card played from hand |
 | `makesLeaderUnit` | the host counts as a leader unit |
 | `actionAbilities` | activated "Action:" abilities, with `usable`, `oncePerRound`, `exhaustCost`, and `anyPlayer` for one offered on an enemy unit too, paid for and owned by whoever uses it |
 | `canPreventDamage` / `payPreventionCost` | offers a prevention, and collects its price if taken |
@@ -548,6 +566,13 @@ Deploying is an epic action requiring the player to **control** resources equal 
 printed cost, not to spend them. A `deployCondition` hook replaces that gate where a card says
 something else.
 
+**A leader that flips instead of deploying** (Chancellor Palpatine // Darth Sidious) never deploys
+(`deployCondition` is false). Which face is up is `LeaderState.flipped`, each face's "Action
+[Exhaust]" is a front action offered only while that face is up, and the action that turns it over
+flips the flag. Its aspects depend on the face, so `leaderAbilities.aspects` says which icons it
+provides while costs are paid. The coverage sweep lists it as a leader that never deployed, which for
+this card is always true.
+
 ## Bases
 
 A base is never played, never leaves play and is not a unit, so `baseAbilities` on the base's card id
@@ -560,8 +585,9 @@ belongs to the player whose base zone holds it:
 - **`aura`** is a constant over units in play (Pau City: "each leader unit you control gets +0/+1"),
   shaped like `leaderAbilities.aura` with the base's controller in place of a source unit, and folded
   into the same aura pass.
-- **`startingHandDelta`** changes how many cards its controller draws to start (Colossus: one fewer),
-  read by `initGame`.
+- **`startingHandDelta`** changes how many cards its controller draws to start (Colossus: one fewer,
+  Nabat Village: three more), read by `initGame`.
+- **`noMulligan`** leaves its controller only keeping their hand at setup (Nabat Village).
 - **`deckMinimumDelta`** changes the smallest legal deck (Data Vault: +10), read by `minimumDeckSize`
   where a decklist is checked and by the deck generator, which builds to it. It is a deck-building
   rule, so the rules engine never consults it.

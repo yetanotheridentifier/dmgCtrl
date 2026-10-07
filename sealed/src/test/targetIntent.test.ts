@@ -54,6 +54,7 @@ const SAMPLE: Record<(typeof BOARD_TARGET_KINDS)[number], PendingChoice> = {
   distributeHealing: { ...base, kind: 'distributeHealing', remaining: 2, healed: 0, unitTargets: ['u1'], baseTargets: ['player'] },
   distributeIndirectDamage: { ...base, kind: 'distributeIndirectDamage', targetPlayer: 'opponent', remaining: 2, total: 2, unitTargets: ['u2'], source: { cardId: 'X', controller: 'player' } },
   damageAnyBases: { ...base, kind: 'damageAnyBases', remaining: ['player', 'opponent'], amount: 1 },
+  enterAsCopy: { ...base, kind: 'enterAsCopy', cardId: 'X', targets: ['u2'], play: { resourcesPaid: 0, how: { from: 'hand' } } },
 }
 
 describe('target intent', () => {

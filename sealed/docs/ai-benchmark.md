@@ -890,7 +890,9 @@ implementation work rests on the third:
 Leaders and bases are counted apart, because both are in play from the first turn. Folding them in
 would credit two free cards per deck. A leader is reported as deployed only when it actually
 deploys, which is the only way its deployed side runs, and a leader that never deploys is listed by
-id, as an unplayed card is.
+id, as an unplayed card is. A leader that flips instead of deploying (TWI_017 Chancellor Palpatine)
+is always on that list; its faces are evidenced by unit tests and by whole games that substitute it
+in (`oneOffCards3.test.ts`), as a base is.
 
 **The base count is availability and nothing more, and it is thin.** One base is chosen per deck, so
 the eight-set sweep plays 32 distinct bases out of the 85 the sets print, and it reports no figure

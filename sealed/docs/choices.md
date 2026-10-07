@@ -352,6 +352,19 @@ recomputed on the post-choice board per CR 6.3.4). It re-finds attacker and defe
 defeats either fizzles gracefully, and clears Support-granted keywords last so they survive the
 suspension.
 
+An attacker's own On Attack choice can shape the damage step, by writing to `pendingAttack` while the
+attack is suspended for it: a second defender (Darth Maul, `secondDefenderId`) or the defender
+striking first (The Stranger, `defenderStrikesFirst`). `resumePendingAttack` carries both into the
+damage step with the prevention progress. See `keywords-effects.md` "Attack targeting".
+
+### Entering play as a copy
+
+Clone's "you may have this unit enter play as a copy of ..." is settled before the unit exists, so
+`playUnitCard` holds the whole play in an `enterAsCopy` choice (`EnterAsCopyPlay`: how it was paid,
+from where, its exploited units, an entry fate) and returns. The board target is a unit to copy, and
+Decline enters it as itself; either answer resumes the same `playUnitCard` call, which then records the
+card as played and fires the arrival batch as any play does.
+
 ## Every choice can name the card that raised it
 
 A prompt has to be able to say *why* the player is being asked, which matters most when the choice
@@ -577,6 +590,20 @@ position among however many Credits are held, exactly like Greater Sarlacc's `re
 defeated Credit triggers nothing and does not reduce what is left to pay with (it is a separate
 currency from ready resources). See `keywords-effects.md` "Credit tokens".
 
+**A fifth, units paying as resources (Vuutun Palaa's Droids), takes Credit's place** when a card in
+play says so (`unitPaysCosts`). Picks are friendly units on the board, each exhausted paying 1, and the
+units are offered ahead of Credit tokens.
+
+### Discarding a card instead of paying
+
+"You may discard a Cunning card from your hand instead of paying this event's cost" (Bamboozle) is
+asked as the event is played from hand and before anything is paid, as a `selectCardThen` over the
+other hand cards that qualify (`discardInsteadOfCost`, `discardForCostIndices`). It is optional while
+the cost could be paid and required when it could not, which is also when the play is legal at all
+without the resources. The answer resumes the card's `ifYouDo`, which plays it through
+`playEventFromHand`: discarding the chosen card (a discard from hand in every sense, so it is heard)
+and paying nothing, or, declined, paying the cost as usual.
+
 ### Playing a card out of another zone
 
 **`playCardFrom` is the one door for a play that is not the Play a Card action**: a card of any type,
@@ -749,4 +776,5 @@ resolve down to one.
   conflict.
 - **Units:** `uniqueUnitCheck(state, owner)` runs at the end of `playUnitCard`, covering every
   play-a-unit path. It raises `selectUniqueUnitToDefeat` as a **board-target** selection, since the
-  copies may differ in damage and upgrades.
+  copies may differ in damage and upgrades. A unit that entered play as a copy (Clone) is not unique
+  and is left out.

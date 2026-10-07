@@ -14195,7 +14195,7 @@ registerCard('SHD_205', { // Let the Wookiee Win
 registerCard('TWI_246', { // Tranquility
   abilities: [
     ...returnFromDiscardWp('You may return a Republic unit from your discard pile to your hand.', c => printedUnit(c) && printedTrait(c, 'Republic'), true).abilities,
-    // `anyCard` reaches units and events: a Republic upgrade takes no "next card" grant, so it pays in full and spends no use.
+    // `anyCard` reaches every card type, a Republic upgrade included.
     ...attacks('Each of the next 3 Republic cards you play this phase costs 1 less.', (s, ctx) =>
       grantNextUnit(s, ctx.owner, { anyCard: true, trait: 'Republic', costDelta: -1, uses: 3 })).abilities!,
   ],

@@ -8,6 +8,10 @@ import { defeatUpgradeAt, returnUnitToHand } from '../engine/effects'
 import { initGame } from '../engine/initGame'
 import { normaliseCard } from '../engine/cardDb'
 import { poolFor } from '../bench/setPools'
+import { buildCoverageDecks } from '../bench/coverageDecks'
+import { sweepCardDb } from '../bench/sweep'
+import { playGame } from '../bench/selfPlay'
+import { randomAi } from '../ai/randomAi'
 import { getCardDefinition } from '../engine/abilities'
 import { IMPLEMENTED_BASES, IMPLEMENTED_EVENTS, IMPLEMENTED_LEADERS, IMPLEMENTED_UNITS, IMPLEMENTED_UPGRADES } from '../data/implementedCards'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
@@ -333,6 +337,25 @@ describe('TWI_116 Clone: may enter play as a copy of a non-leader, non-Vehicle u
     expect(done.players.player.units).toEqual([])
     expect(done.players.player.discard).toEqual(['TWI_116'])
   })
+})
+
+describe('whole games with Chancellor Palpatine leading from Nabat Village', () => {
+  // The coverage sweep picks one base per deck and counts a leader only when it deploys, so neither
+  // card is evidenced by it: these games substitute both into coverage decks instead.
+  it('play to the end, through the bottoming and both faces of the leader', () => {
+    const pool = poolFor(['TWI', 'JTL'])
+    const cardDb = sweepCardDb(pool)
+    const decks = buildCoverageDecks(poolFor(['TWI']), 42).decks
+    const faces = new Set<number>()
+    for (let i = 0; i < 80; i++) {
+      const mine = { ...decks[i % decks.length], leader: 'TWI_017', base: 'JTL_028' }
+      const theirs = decks[(i + 1) % decks.length]
+      const game = playGame({ deckPlayer: mine, deckOpponent: theirs, cardDb, aiPlayer: randomAi, aiOpponent: randomAi, seed: 100 + i, firstPlayer: i % 2 === 0 ? 'player' : 'opponent' })
+      expect(game.status, `game ${i}: ${game.dropReason}`).toBe('completed')
+      for (const m of game.moves) if (m.by === 'player' && m.action.type === 'useLeaderAbility') faces.add(m.action.index)
+    }
+    expect([...faces].sort()).toEqual([0, 1])
+  }, 60_000) // about 1.5s alone, several times that beside the rest of the suite
 })
 
 describe('TWI_135 Darth Maul: may attack 2 units instead of 1', () => {
