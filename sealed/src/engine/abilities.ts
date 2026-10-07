@@ -352,6 +352,8 @@ export interface CardDefinition {
    * `friendlyUnitsEnterReady`, beside `tokensEnterReady` for a created unit and `entersReady` for a played one.
    */
   unitsEnterReady?: (state: GameState, source: UnitState) => boolean
+  /** Units its controller owns that are rescued enter play ready rather than exhausted (DJ). Read by `enterCapturedCard`. */
+  rescuedEnterReady?: (state: GameState, source: UnitState) => boolean
   /** Its controller's units may attack a base while using Ambush (Fett's Firespray). Read by `ambushAttacksBases`. */
   ambushAttacksBases?: (state: GameState, source: UnitState) => boolean
   /** This unit can't declare an attack against a base (Wicket). */

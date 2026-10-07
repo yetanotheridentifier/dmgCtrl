@@ -459,6 +459,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `doublesTokenCreation` | doubles a batch of created tokens |
 | `entersReady` | the unit arrives ready, alongside Ambush and enters-ready grants |
 | `unitsEnterReady` | every unit its controller plays or creates arrives ready (Ritual Dragon) |
+| `rescuedEnterReady` | units its controller owns arrive ready when rescued from capture (DJ) |
 | `ambushAttacksBases` | its controller's units may attack a base while using Ambush (Fett's Firespray) |
 | `grantsAbilities` | an aura handing other units a carrier card's triggered and Action abilities (see Granted ability blocks in [keywords-effects.md](keywords-effects.md)) |
 | `grantedTraits` | extra traits, e.g. The Darksaber granting Mandalorian |

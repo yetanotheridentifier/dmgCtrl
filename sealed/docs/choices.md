@@ -197,7 +197,10 @@ Repairs has none), and `oneUnit` keeps every point on the first unit picked (Kas
 grants a discarded unit's play from that pile). `playUnitFromHand` can
 also damage its controller's base by the unit's cost (`thenDamageOwnBase`), give the unit a lasting
 effect (`thenLasting`), leave a delayed effect about it (`thenDelay`), and defeat a set of units once the
-play is settled whether it was played or declined (`thenDefeat`, Consolidation of Power). With `then` it
+play is settled whether it was played or declined (`thenDefeat`, Consolidation of Power). `thenDefeatIt`
+(Maul) and `thenCaptureBy` (DJ: "the chosen unit captures it") act on the unit just played as part of
+the play, while its arrival abilities are still queued, so its own When Played resolves after it has
+gone. With `then` it
 hands on to the card's hook once the unit is on the board and paid for, with the played card in
 `cardChosen`: General Grievous's "play 2 units from your hand (one at a time)" is two plays rather than
 two simultaneous offers, so the second prices its candidates against the resources the first one left.
@@ -579,7 +582,8 @@ currency from ready resources). See `keywords-effects.md` "Credit tokens".
 **`playCardFrom` is the one door for a play that is not the Play a Card action**: a card of any type,
 out of `zone`, answered by `optionIndex` into its `candidates`. The zones are `hand`, `resources`,
 `opponentResources`, `deckTop`, `opponentDeckTop` (Vermillion: either player may play the top card
-of either deck), `discard` and `opponentDiscard`, plus four **paired** zones for a
+of either deck), `discard`, `opponentDiscard` and `captured` (every card held under a unit the player
+controls, Dryden Vos), plus four **paired** zones for a
 card offered out of more than one place at once: `handOrResources`, `handOrDiscard`, `anyDiscard`
 (both players' piles) and `handOrAnyDiscard` (hand, own pile, then the opponent's: A Fine Addition).
 A paired zone is one zone holding one list, in the order the card names them, so an index past the

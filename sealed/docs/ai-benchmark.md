@@ -849,6 +849,11 @@ the reporter was never asked, and `missingTurn` fills in a pass where a turn-ord
 one player two actions in a row. Each move carries `by`, so the first move whose `by` differs
 from `activePlayer` is where a replay has drifted.
 
+**So can a card registered after the report was recorded.** A card that did nothing when the game was
+played may now raise a choice the recorded moves never answer, long before the moment the report is
+about. Where that card's new behaviour is beside the point, `withInertCard` replays the report with an
+inert copy in its place: the same printed card under a new id nothing has registered.
+
 **A `threw` is not necessarily in `resolve`.** A move is appended to the record *before* it is
 resolved, so a throw inside `resolve` leaves the offending move last. If every recorded move replays
 cleanly, the throw is in the AI **choosing the next move**: replay to the end, then call the AI on the

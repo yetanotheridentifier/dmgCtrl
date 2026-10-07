@@ -633,8 +633,17 @@ listeners stay silent too.
   leaves play (CR 33.4); `rescueCaptured` frees one named card from a specific guardian (Unexpected
   Escape, Cad Bane's On Attack). Both funnel through `enterCapturedCard`, which is `unitPlaySites.test.ts`'s
   one door for this: exhausted, in its own arena, entering play but not *played* — no When Played, no
-  cost, no Shielded shield token, no Ambush. `discardCaptured` sends one named card to its own owner's
-  discard instead (Altering the Deal).
+  cost, no Shielded shield token, no Ambush. It enters ready instead where a unit on the side it returns
+  to has `rescuedEnterReady` (DJ's deployed side: "Friendly units that are rescued enter play ready").
+  `discardCaptured` sends one named card to its own owner's discard instead (Altering the Deal).
+- **A scheduled rescue.** Arrest's "at the start of the regroup phase, its owner rescues it" is a
+  `DelayedEffect` naming the card by `capturedCardId`, since a captured card has no instance id; copies of
+  one card under one guardian are indistinguishable, so `rescueCaptured` taking the first is exact. It is
+  left only when the base actually holds the card (a token is set aside, a protected unit is never taken).
+- **Playing a captured card.** `captured` is a `playCardFrom` zone: every card held under a unit the
+  player controls, unit by unit. Played through `playFromZone` like any other zone, so it is a real play
+  (recorded, When Played fired), and the card keeps its own owner, so an enemy card played this way is
+  `controlUntil: 'permanent'` and goes to its owner's pile when it leaves play (Dryden Vos).
 - **Protection.** `protectedFromEnemyAbility` ("Enemy ability protection" below) is read for the
   `'capture'` action, only when the capturing side differs from the target's own controller — the
   printed text is always "can't be captured **by enemy card abilities**", so a unit may still capture
@@ -646,11 +655,19 @@ listeners stay silent too.
   `captureTargetGuardianWp`: two ordinary `selectUnitThen` picks chained through `IfYouDo`/`step`/`unit`,
   the same way `unitDealsWp` chains its dealer-then-target — no new choice kind, and no new primitive.
   `appendCaptured` is the one door that writes a card under a guardian (`captureUnit`, `baseCapturesUnit`,
-  and Bothan-5's own discard-pile capture all go through it). Still on the follow-up ticket named in
-  `planned-work.md`: a budgeted multi-target capture ("up to 3 units with 8 or less combined remaining
-  HP", or "any number of guardians, each capturing its own target"), a capture that must land before an
-  embedded play's own When Played, a base guardian with a scheduled rescue, and playing a captured card
-  outright.
+  and Bothan-5's own discard-pile capture all go through it). Every capture card is built.
+- **Several targets, or several guardians.** A budgeted capture ("any number of enemy non-leader units
+  with a total of 7 or less remaining HP", "up to 3 ... 8 or less") is `budgetCapture`: one optional
+  `selectUnitThen` pick at a time, each offering only the units that still fit what is left of the
+  budget, the picks so far carried in the step. Nothing is captured until the picks stop (Done, the cap,
+  or nothing left fits), so every pick's remaining HP is read off the same board. "Choose any number of
+  friendly units. Each of those units captures an enemy non-leader unit in the same arena" (Finalizer)
+  is a loop of guardian-then-target pairs instead: the guardian pick is optional and offers only unused
+  friendly units with something in their arena to capture, and its target pick is mandatory.
+- **A capture inside a play.** "Play a unit from your hand ... The chosen unit captures it. (When Played
+  abilities resolve after the unit is captured.)" (DJ) is `playUnitFromHand.thenCaptureBy`: the capture
+  lands as part of the play while the unit's arrival abilities are still queued, the same ordering
+  `thenDefeatIt` gives Maul's defeat, so a When Played about the unit itself finds it gone.
 
 ## Enemy ability protection
 
@@ -723,6 +740,11 @@ one is always optional whatever its printed wording says.
   and Overwhelm, Krrsantan's When Played, Bossk's leader front) or grant it conditionally
   (Hunter of the Haxion Brood's Shielded, granted the same way Privateer Scyk's is: a live
   `conditionalKeywords` read at entry, not the printed keyword).
+- **A Bounty granted for the phase.** "Choose a unit. For this phase, it gains: 'Bounty - \<reward\>.'"
+  (Jabba the Hutt's two Actions, The Client) is `grantBountyForPhase`: a lasting effect giving the unit
+  the Bounty keyword and, through `abilityCardIds`, a carrier card (`GRANT_*`) whose own `bounty` ability
+  is the reward. Lasting effects outlive the unit leaving play until the phase ends, so the granted
+  ability is collected at a defeat or a capture exactly as a printed one is.
 - **Rewards reuse the When Played helpers.** Every reward is written with the same builders a When
   Played ability uses (`damageChoice`, `healChoice`, `shieldChoice`, `targetChoice`, `expUpTo`,
   `readyResource`) and wrapped in `bounty()`, which remaps a `whenPlayed`-shaped definition's trigger

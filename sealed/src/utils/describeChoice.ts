@@ -21,6 +21,7 @@ export function playFromZoneName(zone: PlayFromZone): string {
     case 'anyDiscard': return 'either discard pile'
     case 'handOrDiscard': return 'your hand or discard pile'
     case 'handOrAnyDiscard': return 'your hand or either discard pile'
+    case 'captured': return 'the cards your units are guarding'
   }
 }
 

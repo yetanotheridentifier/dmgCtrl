@@ -9,7 +9,7 @@ import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, 
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, discardCards, discardTaken, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, returnControlledResources, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, forceUse } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, discardCards, discardTaken, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, returnControlledResources, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, captureUnit, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, forceUse } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, cardHasTrait, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
@@ -457,8 +457,11 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
  * ability can read it (Weequay Pirate: "if no resources were paid to play this unit"). The caller knows
  * it and the board no longer does, since payment happens before the unit exists. It defaults to 0, which
  * is what every free-play door pays.
+ *
+ * `fate` is what the ability playing the unit does to it before its own When Played resolves: defeats
+ * it (Maul) or has another unit capture it (DJ).
  */
-function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0, cardOwner?: PlayerId, exploited?: Exploited, how: HowPlayed = PLAYED_ELSEWHERE, defeatOnEntry = false): GameState {
+function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0, cardOwner?: PlayerId, exploited?: Exploited, how: HowPlayed = PLAYED_ELSEWHERE, fate?: EntryFate): GameState {
   // First, after the cost, so "first X each phase" sees this one as the first and nothing below reads
   // a record that is missing it.
   state = recordCardPlayed(state, owner, cardId)
@@ -554,13 +557,17 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // The units exploited to pay for it trigger in this same batch (CR 7.5.16.d).
   const keywordCtx = ready === true || grantEntersReady ? { ambushStaysReady: true } : undefined
   const arrivals = [...(exploited?.owed ?? []), ...collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities, how, exploited?.borrowed, keywordCtx)]
-  if (defeatOnEntry) {
+  if (fate) {
     // "Play a unit from your hand … Then, defeat it. (When Played abilities resolve after the unit is
-    // defeated.)" (Maul). The defeat is part of the ability that played it, so it happens while the
-    // arrival's abilities are still owed: they are queued rather than fired, and the defeat's own batch
-    // nests under them (CR 7.6.11) and drains first. Nothing the unit's When Played does to itself can
-    // land, which is exactly what the reminder text is there to say.
-    next = defeatUnit(enqueueTriggers(next, arrivals), newUnit.instanceId)
+    // defeated.)" (Maul), and "The chosen unit captures it. (When Played abilities resolve after the
+    // unit is captured.)" (DJ). Either is part of the ability that played it, so it happens while the
+    // arrival's abilities are still owed: they are queued rather than fired, and the defeat's or the
+    // capture's own batch nests under them (CR 7.6.11) and drains first. Nothing the unit's When Played
+    // does to itself can land, which is exactly what the reminder text is there to say.
+    const owed = enqueueTriggers(next, arrivals)
+    // A capture fires only what it triggers, so the drain that resolves the arrival's own abilities is
+    // made here; a defeat makes its own.
+    next = 'defeat' in fate ? defeatUnit(owed, newUnit.instanceId) : drainTriggers(captureUnit(owed, fate.capturedBy, newUnit.instanceId))
   } else {
     next = fireBatch(next, arrivals)
   }
@@ -573,6 +580,9 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
  * arriving gains (Vernestra Rwoh), rather than units it defeated.
  */
 interface Exploited { owed: PendingTrigger[]; powers: number[]; borrowed?: string[] }
+
+/** What the ability playing a unit does to it before its own When Played resolves. */
+type EntryFate = { defeat: true } | { capturedBy: string }
 
 /**
  * Everything that triggers off a unit arriving, as one batch: any upgrades it entered with attaching
@@ -858,6 +868,19 @@ function removeFromZone(state: GameState, controller: PlayerId, zone: PlayFromZo
     case 'handOrResources': return index < p.hand.length
       ? updatePlayer(state, owner, { hand: drop(p.hand, index) })
       : updatePlayer(state, owner, { resources: p.resources.filter((_, i) => i !== index - p.hand.length) })
+    case 'captured': {
+      // Off the guardian holding it: the zone lists each friendly unit's captured cards in turn.
+      let rest = index
+      for (const u of state.players[controller].units) {
+        const held = u.captured ?? []
+        if (rest < held.length) {
+          const left = held.filter((_, i) => i !== rest)
+          return updatePlayer(state, controller, { units: state.players[controller].units.map(x => (x.instanceId === u.instanceId ? { ...x, captured: left } : x)) })
+        }
+        rest -= held.length
+      }
+      return state
+    }
   }
 }
 
@@ -2492,7 +2515,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = updatePlayer(next, choice.controller, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
         // `playUnitCard` names the new unit from the counter it is about to consume, so this is its id.
         const enteredId = `u${next.instanceCounter}`
-        next = playUnitCard(next, choice.controller, cardId!, choice.entersReady, cost, undefined, undefined, PLAYED_FROM_HAND, choice.thenDefeatIt)
+        const fate: EntryFate | undefined = choice.thenDefeatIt ? { defeat: true } : choice.thenCaptureBy ? { capturedBy: choice.thenCaptureBy } : undefined
+        next = playUnitCard(next, choice.controller, cardId!, choice.entersReady, cost, undefined, undefined, PLAYED_FROM_HAND, fate)
         // "Deal 4 damage to it" (Reckless Landing) — the unit just played, which can only be
         // addressed now that it is on the board.
         if (choice.thenDamageIt) next = dealDamageToUnit(next, enteredId, choice.thenDamageIt)

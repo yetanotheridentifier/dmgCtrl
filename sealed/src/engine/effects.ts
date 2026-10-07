@@ -973,7 +973,8 @@ export function collectLeavesPlay(state: GameState, unit: UnitState, controller:
 
 /**
  * Bring one captured card back into play (CR 33.3), under its OWN owner's control — not necessarily
- * the guardian's controller, since an enemy unit can be captured. Exhausted, in its own arena. It is
+ * the guardian's controller, since an enemy unit can be captured. Exhausted (ready where that side
+ * has a `rescuedEnterReady` card in play), in its own arena. It is
  * not being *played*, so nothing that keys off playing happens: no "When Played" (or play/create)
  * trigger, no Shielded shield token, no Ambush attack, and no cost. It IS entering play, though
  * (CR 7.1: a card enters play when it moves from an out-of-play zone to an in-play zone), so it
@@ -984,6 +985,8 @@ function enterCapturedCard(state: GameState, captured: CapturedCard): GameState 
   const { cardId, owner } = captured
   const card = state.cards[cardId]
   const instanceId = `u${state.instanceCounter}`
+  // "Friendly units that are rescued enter play ready" (DJ), read off the side it returns to.
+  const ready = state.players[owner].units.some(u => abilityCardIds(state, u).some(id => getCardDefinition(id)?.rescuedEnterReady?.(state, u) ?? false))
   let next: GameState = {
     ...state,
     instanceCounter: state.instanceCounter + 1,
@@ -996,7 +999,7 @@ function enterCapturedCard(state: GameState, captured: CapturedCard): GameState 
           cardId,
           arena: card?.arena ?? 'ground',
           damage: 0,
-          exhausted: true, // rescued units arrive exhausted
+          exhausted: !ready, // rescued units arrive exhausted unless an ability says otherwise
           isLeader: false,
           upgrades: [],
         }],
@@ -1049,10 +1052,12 @@ export function appendCaptured(state: GameState, holder: CaptureHolder, captured
  * On Attack, and any other targeted rescue). No-op if `holder` isn't guarding that card. Matches the
  * first entry with this `cardId`: two captured copies of the same non-unique card under one guardian
  * are otherwise indistinguishable, which is the same "first match" the discard pile already lives with.
+ * `owner` narrows it to a card that player owns ("a card they own", Cad Bane), since one guardian can
+ * hold copies of one card from both sides.
  */
-export function rescueCaptured(state: GameState, holder: CaptureHolder, cardId: string): GameState {
+export function rescueCaptured(state: GameState, holder: CaptureHolder, cardId: string, owner?: PlayerId): GameState {
   const list = capturedListAt(state, holder)
-  const idx = list.findIndex(c => c.cardId === cardId)
+  const idx = list.findIndex(c => c.cardId === cardId && (owner === undefined || c.owner === owner))
   if (idx === -1) return state
   const next = setCapturedListAt(state, holder, [...list.slice(0, idx), ...list.slice(idx + 1)])
   return enterCapturedCard(next, list[idx])

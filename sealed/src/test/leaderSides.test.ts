@@ -65,10 +65,13 @@ const SHIPPED = [
  *
  * SEC_001 Chancellor Palpatine is built on both sides and covered with the rest of Plot, in
  * `plot.test.ts` (front) and `plot2.test.ts` (back).
+ *
+ * SHD_006 Jabba the Hutt and SEC_018 DJ are built on both sides and covered with the last capture
+ * cards, in `captureCards3.test.ts`.
  */
 // The JTL Pilot leaders lifted from here have shipped and are covered in `pilotLeaders.test.ts`.
 const LIFTED = [
-  'TWI_017', 'SHD_006', 'LAW_017',
+  'TWI_017', 'LAW_017',
 ]
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
