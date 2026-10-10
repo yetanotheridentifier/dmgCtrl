@@ -52,28 +52,24 @@ const SHIPPED = [
  * Ren) to playing a card out of a discard pile. All of those have since shipped, so those leaders
  * are built and covered with the group that unblocked them.
  *
- * SHD_010 Bossk is neither: his front (Action: deal 1 damage to a unit with a Bounty, may buff it)
- * is built and covered in `bountyCards.test.ts`, but his back ("When you collect a BOUNTY: you may
- * collect that BOUNTY again") needs a new primitive nothing else here needs, so this file's
- * both-sides check below does not apply to him — he is neither SHIPPED (not both sides) nor LIFTED
- * (his front IS registered).
+ * SHD_010 Bossk is built on both sides and covered elsewhere: his front (Action: deal 1 damage to a
+ * unit with a Bounty, may buff it) in `bountyCards.test.ts`, and his back ("When you collect a
+ * BOUNTY: you may collect that BOUNTY again") with the cards that use an ability again, in
+ * `useAgain.test.ts`.
  *
- * SEC_012 Cassian Andor is the same shape in reverse: his BACK ("can't be defeated by enemy card
- * abilities" while you have the initiative) is built and covered in `enemyAbilityCards.test.ts`
- * (#708), but his front needs ability damage folded into `dealtBaseCombatDamageThisPhase` (#690,
- * open), so he too is neither SHIPPED nor LIFTED.
+ * SEC_012 Cassian Andor's back ("can't be defeated by enemy card abilities" while you have the
+ * initiative) is covered in `enemyAbilityCards.test.ts`.
  *
  * SEC_001 Chancellor Palpatine is built on both sides and covered with the rest of Plot, in
  * `plot.test.ts` (front) and `plot2.test.ts` (back).
  *
  * SHD_006 Jabba the Hutt and SEC_018 DJ are built on both sides and covered with the last capture
  * cards, in `captureCards3.test.ts`, and TWI_017 Chancellor Palpatine // Darth Sidious, a leader that
- * flips rather than deploys, with the last one-offs in `oneOffCards3.test.ts`.
+ * flips rather than deploys, with the last one-offs in `oneOffCards3.test.ts`. LAW_017 Han Solo,
+ * LAW_007 Boba Fett and SEC_016 Padmé Amidala are in `oneOffCards4.test.ts`.
  */
 // The JTL Pilot leaders lifted from here have shipped and are covered in `pilotLeaders.test.ts`.
-const LIFTED = [
-  'LAW_017',
-]
+const LIFTED: string[] = []
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
 const real = (id: string): EngineCard => {
