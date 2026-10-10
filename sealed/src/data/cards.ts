@@ -162,17 +162,28 @@ export async function getCard(set: string, number: string): Promise<SwuCard> {
   // fetch") — e.g. Cloudflare's 1101 worker-exception page, which carries no
   // CORS headers. Treat a rejection exactly like an error status: try the
   // fallback source before giving up.
-  let primaryStatus: string
-  try {
-    const response = await fetch(`${SWU_DB_API}/cards/${set.toUpperCase()}/${number}`)
-    if (response.ok) {
-      const json = (await response.json()) as SwuCard
-      await cacheCard(id, json)
-      return json
+  //
+  // SWUDB files most sets under zero-padded numbers and answers either spelling (SOR/5 and SOR/005
+  // are the same card), but a few sets are filed unpadded and answer only that (IBH/52 is a card,
+  // IBH/052 is a 404; TS26 likewise), while deck lists pad every number. So a 404 on a padded number
+  // is asked once more without the padding. The card comes back under the number its set uses, which
+  // is the id the engine knows it by: the caller files the deck's spelling under it.
+  let primaryStatus = ''
+  const unpadded = number.replace(/^0+(?=.)/, '')
+  for (const candidate of unpadded === number ? [number] : [number, unpadded]) {
+    try {
+      const response = await fetch(`${SWU_DB_API}/cards/${set.toUpperCase()}/${candidate}`)
+      if (response.ok) {
+        const json = (await response.json()) as SwuCard
+        await cacheCard(id, json)
+        return json
+      }
+      primaryStatus = String(response.status)
+      if (response.status !== 404) break
+    } catch (err) {
+      primaryStatus = `unreachable: ${err instanceof Error ? err.message : String(err)}`
+      break
     }
-    primaryStatus = String(response.status)
-  } catch (err) {
-    primaryStatus = `unreachable: ${err instanceof Error ? err.message : String(err)}`
   }
 
   logger.warn('SWUDB card fetch failed, trying swuapi fallback', { id, primaryStatus })

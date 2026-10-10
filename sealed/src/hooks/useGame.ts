@@ -237,11 +237,16 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
           for (const c of deck.cards) ids.add(c.id)
         }
 
+        // A card is filed under the number its source serves, which is not always the deck's spelling
+        // of it (a deck's IBH_052 is served as IBH_52), so each deck id remembers the id it came back as.
         const cards: SwuCard[] = []
+        const servedAs = new Map<string, string>()
         for (const id of ids) {
           const ref = cardRefFromId(id)
           if (!ref) throw new Error(`Malformed card id in deck: ${id}`)
-          cards.push(await getCard(ref.set, ref.number))
+          const card = await getCard(ref.set, ref.number)
+          cards.push(card)
+          servedAs.set(id, cardId(card.Set, card.Number))
         }
 
         if (cancelled) return
@@ -259,7 +264,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
           return target ? asCardId(card, target) : card
         })
 
-        const toCanonical = (id: string) => canonical.get(id)
+        const toCanonical = (id: string) => canonical.get(servedAs.get(id) ?? id)
         let state = initGame(canonicalDeck(playerDeck, toCanonical), canonicalDeck(opponentDeck, toCanonical), buildCardDb(canonicalCards), {
           firstPlayer: options.firstPlayer ?? (rng() < 0.5 ? 'player' : 'opponent'),
           shuffle,
