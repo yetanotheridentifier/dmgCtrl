@@ -120,6 +120,29 @@ describe('useGame', () => {
     expect(result.current.errorDetail).toMatch(/TST_404/)
   })
 
+  // The reported load: the deck list names IBH_052, SWUDB serves the card as number 52, and the
+  // engine knows it as IBH_52. The game starts, and the deck plays the card under the served id.
+  it('starts a game from a deck that names a card with a zero-padded number the source serves unpadded', async () => {
+    const watchThis: SwuCard = { Set: 'IBH', Number: '52', Name: 'Watch This', Type: 'Event', Cost: '6', Aspects: ['Cunning'], Traits: ['GAMBIT'], VariantType: 'Normal' }
+    vi.stubGlobal('fetch', vi.fn((url: string) =>
+      Promise.resolve(
+        String(url).endsWith('/cards/IBH/52')
+          ? { ok: true, status: 200, json: () => Promise.resolve(watchThis) }
+          : { ok: false, status: 404, json: () => Promise.resolve({ cards: [] }) },
+      ),
+    ))
+    const deck = { ...DECK, cards: [{ id: 'IBH_052', count: 30 }] }
+    const { result } = renderHook(() => useGame(deck, deck, OPTS))
+    await waitFor(() => expect(result.current.status).not.toBe('loading'))
+
+    expect(result.current.errorDetail).toBeNull()
+    expect(result.current.status).toBe('playing')
+    const game = result.current.gameState!
+    expect(game.players.player.hand).toEqual(Array(6).fill('IBH_52'))
+    expect(game.cards.IBH_52?.name).toBe('Watch This')
+    expect(result.current.unresolvedPrintings).toEqual([])
+  })
+
   it('acting as the human triggers the AI to take its turn', async () => {
     const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
     await waitFor(() => expect(result.current.status).toBe('playing'))

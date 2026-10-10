@@ -18,6 +18,21 @@ const VADER = {
   FrontArt: 'https://cdn.swu-db.com/images/cards/SOR/010.png',
 }
 
+// As served by worker.dmgctrl.app/cards/IBH/52: the number comes back unpadded.
+const WATCH_THIS = {
+  Set: 'IBH',
+  Number: '52',
+  Name: 'Watch This',
+  Type: 'Event',
+  Aspects: ['Cunning'],
+  Traits: ['GAMBIT'],
+  Cost: '6',
+  FrontText: "Return a non-leader unit that costs 6 or less to its owner's hand. Exhaust each other enemy unit in the same arena.",
+  DoubleSided: false,
+  Unique: false,
+  VariantType: 'Normal',
+}
+
 function mockFetchOk(json: unknown) {
   return vi.fn().mockResolvedValue({
     ok: true,
@@ -89,6 +104,42 @@ describe('getCard hydration', () => {
     await getCard('sor', '010')
 
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  // The reported load: a deck list names IBH_052, and SWUDB files that set's cards unpadded, so
+  // /cards/IBH/052 is a 404 while /cards/IBH/52 is the card (the same holds for TS26).
+  it('retries a 404 without the leading zeros, for a set whose numbers are served unpadded', async () => {
+    const fetchMock = vi.fn((url: string) =>
+      Promise.resolve(
+        url === `${SWU_DB_API}/cards/IBH/52`
+          ? { ok: true, status: 200, json: () => Promise.resolve(WATCH_THIS) }
+          : { ok: false, status: 404, json: () => Promise.resolve({ error: 'No card found for that set and card number.' }) },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const card = await getCard('IBH', '052')
+
+    expect(card.Name).toBe('Watch This')
+    expect(card.Number).toBe('52')
+    expect(fetchMock.mock.calls.map(c => c[0])).toEqual([`${SWU_DB_API}/cards/IBH/052`, `${SWU_DB_API}/cards/IBH/52`])
+
+    // Cached under the id the deck asked for, so the next load is local.
+    fetchMock.mockClear()
+    expect((await getCard('IBH', '052')).Name).toBe('Watch This')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does not retry an error that is not a 404, or a number with no leading zero', async () => {
+    const down = vi.fn().mockResolvedValue({ ok: false, status: 502, json: () => Promise.resolve({ cards: [] }) })
+    vi.stubGlobal('fetch', down)
+    await expect(getCard('IBH', '052')).rejects.toThrow(/IBH_052/)
+    expect(down.mock.calls.map(c => c[0])).not.toContain(`${SWU_DB_API}/cards/IBH/52`)
+
+    const missing = vi.fn().mockResolvedValue({ ok: false, status: 404, json: () => Promise.resolve({ cards: [] }) })
+    vi.stubGlobal('fetch', missing)
+    await expect(getCard('IBH', '999')).rejects.toThrow(/IBH_999/)
+    expect(missing.mock.calls.filter(c => String(c[0]).startsWith(SWU_DB_API))).toHaveLength(1)
   })
 
   it('throws an error naming the card when both sources fail, caching nothing', async () => {

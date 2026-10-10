@@ -383,7 +383,11 @@ message (e.g. `Card ASH_020 could not be loaded (SWUDB 502, no swuapi match)`),
 and the log records each stage. Card hydration tries, in order:
 
 1. IndexedDB cache
-2. SWUDB card detail via the worker (`worker.dmgctrl.app/cards/{set}/{number}`)
+2. SWUDB card detail via the worker (`worker.dmgctrl.app/cards/{set}/{number}`). A 404 on a
+   zero-padded number is asked once more without the padding: SWUDB files a few sets unpadded
+   (`IBH/52` is a card and `IBH/052` is a 404, and TS26 is the same), while deck lists pad every
+   number. The card is cached under the deck's spelling and plays under the id it is served as
+   (`IBH_52`), which is the id its abilities are registered against
 3. swuapi.com Base list fallback. SWUDB's detail endpoint is known to 502 on
    some base ranges (observed: all ASH bases); swuapi is the same source the
    main app uses for base data
