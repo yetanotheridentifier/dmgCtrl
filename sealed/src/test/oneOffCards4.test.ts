@@ -37,7 +37,7 @@ const CARDS_BUILT = ['LAW_053', 'SEC_131', 'SEC_143', 'LOF_033', 'SHD_058', 'SHD
 const LEADERS_BUILT = ['LAW_007', 'LAW_017', 'SEC_016']
 // Cards already built that these tests lean on: a Bounty unit, a Bounty upgrade, a Disclose unit,
 // Malakili, a search for an Underworld unit, a return of an Underworld card, Vuutun Palaa.
-const PROPS = ['SHD_027', 'SHD_125', 'SEC_062', 'LAW_212', 'LAW_136', 'SHD_260', 'SEC_122', 'LOF_076']
+const PROPS = ['SHD_027', 'SHD_125', 'SEC_062', 'SEC_184', 'LAW_212', 'LAW_136', 'SHD_260', 'SEC_122', 'LOF_076']
 const src = (id: string, over: Partial<EngineCard> = {}) => card({ id, type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 3, ...over })
 const F: Record<string, EngineCard> = {
   ...CARDS,
@@ -72,8 +72,6 @@ const board = (mine: Side = {}, theirs: Side = {}, over: Partial<GameState> = {}
   state({ cards: F, players: { player: rich(mine), opponent: rich(theirs) }, ...over })
 const all = (s: GameState) => [...s.players.player.units, ...s.players.opponent.units]
 const U = (s: GameState, id: string) => all(s).find(u => u.instanceId === id)
-const controllerOf = (s: GameState, id: string): PlayerId | undefined =>
-  s.players.player.units.some(u => u.instanceId === id) ? 'player' : s.players.opponent.units.some(u => u.instanceId === id) ? 'opponent' : undefined
 const choice = (s: GameState): PendingChoice => {
   expect(s.pendingChoices?.length ?? 0, 'a choice is raised').toBeGreaterThan(0)
   return s.pendingChoices![0]
@@ -95,7 +93,8 @@ const settle = (s: GameState, answer: (c: PendingChoice) => Extra | 'skip' | und
   for (let i = 0; i < 40 && (next.pendingChoices?.length ?? 0) > 0; i++) {
     const c = next.pendingChoices![0]
     const a = answer(c)
-    next = a === 'skip' ? skip(next) : a ? accept(next, a) : resolve(next, legalMoves(next)[0])
+    // Asked as the player the choice belongs to: a board built by hand has not handed them the turn.
+    next = a === 'skip' ? skip(next) : a ? accept(next, a) : resolve(next, legalMoves({ ...next, activePlayer: c.controller })[0])
   }
   noChoice(next)
   return next
@@ -155,6 +154,16 @@ describe('every card in every set is built or plays as printed', () => {
   it.each(SET_PROGRESS.map(s => s.code))('%s has no card the triage holds back that the manifest does not list', code => {
     const unbuilt = triage(poolFor([code])).triaged.map(c => c.id).filter(id => !credited.has(id))
     expect(unbuilt).toEqual([])
+  })
+
+  it.each(SET_PROGRESS.map(s => s.code))('%s counts as many cards done as it prints, type by type', code => {
+    const set = SET_PROGRESS.find(s => s.code === code)!
+    expect({ ...set.done, tokens: 0 }).toEqual({ ...set.total, tokens: 0 })
+  })
+
+  it('files Snapshot Reflexes as the upgrade it is printed as, in both of its sets', () => {
+    expect(IMPLEMENTED_UPGRADES.some(c => c.id === 'SOR_215')).toBe(true)
+    expect(IMPLEMENTED_EVENTS.some(c => c.id === 'SOR_215')).toBe(false)
   })
 })
 
@@ -309,6 +318,26 @@ describe('SEC_016 Padmé Amidala: 1 damage to a unit when you reveal or discard 
     expect(done.players.player.leader.exhausted).toBe(true)
   })
 
+  it('front: revealing an event for a card that asks for one does the same', () => {
+    // ISB Agent: "You may reveal an event from your hand. If you do, deal 1 damage to a unit."
+    const revealed = accept(play(front({ hand: ['SEC_184', 'TST_E1'] }, { units: [unit('e', 'TOUGH'), unit('e2', 'TOUGH')] }), 'SEC_184'))
+    let asked = 0
+    const done = settle(revealed, c => {
+      if (c.kind === 'mayPayThen') { asked++; return {} }
+      // Her own damage goes on one unit and the ISB Agent's on the other.
+      return c.kind === 'selectDamageTarget' ? { targetInstanceId: c.id.startsWith('SEC_016') ? 'e' : 'e2' } : undefined
+    })
+    expect(asked).toBe(1)
+    expect([U(done, 'e')!.damage, U(done, 'e2')!.damage]).toEqual([1, 1])
+    expect(done.players.player.hand).toEqual(['TST_E1'])
+  })
+
+  it("front: an opponent's reveal is not yours", () => {
+    const theirTurn: GameState = { ...front({}, { hand: ['SEC_184', 'TST_E1'], units: [unit('e', 'TOUGH')] }), activePlayer: 'opponent' }
+    const s = accept(play(theirTurn, 'SEC_184', 'opponent'))
+    expect((s.pendingChoices ?? []).every(c => c.kind !== 'mayPayThen')).toBe(true)
+  })
+
   it('front: a declined disclose reveals nothing', () => {
     const s = skip(play(front({ hand: ['SEC_062', 'VIG'] }), 'SEC_062'))
     noChoice(s)
@@ -457,7 +486,8 @@ describe('SHD_161 Stolen Landspeeder: played from hand it goes to the opponent, 
   })
 
   it('Bounty: an opponent who does not own it gets nothing', () => {
-    const done = settle(defeatUnit(board({ units: [unit('ls', 'SHD_161')] }), 'ls'))
+    const done = defeatUnit(board({ units: [unit('ls', 'SHD_161')] }), 'ls')
+    noChoice(done)
     expect(all(done)).toEqual([])
     expect(done.players.player.discard).toContain('SHD_161')
   })
@@ -493,6 +523,8 @@ describe("SHD_206 Spare the Target: return an enemy non-leader unit to its owner
 
 describe('SHD_228 Bounty Posting: search your deck for a Bounty upgrade, draw it, and you may play it', () => {
   const s = () => board({ hand: ['SHD_228'], deck: ['PLAIN', 'UPG', 'SHD_125', 'PLAIN'], units: [unit('f', 'PLAIN')] }, { units: [unit('e', 'PLAIN')] })
+  // What the event itself costs this player, aspect penalty included.
+  const eventCost = effectiveCost(s(), 'player', F.SHD_228)
 
   it('offers only the Bounty upgrades in the whole deck, and draws the one picked', () => {
     const p = play(s(), 'SHD_228')
@@ -512,15 +544,14 @@ describe('SHD_228 Bounty Posting: search your deck for a Bounty upgrade, draw it
     const done = settle(drawn, x => (x.kind === 'playCardFrom' ? { optionIndex: 0 } : x.kind === 'attachPlayedCard' ? { targetInstanceId: 'e' } : undefined))
     expect(U(done, 'e')!.upgrades.map(u => u.cardId)).toEqual(['SHD_125'])
     expect(done.players.player.hand).toEqual([])
-    // 1 for the event and 2 for the upgrade.
-    expect(readyResources(done)).toBe(20 - 1 - (F.SHD_125.cost ?? 0))
+    expect(readyResources(done)).toBe(20 - eventCost - effectiveCost(s(), 'player', F.SHD_125))
   })
 
   it('leaves it in hand when declined', () => {
     const done = skip(accept(play(s(), 'SHD_228'), { deckIndex: 2 }))
     noChoice(done)
     expect(done.players.player.hand).toEqual(['SHD_125'])
-    expect(readyResources(done)).toBe(19)
+    expect(readyResources(done)).toBe(20 - eventCost)
   })
 })
 

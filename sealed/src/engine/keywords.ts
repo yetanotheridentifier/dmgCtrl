@@ -309,6 +309,10 @@ export function unitTraits(state: GameState, unit: UnitState): string[] {
     out.push(...(def?.grantedTraits?.(state, unit) ?? []))
     for (const t of def?.removedTraits?.(state, unit) ?? []) removed.add(t.toLowerCase())
   }
+  // A trait this one unit has lost for the phase (Nameless Terror: "each enemy unit loses the Force trait").
+  for (const e of state.lastingEffects ?? []) {
+    if (e.removeTraits && e.targetInstanceId === unit.instanceId) for (const t of e.removeTraits) removed.add(t.toLowerCase())
+  }
   return removed.size > 0 ? out.filter(t => !removed.has(t.toLowerCase())) : out
 }
 

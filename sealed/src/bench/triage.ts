@@ -1,5 +1,6 @@
 import type { SwuCard } from '../data/cards'
 import { reprintCanonicalId } from '../data/reprints'
+import { CARD_DATA_CORRECTIONS } from '../engine/cardDataCorrections'
 
 /**
  * Card-pool triage: classify a set by what the engine cannot yet express.
@@ -51,6 +52,7 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
   // "Deals combat damage (to a unit while attacking)" is `onAttackEnd` with the combat damage the
   // attack dealt (Heroic Sacrifice, Dorsal Turret), and "when this unit is attacked" is `onDefense`.
   'when this unit is dealt damage and survives', 'when a friendly unit is dealt damage and survives',
+  'when damage is dealt to this unit',
   'when this unit deals combat damage to a base', "when this unit deals combat damage to an opponent's base",
   'when a friendly unit deals combat damage to a base', 'when an enemy unit deals combat damage to your base',
   'when this unit deals combat damage', 'when this unit deals combat damage to a unit while attacking',
@@ -226,13 +228,25 @@ export function identityKey(card: Pick<SwuCard, 'Type' | 'Name' | 'Subtitle'>): 
 }
 
 /**
+ * A unit's keywords as the engine plays them: the source's list, or the corrected one where the source
+ * has it wrong (`CARD_DATA_CORRECTIONS`: Sullustan Sapper is listed with Shielded and prints
+ * Overwhelm). Read off the raw list, a corrected card's printed keyword looks like ability text and
+ * the card is held back for nothing. Units only: an upgrade's correction says whose keyword it is,
+ * not what the card prints.
+ */
+function keywordsOf(card: SwuCard): string[] {
+  const corrected = card.Type === 'Unit' ? CARD_DATA_CORRECTIONS[`${card.Set}_${card.Number}`]?.keywords : undefined
+  return corrected ? corrected.map(k => k.name) : card.Keywords ?? []
+}
+
+/**
  * Ability text left after removing keyword names and their parenthetical reminders. A keyword's own
  * numeral ("Raid 2") or bracketed cost ("Smuggle [C=4 Cunning]") is part of its printed name, not
  * separate ability text, so both are stripped alongside it.
  */
 export function residualAbility(card: SwuCard): string {
   let t = (card.FrontText ?? '').trim().replace(/\([^)]*\)/g, '')
-  for (const k of card.Keywords ?? []) t = t.replace(new RegExp(`\\b${k.trim()}\\b(\\s+\\d+)?(\\s*\\[[^\\]]*\\])?`, 'gi'), '')
+  for (const k of keywordsOf(card)) t = t.replace(new RegExp(`\\b${k.trim()}\\b(\\s+\\d+)?(\\s*\\[[^\\]]*\\])?`, 'gi'), '')
   return t.replace(/[\s.,]+/g, ' ').trim()
 }
 
@@ -291,7 +305,7 @@ export function triage(pool: SwuCard[]): TriageReport {
   for (const card of cards) {
     sets.add(card.Set)
     const text = (card.FrontText ?? '').trim()
-    const keywords = (card.Keywords ?? []).map(k => k.trim()).filter(Boolean)
+    const keywords = keywordsOf(card).map(k => k.trim()).filter(Boolean)
     const isLeader = card.Type === 'Leader'
     if (isLeader) leaders++
 

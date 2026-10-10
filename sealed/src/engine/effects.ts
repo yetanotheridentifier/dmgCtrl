@@ -1211,6 +1211,19 @@ export function discardTaken(state: GameState, owner: PlayerId, from: DiscardedF
 }
 
 /**
+ * **The one door for revealing cards out of a hand**: `player` has just shown `cardIds`, which stay
+ * where they are. Each call is one event, however many cards it showed ("when you reveal 1 or more
+ * cards from your hand", Padmé Amidala), heard by the revealing player's undeployed leader, base and
+ * units. Revealing nothing is not a reveal. A card revealed off a deck (a search, a look at the top
+ * card) does not come through here, and neither does a hand an opponent only looks at.
+ */
+export function revealedFromHand(state: GameState, player: PlayerId, cardIds: string[]): GameState {
+  if (cardIds.length === 0) return state
+  const ctx: TriggerContext = { reveal: { player, cardIds } }
+  return fireBatch(state, [...collectPlayerTriggers(state, 'whenReveal', player, ctx), ...collectUnitsTrigger(state, 'whenReveal', player, ctx)])
+}
+
+/**
  * Defeat EVERY `tokenCardId` token on a unit: the "it was spent" form (#419).
  *
  * A Shield soaking damage and an Advantage token finishing a combat are both DEFEATS, as each token
