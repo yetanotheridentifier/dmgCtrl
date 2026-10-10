@@ -5,6 +5,8 @@ import { CARD_WIDTH_PX, longEdge } from './cardSizing'
 import { useCardZoom } from './useCardZoom'
 import { CardZoomPopover } from './cardZoom'
 import { CardGridOverlay } from './cardGridOverlay'
+import { PILL_W, TOKEN_H, TOKEN_BORDER, TOKEN_SHADOW, PLAYER_TOKEN_SPEC } from './tokens'
+import type { PlayerTokenKind } from './tokens'
 
 /** Mat cards (deck/resources/discard/opponent-hand) are smaller than the hand. */
 export const MAT_CARD_PX = 84
@@ -70,21 +72,62 @@ function ResourceCounter({ count, exhausted, testid }: { count: number; exhauste
   )
 }
 
+/** One of a player's own tokens: the label pill a unit's tokens use, from `PLAYER_TOKEN_SPEC`. */
+function PlayerTokenPill({ kind, testid, title, children }: { kind: PlayerTokenKind; testid: string; title: string; children: ReactNode }) {
+  const spec = PLAYER_TOKEN_SPEC[kind]
+  return (
+    <span
+      data-testid={testid}
+      role="img"
+      aria-label={title}
+      className="flex items-center justify-center whitespace-nowrap select-none tabular-nums"
+      style={{
+        width: PILL_W,
+        height: TOKEN_H,
+        borderRadius: TOKEN_H / 2,
+        background: spec.background,
+        color: spec.ink,
+        fontSize: `${Math.round(TOKEN_H * 0.5)}px`,
+        fontWeight: 700,
+        lineHeight: 1,
+        border: TOKEN_BORDER,
+        boxShadow: TOKEN_SHADOW,
+      }}
+    >
+      {children}
+    </span>
+  )
+}
+
 /**
  * Resources as two statically-placed slots: a ready card showing the number of
  * available resources, and — once any are spent — an exhausted (turned) card
  * showing the number used. Ready + exhausted = total; the ready card disappears
  * at 0; the column width never changes.
+ *
+ * The tokens the player holds rather than a unit sit here too, as pills laid over the foot of the
+ * two slots like tokens on a card: the Credit tokens (with the count) and the Force token. They
+ * are out of the layout, so holding one moves nothing, and absent while none is held.
  */
-export function ResourceStack({ ready, exhausted }: { ready: number; exhausted: number }) {
+export function ResourceStack({ ready, exhausted, credits = 0, force = false, owner = 'player' }: { ready: number; exhausted: number; credits?: number; force?: boolean; owner?: PlayerId }) {
   return (
-    <div data-testid="resources" className="flex items-center gap-1">
+    <div data-testid="resources" className="relative flex items-center gap-1">
       <div style={{ width: MAT_CARD_PX }} className="flex justify-center">
         {ready > 0 && <ResourceCounter count={ready} testid="resources-ready" />}
       </div>
       <div style={{ width: longEdge(MAT_CARD_PX) }} className="flex justify-center">
         {exhausted > 0 && <ResourceCounter count={exhausted} exhausted testid="resources-exhausted" />}
       </div>
+      {(credits > 0 || force) && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center gap-1">
+          {credits > 0 && (
+            <PlayerTokenPill kind="credit" testid="credit-tokens" title={`${credits} Credit ${credits === 1 ? 'token' : 'tokens'}`}>Cred. {credits}</PlayerTokenPill>
+          )}
+          {force && (
+            <PlayerTokenPill kind="force" testid="force-token" title={`The Force is with ${owner === 'player' ? 'you' : 'the opponent'}`}>Force</PlayerTokenPill>
+          )}
+        </div>
+      )}
     </div>
   )
 }

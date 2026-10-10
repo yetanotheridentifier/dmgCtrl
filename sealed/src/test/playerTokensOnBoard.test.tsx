@@ -101,15 +101,19 @@ describe('the tokens a player holds, on the game screen', () => {
     expect(force('player')).toBeNull()
   })
 
-  it('counts a Credit token down as the paying step spends it, and drops the pill at none', async () => {
+  it('counts a Credit token down once the paying step has spent it', async () => {
     const user = await start(deck('TST_970', 'TST_971'))
     await user.click(screen.getByTestId('hand-card-0'))
     await waitFor(() => expect(credits('player')).toHaveTextContent('2'))
     // Three to pay with two resources: one token covers it, and Done leaves the other.
     await user.click(screen.getByTestId('hand-card-0'))
     await user.click(creditButtons()[0])
+    // A token picked is defeated when the step is finished, so the count holds until then.
+    expect(credits('player')).toHaveTextContent('2')
+    await user.click(screen.getByRole('button', { name: /^done$/i }))
     await waitFor(() => expect(credits('player')).toHaveTextContent('1'))
     expect(credits('player')).toHaveAccessibleName('1 Credit token')
+    expect(within(screen.getByTestId('player-ground-units')).queryAllByTestId(/^board-unit-u\d+$/)).toHaveLength(2)
   })
 
   it('shows your Force token in your bar', async () => {

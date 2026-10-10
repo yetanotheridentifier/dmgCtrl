@@ -41,6 +41,18 @@ export const TOKEN_SPEC: Record<TokenKind, { background: string; ink: string; wi
   weakness: { background: 'var(--color-token-weakness)', ink: 'var(--color-ink)', width: PILL_W, figures: { power: 'var(--color-ink)', hp: 'var(--color-ink)' } },
 }
 
+/**
+ * The tokens a player holds rather than a unit: Credit tokens (a count) and the Force token (one at
+ * most). They are drawn as the same pill as a unit's label tokens, in a player's bar instead of on
+ * a card, each in a colour no unit token uses.
+ */
+export type PlayerTokenKind = 'credit' | 'force'
+
+export const PLAYER_TOKEN_SPEC: Record<PlayerTokenKind, { background: string; ink: string }> = {
+  credit: { background: 'var(--color-token-credit)', ink: 'var(--color-ink)' },
+  force: { background: 'var(--color-token-force)', ink: 'var(--color-ink)' },
+}
+
 /** Weight of a stat pill's figures: bold, a step above the labels. */
 export const TOKEN_FIGURE_WEIGHT = 800
 

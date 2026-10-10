@@ -25,6 +25,8 @@
   --color-token-debuff: #3f3f46;     /* -X -Y off-card debuffs: dark grey */
   --color-token-experience: #22c55e; /* +N +N Experience: green */
   --color-token-weakness: #7e22ce;   /* -N -N Weakness: purple */
+  --color-token-credit: #c2410c;     /* Cred. N, in a player's bar: burnt orange */
+  --color-token-force: #0f766e;      /* Force, in a player's bar: teal */
   --color-token-ink-dark: #1a1200;   /* text on the light fills */
   --color-token-hp: #2563eb;         /* HP figure on a stat pill (power uses --color-red) */
 

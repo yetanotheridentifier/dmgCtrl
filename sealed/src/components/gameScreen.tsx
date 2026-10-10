@@ -35,6 +35,7 @@ import { useCardZoom } from './useCardZoom'
 import { CardRef, DescribedParts } from './cardRef'
 import { CardZoomPopover } from './cardZoom'
 import { DeckPile, ResourceStack, DiscardPile, OpponentHand, EmptySlot } from './mat'
+import { friendlyCreditTokens, hasForceToken } from '../engine/effects'
 
 interface Props {
   deck: SavedDeck
@@ -1176,7 +1177,7 @@ function OpponentBar({ state }: { state: GameState }) {
         <LeaderCard state={state} side="opponent" widthPx={CARD_WIDTH_PX} />
       </div>
       <div className="flex min-w-0 items-stretch justify-end gap-2">
-        <BarColumn label="Resources"><ResourceStack ready={ready} exhausted={exhausted} /></BarColumn>
+        <BarColumn label="Resources"><ResourceStack ready={ready} exhausted={exhausted} credits={friendlyCreditTokens(state, 'opponent')} force={hasForceToken(state, 'opponent')} owner="opponent" /></BarColumn>
         <BarColumn label="Deck"><DeckPile count={p.deck.length} /></BarColumn>
       </div>
     </div>
@@ -1196,7 +1197,7 @@ function PlayerBar({ state, hand, action }: { state: GameState; hand: ReactNode;
   return (
     <div data-testid="player-mat" className="px-2 py-2" style={cols}>
       <BarColumn label="Deck"><DeckPile count={p.deck.length} /></BarColumn>
-      <BarColumn label="Resources"><ResourceStack ready={ready} exhausted={exhausted} /></BarColumn>
+      <BarColumn label="Resources"><ResourceStack ready={ready} exhausted={exhausted} credits={friendlyCreditTokens(state, 'player')} force={hasForceToken(state, 'player')} owner="player" /></BarColumn>
       <BarColumn label="Hand">{hand}</BarColumn>
       <BarColumn label="Action">{action}</BarColumn>
       <BarColumn label="Discard"><DiscardPile state={state} side="player" /></BarColumn>
