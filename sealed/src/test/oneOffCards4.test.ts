@@ -7,6 +7,10 @@ import { createCreditTokens, discardCards, discardFromHand, friendlyCreditTokens
 import { normaliseCard } from '../engine/cardDb'
 import { poolFor } from '../bench/setPools'
 import { triage } from '../bench/triage'
+import { buildCoverageDecks } from '../bench/coverageDecks'
+import { sweepCardDb } from '../bench/sweep'
+import { playGame } from '../bench/selfPlay'
+import { randomAi } from '../ai/randomAi'
 import { getCardDefinition } from '../engine/abilities'
 import { IMPLEMENTED_EVENTS, IMPLEMENTED_LEADERS, IMPLEMENTED_UNITS, IMPLEMENTED_UPGRADES, IMPLEMENTED_BASES, SET_PROGRESS } from '../data/implementedCards'
 import { REPRINTS } from '../data/reprints'
@@ -575,6 +579,24 @@ describe('TS26_22 The Darksaber: Sentinel, and readies its unit when played with
     const s = board({ hand: ['TS26_22'], units: [unit('h', 'PLAIN', { exhausted: true }), unit('a', 'RAID'), unit('b', 'OVER')] }, { units: [unit('c', 'GRIT')] })
     expect(U(playOn(s, 'h'), 'h')!.exhausted).toBe(true)
   })
+})
+
+describe('whole games with The Darksaber (TS26) in the deck', () => {
+  // TS26 is too small to build sealed decks from, so the coverage sweep never decks its cards: these
+  // games put three copies into coverage decks of another set instead.
+  it('play to the end, with the card played', () => {
+    const cardDb = sweepCardDb(poolFor(['SHD', 'TS26']))
+    const decks = buildCoverageDecks(poolFor(['SHD']), 42).decks
+    let played = 0
+    for (let i = 0; i < 40; i++) {
+      const mine = { ...decks[i % decks.length], cards: [...decks[i % decks.length].cards, { id: 'TS26_22', count: 3 }] }
+      const theirs = decks[(i + 1) % decks.length]
+      const game = playGame({ deckPlayer: mine, deckOpponent: theirs, cardDb, aiPlayer: randomAi, aiOpponent: randomAi, seed: 200 + i, firstPlayer: i % 2 === 0 ? 'player' : 'opponent', trackCoverage: true })
+      expect(game.status, `game ${i}: ${game.dropReason}`).toBe('completed')
+      if (game.cardsPlayed.includes('TS26_22')) played++
+    }
+    expect(played).toBeGreaterThan(0)
+  }, 60_000)
 })
 
 describe('a trait one card gives another is read by every filter over cards out of play', () => {

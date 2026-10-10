@@ -1041,6 +1041,12 @@ The tool's model of the engine lives in three lists in `bench/triage.ts`: implem
 dispatched trigger points, and unexpressible mechanics. **They shrink as mechanics land.** When
 Experience tokens ship, delete that entry and every card it was blocking reclassifies itself.
 
+**A unit's keywords are read as the engine plays them**: the source's list, or the corrected one where
+`CARD_DATA_CORRECTIONS` says the source has it wrong. Sullustan Sapper is listed with Shielded and
+prints Overwhelm, and Droideka Security is listed with no keyword at all; read off the raw list, the
+printed keyword looks like ability text and a card that plays as printed is held back for nothing.
+An upgrade's correction is not applied, since it says whose keyword it is rather than what is printed.
+
 An unexpressible-mechanics pattern is checked against the card's text with every parenthetical
 stripped, the same reminder text `residualAbility` already treats as not-a-real-ability. A keyword's
 own reminder can name another mechanic as the trigger point it fires at without the card performing

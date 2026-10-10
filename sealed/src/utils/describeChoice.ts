@@ -432,6 +432,7 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
         return [`put units that cost ${choice.maxCost} or less from your discard pile on the bottom of your deck to play ${cardName(state, choice.cardId)} with their "When Played" abilities (${left} more at most), or Done`]
       }
       if (choice.droids) return [`exhaust friendly units to pay for ${cardName(state, choice.cardId)} as if they were resources, 1 each (${left} more at most), or Done`]
+      if (choice.credit) return [`defeat Credit tokens to pay for ${cardName(state, choice.cardId)}, 1 less each (${left} more at most), or Done`]
       const each = choice.damage === undefined ? 'defeat' : `deal ${choice.damage} damage to`
       const what = choice.resources ? 'ready resources you control' : 'friendly units'
       return [`${each} ${what} while playing ${cardName(state, choice.cardId)}, ${choice.discount} less each (${left} more at most), or Done`]

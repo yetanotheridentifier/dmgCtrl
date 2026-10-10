@@ -572,10 +572,13 @@ controller to order. A card whose "When Played" ability is borrowed this way is 
 - **The exploited units' powers are recorded** on the unit played (`exploitedPowers`), as read when
   they were defeated, for the When Played that counts them (Count Dooku).
 
-The step belongs to the Play a Card action from hand (`playUnit`, `playEvent`), to Count Dooku's
-front, which raises it itself with its Exploit 1, and to Jabba the Hutt's deployed action, which raises
-it so Credit tokens can pay and carries a `creditGrant` (Ambush for the phase when one did). **The
-other ways to play a card do not offer it**:
+The step belongs to the Play a Card action from hand (`playUnit`, `playEvent`, and `playUpgrade` and
+`playBaseUpgrade` for the two standing modes below, which are the only ones an upgrade is asked on),
+to Count Dooku's front, which raises it itself with its Exploit 1, and to Jabba the Hutt's deployed
+action, which raises it so Credit tokens can pay and carries a `creditGrant` (Ambush for the phase
+when one did). An upgrade's step carries the unit it goes on in `onto` (nothing for one that goes on a
+base, `piloting` for a Pilot played as an upgrade), since its cost can depend on the host, and
+`finishExploit` pays and attaches it. **The other ways to play a card do not offer it**:
 `playCardFrom`, `playUnitFromHand`, the free plays and the discard grants pay the card's effective cost
 with no exploit step. No card in the sealed sets both has Exploit and is commonly played that way.
 

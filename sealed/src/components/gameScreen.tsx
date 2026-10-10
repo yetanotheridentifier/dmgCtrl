@@ -1367,7 +1367,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // from the menu, one button per resource, like any other card pick.
     // Vernestra Rwoh's step picks cards in the discard pile, also not on the board: it gets the same
     // card picker as any other "choose a card in a pile", below.
-    const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && (BOARD_TARGET_KINDS as readonly string[]).includes(c.kind) && !(c.kind === 'exploit' && (c.resources || c.fromDiscard)))
+    // A Credit token is the player's rather than a unit's, so paying with one is a button too.
+    const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && (BOARD_TARGET_KINDS as readonly string[]).includes(c.kind) && !(c.kind === 'exploit' && (c.resources || c.fromDiscard || c.credit)))
     const choiceTargetIds = new Map<string, Action>()
     // Base targets (selectDamageTarget): pick a player's base to take the damage.
     const baseTargetActions = new Map<PlayerId, Action>()

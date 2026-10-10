@@ -8,9 +8,9 @@ which avenues that closes off, and [ai-model.md](ai-model.md) holds the measured
 explain the model's current shape. Evidence appears below only where it decides what to build next,
 and then in one line with a pointer.
 
-**Three streams, in this order: the heuristic bot, then the card programme, then the player-facing
-UI.** They sit on separate branches and share no code, so the order is a decision about attention
-rather than a dependency.
+**Three streams, in this order: the heuristic bot, then the card programme (finished for the sets
+printed so far), then the player-facing UI.** They sit on separate branches and share no code, so the
+order is a decision about attention rather than a dependency.
 
 ## Next up
 
@@ -116,12 +116,12 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
 
 ## The card programme (second stream)
 
-ASH is implemented. The other nine sets are not: 1,960 distinct cards, triaged by what the engine
-cannot yet express rather than by how hard the text looks. The triage is repeatable and fetches live,
-so the next set can be sized on release day. See [ai-benchmark.md](ai-benchmark.md).
+**Finished for the eleven sets printed so far**: every card is built or plays as printed (the end of
+this section says how that is held, and names the one limit left). Its cards were triaged by what the
+engine could not yet express rather than by how hard the text looked. The triage is repeatable and
+fetches live, so the next set can be sized on release day. See [ai-benchmark.md](ai-benchmark.md).
 
-It runs on its own branch and shares no code with the AI work, so it is sequenced rather than
-blocked: it starts when the heuristic baseline is finished.
+The shape below is kept as the map of which ticket built which mechanic.
 
 **The programme is #452 to #478.** GitHub holds them and their current state; this section holds only
 the shape.
@@ -180,10 +180,10 @@ which wait on that blocker's ticket; Stolen AT-Hauler
   card from a discard pile" became a standing permission on the Play a Card action. 20 cards, the
   five HMW ones among them. The three with an "Action:" on a card sitting IN the discard pile shipped
   with #678, on a discard door that records and announces every discard from a hand or deck, with five
-  more cards that read it; SEC_016 Padmé Amidala's leader still needs the reveal half of "reveal or
-  discard 1 or more cards from your hand", which has no single door; L3-37 shipped with #477 and
-  Obi-Wan Kenobi with #474, Sifo-Dyas and Mother Talzin with #685; Second Chance and Stolen
-  Landspeeder are on the ticket of their own other blocker.
+  more cards that read it; SEC_016 Padmé Amidala's leader shipped with #793, on a door for revealing
+  cards out of a hand; L3-37 shipped with #477 and
+  Obi-Wan Kenobi with #474, Sifo-Dyas and Mother Talzin with #685; Stolen Landspeeder shipped with
+  #793.
   **Exploit is finished** (#473), and now so is every TWI Exploit card: 22 of TWI's 23 shipped with it
   (seven play as printed, Count Dooku's leader gives it) with HMW's The Marauder on the same step, and
   Osi Sobeck shipped with #466 once capture existed for it to read. Exploit is not offered on a play
@@ -344,7 +344,7 @@ cards held on it, and read against the engine as it now is, 28 needed no engine 
 registration (six HMW among them, and "when an opponent plays" now read from the far side of
 `whenPlayCard`), and shipped. Every other card went to the ticket that owns its real blocker: the
 mechanic tickets above by comment, #680 for trigger heads no point raises, #678 for the discard
-record (all shipped but Padmé Amidala's leader, which needs a reveal door), and five new ones, #682 losing abilities (8, all shipped), #683 re-using abilities (7, of which the two that
+record (all shipped), and five new ones, #682 losing abilities (8, all shipped), #683 re-using abilities (7, of which the two that
 borrow another card's When Played abilities shipped and the five that re-run an ability already used
 moved to #704, all shipped), #684 replacement
 effects (5, all shipped), #685 cards that need only writing (22, all shipped) and #686 the one-offs no other ticket owns (23).
@@ -352,14 +352,19 @@ effects (5, all shipped), #685 cards that need only writing (22, all shipped) an
 #683. Jar Jar Binks, The First Legion, Zam Wesell and Maul's front shipped off #686; the rest of that
 ticket's one-offs moved to #701, which built them all. Asajj Ventress shipped with #476.
 
-**Next: #793**, the twelve cards the set fixtures still hold unbuilt that no open ticket owns (each
-lifted to, or scoped by, a ticket that closed without it), two manifest entries that undercount
-built cards, and two limits #701 left: a trait one card gives another is not seen by a filter
-written over the printed row (`printedTrait`), and Vuutun Palaa's Droids pay only for a unit or event
-played from hand.
+**The card programme is finished** (#793): every card in all eleven sets is built or plays as
+printed, and the setup panel counts each set complete, type by type. Two tests hold that per set
+(`oneOffCards4.test.ts`): the triage holds back no card the manifest does not list, and the count done
+equals the count printed. A new set is sized with the triage on release day and starts from there.
+
+**One limit is left, and it is a design decision rather than a card: #795.** Credit tokens and units
+that pay as resources (Vuutun Palaa's Droids) are offered as the paying step of a card played from
+hand, of any type. A play out of another zone and an ability's own cost are paid with resources only.
+The ticket sets out the options (the step on every pay door, an automatic shortfall, or leaving it)
+and is labelled `needs-decision`.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted to the ticket that owns its
-blocker (#793 for a one-off nothing else shares) and the batch ships without it. The classification is regex triage over ability prose: it catches new nouns but not
+blocker and the batch ships without it. The classification is regex triage over ability prose: it catches new nouns but not
 familiar nouns in an unfamiliar shape.
 
 Three findings that contradict the assumptions the programme started from:
@@ -383,9 +388,8 @@ extra ids for no extra work: each needs one line in `data/reprints.ts` naming it
 Both came out of play-testing the trigger-ordering work, and both sort the same ~72 pending-choice
 kinds, so **#552 first**: it has to classify every kind anyway.
 
-Coming after the card programme means the set of kinds is still growing while this is built, so the
-classification wants to be a rule read off the payload rather than a table of the kinds that exist on
-the day it ships.
+The card programme is finished, but each new set can add kinds, so the classification wants to be a
+rule read off the payload rather than a table of the kinds that exist on the day it ships.
 
 - **#552 triggered choices belong in an overlay, not the action column.** A triggered choice reads as a
   centre-screen overlay when two abilities trigger and as small buttons beside Pass when one does. The

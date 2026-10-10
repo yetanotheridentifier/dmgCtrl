@@ -136,7 +136,7 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 ### Trigger points
 
 `whenPlayed`, `onAttack`, `whenUnitAttacks`, `onAttackEnd`, `onDefense`, `whenHealed`, `whenDefeated`, `whenReadies`,
-`whenReadyStep`, `whenEnemyUnitReadies`, `whenDrawn`, `whenDiscard`, `whenDiscarded`, `whenUnitLeavesPlay`, `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
+`whenReadyStep`, `whenEnemyUnitReadies`, `whenDrawn`, `whenDiscard`, `whenDiscarded`, `whenReveal`, `whenUnitLeavesPlay`, `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
 `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenThisUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
 `whenDamageDealt`, `whenEnemyAttacksBase`,
@@ -167,7 +167,9 @@ for a free play ("if that opponent paid less than the card's cost to play it", L
 door that pays records it in `HowPlayed.paid`, the way a unit's `resourcesPaidToPlay` is. A card
 played out of a resource zone carries
 `ctx.playedFromResources` ("when you play a card from your resources", Bail Organa), and one played
-using Smuggle carries `ctx.playedUsingSmuggle` ("when you play a card using Smuggle", Hondo Ohnaka). A played unit is
+using Smuggle carries `ctx.playedUsingSmuggle` ("when you play a card using Smuggle", Hondo Ohnaka). A unit's
+**own** `whenPlayed` carries `ctx.playedFromHand` when it was played from its controller's hand ("if
+you played this unit from your hand", Stolen Landspeeder). A played unit is
 already in play when the point is collected, so it hears its own play; `ctx.targetInstanceId` names it,
 which is how "when you play **another** Aggression card" leaves itself out while a second copy of the
 same card still counts (Fighters For Freedom). `whenUnitEntersPlay`
@@ -237,6 +239,17 @@ whose cards, from where and which, so a registration compares `ctx.discard.playe
 `ctx.owner`. Reaching a pile any other way (a defeat, an event resolving, an upgrade leaving play) is
 not a discard and raises neither; `discardSites.test.ts` holds every other append to a pile to a named
 list.
+
+`whenReveal` ("when you reveal 1 or more cards from your hand", Padmé Amidala) is raised by **the one
+door for revealing cards out of a hand**, `revealedFromHand` (`effects.ts`). Each call is one event,
+however many cards it showed, heard by the revealing player's undeployed leader, base and units with
+who and which cards in `ctx.reveal`. Everything that shows hand cards calls it: a finished `disclose`,
+a `mayPayThen` that reveals an event, `revealUnitFromHand`, and the cards that reveal a number of
+cards, one named card or a whole hand ("an opponent reveals their hand" is that opponent's reveal). A
+card revealed off a deck (a search, a look at the top card) is not a reveal from a hand, and neither is
+a hand an opponent only looks at. Padmé reads "reveal or discard" as one block registered at this
+point and at `whenDiscard`, with one `hears` that passes for her controller's reveal or their discard
+from hand.
 
 `whenRegroupStarts` fires as the regroup phase begins, **before the draw step**: `enterRegroup` holds
 both players' draw (`pendingRegroupDraw`) until every choice those abilities raised is answered, and
@@ -333,6 +346,12 @@ readers in `cardDefinitions.ts` (`damageToFriendly`, `friendlySurvivors`, `survi
 `friendlyBaseDamaged`, `dealtByYou`) are the shared phrasings. A card printed "when **this** unit is
 dealt damage and survives" is the survivors filtered to `ctx.sourceInstanceId`, and "a friendly unit"
 (Jabba the Hutt) is the same list with the source dropped: there is no second point for either.
+
+**The point is collected from the units still in play, so a unit the damage defeated does not hear
+it**, which is what "and survives" prints. A card printed with no such clause ("when damage is dealt
+to this unit", The Elite Squad) sets `thoughDefeated` on that ability: `applyUnitDamage` then also
+collects it off the unit as it last was, into the same batch, and the ability resolves with a source
+that names no unit in play, as a When Defeated does.
 
 It is **not** the point for "when this unit deals combat damage to a base" (Obi-Wan Kenobi, Chopper,
 Seventh Sister), which is `onAttackEnd` with `ctx.combatDamageToBase`: that is the attacking unit
@@ -481,7 +500,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `discardInsteadOfCost` | the hand cards an event may be paid for by discarding instead (Bamboozle); see [choices.md](choices.md) |
 | `entersAsCopyOf` | the units this card may enter play as a copy of (Clone); see [keywords-effects.md](keywords-effects.md) |
 | `extraRegroupPhase` | a second regroup phase after the first each round, while in play (Max Rebo) |
-| `unitPaysCosts` | which of its controller's units may be exhausted to pay costs (Vuutun Palaa's Droids), as the paying step of a card played from hand |
+| `unitPaysCosts` | which of its controller's units may be exhausted to pay costs (Vuutun Palaa's Droids), as the paying step of a card of any type played from hand |
 | `makesLeaderUnit` | the host counts as a leader unit |
 | `actionAbilities` | activated "Action:" abilities, with `usable`, `oncePerRound`, `exhaustCost`, and `anyPlayer` for one offered on an enemy unit too, paid for and owned by whoever uses it |
 | `canPreventDamage` / `payPreventionCost` | offers a prevention, and collects its price if taken |

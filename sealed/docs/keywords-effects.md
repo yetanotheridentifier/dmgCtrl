@@ -173,13 +173,26 @@ player's board, and the removal is aimed at one player's cards. A read with no o
 traits, which is all that can be said about a card nobody owns.
 
 `unitTraits` adds what an upgrade lends (`grantedTraits`, The Darksaber) and takes away
-(`removedTraits`), and a copy's own printed traits (Clone, below). It looks the controller up only
-when a card-level rule is actually live, so the ordinary case costs what it always did.
+(`removedTraits`), a trait this one unit has lost for the phase (`LastingEffect.removeTraits`: Nameless
+Terror's "each enemy unit loses the Force trait for this phase" reaches the units in play as it
+attacks, and one that arrives later keeps its trait), and a copy's own printed traits (Clone, below).
+It looks the controller up only when a card-level rule is actually live, so the ordinary case costs
+what it always did.
 
-**A filter that takes an `EngineCard` rather than a card id reads the printed row** (`printedTrait`,
-and the `test` hooks on the play-from-hand and play-from-zone choices). Those see none of the three
-effects above: a Creature card in hand reads as Underworld to `cardHasTrait` while Malakili is in play,
-but not to a search or a "play an Underworld unit from your hand" filter written over the row.
+**No filter reads the printed row.** A card's filter over cards out of play (a search, a return from a
+discard pile, a play from hand or from another zone, "if you played a \<Trait\> card this phase", a
+discount on the next card with a trait, a play priced by trait) names whose card it is and asks
+`cardTraits`: `heldTrait(s, owner, card, trait)` in `cardDefinitions.ts`, `cardHasTrait` for a card id,
+and `grantMatches` (`keywords.ts`) for a "next card you play" grant. So a Creature in hand, deck or
+discard pile is Underworld to every one of them while Malakili is in play, and a card that has lost a
+trait is not offered by a play that asks for it. A card test that a helper carries
+(`PlayFromHandOptions.test`, `PlayFromZoneOptions.test`, `returnFromDiscardWp`, `playedCardThisPhase`)
+is told the state and the owner for that reason.
+
+`traitReadSites.test.ts` holds every direct read of `card.traits` in the engine to a named list: the
+door itself, the grant matcher below the registry, the traits a player may name, and Malakili's own
+hook, which gives Underworld to a card *printed* as a Creature and would otherwise be asking the
+question it answers.
 
 ## A unit entering play as a copy
 
@@ -250,7 +263,7 @@ same guard since a pair of Kelleran Beqs blew the stack.
 ```ts
 GameState.lastingEffects?: LastingEffect[]
 // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, untilRoundEnd?, abilityCardIds?,
-//   cannotAttack?, cannotAttackBases?, cannotBeAttacked?, removeKeywords?,
+//   cannotAttack?, cannotAttackBases?, cannotBeAttacked?, removeKeywords?, removeTraits?,
 //   losesAllAbilities?, noCombatDamage?, attackersPower?, attackingBasePower?, cannotReady?, whileSourceInPlay?, preventNext?, preventEach?,
 //   preventCombat?, survivesNoHp?, redirectDamageTo?, printedHp? }
 ```
@@ -422,8 +435,17 @@ reduce what is left to pay with: it is a separate currency.
 be exhausted to pay costs as if it were a resource"). A card in play with `unitPaysCosts` names which
 of its controller's units qualify (`unitCostPayers`), and the step's `droids` flag picks them by
 instance id on the board, each exhausted paying 1. They take the step ahead of Credit tokens, so a
-player holding both is offered the units. Being the Exploit step, it covers units and events played
-from hand: an upgrade, a play out of another zone and an ability's own cost are paid with resources.
+player holding both is offered the units.
+
+**The step belongs to the Play a Card action from hand, for every card type.** A unit or an event
+reaches it through `exploitTerms`. An upgrade has no step of its own, so it is asked on these two
+standing modes alone (`creditExploitTerms`), with the unit it goes on carried in the choice's `onto`
+so its cost is read against that host, and a Pilot played as an upgrade priced by its Piloting
+bracket. A play out of another zone and an ability's own cost are paid with resources only.
+
+On the game screen a Credit pick is a button ("Defeat a Credit token"), one per token, since a Credit
+token is the player's and not on the board, and a unit that pays is clicked on the board like any
+other unit pick. Done appears once what is left is affordable (`creditPaymentOnBoard.test.tsx`).
 
 An ability that plays a card from hand offers the step only where it raises it itself, as Count
 Dooku's front and Jabba the Hutt's deployed action do (`raiseExploit`). The `exploit` choice's
@@ -431,9 +453,13 @@ Dooku's front and Jabba the Hutt's deployed action do (`raiseExploit`). The `exp
 (Jabba: Ambush): `finishExploit` turns it into a `nextUnitGrant` for that card id before the unit
 enters, so an entry keyword fires exactly as a printed one would.
 
-**"Defeat a friendly token" spans every kind a player can hold** (Alliance Outpost): a token upgrade
-they own on a unit, a token unit they control, a Credit token, or their Force token. The kind is asked
-first only when more than one is available, then which one where that matters (an upgrade or a unit).
+**"Defeat a friendly token" spans every kind a player can hold** (Alliance Outpost, Han Solo): a token
+upgrade they own on a unit, a token unit they control, a Credit token, or their Force token. The kind
+is asked first only when more than one is available, then which one where that matters (an upgrade or
+a unit). `friendlyTokenKinds`, `defeatFriendlyToken` and `tokenDefeated` in `cardDefinitions.ts` are
+that cost, shared by the cards that print it. "Defeat **any number** of friendly tokens" (Han Solo's
+deployed side) is the same pick asked again while a token is left, with stopping as one of the
+answers, and the count carried in the step.
 
 `createCreditTokens` records `phaseEvents.tokensCreated` like `giveTokens`/`createTokenUnits`, so "if
 you created a token this phase" (The Client) sees a Credit token too.
@@ -720,7 +746,8 @@ listeners stay silent too.
   `selectUnitThen` pick at a time, each offering only the units that still fit what is left of the
   budget, the picks so far carried in the step. Nothing is captured until the picks stop (Done, the cap,
   or nothing left fits), so every pick's remaining HP is read off the same board. "Choose any number of
-  friendly units. Each of those units captures an enemy non-leader unit in the same arena" (Finalizer)
+  friendly units. Each of those units captures an enemy non-leader unit in the same arena" (Finalizer;
+  Let's Talk is the same loop with every friendly unit capturing and no pick optional)
   is a loop of guardian-then-target pairs instead: the guardian pick is optional and offers only unused
   friendly units with something in their arena to capture, and its target pick is mandatory.
 - **A capture inside a play.** "Play a unit from your hand ... The chosen unit captures it. (When Played
@@ -804,6 +831,20 @@ one is always optional whatever its printed wording says.
   the Bounty keyword and, through `abilityCardIds`, a carrier card (`GRANT_*`) whose own `bounty` ability
   is the reward. Lasting effects outlive the unit leaving play until the phase ends, so the granted
   ability is collected at a defeat or a capture exactly as a printed one is.
+- **Collected without a defeat or a capture.** "Return an enemy non-leader unit to its owner's hand.
+  Collect that unit's Bounties" (Spare the Target) collects the unit's `bounty` abilities while it is
+  still in play, as a defeat reads them (its own, its upgrades' and any granted for the phase), returns
+  it, and fires them as one batch under the opponent of its controller.
+- **A Bounty with a condition on the collector.** Stolen Landspeeder's "If you own this unit, play it
+  from your discard pile for free and give an Experience token to it" states the condition as the
+  ability's `hears`: the collector owns the card (`ctx.bountyUnit.owner`, set only on a unit somebody
+  else controls) and the card is in their discard pile. So no Bounty is offered to a collector who
+  does not own it, or for a capture or a return to hand, where there is no card in a pile to play.
+  Its When Played hands it over only when `ctx.playedFromHand` is set, which a unit's own When Played
+  carries for a play from its controller's hand, and the change of control is permanent.
+- **Beside a When Defeated.** Val prints both, with "the active player chooses the order of Val's
+  abilities": one is her opponent's and one her controller's, which is the question the defeat batch
+  already asks when both sides are owed something.
 - **Rewards reuse the When Played helpers.** Every reward is written with the same builders a When
   Played ability uses (`damageChoice`, `healChoice`, `shieldChoice`, `targetChoice`, `expUpTo`,
   `readyResource`) and wrapped in `bounty()`, which remaps a `whenPlayed`-shaped definition's trigger
