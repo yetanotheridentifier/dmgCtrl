@@ -486,17 +486,20 @@ export function spendNextUnitGrants(all: NextUnitGrant[] | undefined, spent: Nex
   return left.length > 0 ? left : undefined
 }
 
-/** True if `card` is a unit satisfying a grant's filter. `state` and `owner` are needed only by a board-reading filter. */
-export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state?: GameState, owner?: PlayerId): boolean {
+/**
+ * True if `card` is a unit satisfying a grant's filter. `state` and `owner` are needed only by a
+ * board-reading filter. `liveTraits` is the card's traits as `cardTraits` reads them: this module sits
+ * below the registry and cannot ask, so the engine calls this through `grantMatches` (keywords.ts),
+ * which does. Without it the printed traits are read, less any the card has lost for the phase.
+ */
+export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state?: GameState, owner?: PlayerId, liveTraits?: readonly string[]): boolean {
   if (!card || grant.viaPlot) return false
   if (grant.anyCard ? card.type !== 'unit' && card.type !== 'event' && card.type !== 'upgrade' : card.type !== (grant.event ? 'event' : 'unit')) return false
   if (grant.withoutAspects && card.aspects.some(a => grant.withoutAspects!.includes(a))) return false
-  // Traits the card has lost for the phase are gone here too (The First Legion). The card-level
-  // grants `cardTraits` adds are not read here: this module sits below the registry, and no grant a
-  // card makes itself has ever been what a "your next <Trait> unit" discount turned on.
   if (grant.trait) {
     const lost = state && owner ? traitsRemovedFrom(state, owner) : EMPTY_TRAITS
-    if (!card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase() && !lost.has(t.toLowerCase()))) return false
+    const traits = liveTraits ?? card.traits.filter(t => !lost.has(t.toLowerCase()))
+    if (!traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase())) return false
   }
   if (grant.maxPower !== undefined && (card.power ?? 0) > grant.maxPower) return false
   if (grant.cardId !== undefined && card.id !== grant.cardId) return false
@@ -939,6 +942,8 @@ export interface LastingEffect {
   cannotBeAttacked?: boolean
   /** Keyword names the unit loses for the duration (SpecForce Soldier: Sentinel). Read by `unitKeywords`. */
   removeKeywords?: string[]
+  /** Trait names the unit loses for the duration (Nameless Terror: Force). Read by `unitTraits`. */
+  removeTraits?: string[]
   /**
    * The unit loses all abilities, and can't gain any, for the duration (Force Lightning, There Is No
    * Escape). Read by `abilityBlank` (abilities.ts), the gate every ability lookup goes through.
@@ -1277,6 +1282,13 @@ export interface TriggerContext {
    * `player` against `ctx.owner` ("when you discard" or "when a player discards").
    */
   discard?: { player: PlayerId; from: DiscardedFrom; cardIds: string[] }
+  /**
+   * `whenReveal`: one reveal event, the cards `player` showed out of their hand at once. Heard by that
+   * player only, since the one card that reads it says "you" (Padmé Amidala).
+   */
+  reveal?: { player: PlayerId; cardIds: string[] }
+  /** A unit's own `whenPlayed`: it was played from its controller's hand ("if you played this unit from your hand", Stolen Landspeeder). */
+  playedFromHand?: boolean
 }
 
 export interface PendingTrigger {
@@ -1599,7 +1611,12 @@ type ChoiceVariant =
   // `creditGrant` is what the played unit gains for this phase if at least one Credit is defeated
   // paying for it (Jabba the Hutt: "If you defeated a Credit while paying its cost, that unit gains
   // Ambush for this phase"), given as it enters play so an entry keyword like Ambush still fires.
-  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean; creditGrant?: KeywordInstance[]; droids?: boolean }
+  // `droids` is a fifth: units that pay as resources (Vuutun Palaa), picked by instance id, each
+  // exhausted paying 1.
+  // `onto` says the card is an upgrade played from hand, which only the two standing modes (`credit`,
+  // `droids`) are ever asked for: the unit it attaches to, absent for one that goes on a base, and
+  // `piloting` for a Pilot unit played as an upgrade at its Piloting bracket.
+  | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean; creditGrant?: KeywordInstance[]; droids?: boolean; onto?: { targetInstanceId?: string; piloting?: boolean } }
   /**
    * "You may have this unit enter play as a copy of a non-leader, non-Vehicle unit in play" (Clone):
    * asked as the unit enters, before anything reacts to it. `play` is the rest of the play, resumed

@@ -1,5 +1,5 @@
-import type { GameState, KeywordInstance, PlayerId, UnitState, CombatContext } from './types'
-import { lastingEffectTotals, carriedAbilityCardIds, baseAbilityCardIds, traitsRemovedFrom } from './types'
+import type { EngineCard, GameState, KeywordInstance, NextUnitGrant, PlayerId, UnitState, CombatContext } from './types'
+import { lastingEffectTotals, carriedAbilityCardIds, baseAbilityCardIds, traitsRemovedFrom, nextUnitGrantMatches } from './types'
 import { abilityBlank, abilityCardIds, getCardDefinition, isTraitGranter, leaderAbilitiesBlanked } from './abilities'
 import type { AttackContext, AuraContribution, StatModContext } from './abilities'
 
@@ -280,6 +280,14 @@ function traitGrantersOf(state: GameState, owner: PlayerId): UnitState[] {
   return units.filter(u => isTraitGranter(u.cardId) && !abilityBlank(state, u, owner))
 }
 
+/**
+ * Whether a "next <kind of> card you play" grant is about `card`, as `owner` plays it. The grant's
+ * trait is read through {@link cardTraits}, so a trait another card gives this one counts.
+ */
+export function grantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state: GameState, owner: PlayerId): boolean {
+  return nextUnitGrantMatches(card, grant, state, owner, card && grant.trait ? cardTraits(state, card.id, owner) : undefined)
+}
+
 /** Case-insensitive trait test for a card anywhere. See {@link cardTraits}. */
 export function cardHasTrait(state: GameState, cardId: string, name: string, owner?: PlayerId): boolean {
   return cardTraits(state, cardId, owner).some(t => t.toLowerCase() === name.toLowerCase())
@@ -308,6 +316,10 @@ export function unitTraits(state: GameState, unit: UnitState): string[] {
     const def = getCardDefinition(cardId)
     out.push(...(def?.grantedTraits?.(state, unit) ?? []))
     for (const t of def?.removedTraits?.(state, unit) ?? []) removed.add(t.toLowerCase())
+  }
+  // A trait this one unit has lost for the phase (Nameless Terror: "each enemy unit loses the Force trait").
+  for (const e of state.lastingEffects ?? []) {
+    if (e.removeTraits && e.targetInstanceId === unit.instanceId) for (const t of e.removeTraits) removed.add(t.toLowerCase())
   }
   return removed.size > 0 ? out.filter(t => !removed.has(t.toLowerCase())) : out
 }

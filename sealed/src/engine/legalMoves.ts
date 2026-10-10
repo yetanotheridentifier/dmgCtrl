@@ -1,8 +1,8 @@
 import type { Action } from './actions'
 import type { AspectWaiver, AttackerFilter, CapturedCard, DiscardPlayGrant, EngineCard, GameState, HandCardRef, KeywordInstance, PendingChoice, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
-import { opponentOf, hasPendingChoices, nextUnitGrantMatches, plotCostDelta, pushChoice, isFortify, upgradeSideId } from './types'
+import { opponentOf, hasPendingChoices, plotCostDelta, pushChoice, isFortify, upgradeSideId } from './types'
 import { canAfford, readyResourceCount } from './resources'
-import { cardHasTrait, keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
+import { cardHasTrait, grantMatches, keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
 import { abilityCardIds, cardAbilitiesBlanked, getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, leaderAbilitiesBlanked, baseEpicAction, usableBaseActions } from './abilities'
 import { friendlyCreditTokens, discloseRemaining, hasForceToken } from './effects'
 import './cardDefinitions' // side effect: registers all real card behaviours
@@ -232,7 +232,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   }
   if (waivePenalty) penalty = 0
   // "Your next unit …" cost grants that match this card — Mouse Droid's −1 to the next Imperial.
-  const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (nextUnitGrantMatches(card, g, state, playerId) ? (g.costDelta ?? 0) : 0), 0)
+  const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (grantMatches(card, g, state, playerId) ? (g.costDelta ?? 0) : 0), 0)
   // A card an OPPONENT's unit has named for a surcharge costs that much more to play (Qi'ra).
   const surcharge = state.players[opponentOf(playerId)].units.reduce(
     (sum, u) => sum + (u.namedCard === card.name ? u.namedCardSurcharge ?? 0 : 0), 0)
@@ -289,7 +289,7 @@ export function exploitTerms(state: GameState, playerId: PlayerId, card: EngineC
   const units = state.players[playerId].units.length
   if (own) return units > 0 ? { limit: units, discount: own.discount, damage: own.damage } : creditExploitTerms(state, playerId)
   const granted = (state.players[playerId].nextUnitGrants ?? [])
-    .reduce((sum, g) => sum + (nextUnitGrantMatches(card, g, state, playerId) ? g.exploit ?? 0 : 0), 0)
+    .reduce((sum, g) => sum + (grantMatches(card, g, state, playerId) ? g.exploit ?? 0 : 0), 0)
   const x = (blanked ? 0 : keywordValue(state, card.id, 'Exploit')) + granted + extra
   if (x > 0 && units > 0) return { limit: Math.min(x, units), discount: 2 }
   return creditExploitTerms(state, playerId)
@@ -300,8 +300,10 @@ export function exploitTerms(state: GameState, playerId: PlayerId, card: EngineC
  * pay 1 less" — offered on any card play, not declared by the card, whenever nothing else already
  * claims this step and the payer holds any. No LAW card both needs its own `whilePlaying`/Exploit AND
  * has Credit tokens, so combining the two in one step is left unbuilt rather than guessed at.
+ *
+ * An upgrade played from hand has no step of its own, so these are the only terms it is ever asked on.
  */
-function creditExploitTerms(state: GameState, playerId: PlayerId): ExploitTerms | undefined {
+export function creditExploitTerms(state: GameState, playerId: PlayerId): ExploitTerms | undefined {
   // Units paying as resources (Vuutun Palaa's Droids) take the same step, each exhausted paying 1. A
   // player with both those and Credit tokens is offered the units: the step is built for one kind.
   const payers = unitCostPayers(state, playerId)
@@ -329,11 +331,13 @@ export function unitCostPayers(state: GameState, playerId: PlayerId): string[] {
  * Exploit (CR 7.5.16), and The Marauder's step of the same shape: before anything is paid, ask for
  * the friendly units, one at a time. The card stays in hand until the step finishes, since nothing
  * else happens in between. The choice is the card's own, so its prompt can name it. `resolve` answers
- * it; an ability doing the playing (Count Dooku) raises it here too.
+ * it; an ability doing the playing (Count Dooku) raises it here too. `onto` makes the play an
+ * upgrade's: the unit it goes on, which its cost can depend on, or nothing for one that goes on a base.
  */
-export function raiseExploit(state: GameState, owner: PlayerId, cardId: string, handIndex: number, terms: ExploitTerms): GameState {
+export function raiseExploit(state: GameState, owner: PlayerId, cardId: string, handIndex: number, terms: ExploitTerms, onto?: { targetInstanceId?: string; piloting?: boolean }): GameState {
   return pushChoice(state, {
     kind: 'exploit', id: `exploit-${cardId}`, controller: owner, cardId, handIndex, picks: [],
+    ...(onto ? { onto } : {}),
     limit: terms.limit, discount: terms.discount, ...(terms.damage !== undefined ? { damage: terms.damage } : {}),
     ...(terms.resources ? { resources: true } : {}),
     ...(terms.fromDiscard ? { fromDiscard: true, maxCost: terms.maxCost } : {}),
@@ -383,7 +387,22 @@ export function discardForCostIndices(state: GameState, playerId: PlayerId, hand
  */
 export function exploitCost(state: GameState, choice: Extract<PendingChoice, { kind: 'exploit' }>): number {
   const card = state.cards[choice.cardId]
-  return card ? Math.max(0, effectiveCost(state, choice.controller, card) - choice.picks.length * choice.discount) : 0
+  if (!card) return 0
+  // An upgrade is priced against the unit it goes on, and a Pilot played as one by its Piloting bracket.
+  const host = choice.onto?.targetInstanceId
+    ? [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === choice.onto!.targetInstanceId)
+    : undefined
+  const cost = choice.onto ? effectiveCost(state, choice.controller, card, host, undefined, choice.onto.piloting ? card.piloting : undefined) : effectiveCost(state, choice.controller, card)
+  return Math.max(0, cost - choice.picks.length * choice.discount)
+}
+
+/**
+ * Whether `playerId` can pay `cost` for an upgrade played from hand: with ready resources, less what
+ * the standing paying step could save (Credit tokens, or units that pay as resources).
+ */
+export function canPayForUpgrade(state: GameState, playerId: PlayerId, cost: number): boolean {
+  const terms = creditExploitTerms(state, playerId)
+  return Math.max(0, cost - (terms ? terms.limit * terms.discount : 0)) <= readyResourceCount(state.players[playerId])
 }
 
 /** Whether an `exploit` step could finish now: what is left fits the ready resources its picks leave. */
@@ -669,7 +688,8 @@ export function playFromCost(state: GameState, controller: PlayerId, card: Engin
   if (terms.free) return 0
   const plotDelta = terms.plot ? plotCostDelta(state, controller) : 0
   const byTrait = terms.traitCostDelta
-  const delta = byTrait && (card.traits ?? []).some(t => t.toLowerCase() === byTrait.trait.toLowerCase())
+  // The trait the card has now, for the player playing it: one given by another card counts.
+  const delta = byTrait && cardHasTrait(state, card.id, byTrait.trait, controller)
     ? byTrait.costDelta : terms.costDelta ?? 0
   return Math.max(0, effectiveCost(state, controller, card, target, terms.waive, terms.piloting ? card.piloting : terms.altCost) + delta + plotDelta)
 }
@@ -823,13 +843,13 @@ function actionPhaseMoves(state: GameState): Action[] {
     if (forbiddenNames.has(card.name)) return
     // Fortify: "Attach this to your base, not a unit." Its one target is fixed, so it names none.
     if (isFortify(card)) {
-      if (canAfford(p, effectiveCost(state, playerId, card))) moves.push({ type: 'playBaseUpgrade', handIndex })
+      if (canPayForUpgrade(state, playerId, effectiveCost(state, playerId, card))) moves.push({ type: 'playBaseUpgrade', handIndex })
       return
     }
     const restriction = getCardDefinition(card.id)?.attachRestriction
     for (const target of allUnits) {
       if (restriction && !restriction(state, target, playerId)) continue
-      if (!canAfford(p, effectiveCost(state, playerId, card, target))) continue
+      if (!canPayForUpgrade(state, playerId, effectiveCost(state, playerId, card, target))) continue
       moves.push({ type: 'playUpgrade', handIndex, targetInstanceId: target.instanceId })
     }
   })
@@ -841,7 +861,7 @@ function actionPhaseMoves(state: GameState): Action[] {
     if (!card?.piloting || forbiddenNames.has(card.name)) return
     for (const target of p.units) {
       if (!canTakePilot(state, target, card.id)) continue
-      if (!canAfford(p, effectiveCost(state, playerId, card, target, undefined, card.piloting))) continue
+      if (!canPayForUpgrade(state, playerId, effectiveCost(state, playerId, card, target, undefined, card.piloting))) continue
       moves.push({ type: 'playUpgrade', handIndex, targetInstanceId: target.instanceId, piloting: true })
     }
   })

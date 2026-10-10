@@ -359,7 +359,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
           const resource = state.players[choice.controller].resources[action.optionIndex ?? -1]
           return `Defeat ${resource ? state.cards[resource.cardId]?.name ?? 'resource' : 'resource'}`
         }
+        // The two standing ways to pay: a Credit token is defeated, a unit that pays as a resource is exhausted.
+        if (choice.credit) return 'Defeat a Credit token'
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        if (choice.droids) return `Exhaust ${target ?? 'unit'} to pay`
         return choice.damage === undefined ? `Exploit ${target ?? 'unit'}` : `Deal ${choice.damage} to ${target ?? 'unit'}`
       }
       if (choice.kind === 'playCardFrom') {

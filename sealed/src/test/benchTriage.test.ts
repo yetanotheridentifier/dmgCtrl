@@ -335,14 +335,20 @@ describe('trigger heads', () => {
   })
 
   it('blocks a compound head on the half the engine cannot dispatch, not on the join', () => {
-    // SEC_143 The Elite Squad. "When Played" is dispatched; damage dealt to this unit is not a trigger
-    // point at all, so that half is what holds the card back and the report has to name it. Three cards,
-    // because a trigger blocker on fewer than ONE_OFF_THRESHOLD cards folds into trigger:one-off.
+    // An invented head. "When Played" is dispatched; an opponent passing is not a trigger point at all,
+    // so that half is what holds the card back and the report has to name it. Three cards, because a
+    // trigger blocker on fewer than ONE_OFF_THRESHOLD cards folds into trigger:one-off.
     // The blocker names the missing half alone, so cards waiting on the same point group together
     // however their compound heads are spelled.
-    const r = triage([1, 2, 3].map(n => card({ Number: String(n), Name: `Squad ${n}`, FrontText: 'When Played/When damage is dealt to this unit: You may deal 2 damage to another unique unit.' })))
-    const missing = ['trigger:When damage is dealt to this unit']
+    const r = triage([1, 2, 3].map(n => card({ Number: String(n), Name: `Squad ${n}`, FrontText: 'When Played/When an opponent passes: You may deal 2 damage to another unique unit.' })))
+    const missing = ['trigger:When an opponent passes']
     expect(r.triaged.map(c => c.blockers)).toEqual([missing, missing, missing])
+  })
+
+  it('reads damage dealt to the unit itself as a point the engine dispatches', () => {
+    // SEC_143 The Elite Squad: `whenDamageDealt` filtered to the unit, whether or not it survives.
+    const text = 'When Played/When damage is dealt to this unit: You may deal 2 damage to another unique unit.'
+    expect(triage([card({ FrontText: text })]).triaged[0].blockers).toEqual([])
   })
 
   /**

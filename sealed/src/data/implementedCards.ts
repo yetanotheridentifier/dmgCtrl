@@ -313,9 +313,8 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   // different ones a unit has.
   { id: 'HMW_001', name: 'Asajj Ventress', front: true, back: true },
   { id: 'TS26_3', name: 'Maul', front: true, back: true },
-  // Bounty: front only. His back ("When you collect a Bounty, you may collect it again") needs a
-  // separate new primitive that nothing else built for Bounty needs.
-  { id: 'SHD_010', name: 'Bossk', front: true, back: false },
+  // Bounty: his back ("When you collect a Bounty, you may collect it again") uses an ability again.
+  { id: 'SHD_010', name: 'Bossk', front: true, back: true },
   { id: 'SEC_012', name: 'Cassian Andor', front: true, back: true },
   // Front only ("search the top 5 for a card with Plot, reveal it, and draw it"). Back ("the next
   // card you play using Plot this phase costs 3 less") needs a new `NextUnitGrant` restriction plus
@@ -366,6 +365,10 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'LAW_018', name: 'Lando Calrissian', front: true, back: true },
   // A leader that flips between two faces instead of deploying: "back" is the Darth Sidious face.
   { id: 'TWI_017', name: 'Chancellor Palpatine', front: true, back: true },
+  // A reward for a kill, tokens spent as damage, and a reveal or a discard from hand.
+  { id: 'LAW_007', name: 'Boba Fett', front: true, back: true },
+  { id: 'LAW_017', name: 'Han Solo', front: true, back: true },
+  { id: 'SEC_016', name: 'Padmé Amidala', front: true, back: true },
 ]
 
 /**
@@ -618,6 +621,10 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   // The last one-offs
   { id: 'SOR_122', name: 'Traitorous' },
   { id: 'TWI_069', name: 'Roger Roger' },
+  { id: 'TS26_22', name: 'The Darksaber' },
+  // Printed as an upgrade, which is how SHD's listing files its reprint. SOR's listing files it as an
+  // event (see `cardDataCorrections.ts`), so SOR's totals below count it as the upgrade it is.
+  { id: 'SOR_215', name: 'Snapshot Reflexes' },
 ]
 
 /**
@@ -920,9 +927,6 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SOR_075', name: 'It Binds All Things' },
   { id: 'LAW_102', name: 'Choke on Aspirations' },
   { id: 'SOR_104', name: 'U-Wing Reinforcement' },
-  // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
-  // below, file it as an event. Counted where the totals count it.
-  { id: 'SOR_215', name: 'Snapshot Reflexes' },
   // Experience tokens: C, a token on each of several units
   { id: 'SEC_124', name: 'Budget Scheming' },
   { id: 'LOF_241', name: 'In the Shadows' },
@@ -1114,6 +1118,9 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SHD_144', name: 'Give In to Your Anger' },
   { id: 'SEC_145', name: 'Confidence in Victory' },
   { id: 'SOR_199', name: 'Bamboozle' },
+  { id: 'SEC_131', name: "Let's Talk" },
+  { id: 'SHD_206', name: 'Spare the Target' },
+  { id: 'SHD_228', name: 'Bounty Posting' },
 ]
 
 /**
@@ -2133,7 +2140,6 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SOR_193', name: 'Millennium Falcon' },
   { id: 'LOF_148', name: 'Rey' },
   // Exploit: the Exploit units' other abilities, and The Marauder's step of the same shape.
-  { id: 'TWI_037', name: 'Droideka Security' },
   { id: 'TWI_038', name: 'Providence Destroyer' },
   { id: 'TWI_039', name: 'Malevolence' },
   { id: 'TWI_066', name: 'Multi-Troop Transport' },
@@ -2465,6 +2471,11 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SEC_122', name: 'Vuutun Palaa' },
   { id: 'TWI_116', name: 'Clone' },
   { id: 'TWI_135', name: 'Darth Maul' },
+  { id: 'LAW_053', name: 'Dengar' },
+  { id: 'SEC_143', name: 'The Elite Squad' },
+  { id: 'LOF_033', name: 'Nameless Terror' },
+  { id: 'SHD_058', name: 'Val' },
+  { id: 'SHD_161', name: 'Stolen Landspeeder' },
 ]
 
 /**
@@ -2540,7 +2551,8 @@ const SET_TOTALS: { code: string; group: SetGroup; total: Omit<TypeCounts, 'toke
   { code: 'JTL', group: 'rotation', total: { leaders: 18, bases: 13, units: 167, upgrades: 7, events: 57 } },
   { code: 'TWI', group: 'retired', total: { leaders: 18, bases: 12, units: 150, upgrades: 19, events: 58 } },
   { code: 'SHD', group: 'retired', total: { leaders: 18, bases: 8, units: 160, upgrades: 30, events: 46 } },
-  { code: 'SOR', group: 'retired', total: { leaders: 18, bases: 12, units: 148, upgrades: 14, events: 60 } },
+  // SOR's listing files Snapshot Reflexes as an event. It is printed as an upgrade, and counted as one.
+  { code: 'SOR', group: 'retired', total: { leaders: 18, bases: 12, units: 148, upgrades: 15, events: 59 } },
   { code: 'TS26', group: 'out-of-cycle', total: { leaders: 8, bases: 4, units: 41, upgrades: 8, events: 23 } },
   { code: 'IBH', group: 'out-of-cycle', total: { leaders: 2, bases: 2, units: 35, upgrades: 0, events: 12 } },
 ]
@@ -2593,11 +2605,11 @@ const BUILT_TOKEN_NAMES = new Set([...Object.values(TOKEN_CARDS), ...Object.valu
 export const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
   HMW: { bases: 16, units: 42 },
   ASH: { bases: 8, units: 39 },
-  LAW: { units: 47 },
+  LAW: { units: 48 },
   SEC: { bases: 8, units: 34, upgrades: 4 },
   LOF: { units: 46 },
   JTL: { bases: 9, units: 28 },
-  TWI: { bases: 8, units: 28 },
+  TWI: { bases: 8, units: 29 },
   SHD: { bases: 8, units: 28, upgrades: 1 },
   SOR: { bases: 8, units: 29, upgrades: 2 },
   TS26: { units: 5, upgrades: 1 },

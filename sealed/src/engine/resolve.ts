@@ -2,17 +2,17 @@ import type { Action, AttackTarget } from './actions'
 import type { Arena, EngineCard, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, HowPlayed, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef, UsedAbility } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed, upgradeSideId, PLAYED_FROM_HAND, PLAYED_ELSEWHERE } from './types'
-import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, recordActionStarted, markAbilityUsed, nextUnitGrantMatches, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
+import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, recordActionStarted, markAbilityUsed, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { canTakePilot, effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, discardForCostIndices, canAffordFromHand, unitCostPayers, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, smuggleTerms, smuggleCostUnits, type PlayFromTerms } from './legalMoves'
+import { canTakePilot, effectiveCost, exploitTerms, creditExploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, discardForCostIndices, canAffordFromHand, unitCostPayers, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, smuggleTerms, smuggleCostUnits, type PlayFromTerms } from './legalMoves'
 import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectAbilityUsed, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, discardCards, discardTaken, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, returnControlledResources, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, captureUnit, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, forceUse } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, discardCards, discardTaken, revealedFromHand, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, returnControlledResources, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, captureUnit, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, forceUse } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
-import { hasKeyword, cardHasTrait, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
+import { hasKeyword, cardHasTrait, grantMatches, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, hasToken } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 
@@ -491,7 +491,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // grant (Sabine → Shielded) — so a granted Ambush/Shielded/Hidden fires just like a printed one.
   // "Your next unit …" grants matching this card — their keywords/enters-ready apply here
   // (the cost delta was already folded into `effectiveCost` at play time).
-  const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g, state, owner))
+  const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => grantMatches(card, g, state, owner))
   // "If you play this unit from your hand, it gains Ambush" (Millennium Falcon): keywords the card
   // gains for this play only, given the same way a grant's are. Gone with the card's abilities.
   const fromHand = how.from === 'hand' && !cardAbilitiesBlanked(state, cardId, owner) ? getCardDefinition(cardId)?.fromHandKeywords ?? [] : []
@@ -629,7 +629,7 @@ function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string,
   if (entered.upgrades.length > 0) owed.push(...collectUpgradeAttached(state, newUnitId))
   // A unit that arrives without its abilities (a name Galen Erso has named) has no When Played to fire.
   if (!abilityBlank(state, entered, owner)) {
-    owed.push(...collectCardTriggers('whenPlayed', cardId, owner, newUnitId))
+    owed.push(...collectCardTriggers('whenPlayed', cardId, owner, newUnitId, how.from === 'hand' ? { playedFromHand: true } : undefined))
     for (const lent of borrowed) owed.push(...collectCardTriggers('whenPlayed', lent, owner, newUnitId))
     // Ambush / Support: keyword-printed When Played abilities, ordered with the rest.
     for (const kw of keywordAbilities) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId, keywordCtx))
@@ -863,6 +863,12 @@ function finishExploit(state: GameState, choice: Extract<PendingChoice, { kind: 
   const at = p.hand[choice.handIndex] === choice.cardId ? choice.handIndex : p.hand.indexOf(choice.cardId)
   if (at === -1) return next
   const paid = payCost(p, cost)
+  if (choice.onto) {
+    // An upgrade: on a base it names no unit, and a Pilot goes on as one for its Piloting bracket.
+    const { targetInstanceId, piloting } = choice.onto
+    if (targetInstanceId !== undefined) return playUpgradeOnto(updatePlayer(next, owner, paid), owner, at, targetInstanceId, piloting === true, cost)
+    return playUpgradeCardOnto(updatePlayer(next, owner, { ...paid, hand: paid.hand.filter((_, i) => i !== at) }), owner, card.id, undefined, undefined, { ...PLAYED_FROM_HAND, paid: cost })
+  }
   next = updatePlayer(next, owner, { ...paid, hand: paid.hand.filter((_, i) => i !== at) })
   if (card.type === 'event') return playEventCard(next, owner, card.id, undefined, owed, { ...PLAYED_FROM_HAND, paid: cost })
   return checkWin(playUnitCard(next, owner, card.id, undefined, cost, undefined, { owed, powers, ...(borrowed.length > 0 ? { borrowed } : {}) }, PLAYED_FROM_HAND))
@@ -879,7 +885,7 @@ function playEventCard(state: GameState, playerId: PlayerId, cardId: string, car
   const p = state.players[playerId]
   // "The next event you play this phase costs less" (Rex): priced into the cost already paid, so
   // spent now.
-  const eventGrants = (p.nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g, state, playerId))
+  const eventGrants = (p.nextUnitGrants ?? []).filter(g => grantMatches(card, g, state, playerId))
   // An event goes to its OWNER's discard pile (CR 1.5.2), which is the player it was played out of
   // when that was not the one playing it. The grants are still the player's own.
   const owner = cardOwner ?? playerId
@@ -1567,6 +1573,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (unitTargets.length > 0) {
         next = pushChoice(next, { kind: 'selectDamageTarget', id: `${choice.id}-dmg`, controller: choice.controller, amount: choice.amount, unitTargets, baseTargets: [] })
       }
+      next = revealedFromHand(next, choice.controller, [revealed])
       break
     }
     case 'damageAnyBases': {
@@ -2054,6 +2061,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       next = choice.useForce
         ? forceUse(next, choice.controller, rest)
         : rest(updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost)))
+      if (choice.revealEvent) {
+        const shown = next.players[choice.controller].hand.find(id => next.cards[id]?.type === 'event')
+        if (shown) next = revealedFromHand(next, choice.controller, [shown])
+      }
       break
     }
     case 'mayCollectBounty': {
@@ -2103,10 +2114,12 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // offered only once `need` is covered.
       if (handIndex !== undefined) {
         if (!choice.picks.includes(handIndex)) next = pushChoice(next, { ...choice, picks: [...choice.picks, handIndex] })
-      } else if (choice.then) {
+      } else {
         const hand = next.players[choice.controller].hand
         const disclosed = choice.picks.flatMap(i => (hand[i] !== undefined ? [hand[i]] : []))
-        next = runIfYouDo(next, choice.then, { disclosed })
+        if (choice.then) next = runIfYouDo(next, choice.then, { disclosed })
+        // Disclosing is revealing cards from a hand, all at once: one reveal for the whole disclose.
+        next = revealedFromHand(next, choice.controller, disclosed)
       }
       break
     }
@@ -2717,6 +2730,8 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
   if (piloting) {
     const host = p.units.find(u => u.instanceId === targetInstanceId)
     if (!host || !canTakePilot(state, host, card.id)) throw new Error(`playUpgrade: ${targetInstanceId} cannot take ${card.id} as a Pilot`)
+    const step = creditExploitTerms(state, playerId)
+    if (step) return raiseExploit(state, playerId, card.id, handIndex, step, { targetInstanceId, piloting: true })
     const pilotCost = effectiveCost(state, playerId, card, host, undefined, card.piloting)
     const paid = updatePlayer(state, playerId, payCost(p, pilotCost))
     return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId, true, pilotCost)
@@ -2729,6 +2744,10 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
     throw new Error(`playUpgrade: no unit ${targetInstanceId} to attach to`)
   }
   const targetUnit = state.players[targetOwner].units.find(u => u.instanceId === targetInstanceId)
+  // The standing paying step (Credit tokens, units that pay as resources) is asked before anything is
+  // paid, as it is for a unit or an event; `finishExploit` then pays and attaches.
+  const step = creditExploitTerms(state, playerId)
+  if (step) return raiseExploit(state, playerId, card.id, handIndex, step, { targetInstanceId })
 
   const cost = effectiveCost(state, playerId, card, targetUnit)
   const paid = updatePlayer(state, playerId, payCost(p, cost))
@@ -2766,7 +2785,7 @@ function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: strin
   let next = onBase ? attachToBase(state, playerId, card.id) : attachUpgrades(state, targetInstanceId!, [{ cardId: card.id, owner, ...(how.smuggle ? { usingSmuggle: true } : {}), ...(unitCard ? { unitCard: true } : {}) }], true)
   next = recordCardPlayed(next, playerId, card.id) // after the cost ("the first upgrade you play each phase")
   // "The next <kind of> card you play" (Bendu, Tranquility): priced into the cost already paid, so spent now.
-  const cardGrants = (next.players[playerId].nextUnitGrants ?? []).filter(g => g.anyCard && nextUnitGrantMatches(card, g, next, playerId))
+  const cardGrants = (next.players[playerId].nextUnitGrants ?? []).filter(g => g.anyCard && grantMatches(card, g, next, playerId))
   if (cardGrants.length > 0) next = updatePlayer(next, playerId, { nextUnitGrants: spendNextUnitGrants(next.players[playerId].nextUnitGrants, cardGrants) })
 
   // One upgrade arriving is one event: the host reacting to it attaching (Sabine Wren, and since this
@@ -2817,6 +2836,8 @@ function playBaseUpgrade(state: GameState, handIndex: number): GameState {
   const cardId = p.hand[handIndex]
   const card = cardId ? state.cards[cardId] : undefined
   if (!isFortify(card)) throw new Error(`playBaseUpgrade: hand index ${handIndex} is not a Fortify upgrade`)
+  const step = creditExploitTerms(state, playerId)
+  if (step) return raiseExploit(state, playerId, cardId, handIndex, step, {})
   const cost = effectiveCost(state, playerId, card!)
   const paid = updatePlayer(state, playerId, { ...payCost(p, cost), hand: p.hand.filter((_, i) => i !== handIndex) })
   return playUpgradeCardOnto(paid, playerId, cardId, undefined, undefined, { ...PLAYED_FROM_HAND, paid: cost })

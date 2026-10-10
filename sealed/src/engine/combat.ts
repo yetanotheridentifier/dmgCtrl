@@ -6,7 +6,7 @@ import { effectiveHp } from './stats'
 import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
-import { abilityCardIds, collectPlayerTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
+import { abilityCardIds, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, triggerAbility } from './abilities'
 import { fireUpgradesDefeated, damageIsUnpreventable, releaseCaptured, damageDealer, collectDamageDealt, collectLeavesPlay, abilityDamageBonus, protectedFromEnemyAbility, indirectDamageBonus, indirectDamageAssignedByDealer, sendAttachmentFromPlay, escapesDefeat } from './effects'
 
 /**
@@ -173,7 +173,12 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
     const dealer = damageDealer(state, source, byCombat)
     const indirect = (source ?? state.resolvingSource)?.indirect === true
     const event: DamageDealt = { owner, units: dealt, byCombat, ...(dealer ? { dealer } : {}), ...(indirect ? { indirect } : {}) }
-    result = enqueueTriggers(result, collectDamageDealt(result, event), defer || joinsDefeats)
+    // A unit this damage defeated is no longer there to be collected from, so its own abilities printed
+    // without "and survives" are read off the unit as it last was ("when damage is dealt to this unit").
+    const fallen = defeated
+      .filter(u => dealt.some(d => d.instanceId === u.instanceId))
+      .flatMap(u => collectUnitTriggers(result, 'whenDamageDealt', u, owner, { damageDealt: event }).filter(t => triggerAbility(t)?.thoughDefeated))
+    result = enqueueTriggers(result, [...collectDamageDealt(result, event), ...fallen], defer || joinsDefeats)
   }
   // Resolve the batch here, which is where it used to resolve. `drainTriggers` stops of its own accord
   // as soon as a player has something to order, so deferral costs nothing when there is no decision:

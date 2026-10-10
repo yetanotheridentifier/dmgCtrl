@@ -53,9 +53,10 @@ const SHIPPED = [
 
 /**
  * Scoped by the triage but lifted out to the ticket that owns their blocker: the compound head is no
- * longer what holds them back.
+ * longer what holds them back. None is left: SEC_143 The Elite Squad, whose second point is damage
+ * dealt to it, is built and covered with the last one-offs in `oneOffCards4.test.ts`.
  */
-const LIFTED = ['SEC_143']
+const LIFTED: string[] = []
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'ASH', 'HMW'])
 const real = (id: string): EngineCard => {

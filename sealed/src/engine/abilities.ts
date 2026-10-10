@@ -75,6 +75,10 @@ export type TriggerPoint =
   // "When this card is discarded from your hand or deck" (That's a Rock): each discarded card's own
   // ability, from the pile it has just reached, as `whenDrawn` is from the hand. Same `ctx.discard`.
   | 'whenDiscarded'
+  // "When you reveal 1 or more cards from your hand" (Padmé Amidala): one reveal event, raised by
+  // `revealedFromHand`, the door every reveal out of a hand goes through, and heard by the revealing
+  // player's undeployed leader, base and units. `ctx.reveal` says who and which cards.
+  | 'whenReveal'
   // Damage dealt, to units or a base, by combat or an ability (Rancor Keeper, Blade Three, Cassian
   // Andor, Darth Sidious). One event per application of damage, heard by BOTH players' undeployed
   // leaders, bases and units, the damaged side first. `ctx.damageDealt` names every unit dealt damage
@@ -174,6 +178,12 @@ export interface AbilityDef {
    * still puts its side in the batch, and a batch with both sides in it asks who goes first.
    */
   hears?: (state: GameState, ctx: EffectContext) => boolean
+  /**
+   * At `whenDamageDealt`: the ability is the damaged unit's own and is printed with no "and survives"
+   * ("when damage is dealt to this unit", The Elite Squad), so it triggers even when that damage
+   * defeats the unit. The point is otherwise collected from the units still in play.
+   */
+  thoughDefeated?: boolean
 }
 
 /** Whether `ability` is triggered by an event at its point, as collected for `owner`. */

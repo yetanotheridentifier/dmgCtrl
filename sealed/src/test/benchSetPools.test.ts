@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import ashSet from './fixtures/ashSet.json'
 import type { SwuCard } from '../data/cards'
 import { SET_PROGRESS } from '../data/implementedCards'
+import { CARD_DATA_CORRECTIONS } from '../engine/cardDataCorrections'
 import {
   SEALED_MIN_CARDS, SEALED_SET_CODES, SET_CODES, fixtureFile, poolFor, resolveSealedSets, resolveSetCodes, toFixture,
 } from '../bench/setPools'
@@ -137,7 +138,13 @@ describe('toFixture', () => {
 describe('the bundled fixtures', () => {
   it.each(SET_PROGRESS.map(s => [s.code, s.total] as const))('%s matches the printed card counts', (code, total) => {
     const counts: Record<string, number> = {}
-    for (const c of poolFor([code])) counts[c.Type] = (counts[c.Type] ?? 0) + 1
+    // A card whose type the listing gets wrong is counted as the type it is printed with, which is
+    // what the totals record (Snapshot Reflexes: listed in SOR as an event, printed as an upgrade).
+    const printedType = (c: SwuCard): string => {
+      const corrected = CARD_DATA_CORRECTIONS[`${c.Set}_${c.Number}`]?.type
+      return corrected ? corrected[0].toUpperCase() + corrected.slice(1) : c.Type
+    }
+    for (const c of poolFor([code])) counts[printedType(c)] = (counts[printedType(c)] ?? 0) + 1
     const expected = Object.fromEntries(
       ([['Leader', total.leaders], ['Base', total.bases], ['Unit', total.units], ['Upgrade', total.upgrades], ['Event', total.events]] as const)
         .filter(([, n]) => n > 0),
