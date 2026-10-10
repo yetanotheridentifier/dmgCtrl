@@ -454,8 +454,8 @@ const imperialDefeatedThisPhase = (s: GameState, owner: PlayerId): boolean =>
 // Imperial unit in your discard pile has it, this unit gains it too.
 const MOFF_KEYWORDS = ['Ambush', 'Grit', 'Hidden', 'Overwhelm', 'Saboteur', 'Sentinel', 'Shielded', 'Support']
 const cardHasKeyword = (c: EngineCard | undefined, name: string): boolean => (c?.keywords ?? []).some(k => k.name === name)
-const isImperialUnitCard = (c: EngineCard | undefined): boolean =>
-  c?.type === 'unit' && (c.traits ?? []).some(t => t.toLowerCase() === 'imperial')
+const isImperialUnitCard = (s: GameState, owner: PlayerId, cardId: string): boolean =>
+  s.cards[cardId]?.type === 'unit' && cardHasTrait(s, cardId, 'Imperial', owner)
 
 registerCard('ASH_008', { // Moff Gideon — front: play a unit costing 1 less if a friendly Imperial died this phase
   leaderAbilities: {
@@ -476,7 +476,7 @@ registerCard('ASH_008', { // Moff Gideon — front: play a unit costing 1 less i
   conditionalKeywords: (s, u) => {
     const owner = findUnit(s, u.instanceId)?.owner
     if (!owner) return []
-    const discardImperials = s.players[owner].discard.map(id => s.cards[id]).filter(isImperialUnitCard)
+    const discardImperials = s.players[owner].discard.filter(id => isImperialUnitCard(s, owner, id)).map(id => s.cards[id])
     return MOFF_KEYWORDS.filter(kw => discardImperials.some(c => cardHasKeyword(c, kw))).map(name => ({ name }))
   },
 })
@@ -2030,7 +2030,7 @@ registerCard('ASH_104', { // Dathomiri Magicks
     // because each one is a play whose When Played can change what the next one may take.
     effect: (s, ctx) => playFromZoneChoice(s, ctx, {
       zone: 'discard', free: true, optional: true, then: { again: true, againLimit: 3 },
-      test: c => c?.type === 'unit' && c.cost <= 2 && !c.traits.some(t => t.toLowerCase() === 'vehicle'),
+      test: c => c?.type === 'unit' && c.cost <= 2 && !heldTrait(s, ctx.owner, c, 'Vehicle'),
     }),
   }],
 })

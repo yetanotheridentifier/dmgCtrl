@@ -1,5 +1,5 @@
-import type { GameState, KeywordInstance, PlayerId, UnitState, CombatContext } from './types'
-import { lastingEffectTotals, carriedAbilityCardIds, baseAbilityCardIds, traitsRemovedFrom } from './types'
+import type { EngineCard, GameState, KeywordInstance, NextUnitGrant, PlayerId, UnitState, CombatContext } from './types'
+import { lastingEffectTotals, carriedAbilityCardIds, baseAbilityCardIds, traitsRemovedFrom, nextUnitGrantMatches } from './types'
 import { abilityBlank, abilityCardIds, getCardDefinition, isTraitGranter, leaderAbilitiesBlanked } from './abilities'
 import type { AttackContext, AuraContribution, StatModContext } from './abilities'
 
@@ -278,6 +278,14 @@ function traitGrantersOf(state: GameState, owner: PlayerId): UnitState[] {
   const units = state.players[owner].units
   if (!units.some(u => isTraitGranter(u.cardId))) return []
   return units.filter(u => isTraitGranter(u.cardId) && !abilityBlank(state, u, owner))
+}
+
+/**
+ * Whether a "next <kind of> card you play" grant is about `card`, as `owner` plays it. The grant's
+ * trait is read through {@link cardTraits}, so a trait another card gives this one counts.
+ */
+export function grantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state: GameState, owner: PlayerId): boolean {
+  return nextUnitGrantMatches(card, grant, state, owner, card && grant.trait ? cardTraits(state, card.id, owner) : undefined)
 }
 
 /** Case-insensitive trait test for a card anywhere. See {@link cardTraits}. */

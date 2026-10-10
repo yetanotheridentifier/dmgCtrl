@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
-import { effectiveCost, legalMoves } from '../engine/legalMoves'
+import { effectiveCost, legalMoves, playFromCost } from '../engine/legalMoves'
 import { unitHasKeyword, unitHasTrait } from '../engine/keywords'
 import { defeatUnit, dealDamageToUnit } from '../engine/combat'
 import { createCreditTokens, discardCards, discardFromHand, friendlyCreditTokens } from '../engine/effects'
@@ -596,11 +596,27 @@ describe('a trait one card gives another is read by every filter over cards out 
     noChoice(play(board({ hand: ['SHD_260'], discard: ['PLAIN', 'CREATURE'] }), 'SHD_260'))
   })
 
+  it('a discount on the next card with a trait reaches a card that was given it', () => {
+    const next: Side = { nextUnitGrants: [{ trait: 'Underworld', costDelta: -1 }] }
+    expect(effectiveCost(board(next), 'player', F.CREATURE)).toBe(2)
+    expect(effectiveCost(board({ ...next, units: [unit('m', 'LAW_212')] }), 'player', F.CREATURE)).toBe(1)
+  })
+
   it('a play of a card with a trait from hand does not offer a card that has lost it', () => {
     // Soresu Stance: "Play a Force unit from your hand (paying its cost) and give a Shield token to it."
     const s = board({ hand: ['LOF_076', 'FORCE'] })
     expect(choice(play(s, 'LOF_076')).kind).toBe('playUnitFromHand')
     noChoice(play({ ...s, traitsRemoved: { player: ['force'] } }, 'LOF_076'))
+  })
+})
+
+describe('a play priced by trait reads the trait the card has now', () => {
+  // Palpatine's Return: "It costs 6 less. If it's a Force unit, it costs 8 less instead."
+  const terms = { costDelta: -1, traitCostDelta: { trait: 'Force', costDelta: -2 } }
+
+  it('prices a card that has lost the trait as any other', () => {
+    expect(playFromCost(board(), 'player', F.FORCE, terms)).toBe(0)
+    expect(playFromCost(board({}, {}, { traitsRemoved: { player: ['force'] } }), 'player', F.FORCE, terms)).toBe(1)
   })
 })
 

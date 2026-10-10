@@ -486,17 +486,20 @@ export function spendNextUnitGrants(all: NextUnitGrant[] | undefined, spent: Nex
   return left.length > 0 ? left : undefined
 }
 
-/** True if `card` is a unit satisfying a grant's filter. `state` and `owner` are needed only by a board-reading filter. */
-export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state?: GameState, owner?: PlayerId): boolean {
+/**
+ * True if `card` is a unit satisfying a grant's filter. `state` and `owner` are needed only by a
+ * board-reading filter. `liveTraits` is the card's traits as `cardTraits` reads them: this module sits
+ * below the registry and cannot ask, so the engine calls this through `grantMatches` (keywords.ts),
+ * which does. Without it the printed traits are read, less any the card has lost for the phase.
+ */
+export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state?: GameState, owner?: PlayerId, liveTraits?: readonly string[]): boolean {
   if (!card || grant.viaPlot) return false
   if (grant.anyCard ? card.type !== 'unit' && card.type !== 'event' && card.type !== 'upgrade' : card.type !== (grant.event ? 'event' : 'unit')) return false
   if (grant.withoutAspects && card.aspects.some(a => grant.withoutAspects!.includes(a))) return false
-  // Traits the card has lost for the phase are gone here too (The First Legion). The card-level
-  // grants `cardTraits` adds are not read here: this module sits below the registry, and no grant a
-  // card makes itself has ever been what a "your next <Trait> unit" discount turned on.
   if (grant.trait) {
     const lost = state && owner ? traitsRemovedFrom(state, owner) : EMPTY_TRAITS
-    if (!card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase() && !lost.has(t.toLowerCase()))) return false
+    const traits = liveTraits ?? card.traits.filter(t => !lost.has(t.toLowerCase()))
+    if (!traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase())) return false
   }
   if (grant.maxPower !== undefined && (card.power ?? 0) > grant.maxPower) return false
   if (grant.cardId !== undefined && card.id !== grant.cardId) return false

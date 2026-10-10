@@ -2,7 +2,7 @@ import type { Action, AttackTarget } from './actions'
 import type { Arena, EngineCard, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, HowPlayed, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef, UsedAbility } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed, upgradeSideId, PLAYED_FROM_HAND, PLAYED_ELSEWHERE } from './types'
-import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, recordActionStarted, markAbilityUsed, nextUnitGrantMatches, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
+import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, recordActionStarted, markAbilityUsed, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { canTakePilot, effectiveCost, exploitTerms, creditExploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, discardForCostIndices, canAffordFromHand, unitCostPayers, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, smuggleTerms, smuggleCostUnits, type PlayFromTerms } from './legalMoves'
 import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectAbilityUsed, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
@@ -12,7 +12,7 @@ import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
 import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, discardCards, discardTaken, revealedFromHand, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, returnControlledResources, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, captureUnit, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, forceUse } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
-import { hasKeyword, cardHasTrait, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
+import { hasKeyword, cardHasTrait, grantMatches, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, hasToken } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 
@@ -491,7 +491,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // grant (Sabine → Shielded) — so a granted Ambush/Shielded/Hidden fires just like a printed one.
   // "Your next unit …" grants matching this card — their keywords/enters-ready apply here
   // (the cost delta was already folded into `effectiveCost` at play time).
-  const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g, state, owner))
+  const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => grantMatches(card, g, state, owner))
   // "If you play this unit from your hand, it gains Ambush" (Millennium Falcon): keywords the card
   // gains for this play only, given the same way a grant's are. Gone with the card's abilities.
   const fromHand = how.from === 'hand' && !cardAbilitiesBlanked(state, cardId, owner) ? getCardDefinition(cardId)?.fromHandKeywords ?? [] : []
@@ -885,7 +885,7 @@ function playEventCard(state: GameState, playerId: PlayerId, cardId: string, car
   const p = state.players[playerId]
   // "The next event you play this phase costs less" (Rex): priced into the cost already paid, so
   // spent now.
-  const eventGrants = (p.nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g, state, playerId))
+  const eventGrants = (p.nextUnitGrants ?? []).filter(g => grantMatches(card, g, state, playerId))
   // An event goes to its OWNER's discard pile (CR 1.5.2), which is the player it was played out of
   // when that was not the one playing it. The grants are still the player's own.
   const owner = cardOwner ?? playerId
@@ -2785,7 +2785,7 @@ function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: strin
   let next = onBase ? attachToBase(state, playerId, card.id) : attachUpgrades(state, targetInstanceId!, [{ cardId: card.id, owner, ...(how.smuggle ? { usingSmuggle: true } : {}), ...(unitCard ? { unitCard: true } : {}) }], true)
   next = recordCardPlayed(next, playerId, card.id) // after the cost ("the first upgrade you play each phase")
   // "The next <kind of> card you play" (Bendu, Tranquility): priced into the cost already paid, so spent now.
-  const cardGrants = (next.players[playerId].nextUnitGrants ?? []).filter(g => g.anyCard && nextUnitGrantMatches(card, g, next, playerId))
+  const cardGrants = (next.players[playerId].nextUnitGrants ?? []).filter(g => g.anyCard && grantMatches(card, g, next, playerId))
   if (cardGrants.length > 0) next = updatePlayer(next, playerId, { nextUnitGrants: spendNextUnitGrants(next.players[playerId].nextUnitGrants, cardGrants) })
 
   // One upgrade arriving is one event: the host reacting to it attaching (Sabine Wren, and since this

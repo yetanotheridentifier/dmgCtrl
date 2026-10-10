@@ -1,8 +1,8 @@
 import type { Action } from './actions'
 import type { AspectWaiver, AttackerFilter, CapturedCard, DiscardPlayGrant, EngineCard, GameState, HandCardRef, KeywordInstance, PendingChoice, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
-import { opponentOf, hasPendingChoices, nextUnitGrantMatches, plotCostDelta, pushChoice, isFortify, upgradeSideId } from './types'
+import { opponentOf, hasPendingChoices, plotCostDelta, pushChoice, isFortify, upgradeSideId } from './types'
 import { canAfford, readyResourceCount } from './resources'
-import { cardHasTrait, keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
+import { cardHasTrait, grantMatches, keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
 import { abilityCardIds, cardAbilitiesBlanked, getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, leaderAbilitiesBlanked, baseEpicAction, usableBaseActions } from './abilities'
 import { friendlyCreditTokens, discloseRemaining, hasForceToken } from './effects'
 import './cardDefinitions' // side effect: registers all real card behaviours
@@ -232,7 +232,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   }
   if (waivePenalty) penalty = 0
   // "Your next unit …" cost grants that match this card — Mouse Droid's −1 to the next Imperial.
-  const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (nextUnitGrantMatches(card, g, state, playerId) ? (g.costDelta ?? 0) : 0), 0)
+  const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (grantMatches(card, g, state, playerId) ? (g.costDelta ?? 0) : 0), 0)
   // A card an OPPONENT's unit has named for a surcharge costs that much more to play (Qi'ra).
   const surcharge = state.players[opponentOf(playerId)].units.reduce(
     (sum, u) => sum + (u.namedCard === card.name ? u.namedCardSurcharge ?? 0 : 0), 0)
@@ -289,7 +289,7 @@ export function exploitTerms(state: GameState, playerId: PlayerId, card: EngineC
   const units = state.players[playerId].units.length
   if (own) return units > 0 ? { limit: units, discount: own.discount, damage: own.damage } : creditExploitTerms(state, playerId)
   const granted = (state.players[playerId].nextUnitGrants ?? [])
-    .reduce((sum, g) => sum + (nextUnitGrantMatches(card, g, state, playerId) ? g.exploit ?? 0 : 0), 0)
+    .reduce((sum, g) => sum + (grantMatches(card, g, state, playerId) ? g.exploit ?? 0 : 0), 0)
   const x = (blanked ? 0 : keywordValue(state, card.id, 'Exploit')) + granted + extra
   if (x > 0 && units > 0) return { limit: Math.min(x, units), discount: 2 }
   return creditExploitTerms(state, playerId)
@@ -688,7 +688,8 @@ export function playFromCost(state: GameState, controller: PlayerId, card: Engin
   if (terms.free) return 0
   const plotDelta = terms.plot ? plotCostDelta(state, controller) : 0
   const byTrait = terms.traitCostDelta
-  const delta = byTrait && (card.traits ?? []).some(t => t.toLowerCase() === byTrait.trait.toLowerCase())
+  // The trait the card has now, for the player playing it: one given by another card counts.
+  const delta = byTrait && cardHasTrait(state, card.id, byTrait.trait, controller)
     ? byTrait.costDelta : terms.costDelta ?? 0
   return Math.max(0, effectiveCost(state, controller, card, target, terms.waive, terms.piloting ? card.piloting : terms.altCost) + delta + plotDelta)
 }
