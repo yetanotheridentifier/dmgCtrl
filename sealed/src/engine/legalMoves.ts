@@ -1276,6 +1276,10 @@ function choiceMoves(state: GameState): Action[] {
         }
         break
       }
+      case 'lookAtDeckTops':
+        // Grand Admiral Thrawn: view-only, so the Done is the whole answer.
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
       case 'searchDraw': {
         // Clan Wren Loyalist: draw one of the matching revealed cards. Mandatory while a match
         // exists; with none, the reveal is still shown (#413) and the only move is to acknowledge

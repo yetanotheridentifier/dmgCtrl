@@ -672,6 +672,13 @@ export interface GameState {
    */
   pendingTriggers?: PendingTrigger[]
   /**
+   * Batches set aside while an attack made by one of their abilities runs (Ambush, Support, "attack
+   * with a unit"), innermost last. The attack is part of resolving that ability, so the abilities
+   * that triggered alongside it wait until the attack and everything it triggers have resolved
+   * (CR 7.5.5f, 7.6.12). `holdTriggers` and `releaseTriggers` in `triggerQueue.ts` own it.
+   */
+  heldTriggers?: HeldTriggers[]
+  /**
    * The card whose effect is resolving right now, set only for the duration of the effect call and
    * never at rest. Damage the effect deals without naming a source is attributed to it for the damage
    * event (`DamageDealt.dealer`) and for nothing else: prevention still reads only a named source.
@@ -1342,6 +1349,13 @@ export interface PendingTrigger {
   ctx?: TriggerContext
 }
 
+/** A batch waiting on the attack `attackerId` is making, with whose turn it was to resolve in it. */
+export interface HeldTriggers {
+  attackerId: string
+  triggers: PendingTrigger[]
+  turn?: GameState['triggerTurn']
+}
+
 /**
  * A triggered ability that has been used, as the handle to use it **again**: the collected trigger
  * without its place in the queue. Card, ability index and point address the ability, and the source
@@ -1814,6 +1828,11 @@ type ChoiceVariant =
   // the choice would have no legal move.
   // `thenNameCard` raises a `nameCard` once the look is done (Qi'ra looks, then names).
   | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean; discardFilter?: 'nonUnit' | 'event' | 'unit'; discardAspects?: string[]; thenNameCard?: { unitId: string; surcharge: number }; then?: IfYouDo }
+  // "Look at the top card of each player's deck" (Grand Admiral Thrawn): view-only, so its one answer
+  // is the Done (`skipTrigger`) and answering changes nothing. `tops` holds the cards that were on top
+  // when the ability resolved, the controller's own deck first and an empty deck left out. Private to
+  // the controller: the answer names no card, so neither the log nor a replay's moves do.
+  | { kind: 'lookAtDeckTops'; id: string; controller: PlayerId; tops: { deck: PlayerId; cardId: string }[] }
   // Search the revealed top cards (Clan Wren Loyalist): pick one of the `eligibleIndices`
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.

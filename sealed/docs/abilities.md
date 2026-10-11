@@ -111,13 +111,31 @@ the ability. It is the trigger condition in the rules' sense, settled once, wher
 every pass. The points heard on both sides are where it earns its place (`whenDamageDealt` uses it for
 every registration).
 
-### Ambush and Support are abilities, not keywords
+### Ambush, Support and Shielded are abilities, not keywords
 
-Both read as keywords but each is a When Played ability ("When you play this unit, you may attack …"),
-so they are registered as the pseudo cards `KEYWORD_AMBUSH` and `KEYWORD_SUPPORT` and collected into
-the play batch like anything else. That is what puts them into the ordering question alongside the
-card's own When Played. Raising their choice directly instead would stop the rest of the batch until
-it was answered, since a choice on the board holds everything behind it.
+All three read as keywords but each resolves as a When Played ability ("When you play this unit, you
+may attack …", "… give a Shield token to this unit"), so they are registered as the pseudo cards
+`KEYWORD_AMBUSH`, `KEYWORD_SUPPORT` and `KEYWORD_SHIELDED` and collected into the play batch like
+anything else. That is what puts them into the ordering question alongside the card's own When Played
+(CR 7.6.13b: "When Played abilities, Ambush, and Shielded all resolve in the same timing window, in
+the order that the card's controller chooses"). Raising their choice directly instead would stop the
+rest of the batch until it was answered, since a choice on the board holds everything behind it, and
+attaching the Shield as the unit arrives would settle the order before anyone could be asked.
+
+A deploying leader brings the same three to its own arrival batch (`collectDeployKeywords`), where
+they are ordered with its When Deployed.
+
+**Shielded leads the batch.** Collection order is the order abilities resolve in wherever nobody is
+asked, and the answer a bot gives when it cannot separate the options, so the Shield arrives first
+unless its controller says otherwise. It also declares `yieldsOrder` on its `AbilityDef`: the ability
+is left out of the ordering question wherever the queue measures that its place in the order cannot be
+seen (`choices.md` owns how), because a question on every Shielded unit that also has something else
+to resolve would be asked constantly and decide nothing.
+
+**An attack an ability makes is part of resolving it.** Taking the Ambush or Support attack sets the
+rest of the batch aside until the attack and everything it triggers have resolved (CR 7.5.5f,
+`holdTriggers` and `releaseTriggers`), so an ability chosen to resolve after the attack really does:
+the Shield arrives on a unit that has already taken the hit.
 
 Pseudo cards (`KEYWORD_*`, and the `GRANT_*` abilities one card hands to others) are not cards. The
 setup panel's manifest, `data/implementedCards.ts`, must list every registered card id in any set, and
@@ -126,12 +144,14 @@ its test counts only ids shaped `<SET>_<number>`, so a pseudo card is left out a
 The unit's ready state is not part of that: entering ready so Ambush can attack is part of entering
 play, and stays in `playUnitCard`.
 
-**Shielded and Hidden are read from the unit's LIVE keywords once it is in play** (`applyEntryKeywords`,
-shared by a unit played from hand and a leader deploying), for the same reason Ambush is: a unit can
-gain either one only once there is a unit to look at. Privateer Scyk has Shielded while you control
-another Cunning unit, and every friendly Inquisitor gains Hidden from the Grand Inquisitor; read from
-the card alone, both are silently dropped. The Shield token is attached before anything reacts to the
-unit arriving, so "when 1 or more upgrades attach to this unit" still fires for it.
+**Shielded and Hidden are read from the unit's LIVE keywords once it is in play** (`shieldedOnEntry`
+and `applyHidden`, shared by a unit played from hand and a leader deploying), for the same reason
+Ambush is: a unit can gain either one only once there is a unit to look at. Privateer Scyk has Shielded
+while you control another Cunning unit, and every friendly Inquisitor gains Hidden from the Grand
+Inquisitor; read from the card alone, both are silently dropped. Whether Shielded triggers is settled
+as the unit arrives; the Shield itself is given when the ability resolves, through `giveToken`, so
+"when 1 or more upgrades attach to this unit" fires for it as a nested ability. Hidden is not an
+ability: the unit is hidden as it arrives.
 
 ### Trigger points
 
@@ -544,7 +564,11 @@ target (see `architecture.md`). Because looking never passes through `resolve`, 
 log, the replay data or the other seat, and a bot holding the permission is never waited on.
 
 A one-shot "look at the top card of your deck" inside an ability is a different thing: that is a
-pending choice which shows the card as it asks what to do with it (see `choices.md`).
+pending choice which shows the card as it asks what to do with it (see `choices.md`). So is a
+triggered look that asks nothing: Grand Admiral Thrawn's "when the action phase starts, look at the top
+card of each player's deck" is one `whenActionPhaseStarts` ability declared on both sides of the card
+(`leaderAbilities.abilities` for the leader side, `abilities` for the unit), raising the view-only
+`lookAtDeckTops` choice.
 
 `lookAtDeckTop.test.ts` finds every bundled card that prints the standing sentence and fails for one
 that does not declare it.

@@ -396,6 +396,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
               ? 'choose a card sharing an aspect with that unit to discard from their hand'
               : 'choose a card to discard from their hand'
         : 'look at their hand']
+    // The cards themselves are shown in the overlay only: a prompt can outlive it on the screen.
+    case 'lookAtDeckTops':
+      return ['look at the top card of each deck']
     case 'mayResourceTop':
       return ['put the top card of your deck into play as a resource, or decline']
     case 'mayDiscardTop':
