@@ -4,7 +4,7 @@ import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
 import type { CapturedCard, EngineCard, GameState, PendingChoice, PendingTrigger, PlayerId, TargetIntent, UnitState, UpgradeAttachment } from '../engine/types'
-import { leaderActions, triggerAbility } from '../engine/abilities'
+import { leaderActions, mayLookAtDeckTop, triggerAbility } from '../engine/abilities'
 import type { Action } from '../engine/actions'
 import { describeAction, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
@@ -1178,7 +1178,8 @@ function OpponentBar({ state }: { state: GameState }) {
       </div>
       <div className="flex min-w-0 items-stretch justify-end gap-2">
         <BarColumn label="Resources"><ResourceStack ready={ready} exhausted={exhausted} credits={friendlyCreditTokens(state, 'opponent')} force={hasForceToken(state, 'opponent')} owner="opponent" /></BarColumn>
-        <BarColumn label="Deck"><DeckPile count={p.deck.length} /></BarColumn>
+        {/* Never `canLook`: the opponent's deck is theirs to look at, whatever they hold. */}
+        <BarColumn label="Deck"><DeckPile state={state} side="opponent" /></BarColumn>
       </div>
     </div>
   )
@@ -1196,7 +1197,7 @@ function PlayerBar({ state, hand, action }: { state: GameState; hand: ReactNode;
   const cols: CSSProperties = { display: 'grid', gridTemplateColumns: 'auto auto minmax(0, 1fr) 10rem auto', columnGap: '0.5rem', alignItems: 'stretch' }
   return (
     <div data-testid="player-mat" className="px-2 py-2" style={cols}>
-      <BarColumn label="Deck"><DeckPile count={p.deck.length} /></BarColumn>
+      <BarColumn label="Deck"><DeckPile state={state} side="player" canLook={mayLookAtDeckTop(state, 'player')} /></BarColumn>
       <BarColumn label="Resources"><ResourceStack ready={ready} exhausted={exhausted} credits={friendlyCreditTokens(state, 'player')} force={hasForceToken(state, 'player')} owner="player" /></BarColumn>
       <BarColumn label="Hand">{hand}</BarColumn>
       <BarColumn label="Action">{action}</BarColumn>

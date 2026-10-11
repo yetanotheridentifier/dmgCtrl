@@ -7,6 +7,8 @@ import { CardZoomPopover } from './cardZoom'
 import { CardGridOverlay } from './cardGridOverlay'
 import { PILL_W, TOKEN_H, TOKEN_BORDER, TOKEN_SHADOW, PLAYER_TOKEN_SPEC } from './tokens'
 import type { PlayerTokenKind } from './tokens'
+import { highlightOutline } from './highlight'
+import type { Highlight } from './highlight'
 
 /** Mat cards (deck/resources/discard/opponent-hand) are smaller than the hand. */
 export const MAT_CARD_PX = 84
@@ -19,10 +21,10 @@ function dims(short: number, landscape: boolean) {
  * A face-down card back: the transparent dmgCtrl symbol on an opaque card in the
  * darker background colour (not the paler play-area surface).
  */
-export function CardBack({ widthPx = MAT_CARD_PX, landscape = false, symbol = true }: { widthPx?: number; landscape?: boolean; symbol?: boolean }) {
+export function CardBack({ widthPx = MAT_CARD_PX, landscape = false, symbol = true, highlight }: { widthPx?: number; landscape?: boolean; symbol?: boolean; highlight?: Highlight }) {
   return (
     <div
-      style={{ ...dims(widthPx, landscape), backgroundColor: 'var(--color-bg)' }}
+      style={{ ...dims(widthPx, landscape), backgroundColor: 'var(--color-bg)', ...highlightOutline(highlight) }}
       className="flex items-center justify-center rounded-lg border border-line/40"
     >
       {symbol && <img src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`} alt="" className="w-3/5 opacity-90" />}
@@ -51,12 +53,51 @@ function CountChip({ children }: { children: ReactNode }) {
   )
 }
 
-/** The draw deck: a card back with the remaining count in a top chip. */
-export function DeckPile({ count }: { count: number }) {
+/** Which highlight says "you can click this": the same one a leader with a usable ability carries. */
+const CLICKABLE: Highlight = 'accent-dim'
+
+/**
+ * The draw deck: a card back with the remaining count in a top chip.
+ *
+ * `canLook` is "you may look at the top card of your deck at any time" (`mayLookAtDeckTop`), passed
+ * for the human's own deck only. The pile then highlights and becomes a click target that shows the
+ * top card centre-screen, dismissed by clicking outside it, like the discard pile beside it. Looking
+ * is not a move: it goes nowhere near the engine, so it reaches neither the log nor the opponent. The
+ * card shown is read live, so it is always the one on top now, and it closes if the permission goes.
+ */
+export function DeckPile({ state, side, canLook = false }: { state: GameState; side: PlayerId; canLook?: boolean }) {
+  const [open, setOpen] = useState(false)
+  const deck = state.players[side].deck
+  const top = canLook ? deck[0] : undefined
   return (
     <div data-testid="deck-pile" className="relative w-fit">
-      <CardBack />
-      <CountChip>{count}</CountChip>
+      {top === undefined ? (
+        <>
+          <CardBack />
+          <CountChip>{deck.length}</CountChip>
+        </>
+      ) : (
+        <button
+          data-testid={`${side}-deck-look`}
+          data-highlight={CLICKABLE}
+          aria-label="Look at the top card of your deck"
+          onClick={() => setOpen(true)}
+          className="relative block w-fit cursor-pointer"
+        >
+          <CardBack highlight={CLICKABLE} />
+          <CountChip>{deck.length}</CountChip>
+        </button>
+      )}
+      {open && top !== undefined && (
+        <CardGridOverlay
+          idPrefix="deck-top"
+          prompt="The top card of your deck"
+          cardsById={state.cards}
+          cardWidthPx={CARD_WIDTH_PX}
+          onBackdropClick={() => setOpen(false)}
+          items={[{ cardId: top, key: top }]}
+        />
+      )}
     </div>
   )
 }

@@ -8890,9 +8890,12 @@ registerCard('HMW_095', { // Carbonite Chamber
   }] },
   ifYouDo: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, skipsRegroupReady: true, untilRoundEnd: true }),
 })
-registerCard('HMW_205', whenPlayed("Look at an opponent's hand. You may discard a card from it. If you do, they draw a card.", (s, ctx) => // Intelligence Agency
-  // "You may look at the top card of your deck at any time" is information the engine does not model.
-  pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, thenDraw: true })))
+registerCard('HMW_205', { // Intelligence Agency
+  ...whenPlayed("Look at an opponent's hand. You may discard a card from it. If you do, they draw a card.", (s, ctx) =>
+    pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, thenDraw: true })),
+  // Attached base gains: "You may look at the top card of your deck at any time."
+  baseAbilities: { looksAtOwnDeckTop: true },
+})
 
 // D: cards that read a base's upgrades
 registerCard('HMW_061', attacks('If your base is upgraded, draw a card.', (s, ctx) => (baseUpgraded(s, ctx.owner) ? drawCards(s, ctx.owner, 1) : s))) // Director Krennic
@@ -9936,8 +9939,8 @@ registerCard('SOR_246', whenPlayed('Look at the top card of your deck. You may p
 
 const topCardPaid: PlayFromZoneOptions = { zone: 'deckTop' }
 registerCard('LAW_094', { // Hondo Ohnaka
-  // "You may look at the top card of your deck at any time" is information rather than a rule: it
-  // changes nothing in the game state, and showing it is a UI affordance this card does not have.
+  // "You may look at the top card of your deck at any time."
+  looksAtOwnDeckTop: true,
   actionAbilities: [{
     description: 'Play the top card of your deck (paying its cost). Use this ability only once each round.',
     oncePerRound: true,

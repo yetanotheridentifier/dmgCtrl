@@ -5,10 +5,10 @@ import { normaliseCard } from '../engine/cardDb'
 import { cardId } from '../data/cards'
 import { SET_CODES, poolFor } from '../bench/setPools'
 import { getCardDefinition, mayLookAtDeckTop } from '../engine/abilities'
-import { addLastingEffect } from '../engine/effects'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import '../engine/cardDefinitions' // side-effect: registers every implemented card
+import { addLastingEffect } from '../engine/types'
 import type { EngineCard, GameState, PlayerId } from '../engine/types'
 
 /**
