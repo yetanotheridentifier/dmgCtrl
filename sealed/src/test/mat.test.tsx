@@ -8,10 +8,76 @@ import type { GameState } from '../engine/types'
 // Reset the shared modifier store between tests (CardFace zoom reads it).
 afterEach(() => fireEvent.keyUp(window, { key: 'Shift', shiftKey: false, altKey: false }))
 
+function deckState(deck: string[]): GameState {
+  return state({
+    cards: { ...CARDS, T1: card({ id: 'T1', name: 'Top Card' }), T2: card({ id: 'T2', name: 'Second Card' }) },
+    players: { player: player({ deck }), opponent: player({ deck }) },
+  })
+}
+
 describe('DeckPile', () => {
   it('shows the number of cards remaining', () => {
-    render(<DeckPile count={17} />)
+    render(<DeckPile state={deckState(Array.from({ length: 17 }, () => 'T2'))} side="player" />)
     expect(screen.getByTestId('deck-pile')).toHaveTextContent('17')
+  })
+
+  it('is face down and not a click target: a deck is hidden from both players', () => {
+    render(<DeckPile state={deckState(['T1', 'T2'])} side="player" />)
+    expect(screen.queryByTestId('player-deck-look')).toBeNull()
+    expect(within(screen.getByTestId('deck-pile')).queryByTestId('card-face')).toBeNull()
+    expect(screen.getByTestId('deck-pile')).not.toHaveTextContent('Top Card')
+  })
+
+  describe('when its player may look at the top card', () => {
+    it('highlights as something to click, still face down, with its count', () => {
+      render(<DeckPile state={deckState(['T1', 'T2'])} side="player" canLook />)
+      const look = screen.getByTestId('player-deck-look')
+      expect(look).toHaveAttribute('data-highlight', 'accent-dim')
+      expect(look).toHaveAccessibleName('Look at the top card of your deck')
+      expect(screen.getByTestId('deck-pile')).toHaveTextContent('2')
+      expect(within(look).queryByTestId('card-face')).toBeNull()
+      expect(screen.queryByTestId('deck-top-overlay')).toBeNull()
+    })
+
+    it('shows the top card, and only the top card, when clicked', () => {
+      render(<DeckPile state={deckState(['T1', 'T2'])} side="player" canLook />)
+      fireEvent.click(screen.getByTestId('player-deck-look'))
+      const overlay = screen.getByTestId('deck-top-overlay')
+      expect(within(overlay).getAllByTestId('card-face')).toHaveLength(1)
+      expect(overlay).toHaveTextContent('Top Card')
+      expect(overlay).not.toHaveTextContent('Second Card')
+      expect(screen.getByTestId('deck-top-prompt')).toHaveTextContent('The top card of your deck')
+    })
+
+    it('puts it away when clicking outside it, and not when clicking the card', () => {
+      render(<DeckPile state={deckState(['T1', 'T2'])} side="player" canLook />)
+      fireEvent.click(screen.getByTestId('player-deck-look'))
+      fireEvent.click(screen.getByTestId('deck-top-overlay-content'))
+      expect(screen.getByTestId('deck-top-overlay')).toBeInTheDocument()
+      fireEvent.click(screen.getByTestId('deck-top-overlay')) // the backdrop
+      expect(screen.queryByTestId('deck-top-overlay')).toBeNull()
+    })
+
+    it('follows the deck: the card showing is whichever is on top now', () => {
+      const { rerender } = render(<DeckPile state={deckState(['T1', 'T2'])} side="player" canLook />)
+      fireEvent.click(screen.getByTestId('player-deck-look'))
+      rerender(<DeckPile state={deckState(['T2'])} side="player" canLook />)
+      expect(screen.getByTestId('deck-top-overlay')).toHaveTextContent('Second Card')
+    })
+
+    it('stops showing it the moment the permission goes', () => {
+      const { rerender } = render(<DeckPile state={deckState(['T1', 'T2'])} side="player" canLook />)
+      fireEvent.click(screen.getByTestId('player-deck-look'))
+      rerender(<DeckPile state={deckState(['T1', 'T2'])} side="player" />)
+      expect(screen.queryByTestId('deck-top-overlay')).toBeNull()
+      expect(screen.queryByTestId('player-deck-look')).toBeNull()
+    })
+
+    it('has nothing to click with no cards left', () => {
+      render(<DeckPile state={deckState([])} side="player" canLook />)
+      expect(screen.queryByTestId('player-deck-look')).toBeNull()
+      expect(screen.getByTestId('deck-pile')).toHaveTextContent('0')
+    })
   })
 })
 
