@@ -1,7 +1,8 @@
 import type { Action } from './actions'
 import type { AspectWaiver, AttackerFilter, CapturedCard, DiscardPlayGrant, EngineCard, GameState, HandCardRef, KeywordInstance, PendingChoice, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
 import { opponentOf, hasPendingChoices, plotCostDelta, pushChoice, isFortify, upgradeSideId } from './types'
-import { canAfford, readyResourceCount } from './resources'
+import { readyResourceCount } from './resources'
+import { canPay, payable, unitCostPayers, usableCreditTokens, payWithAffordable, payWithCredit, payWithUnits } from './payment'
 import { cardHasTrait, grantMatches, keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
 import { abilityCardIds, cardAbilitiesBlanked, getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, leaderAbilitiesBlanked, baseEpicAction, usableBaseActions } from './abilities'
 import { friendlyCreditTokens, discloseRemaining, hasForceToken } from './effects'
@@ -280,64 +281,45 @@ export function exploitTerms(state: GameState, playerId: PlayerId, card: EngineC
     const there = discardUnitPicks(state, playerId, own.fromDiscard.maxCost).length
     return there > 0
       ? { limit: Math.min(own.fromDiscard.limit, there), discount: 0, fromDiscard: true, maxCost: own.fromDiscard.maxCost }
-      : creditExploitTerms(state, playerId)
+      : undefined
   }
   if (own && 'resources' in own) {
     const readyNow = readyResourceCount(state.players[playerId])
-    return readyNow > 0 ? { limit: readyNow, discount: own.discount, resources: true } : creditExploitTerms(state, playerId)
+    return readyNow > 0 ? { limit: readyNow, discount: own.discount, resources: true } : undefined
   }
   const units = state.players[playerId].units.length
-  if (own) return units > 0 ? { limit: units, discount: own.discount, damage: own.damage } : creditExploitTerms(state, playerId)
+  if (own) return units > 0 ? { limit: units, discount: own.discount, damage: own.damage } : undefined
   const granted = (state.players[playerId].nextUnitGrants ?? [])
     .reduce((sum, g) => sum + (grantMatches(card, g, state, playerId) ? g.exploit ?? 0 : 0), 0)
   const x = (blanked ? 0 : keywordValue(state, card.id, 'Exploit')) + granted + extra
   if (x > 0 && units > 0) return { limit: Math.min(x, units), discount: 2 }
-  return creditExploitTerms(state, playerId)
+  return undefined
 }
 
 /**
- * Credit's own standing rule (#602): "while paying resources, you may defeat this token. If you do,
- * pay 1 less" — offered on any card play, not declared by the card, whenever nothing else already
- * claims this step and the payer holds any. No LAW card both needs its own `whilePlaying`/Exploit AND
- * has Credit tokens, so combining the two in one step is left unbuilt rather than guessed at.
+ * The terms for a card that raises the Credit step itself, so as to hear whether a token was defeated
+ * paying for it (Jabba the Hutt: "If you defeated a Credit while paying its cost, that unit gains
+ * Ambush"). Every other payment asks through the paying step in `payment.ts`, which no card declares.
  *
- * An upgrade played from hand has no step of its own, so these are the only terms it is ever asked on.
+ * This step is built for one kind of pick: a player with paying units (Vuutun Palaa's Droids) is
+ * offered those, and otherwise their usable Credit tokens.
  */
 export function creditExploitTerms(state: GameState, playerId: PlayerId): ExploitTerms | undefined {
-  // Units paying as resources (Vuutun Palaa's Droids) take the same step, each exhausted paying 1. A
-  // player with both those and Credit tokens is offered the units: the step is built for one kind.
   const payers = unitCostPayers(state, playerId)
   if (payers.length > 0) return { limit: payers.length, discount: 1, droids: true }
-  const held = friendlyCreditTokens(state, playerId)
-  if (held === 0) return undefined
-  // "Enemy Credit tokens lose all abilities" (Conveyex Security Captain): theirs can't pay.
-  const enemy = opponentOf(playerId)
-  if (state.players[enemy].units.some(u => abilityCardIds(state, u, enemy).some(id => getCardDefinition(id)?.suppressesEnemyCredits?.(state, u) ?? false))) return undefined
-  return { limit: held, discount: 1, credit: true }
-}
-
-/** `playerId`'s ready units that a friendly card lets them exhaust to pay costs (Vuutun Palaa's Droids). */
-export function unitCostPayers(state: GameState, playerId: PlayerId): string[] {
-  const units = state.players[playerId].units
-  const tests = units.flatMap(u => abilityCardIds(state, u, playerId).flatMap(id => {
-    const test = getCardDefinition(id)?.unitPaysCosts
-    return test ? [test] : []
-  }))
-  if (tests.length === 0) return []
-  return units.filter(u => !u.exhausted && tests.some(t => t(state, u))).map(u => u.instanceId)
+  const held = usableCreditTokens(state, playerId)
+  return held > 0 ? { limit: held, discount: 1, credit: true } : undefined
 }
 
 /**
  * Exploit (CR 7.5.16), and The Marauder's step of the same shape: before anything is paid, ask for
  * the friendly units, one at a time. The card stays in hand until the step finishes, since nothing
  * else happens in between. The choice is the card's own, so its prompt can name it. `resolve` answers
- * it; an ability doing the playing (Count Dooku) raises it here too. `onto` makes the play an
- * upgrade's: the unit it goes on, which its cost can depend on, or nothing for one that goes on a base.
+ * it; an ability doing the playing (Count Dooku) raises it here too.
  */
-export function raiseExploit(state: GameState, owner: PlayerId, cardId: string, handIndex: number, terms: ExploitTerms, onto?: { targetInstanceId?: string; piloting?: boolean }): GameState {
+export function raiseExploit(state: GameState, owner: PlayerId, cardId: string, handIndex: number, terms: ExploitTerms): GameState {
   return pushChoice(state, {
     kind: 'exploit', id: `exploit-${cardId}`, controller: owner, cardId, handIndex, picks: [],
-    ...(onto ? { onto } : {}),
     limit: terms.limit, discount: terms.discount, ...(terms.damage !== undefined ? { damage: terms.damage } : {}),
     ...(terms.resources ? { resources: true } : {}),
     ...(terms.fromDiscard ? { fromDiscard: true, maxCost: terms.maxCost } : {}),
@@ -358,7 +340,8 @@ export function raiseExploit(state: GameState, owner: PlayerId, cardId: string, 
 export function canAffordFromHand(state: GameState, playerId: PlayerId, card: EngineCard, extra = 0): boolean {
   const terms = exploitTerms(state, playerId, card, extra)
   const cost = effectiveCost(state, playerId, card)
-  const readyNow = readyResourceCount(state.players[playerId])
+  // What is left after the card's own step is paid through the door, so Credit tokens and paying units count.
+  const readyNow = payable(state, playerId)
   if (!terms) return cost <= readyNow
   if (!terms.resources) return Math.max(0, cost - terms.limit * terms.discount) <= readyNow
   for (let k = 0; k <= terms.limit; k++) if (Math.max(0, cost - k * terms.discount) <= readyNow - k) return true
@@ -388,27 +371,17 @@ export function discardForCostIndices(state: GameState, playerId: PlayerId, hand
 export function exploitCost(state: GameState, choice: Extract<PendingChoice, { kind: 'exploit' }>): number {
   const card = state.cards[choice.cardId]
   if (!card) return 0
-  // An upgrade is priced against the unit it goes on, and a Pilot played as one by its Piloting bracket.
-  const host = choice.onto?.targetInstanceId
-    ? [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === choice.onto!.targetInstanceId)
-    : undefined
-  const cost = choice.onto ? effectiveCost(state, choice.controller, card, host, undefined, choice.onto.piloting ? card.piloting : undefined) : effectiveCost(state, choice.controller, card)
-  return Math.max(0, cost - choice.picks.length * choice.discount)
+  return Math.max(0, effectiveCost(state, choice.controller, card) - choice.picks.length * choice.discount)
 }
 
 /**
- * Whether `playerId` can pay `cost` for an upgrade played from hand: with ready resources, less what
- * the standing paying step could save (Credit tokens, or units that pay as resources).
+ * Whether an `exploit` step could finish now: what is left can be paid once its picks are gone. A
+ * step that takes Credit tokens or paying units is the paying step for its card, so only ready
+ * resources are left to it; any other leaves the rest to the door, where those can still pay.
  */
-export function canPayForUpgrade(state: GameState, playerId: PlayerId, cost: number): boolean {
-  const terms = creditExploitTerms(state, playerId)
-  return Math.max(0, cost - (terms ? terms.limit * terms.discount : 0)) <= readyResourceCount(state.players[playerId])
-}
-
-/** Whether an `exploit` step could finish now: what is left fits the ready resources its picks leave. */
 export function exploitAffordable(state: GameState, choice: Extract<PendingChoice, { kind: 'exploit' }>): boolean {
-  const readyLeft = readyResourceCount(state.players[choice.controller]) - (choice.resources ? choice.picks.length : 0)
-  return exploitCost(state, choice) <= readyLeft
+  const has = choice.credit || choice.droids ? readyResourceCount(state.players[choice.controller]) : payable(state, choice.controller)
+  return exploitCost(state, choice) <= has - (choice.resources ? choice.picks.length : 0)
 }
 
 /**
@@ -454,7 +427,7 @@ export function eventsBannedFor(state: GameState, playerId: PlayerId): boolean {
 
 export function affordableHandUnits(state: GameState, owner: PlayerId, extraResourceCost: number, costDelta: number): HandCardRef[] {
   const p = state.players[owner]
-  const budget = readyResourceCount(p) - extraResourceCost
+  const budget = payable(state, owner) - extraResourceCost
   const out: HandCardRef[] = []
   p.hand.forEach((cardId, handIndex) => {
     const card = state.cards[cardId]
@@ -703,7 +676,7 @@ export function playFromCost(state: GameState, controller: PlayerId, card: Engin
  * that card before any other, which is free for the player because it is leaving the zone anyway.
  */
 export function playFromBudget(state: GameState, controller: PlayerId, extraCost = 0): number {
-  return readyResourceCount(state.players[controller]) - extraCost
+  return payable(state, controller) - extraCost
 }
 
 /**
@@ -843,13 +816,13 @@ function actionPhaseMoves(state: GameState): Action[] {
     if (forbiddenNames.has(card.name)) return
     // Fortify: "Attach this to your base, not a unit." Its one target is fixed, so it names none.
     if (isFortify(card)) {
-      if (canPayForUpgrade(state, playerId, effectiveCost(state, playerId, card))) moves.push({ type: 'playBaseUpgrade', handIndex })
+      if (canPay(state, playerId, effectiveCost(state, playerId, card))) moves.push({ type: 'playBaseUpgrade', handIndex })
       return
     }
     const restriction = getCardDefinition(card.id)?.attachRestriction
     for (const target of allUnits) {
       if (restriction && !restriction(state, target, playerId)) continue
-      if (!canPayForUpgrade(state, playerId, effectiveCost(state, playerId, card, target))) continue
+      if (!canPay(state, playerId, effectiveCost(state, playerId, card, target))) continue
       moves.push({ type: 'playUpgrade', handIndex, targetInstanceId: target.instanceId })
     }
   })
@@ -861,7 +834,7 @@ function actionPhaseMoves(state: GameState): Action[] {
     if (!card?.piloting || forbiddenNames.has(card.name)) return
     for (const target of p.units) {
       if (!canTakePilot(state, target, card.id)) continue
-      if (!canPayForUpgrade(state, playerId, effectiveCost(state, playerId, card, target, undefined, card.piloting))) continue
+      if (!canPay(state, playerId, effectiveCost(state, playerId, card, target, undefined, card.piloting))) continue
       moves.push({ type: 'playUpgrade', handIndex, targetInstanceId: target.instanceId, piloting: true })
     }
   })
@@ -901,7 +874,8 @@ function actionPhaseMoves(state: GameState): Action[] {
       if (ability.oncePerRound && u.usedAbilities?.includes(actionAbilityKey(cardId, index))) continue
       if (ability.exhaustCost && u.exhausted) continue // "[Exhaust]" — the unit must be ready to pay it
       if (ability.useForceCost && !hasForceToken(state, playerId)) continue // "[use the Force]" (#462)
-      if (!canAfford(p, ability.cost ?? 0)) continue
+      // A unit does not pay for its own action by being exhausted as a resource.
+      if (!canPay(state, playerId, ability.cost ?? 0, u.instanceId)) continue
       if (ability.usable && !ability.usable(state, u)) continue
       moves.push({ type: 'useAbility', instanceId: u.instanceId, cardId, index })
     }
@@ -914,7 +888,7 @@ function actionPhaseMoves(state: GameState): Action[] {
   if (!p.leader.deployed && !p.leader.exhausted && !leaderAbilitiesBlanked(state, playerId)) {
     leaderActions(p.leader.cardId).forEach((ability, index) => {
       if (ability.useForceCost && !hasForceToken(state, playerId)) return // "[use the Force]" (#462)
-      if (!canAfford(p, ability.cost ?? 0)) return
+      if (!canPay(state, playerId, ability.cost ?? 0)) return
       if (ability.targets) {
         for (const targetInstanceId of ability.targets(state, playerId)) {
           moves.push({ type: 'useLeaderAbility', index, targetInstanceId })
@@ -958,7 +932,10 @@ function choiceMoves(state: GameState): Action[] {
   // An outstanding "who resolves first" gates the whole queue (CR 7.6.10). Offering anything alongside
   // it would let the player settle the order by accident, by answering one of their own triggers and
   // thereby choosing themselves without being asked.
-  const gate = (state.pendingChoices ?? []).find(c =>
+  // A paying step gates it the same way, and comes first: it stands in front of an action that has
+  // not happened yet, and that action may be the answer to one of the other choices.
+  const queued = state.pendingChoices ?? []
+  const gate = queued.find(c => c.kind === 'payWith' && c.controller === state.activePlayer) ?? queued.find(c =>
     (c.kind === 'chooseTriggerOrder' || c.kind === 'chooseNextTrigger') && c.controller === state.activePlayer)
   const queue = gate ? [gate] : (state.pendingChoices ?? [])
 
@@ -986,7 +963,7 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'payOrExhaust': {
-        if (readyResourceCount(p) >= choice.cost) moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        if (canPay(state, choice.controller, choice.cost)) moves.push({ type: 'acceptChoice', choiceId: choice.id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
@@ -1109,6 +1086,16 @@ function choiceMoves(state: GameState): Action[] {
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         break
       }
+      case 'payWith': {
+        // Done first, once ready resources cover what the picks leave. Then one move for a Credit
+        // token (they are fungible, so there is only ever one to offer) and one for each paying unit.
+        if (payWithAffordable(state, choice)) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (payWithCredit(state, choice)) moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: choice.credits })
+        if (choice.credits + choice.units.length < choice.cost) {
+          for (const id of payWithUnits(state, choice)) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        }
+        break
+      }
       case 'exploit': {
         // Done first, then each friendly unit not yet chosen. Done only once the rest is affordable, so
         // a play that needs its discount cannot be stranded half paid.
@@ -1185,7 +1172,7 @@ function choiceMoves(state: GameState): Action[] {
       }
       case 'mayPayToDraw': {
         // Mandalorian: a yes/no — accept only if the cost is affordable.
-        if (readyResourceCount(p) >= choice.cost) moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        if (canPay(state, choice.controller, choice.cost)) moves.push({ type: 'acceptChoice', choiceId: choice.id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
@@ -1357,7 +1344,7 @@ function choiceMoves(state: GameState): Action[] {
         const host = [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === choice.unitId)
         for (const deckIndex of choice.eligibleIndices) {
           const card = state.cards[choice.revealed[deckIndex]]
-          if (card && canAfford(p, Math.max(0, effectiveCost(state, choice.controller, card, host) - choice.discount))) {
+          if (card && canPay(state, choice.controller, Math.max(0, effectiveCost(state, choice.controller, card, host) - choice.discount))) {
             moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex })
           }
         }
@@ -1383,7 +1370,7 @@ function choiceMoves(state: GameState): Action[] {
       case 'mayPayThen': {
         // A yes/no: accept only while the cost can still be paid — resources, or (#462) the
         // controller's own Force token, which "Use the Force" can never be offered without (CR 8.37.4).
-        if (choice.useForce ? hasForceToken(state, choice.controller) : readyResourceCount(p) >= choice.cost) {
+        if (choice.useForce ? hasForceToken(state, choice.controller) : canPay(state, choice.controller, choice.cost)) {
           moves.push({ type: 'acceptChoice', choiceId: choice.id })
         }
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
@@ -1476,7 +1463,7 @@ function choiceMoves(state: GameState): Action[] {
       }
       case 'mayPayExhaustArena': {
         // Jod Na Nawood: ground or space, or decline. Only if the cost is affordable.
-        if (canAfford(p, choice.cost)) {
+        if (canPay(state, choice.controller, choice.cost)) {
           moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 })
           moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 })
         }

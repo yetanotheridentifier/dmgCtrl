@@ -43,7 +43,7 @@ const noChoice = (s: GameState): boolean => (s.pendingChoices?.length ?? 0) === 
 // first where a test's fixture happens to hold a Credit — paying full price, keeping the token for
 // the ability that follows.
 const skipCreditExploit = (s: GameState): GameState =>
-  s.pendingChoices?.[0]?.kind === 'exploit' && s.pendingChoices[0].credit ? resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices[0].id }) : s
+  s.pendingChoices?.[0]?.kind === 'payWith' ? resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices[0].id }) : s
 const accept = (s: GameState, extra: Partial<Extract<Action, { type: 'acceptChoice' }>> = {}) =>
   resolve(s, { type: 'acceptChoice', choiceId: choice(s).id, ...extra })
 const decline = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: choice(s).id })

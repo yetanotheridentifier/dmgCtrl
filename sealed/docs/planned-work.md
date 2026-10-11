@@ -357,12 +357,6 @@ printed, and the setup panel counts each set complete, type by type. Two tests h
 (`oneOffCards4.test.ts`): the triage holds back no card the manifest does not list, and the count done
 equals the count printed. A new set is sized with the triage on release day and starts from there.
 
-**One limit is left, and it is a design decision rather than a card: #795.** Credit tokens and units
-that pay as resources (Vuutun Palaa's Droids) are offered as the paying step of a card played from
-hand, of any type. A play out of another zone and an ability's own cost are paid with resources only.
-The ticket sets out the options (the step on every pay door, an automatic shortfall, or leaving it)
-and is labelled `needs-decision`.
-
 **Batches shrink, never grow.** A card that turns out not to fit is lifted to the ticket that owns its
 blocker and the batch ships without it. The classification is regex triage over ability prose: it catches new nouns but not
 familiar nouns in an unfamiliar shape.

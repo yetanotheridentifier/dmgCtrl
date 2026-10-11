@@ -1,6 +1,7 @@
 import type { GameState, PendingChoice, PlayFromZone, PlayerId } from '../engine/types'
 import { getCardDefinition } from '../engine/abilities'
 import { discloseRemaining } from '../engine/effects'
+import { payWithUnits, usableCreditTokens } from '../engine/payment'
 import type { DescribePart } from './describeAction'
 import type { Action } from '../engine/actions'
 
@@ -39,7 +40,7 @@ export const BOARD_TARGET_KINDS = [
   'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust',
   'selectUnitToDefeat', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens',
   'multiPick', 'distributeDamage', 'distributeTokens', 'variableStrike', 'healForAdvantage',
-  'returnFriendlyUnit', 'selectPair', 'exploit',
+  'returnFriendlyUnit', 'selectPair', 'exploit', 'payWith',
   'selectUnitThen', 'selectUnitToReady', 'selectUnitToReturn', 'selectUnitToSteal', 'selectFriendlyUnit',
   'selectDistributeSource', 'attachPlayedCard', 'mayPlayUpgradeFree',
   'distributeHealing', 'distributeIndirectDamage', 'damageAnyBases', 'enterAsCopy',
@@ -47,7 +48,7 @@ export const BOARD_TARGET_KINDS = [
 
 /** Board-target kinds picked again and again until Done (or until the amount is spent). */
 const REPEATABLE_KINDS: readonly BoardTargetKind[] = [
-  'multiPick', 'distributeDamage', 'distributeTokens', 'exploit', 'distributeHealing', 'distributeIndirectDamage', 'damageAnyBases',
+  'multiPick', 'distributeDamage', 'distributeTokens', 'exploit', 'payWith', 'distributeHealing', 'distributeIndirectDamage', 'damageAnyBases',
 ]
 export const isRepeatable = (choice: PendingChoice): boolean => (REPEATABLE_KINDS as readonly string[]).includes(choice.kind)
 
@@ -137,6 +138,23 @@ function tokenName(state: GameState, id: string): string {
 }
 
 /** A card's printed name for use inside a prompt sentence, degrading to a neutral noun. */
+/** What a paying step's cost is for, named from the action it stands in front of. */
+function paidFor(state: GameState, choice: Extract<PendingChoice, { kind: 'payWith' }>): string {
+  const a = choice.resume
+  const p = state.players[choice.controller]
+  const named = (id: string | undefined) => (id ? cardName(state, id) : 'this card')
+  switch (a.type) {
+    case 'playUnit': case 'playEvent': case 'playUpgrade': case 'playBaseUpgrade': return named(p.hand[a.handIndex])
+    case 'smuggle': return named(p.resources[a.resourceIndex]?.cardId)
+    case 'playFromDiscard': return named(state.discardPlayGrants?.[a.grantIndex]?.cardId)
+    case 'useDiscardAction': return named(p.discard[a.discardIndex])
+    case 'useAbility': return `${cardName(state, a.cardId)}'s action`
+    case 'useLeaderAbility': return `${cardName(state, p.leader.cardId)}'s action`
+    case 'useBaseAbility': return `${cardName(state, a.cardId ?? p.base.cardId)}'s action`
+    default: return choice.source ? cardName(state, choice.source.cardId) : 'this cost'
+  }
+}
+
 function cardName(state: GameState, id: string): string {
   return state.cards[id]?.name ?? 'the card'
 }
@@ -426,6 +444,16 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     }
     case 'selectDistributeSource':
       return ['choose the unit whose power is spread as damage']
+    case 'payWith': {
+      // The step stands in front of an action that has not happened, so the prompt says what the cost
+      // is for, how much it is, and what is left for ready resources to cover.
+      const left = choice.cost - choice.credits - choice.units.length
+      const units = payWithUnits(state, choice).length > 0 || choice.units.length > 0
+      const credits = choice.credits > 0 || usableCreditTokens(state, choice.controller) > 0
+      const how = credits && units ? 'defeat Credit tokens or exhaust friendly units' : units ? 'exhaust friendly units' : 'defeat Credit tokens'
+      const as = units && !credits ? ' as if they were resources' : ''
+      return [`${how} to pay for ${paidFor(state, choice)}${as} (${choice.cost} to pay), 1 less each, or Done (${left} left for your resources)`]
+    }
     case 'exploit': {
       // Says what is being paid for and what each pick costs and saves, since the card is not on the
       // board yet and the highlight alone reads as "pick something to hit".

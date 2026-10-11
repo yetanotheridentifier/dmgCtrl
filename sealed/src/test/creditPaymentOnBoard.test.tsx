@@ -16,7 +16,7 @@ import { SettingsProvider } from '../hooks/useSettings'
 /**
  * The standing paying step, as a player answers it on the game screen.
  *
- * A Credit token is not on the board, so its picks are buttons, one per token, with Done beside them
+ * A Credit token is not on the board, so its pick is a button, pressed once per token, with Done beside it
  * once what is left is affordable. A unit that pays as a resource is on the board and is clicked
  * there. The step is asked for a unit and for an upgrade played from hand alike.
  */

@@ -14,9 +14,9 @@ import type { Action } from '../engine/actions'
  *
  * Unlike Experience/Shield/Weakness, a Credit token belongs to a PLAYER rather than to a unit: it has
  * no board identity, is fungible, and "take control of an enemy Credit token" is the count moving
- * between the two players. The discount is a standing rule usable on ANY card play, read by
- * `exploitTerms` as a fourth mode of the #473/#683 `exploit`/`whilePlaying` step, not declared by the
- * card being played.
+ * between the two players. The discount is a standing rule usable on any cost, asked in the paying
+ * step that stands in front of the action (`payment.ts`), not declared by the card being played.
+ * `payingStepDoors.test.ts` takes the doors other than a card played from hand through it.
  */
 
 const F: Record<string, EngineCard> = {
@@ -76,13 +76,18 @@ describe('Credit token primitives', () => {
   })
 })
 
-describe('Credit tokens as a payment: exploitTerms offers the standing discount', () => {
-  it('offers nothing when the player holds none', () => {
-    expect(exploitTerms(board(4, ['PLAIN']), 'player', F.PLAIN)).toBeUndefined()
+describe('Credit tokens as a payment: the paying step in front of a card played from hand', () => {
+  it('asks nothing when the player holds none', () => {
+    const s = resolve(board(4, ['PLAIN']), { type: 'playUnit', handIndex: 0 })
+    expect(s.pendingChoices ?? []).toHaveLength(0)
+    expect(s.players.player.units.some(u => u.cardId === 'PLAIN')).toBe(true)
   })
 
-  it('offers a credit mode sized to what is held, discount 1 each, when the player holds any', () => {
-    expect(exploitTerms(board(4, ['PLAIN'], 3), 'player', F.PLAIN)).toEqual({ limit: 3, discount: 1, credit: true })
+  it('is not a step the card declares: it stands in front of the play, for what the play costs', () => {
+    expect(exploitTerms(board(4, ['PLAIN'], 3), 'player', F.PLAIN)).toBeUndefined()
+    const s = resolve(board(4, ['PLAIN'], 3), { type: 'playUnit', handIndex: 0 })
+    expect(choice(s)).toMatchObject({ kind: 'payWith', id: 'exploit-PLAIN', cost: 4, credits: 0, resume: { type: 'playUnit', handIndex: 0 } })
+    expect(s.players.player.hand).toEqual(['PLAIN'])
   })
 
   it('makes an otherwise-too-dear play affordable', () => {
@@ -95,26 +100,46 @@ describe('Credit tokens as a payment: exploitTerms offers the standing discount'
     expect(legalMoves(board(0, ['EVT'], 3))).toContainEqual({ type: 'playEvent', handIndex: 0 })
   })
 
-  it('does not combine with a card\'s own Exploit (scope limit, #602): Exploit wins when there are units to exploit', () => {
-    const s = resolve(board(6, ['EX2'], 5, ['PLAIN']), { type: 'playUnit', handIndex: 0 })
+  it("follows a card's own Exploit: the units are chosen first, then what is left is paid with tokens or resources", () => {
+    let s = resolve(board(2, ['EX2'], 5, ['PLAIN']), { type: 'playUnit', handIndex: 0 })
     const c = choice(s)
     expect(c.kind).toBe('exploit')
     expect(c).toMatchObject({ discount: 2 }) // the keyword's own discount, not Credit's 1
-    expect('credit' in c && c.credit).toBeFalsy()
+    // The one unit there is to exploit finishes Exploit's step, and the 4 left to pay is asked about.
+    s = resolve(s, { type: 'acceptChoice', choiceId: c.id, targetInstanceId: 'f0' })
+    const pays = s.pendingChoices?.find(p => p.kind === 'payWith')
+    expect(pays).toMatchObject({ cost: 4, credits: 0 })
+    expect(s.players.player.units.map(u => u.cardId)).toEqual(['PLAIN']) // nothing exploited yet
+    s = resolve(s, { type: 'acceptChoice', choiceId: pays!.id, optionIndex: 0 })
+    s = resolve(s, { type: 'acceptChoice', choiceId: pays!.id, optionIndex: 1 })
+    s = resolve(s, { type: 'skipTrigger', choiceId: pays!.id })
+    expect(s.players.player.units.map(u => u.cardId)).toEqual(['EX2'])
+    expect(friendlyCreditTokens(s, 'player')).toBe(3)
+    expect(readyLeft(s)).toBe(0)
   })
 
-  it('falls back to the credit discount when a card grants Exploit but there is nothing to exploit', () => {
+  it('is asked of a card with Exploit and nothing to exploit', () => {
     const s = resolve(board(6, ['EX2'], 5), { type: 'playUnit', handIndex: 0 })
-    expect(choice(s)).toMatchObject({ kind: 'exploit', credit: true, limit: 5, discount: 1 })
+    expect(choice(s)).toMatchObject({ kind: 'payWith', cost: 6, credits: 0 })
   })
 
-  it('picks by ordinal position, one at a time, up to what is held', () => {
+  it('picks one token at a time, up to what is held', () => {
     let s = resolve(board(2, ['PLAIN'], 3), { type: 'playUnit', handIndex: 0 })
-    expect(choice(s)).toMatchObject({ kind: 'exploit', credit: true, limit: 3, discount: 1 })
-    expect(optionIndices(s)).toEqual([0, 1, 2])
+    expect(choice(s)).toMatchObject({ kind: 'payWith', cost: 4, credits: 0 })
+    // Tokens are fungible, so one move stands for the next of them.
+    expect(optionIndices(s)).toEqual([0])
     s = pickOption(s, 0)
     expect(friendlyCreditTokens(s, 'player')).toBe(3) // not spent until Done/finish
-    expect(optionIndices(s)).toEqual([1, 2])
+    expect(choice(s)).toMatchObject({ credits: 1 })
+    expect(optionIndices(s)).toEqual([1])
+  })
+
+  it('never takes more tokens than the cost', () => {
+    let s = resolve(board(4, ['EVT'], 5), { type: 'playEvent', handIndex: 0 })
+    for (let i = 0; i < 3; i++) s = pickOption(s, i)
+    expect(s.pendingChoices ?? []).toHaveLength(0) // three cover the event's 3, and the step finishes
+    expect(friendlyCreditTokens(s, 'player')).toBe(2)
+    expect(readyLeft(s)).toBe(4)
   })
 
   it('finishing pays the remainder from ready resources and defeats the Credits picked, not before', () => {

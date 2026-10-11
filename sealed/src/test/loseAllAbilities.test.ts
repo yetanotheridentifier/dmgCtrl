@@ -384,13 +384,13 @@ describe('the cards', () => {
 
   it("LAW_117 Conveyex Security Captain: enemy Credit tokens lose their ability, so they can't pay", () => {
     const s = board({ hand: ['PLAIN'], creditTokens: 2 }, {})
-    expect(choice(resolve(s, { type: 'playUnit', handIndex: 0 }))).toMatchObject({ kind: 'exploit', credit: true })
+    expect(choice(resolve(s, { type: 'playUnit', handIndex: 0 }))).toMatchObject({ kind: 'payWith', credits: 0 })
     const guarded = board({ hand: ['PLAIN'], creditTokens: 2 }, { units: [unit('c', 'LAW_117')] })
     const played = resolve(guarded, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices ?? []).toHaveLength(0)
     expect(played.players.player.units.some(u => u.cardId === 'PLAIN')).toBe(true)
     // Its controller's own Credit tokens still work.
     const own = board({ hand: ['PLAIN'], creditTokens: 2, units: [unit('c', 'LAW_117')] }, {})
-    expect(choice(resolve(own, { type: 'playUnit', handIndex: 0 }))).toMatchObject({ kind: 'exploit', credit: true })
+    expect(choice(resolve(own, { type: 'playUnit', handIndex: 0 }))).toMatchObject({ kind: 'payWith', credits: 0 })
   })
 })

@@ -395,8 +395,8 @@ export function giveMixedTokens(state: GameState, instanceId: string, tokenIds: 
 // Unlike Experience/Shield/Weakness, a Credit token is not attached to a unit as an upgrade: it has
 // no board identity, belongs to a PLAYER, and is fungible, so `PlayerState.creditTokens` is a plain
 // count. Its printed rule ("While paying resources, you may defeat this token. If you do, pay 1
-// less.") is a standing payment step read by `exploitTerms` (legalMoves.ts) as a fourth mode of the
-// same `exploit`/`whilePlaying` step #473 and #683 built, not a parallel mechanism.
+// less.") is a standing rule about paying, asked in the paying step in front of every cost
+// (`payment.ts`), not something a card declares.
 
 /** How many Credit tokens `owner` currently holds. */
 export function friendlyCreditTokens(state: GameState, owner: PlayerId): number {

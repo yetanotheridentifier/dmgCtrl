@@ -110,6 +110,20 @@ describe('the look, as an action phase starts', () => {
     }
   })
 
+  it('costs nothing, so a controller holding Credit tokens gets the same look and no paying step', () => {
+    const plain = nextActionPhase(board(front()))
+    const s = nextActionPhase(board({ ...front(), creditTokens: 2 }))
+    expect(s.pendingChoices).toEqual(plain.pendingChoices)
+    expect(s.pendingChoices).toHaveLength(1)
+    expect(legalMoves(s)).toEqual([{ type: 'skipTrigger', choiceId: theLook(s).id }])
+    const after = done(s)
+    expect(after.pendingChoices ?? []).toEqual([])
+    expect(after.players.player.creditTokens).toBe(2)
+    expect(after.players.player.resources.every(r => !r.exhausted)).toBe(true)
+    expect('paying' in after).toBe(false)
+    expect(legalMoves(after)).toEqual(legalMoves(done(plain)))
+  })
+
   it('has one answer, which costs nothing and changes nothing but who acts next', () => {
     const s = nextActionPhase(board(front(), {}, { initiative: 'opponent', activePlayer: 'opponent' }))
     const after = done(s)

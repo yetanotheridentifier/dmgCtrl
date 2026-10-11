@@ -501,7 +501,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `providesAspects` | supplies aspect icons while paying costs |
 | `deployCondition` | replaces the resource gate on deploying a leader |
 | `suppressesFriendlyAdvantage` | Advantage tokens are not spent after combat |
-| `suppressesEnemyCredits` | the other player's Credit tokens can't be defeated to pay (Conveyex Security Captain) |
+| `suppressesEnemyCredits` | the other player's Credit tokens can't be defeated to pay for anything (Conveyex Security Captain) |
 | `blanksHost` | the host loses all abilities while it returns a blank, keeping what the blank names (Imprisoned, Condemn, Exiled from the Force); see Losing all abilities in [keywords-effects.md](keywords-effects.md) |
 | `blanksCard` | a unit's constant ability that makes a card lose all abilities wherever it is (Brain Invaders, Galen Erso) |
 | `blanksPlayedEvent` | an event just played loses all abilities as it resolves (Relentless) |
@@ -520,7 +520,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `discardInsteadOfCost` | the hand cards an event may be paid for by discarding instead (Bamboozle); see [choices.md](choices.md) |
 | `entersAsCopyOf` | the units this card may enter play as a copy of (Clone); see [keywords-effects.md](keywords-effects.md) |
 | `extraRegroupPhase` | a second regroup phase after the first each round, while in play (Max Rebo) |
-| `unitPaysCosts` | which of its controller's units may be exhausted to pay costs (Vuutun Palaa's Droids), as the paying step of a card of any type played from hand |
+| `unitPaysCosts` | which of its controller's units may be exhausted to pay costs (Vuutun Palaa's Droids), offered in the paying step in front of every cost; see Paying a cost in [keywords-effects.md](keywords-effects.md) |
 | `makesLeaderUnit` | the host counts as a leader unit |
 | `actionAbilities` | activated "Action:" abilities, with `usable`, `oncePerRound`, `exhaustCost`, and `anyPlayer` for one offered on an enemy unit too, paid for and owned by whoever uses it |
 | `canPreventDamage` / `payPreventionCost` | offers a prevention, and collects its price if taken |

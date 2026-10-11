@@ -8,9 +8,10 @@ import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_WEAKNESS, TOKEN_
 import { deployLeaderAsPilot, playUpgradeOnto, playEventFromHand } from './resolve'
 import { TOKEN_MANDALORIAN, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard } from './tokenUnits'
 import { baseHostId, isFortify, isPlot, previousActionAttackedBase, opponentOf, pushChoice, addLastingEffect, addDelayedEffect, addDiscardPlayGrant, baseDamageThisPhase, tokenCreatedThisPhase, tokenUpgradeGivenThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseAttackersThisPhase, baseDamagedThisPhase, dealtBaseCombatDamageThisPhase, damagedBaseThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, discardedThisPhase, indirectDamageDealtThisPhase, baseHealedThisPhase, markAbilityUsed, updatePlayer, upgradeSideId, recordUnitDefeated, noActionYetThisPhase, forceNextAttack } from './types'
-import { canTakePilot, affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, canAffordFromHand, raiseExploit, smuggleTerms, smuggleMoves, namedByOpponent, enemyAttackTargets } from './legalMoves'
+import { canTakePilot, affordableHandUnits, playFromCandidates, ambushHasTarget, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack, exploitTerms, creditExploitTerms, canAffordFromHand, raiseExploit, smuggleTerms, smuggleMoves, namedByOpponent, enemyAttackTargets } from './legalMoves'
 import type { AttackOffer, PlayFromTerms } from './legalMoves'
-import { canAfford, payCost, readyResourceCount } from './resources'
+import { readyResourceCount } from './resources'
+import { canPay, pay, payable } from './payment'
 import { cardHasTrait, cardTraits, unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywords, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywordValue, unitKeywords } from './keywords'
 import type { CombatContext, DamageSource, DiscardPlayGrant, EngineCard, GameState, IfYouDo, IndirectDamageFollowUp, KeywordInstance, LastingEffect, PendingChoice, PendingTrigger, PlayerId, PlayFromTail, PlayFromZone, TargetIntent, UnitState, UpgradeAttachment, UpgradeRef } from './types'
 
@@ -251,7 +252,7 @@ registerCard('ASH_014', { // The Mandalorian — front take-initiative draw; dep
       trigger: 'whenTakeInitiative',
       description: 'You may pay 1 to draw a card.',
       effect: (s, ctx) =>
-        s.players[ctx.owner].resources.some(r => !r.exhausted)
+        canPay(s, ctx.owner, 1)
           ? pushChoice(s, { kind: 'mayPayToDraw', id: `${ctx.cardId}-init`, controller: ctx.owner, cost: 1, draw: 1 })
           : s,
     }],
@@ -1678,7 +1679,7 @@ registerCard('ASH_042', { // Jabba the Hutt
 registerCard('ASH_219', { // Jod Na Nawood
   abilities: [{ trigger: 'whenPlayed', description: 'You may pay 4. If you do, choose an arena. Exhaust each unit in that arena.', effect: (s, ctx) =>
     // Don't raise a choice the player can't act on — the cost is checked after paying for Jod himself.
-    canAfford(s.players[ctx.owner], 4) ? pushChoice(s, { kind: 'mayPayExhaustArena', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 4 }) : s }],
+    canPay(s, ctx.owner, 4) ? pushChoice(s, { kind: 'mayPayExhaustArena', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 4 }) : s }],
 })
 
 // Queen Soruna, Trask Walker and Gorian Shard's Corsair are compound heads too, but each closes over
@@ -3364,7 +3365,7 @@ registerCard('LOF_100', whenPlayed('Search the top 7 cards of your deck for a un
   const p = s.players[ctx.owner]
   const revealed = p.deck.slice(0, searchCount(s, ctx.owner, 7))
   if (revealed.length === 0) return s
-  const ready = p.resources.filter(r => !r.exhausted).length
+  const ready = payable(s, ctx.owner)
   const eligibleIndices = revealed.flatMap((id, i) => {
     const c = s.cards[id]
     return printedUnit(c) && c && Math.max(0, effectiveCost(s, ctx.owner, c) - 3) <= ready ? [i] : []
@@ -3748,7 +3749,7 @@ const resume = (ctx: Resumable, step?: string, unit?: string): IfYouDo =>
 /** "You may pay `cost`. If you do, <then>". Not offered at all when the cost cannot be paid. */
 const mayPayWp = (description: string, cost: number, text: string, then: NonNullable<CardDefinition['ifYouDo']>): CardDefinition => ({
   ...whenPlayed(description, (s, ctx) =>
-    (canAfford(s.players[ctx.owner], cost) ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost, text, then: resume(ctx) }) : s)),
+    (canPay(s, ctx.owner, cost) ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost, text, then: resume(ctx) }) : s)),
   ifYouDo: then,
 })
 /**
@@ -5263,7 +5264,7 @@ const searchPlayReady = (s: GameState, ctx: EventCtx, depth: number, trait: stri
   const p = s.players[ctx.owner]
   const revealed = p.deck.slice(0, searchCount(s, ctx.owner, depth))
   if (revealed.length === 0) return s
-  const ready = p.resources.filter(r => !r.exhausted).length
+  const ready = payable(s, ctx.owner)
   const eligibleIndices = revealed.flatMap((id, i) => {
     const c = s.cards[id]
     return printedUnit(c) && heldTrait(s, ctx.owner, c, trait) && c && Math.max(0, effectiveCost(s, ctx.owner, c) - discount) <= ready ? [i] : []
@@ -6114,7 +6115,7 @@ registerCard('SEC_218', { // Cikatro Vizago
     const top = s.players[ctx.owner].deck[0]
     if (top === undefined) return s
     const opp = opponentOf(ctx.owner)
-    if (!canAfford(s.players[opp], 1)) return drawCards(s, ctx.owner, 1)
+    if (!canPay(s, opp, 1)) return drawCards(s, ctx.owner, 1)
     return pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: opp, cost: 1, text: `pay 1 to stop your opponent drawing ${s.cards[top]?.name ?? top}`, then: resume(ctx, 'paid'), declineStep: 'draw' })
   })),
   ifYouDo: (s, ctx) => (ctx.step === 'draw' ? drawCards(s, ctx.owner, 1) : s),
@@ -7752,10 +7753,10 @@ registerCard('TS26_60', { // Take Charge
 
 // D: the number of tokens is decided as the ability resolves — by what is paid, revealed, named or
 // carried. `chooseNumber` asks for the count and hands it back as `optionIndex`.
-const readyResources = (s: GameState, owner: PlayerId): number => s.players[owner].resources.filter(r => !r.exhausted).length
-/** Exhaust `n` ready resources, one at a time through the one door that exhausts one. */
-const payResources = (s: GameState, owner: PlayerId, n: number): GameState =>
-  Array.from({ length: n }).reduce<GameState>(acc => exhaustReadyResource(acc, owner), s)
+/** The most `owner` could pay, which is what a "pay any number of resources" may ask for. */
+const readyResources = payable
+/** `owner` pays `n`, through the door every payment goes through. */
+const payResources = pay
 const chooseNumberUpTo = (s: GameState, ctx: Resumable, max: number, text: string, step?: string, unit?: string): GameState =>
   (max > 0 ? pushChoice(s, { kind: 'chooseNumber', id: ctx.sourceInstanceId!, controller: ctx.owner, max, text, then: resume(ctx, step, unit) }) : s)
 
@@ -8320,7 +8321,7 @@ registerCard('TWI_112', createWp('If you have the initiative, create a Battle Dr
 registerCard('TWI_144', createWp('Create a Clone Trooper token.', TOKEN_CLONE_TROOPER)) // Batch Brothers
 registerCard('TWI_145', whenPlayed('An opponent creates 2 Battle Droid tokens.', (s, ctx) => create(s, opponentOf(ctx.owner), TOKEN_BATTLE_DROID, 2))) // Jesse
 registerCard('TWI_183', onAttack(createWp('If the defending player controls no ready resources, create a Battle Droid token.', TOKEN_BATTLE_DROID, 1, // Rush Clovis
-  (s, ctx) => readyResources(s, opponentOf(ctx.owner)) === 0)))
+  (s, ctx) => readyResourceCount(s.players[opponentOf(ctx.owner)]) === 0)))
 registerCard('TWI_247', createWd('Create 2 Clone Trooper tokens.', TOKEN_CLONE_TROOPER, 2)) // AT-TE Vanguard
 registerCard('HMW_038', whenPlayed('If attached unit is a Creature or a Force unit, create a Beast token.', (s, ctx) => // Bestial Bond
   (hostPasses(s, ctx, (st, h) => unitHasTrait(st, h, 'Creature') || unitHasTrait(st, h, 'Force')) ? create(s, ctx.owner, TOKEN_BEAST) : s)))
@@ -8727,7 +8728,7 @@ registerCard('HMW_240', { // Sandstorm
 registerCard('HMW_248', { // Defoliator Tank
   ...attacks("If the defending unit isn't a Droid or Vehicle, you may pay 2. If you do, give 2 Weakness tokens to it.", (s, ctx) => {
     const defender = defenderOf(s, ctx)
-    if (!defender || unitHasTrait(s, defender, 'Droid') || unitHasTrait(s, defender, 'Vehicle') || !canAfford(s.players[ctx.owner], 2)) return s
+    if (!defender || unitHasTrait(s, defender, 'Droid') || unitHasTrait(s, defender, 'Vehicle') || !canPay(s, ctx.owner, 2)) return s
     return pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 2, text: 'give 2 Weakness tokens to the defending unit', then: resume(ctx, undefined, defender.instanceId) })
   }),
   ifYouDo: (s, ctx) => (ctx.unitChosen ? giveWeakness(s, ctx.unitChosen, ctx.owner, 2) : s),
@@ -10784,7 +10785,7 @@ registerCard('HMW_214', { // Phee Genoa
     const leader = s.players[enemy].units.find(u => u.instanceId === ctx.targetInstanceId && isLeaderUnit(s, u))
     if (!leader) return s
     // The pay-or-not is theirs; one who cannot pay simply has the leader exhausted.
-    return canAfford(s.players[enemy], 2)
+    return canPay(s, enemy, 2)
       ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-deploy`, controller: enemy, cost: 2, text: 'pay 2 (otherwise your leader is exhausted)', then: resume(ctx, 'paid', leader.instanceId), declineStep: 'exhaust' })
       : exhaustUnit(s, leader.instanceId)
   } }],
@@ -11389,8 +11390,8 @@ registerCard('TS26_12', { // Sundari Palace
 registerCard('LAW_029', { // Citadel Research Center
   // "Epic Action [C=1]": the cost is paid before the effect, as it would be for a leader's action.
   ...baseEpic("[C=1]: Return a friendly resource to its owner's hand. If you do, resource the top card of your deck.", {
-    usable: (s, ctx) => canAfford(s.players[ctx.owner], 1),
-    effect: (s, ctx) => resourceThen(updatePlayer(s, ctx.owner, payCost(s.players[ctx.owner], 1)), ctx, {
+    usable: (s, ctx) => canPay(s, ctx.owner, 1),
+    effect: (s, ctx) => resourceThen(pay(s, ctx.owner, 1), ctx, {
       holder: ctx.owner, step: 'citadel', text: "return a friendly resource to its owner's hand, then resource the top card of your deck",
     }),
   }),
@@ -12302,7 +12303,7 @@ registerCard('LAW_015', { // Jabba the Hutt
     if (ctx.step === 'jabba') return createCreditTokens(returnUnitToHand(s, ctx.targetInstanceId!), ctx.owner, 1)
     const c = ctx.cardChosen ? s.cards[ctx.cardChosen] : undefined
     if (ctx.handIndex === undefined || !c) return s
-    const terms = exploitTerms(s, ctx.owner, c)
+    const terms = exploitTerms(s, ctx.owner, c) ?? creditExploitTerms(s, ctx.owner)
     return raiseExploit(s, ctx.owner, c.id, ctx.handIndex, terms ? { ...terms, ...(terms.credit ? { creditGrant: [KW.ambush] } : {}) } : { limit: 0, discount: 2 })
   },
 })
@@ -13939,7 +13940,7 @@ const againLeader = (cardId: string, point: TriggerPoint, name: string, frontCos
       abilities: [{
         trigger: 'whenAbilityUsed', hears: usesAt(point),
         description: `When you use a "${name}" ability: You may ${frontCost > 0 ? `pay ${frontCost} and ` : ''}exhaust this leader. If you do, use that ability again.`,
-        effect: (s, ctx) => (s.players[ctx.owner].leader.exhausted || !canAfford(s.players[ctx.owner], frontCost) ? s
+        effect: (s, ctx) => (s.players[ctx.owner].leader.exhausted || !canPay(s, ctx.owner, frontCost) ? s
           : offerUseAgain(s, ctx, `exhaust this leader and ${text}`, frontCost, 'front')),
       }],
     },
@@ -14810,7 +14811,7 @@ registerCard('JTL_038', { // Corvus
 const thiefHost: Pick = (s, u) => (unitHasTrait(s, u, 'Fighter') || unitHasTrait(s, u, 'Transport')) && pilotsOn(s, u) === 0
 registerPilot('JTL_083', { unit: { // Pantoran Starship Thief
   ...whenPlayed('When Played: You may pay 3. If you do, attach this unit as an upgrade to a Fighter or Transport unit without a Pilot on it. Take control of that unit.', (s, ctx) =>
-    (canAfford(s.players[ctx.owner], 3) && pickedIds(s, ctx, thiefHost).length > 0
+    (canPay(s, ctx.owner, 3) && pickedIds(s, ctx, thiefHost).length > 0
       ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 3, text: 'attach Pantoran Starship Thief to a Fighter or Transport and take control of it', then: resume(ctx) })
       : s)),
   ifYouDo: (s, ctx) => {
@@ -15029,7 +15030,7 @@ registerCard('SHD_142', alsoAt({ // Pre Vizsla
     selectUpgradeThen(s, ctx, upgradeCandidates(s, { on: 'unit' }).filter(up => {
       const host = findUnit(s, up.unitId)?.unit
       return host !== undefined && host.instanceId !== ctx.sourceInstanceId && nonVehicle(s, host) && notLeaderUpgrade(s, up) &&
-        canAfford(s.players[ctx.owner], s.cards[up.cardId]?.cost ?? 0)
+        canPay(s, ctx.owner, s.cards[up.cardId]?.cost ?? 0)
     }), 'pay the cost of an upgrade on another non-Vehicle unit to take it', true)),
   ifYouDo: (s, ctx) => {
     const up = ctx.upgradeChosen

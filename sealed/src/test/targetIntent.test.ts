@@ -43,6 +43,7 @@ const SAMPLE: Record<(typeof BOARD_TARGET_KINDS)[number], PendingChoice> = {
   returnFriendlyUnit: { ...base, kind: 'returnFriendlyUnit', targets: ['u1'] },
   selectPair: { ...base, kind: 'selectPair', friendlyTargets: ['u1'], enemyTargets: ['u2'], mode: 'exhaust' },
   exploit: { ...base, kind: 'exploit', cardId: 'X', handIndex: 0, picks: [], limit: 2, discount: 2 },
+  payWith: { ...base, kind: 'payWith', cost: 2, credits: 0, units: [], resume: { type: 'pass' } },
   selectUnitThen: { ...base, kind: 'selectUnitThen', targets: ['u2'], text: 'capture an enemy unit', intent: 'cunning', then: { cardId: 'X', owner: 'player' } },
   selectUnitToReady: { ...base, kind: 'selectUnitToReady', targets: ['u1'] },
   selectUnitToReturn: { ...base, kind: 'selectUnitToReturn', targets: ['u2'] },
