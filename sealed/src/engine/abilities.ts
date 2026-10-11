@@ -268,6 +268,13 @@ export interface CardDefinition {
    */
   cannotPlayFromHand?: boolean
   /**
+   * "You may look at the top card of your deck at any time" (Hondo Ohnaka), held by the unit's
+   * controller while the unit has its abilities. A standing permission: it raises nothing and changes
+   * nothing, and is only ever asked about (`mayLookAtDeckTop`). A base holds it through
+   * `BaseAbilities.looksAtOwnDeckTop`.
+   */
+  looksAtOwnDeckTop?: boolean
+  /**
    * "Action: If <condition>, play this card from your discard pile (paying its cost)" (Kylo's TIE
    * Silencer, Salvaged Blaster, Brutal Traditions): the one kind of ability that works from a discard
    * pile. Offered to the pile's owner as `useDiscardAction` while `usable` holds and the card could be
@@ -759,6 +766,8 @@ export interface BaseAbilities {
    * board with the damage dealt with, prevented and paid for, or `undefined` to leave it alone.
    */
   interceptDamage?: (state: GameState, owner: PlayerId, amount: number) => GameState | undefined
+  /** "You may look at the top card of your deck at any time" (Intelligence Agency), held by the base's controller. See `mayLookAtDeckTop`. */
+  looksAtOwnDeckTop?: boolean
 }
 
 /**
@@ -1298,6 +1307,21 @@ export function playedEventBlanked(state: GameState, player: PlayerId, owner: Pl
   if (cardAbilitiesBlanked(state, cardId, owner)) return true
   return SIDES.some(side => state.players[side].units.some(u =>
     abilityCardIds(state, u, side).some(id => registry.get(id)?.blanksPlayedEvent?.(state, u, side, player) ?? false)))
+}
+
+/**
+ * Whether `player` may look at the top card of their own deck at any time: a unit they control that
+ * still has its abilities says so (`CardDefinition.looksAtOwnDeckTop`), or their base does, printed or
+ * through an upgrade on it (`BaseAbilities.looksAtOwnDeckTop`).
+ *
+ * This is the whole of the rule. Looking is not an action and not a choice: it never passes through
+ * `resolve`, so it cannot change the board, reach the log or be seen from the other seat. The screen
+ * asks this for the human's own deck and shows the card; a bot holding the permission is asked nothing.
+ */
+export function mayLookAtDeckTop(state: GameState, player: PlayerId): boolean {
+  const side = state.players[player]
+  return baseAbilityCardIds(side.base).some(id => registry.get(id)?.baseAbilities?.looksAtOwnDeckTop)
+    || side.units.some(u => abilityCardIds(state, u, player).some(id => registry.get(id)?.looksAtOwnDeckTop))
 }
 
 /**

@@ -453,6 +453,13 @@ The board is drawn with art-dominant cards, not text rows:
     `PLAYER_TOKEN_SPEC` (`components/tokens.ts`) in the unit tokens' pill shape. They are
     absolutely placed over the foot of the two resource slots, so holding one never changes a
     column's width, and they read the engine's own `friendlyCreditTokens` and `hasForceToken`.
+  - A deck is face down and inert for both players. While `mayLookAtDeckTop` holds for the human,
+    `PlayerBar` passes `canLook` to their `DeckPile`, which then carries the clickable outline
+    (`accent-dim`, as a leader with a usable ability does) and opens a view-only `CardGridOverlay`
+    of the top card, dismissed by clicking outside it like the discard pile's. It is component
+    state only: no action is dispatched, so nothing is logged or recorded, the card shown is read
+    live from the deck, and the overlay closes if the permission goes. `OpponentBar` never passes
+    `canLook`, whatever the opponent holds.
 - **Battlefield layout** (`Board`): a three-column grid, **Space | Leaders+Bases | Ground**,
   set with an inline `grid-template-columns` (Tailwind can't compile a `minmax(0,1fr)`
   arbitrary value). It's transparent and grows to fill the play area's height, centring the

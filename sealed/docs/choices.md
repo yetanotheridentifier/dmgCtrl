@@ -475,6 +475,9 @@ action looks like a heal that never happened.
 - **"Look at a card" is PRIVATE.** The overlay renders only for the human's own choice, so the AI's
   look-at never surfaces and hidden information is preserved. A future public "reveal" reuses the
   shell with a public prompt and a confirm action.
+- **A look "at any time" is not a choice at all.** A card that lets its player look at the top card
+  of their deck whenever they like raises nothing: the deck itself is the click target, for the
+  human's own deck only (see "A standing permission to look" in `abilities.md`).
 - **A look that leads somewhere raises the follow-up from both answers.** Qi'ra looks at a hand and
   then names a card, and her look is view-only, so Done is the only way to answer it: a tail hung on
   the accept path alone would never fire. `lookAtHand.thenNameCard` is raised on the skip path too.

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { EngineCard, KeywordInstance } from '../engine/types'
+import { highlightOutline } from './highlight'
 import type { Highlight } from './highlight'
 import { artUrl } from '../data/thumbnails'
 import { CARD_WIDTH_PX, longEdge } from './cardSizing'
@@ -80,16 +81,6 @@ export default function CardFace({
   const showArt = Boolean(art) && !artFailed
   const showStats = card && (card.type === 'unit' || card.type === 'leader')
 
-  // Highlight hugs the card: a 2px line straddling its edge (1px in, 1px out).
-  const outline =
-    highlight === 'accent' ? '2px solid var(--color-accent)'
-    : highlight === 'green' ? '2px solid var(--color-green)'
-    : highlight === 'red' ? '2px solid var(--color-red)'
-    : highlight === 'yellow' ? '2px solid var(--color-yellow)'
-    : highlight === 'white' ? '2px solid var(--color-ink)'
-    : highlight === 'accent-dim' ? '2px solid rgba(79, 195, 247, 0.55)'
-    : undefined
-
   // Cards that never rotate (the hand) frame tightly to their art; others reserve
   // the square slot so they can rotate when exhausted without overlapping.
   const frameW = tight ? artW : slot
@@ -108,7 +99,7 @@ export default function CardFace({
           rotates it 90°; the square already fits the card in any orientation,
           so rotated cards never overlap their neighbours. */}
       <div
-        style={{ width: artW, height: artH, outline, outlineOffset: outline ? '-1px' : undefined }}
+        style={{ width: artW, height: artH, ...highlightOutline(highlight) }}
         className={[
           'relative overflow-hidden rounded-lg border border-line/60 bg-surface',
           // Exhausted: rotate and DIM, but stay opaque (a brightness filter, not

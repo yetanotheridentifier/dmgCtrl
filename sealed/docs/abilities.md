@@ -508,6 +508,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `abilityDamageBonus` | adds to an instance of ability damage (Ty Yorrick's "plus 1") |
 | `defeatsInsteadOfBaseUpgrade` | offers the unit's defeat in place of an upgrade on its controller's base (Vice Admiral Rampart) |
 | `dealsCombatDamageByHp` | the attacker's combat damage is its remaining HP, not its power (Babu Frik's attack grant) |
+| `looksAtOwnDeckTop` | "you may look at the top card of your deck at any time" (Hondo Ohnaka); see "A standing permission to look" below |
 
 Three of these are scoped more narrowly than they read.
 
@@ -526,6 +527,27 @@ do not search: players do. So every search that player makes is doubled while th
 whichever card is doing the searching, and `searchCount` takes the owner rather than a unit. Scoped to
 the searching unit it would do nothing except when the upgrade happened to sit on the very unit that
 searched.
+
+### A standing permission to look
+
+"You may look at the top card of your deck at any time" is neither an ability that resolves nor a
+choice. Nothing triggers it, nothing answers it and the board is the same afterwards, so it has no
+`Action`, no `PendingChoice` and no trigger point. The card only declares it: `looksAtOwnDeckTop` on
+the `CardDefinition` of a unit that prints it, or on `baseAbilities` for a base that has it (an
+"attached base gains" upgrade included).
+
+`mayLookAtDeckTop(state, player)` is the one question asked of it: true while a unit the player
+controls still lists the card among its `abilityCardIds` (so it goes with a loss of abilities, and
+follows a change of control to the new controller and their own deck), or while `baseAbilityCardIds`
+of their base does. The game screen asks it for the human's own deck and makes that deck a click
+target (see `architecture.md`). Because looking never passes through `resolve`, it cannot reach the
+log, the replay data or the other seat, and a bot holding the permission is never waited on.
+
+A one-shot "look at the top card of your deck" inside an ability is a different thing: that is a
+pending choice which shows the card as it asks what to do with it (see `choices.md`).
+
+`lookAtDeckTop.test.ts` finds every bundled card that prints the standing sentence and fails for one
+that does not declare it.
 
 ## Pilots
 
@@ -633,6 +655,8 @@ from another zone sends it to the base whatever unit it named.
 `baseAbilityCardIds`: the base card and each upgrade on it.
 
 - A **constant** is `baseAbilities.aura` on the upgrade card (Landing Pad), folded into the aura pass.
+- A **standing permission to look at the top card of the deck** is `baseAbilities.looksAtOwnDeckTop`
+  (Intelligence Agency), read by `mayLookAtDeckTop`.
 - A **triggered ability** is an ordinary `abilities` entry on the upgrade card, collected by
   `collectBaseTriggers` for the base's controller wherever an undeployed leader's would be
   (`collectPlayerTriggers`), plus friendly defeats and units entering play. Its source is `<cardId>-base`,
