@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { loadReport, replayUpTo, replayWith, pickTrigger } from './helpers/replayReport'
+import { loadReport, replayWith, pickTrigger, type ReplayInserts } from './helpers/replayReport'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import { normaliseCard } from '../engine/cardDb'
 import { cardId } from '../data/cards'
@@ -10,6 +10,7 @@ import { effectivePower } from '../engine/stats'
 import { KEYWORD_AMBUSH, KEYWORD_SHIELDED } from '../engine/cardDefinitions' // also registers every implemented card
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { AIS } from '../ai/registry'
+import type { Action } from '../engine/actions'
 import type { EngineCard, GameState, LeaderState, PendingChoice, UnitState } from '../engine/types'
 
 /**
@@ -50,7 +51,16 @@ describe('the reported game: Mae played into a Rebel Pathfinder', () => {
   const report = loadReport('maeShieldAmbush')
   /** Move 12 plays Mae and move 13 is her Ambush attack on the Pathfinder (`u1`). */
   const MAE_PLAY = 12
-  const played = (): GameState => replayUpTo(report, MAE_PLAY + 1, ALL_CARDS)
+  /**
+   * The reporter led with Grand Admiral Thrawn, and the game was recorded without his look at the top
+   * of each deck as the action phase starts. It is dismissed wherever it is waiting, which is the only
+   * answer it has and changes nothing on the board.
+   */
+  const dismissLook = (s: GameState): Action[] => (s.pendingChoices ?? [])
+    .filter(c => c.kind === 'lookAtDeckTops')
+    .map(c => ({ type: 'skipTrigger', choiceId: c.id }))
+  const LOOKS: ReplayInserts = Object.fromEntries(report.moves.map((_, i) => [i, dismissLook]))
+  const played = (): GameState => replayWith(report, LOOKS, MAE_PLAY + 1, ALL_CARDS)
   const mae = (s: GameState): UnitState => s.players.player.units.find(u => u.cardId === MAE)!
   const attackPathfinder = (s: GameState): GameState =>
     resolve(s, { type: 'attack', attackerId: mae(s).instanceId, target: { kind: 'unit', instanceId: 'u1' } })
@@ -109,7 +119,12 @@ describe('the reported game: Mae played into a Rebel Pathfinder', () => {
   })
 
   it('replays to the board the report was filed from once the order is answered the way it used to resolve', () => {
-    const final = replayWith(report, { [MAE_PLAY + 1]: s => pickTrigger(s, KEYWORD_SHIELDED) }, report.moves.length, ALL_CARDS)
+    const final = replayWith(
+      report,
+      { ...LOOKS, [MAE_PLAY + 1]: s => [...dismissLook(s), ...pickTrigger(s, KEYWORD_SHIELDED)] },
+      report.moves.length,
+      ALL_CARDS,
+    )
     expect(mae(final).damage).toBe(0)
     expect(shields(mae(final))).toBe(0)
   })
