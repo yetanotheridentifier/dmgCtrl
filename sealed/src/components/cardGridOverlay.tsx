@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { EngineCard } from '../engine/types'
-import { OverlayButtons, OverlayHeader, OverlayShell, PANEL_PRIMARY } from './overlayShell'
+import { OVERLAY_DETAIL, OverlayButtons, OverlayHeader, OverlayShell, PANEL_PRIMARY } from './overlayShell'
 import CardFace from './cardFace'
 import { ZOOM_WIDTH_PX } from './cardSizing'
 import { useCardZoom } from './useCardZoom'
@@ -19,6 +19,9 @@ export interface CardGridItem {
   dimmed?: boolean
   actionLabel?: string
   onSelect?: () => void
+  /** A line under the card saying what it is (whose deck it tops), in the overlay's detail type. */
+  caption?: string
+  captionTestId?: string
 }
 
 /**
@@ -30,7 +33,7 @@ export interface CardGridItem {
  * `onBackdropClick` dismisses view-only overlays (clicks inside the panel are ignored).
  */
 /** One card cell: the card (a click target when selectable), zoom-on-hover, an optional labelled
- *  action button and host caption. */
+ *  caption and an optional labelled action button. */
 function GridCardCell({ item, card, width }: { item: CardGridItem; card: EngineCard | undefined; width: number }) {
   const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   const clickCard = item.onSelect && !item.actionLabel
@@ -47,6 +50,7 @@ function GridCardCell({ item, card, width }: { item: CardGridItem; card: EngineC
       ) : (
         <div ref={setAnchor} {...bind} className="relative w-fit">{face}{zoom}</div>
       )}
+      {item.caption && <p data-testid={item.captionTestId} className={OVERLAY_DETAIL}>{item.caption}</p>}
       {item.actionLabel && item.onSelect && (
         <button data-testid={item.testId} onClick={item.onSelect} className={PANEL_PRIMARY}>
           {item.actionLabel}
