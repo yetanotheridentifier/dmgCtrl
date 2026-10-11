@@ -210,7 +210,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack' || choice.kind === 'mayAttackAnyUnit') return "Don't attack"
-      if (choice.kind === 'distributeDamage' || choice.kind === 'distributeHealing' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount' || choice.kind === 'exploit') return 'Done'
+      if (choice.kind === 'distributeDamage' || choice.kind === 'distributeHealing' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount' || choice.kind === 'exploit' || choice.kind === 'payWith') return 'Done'
       // Acknowledging a reveal that matched nothing (#413), and passing on Reforge's search.
       if (choice.kind === 'searchDraw' || choice.kind === 'search' || choice.kind === 'searchPlayUpgrade') return 'Done'
       if (choice.kind === 'mayDoubleTokens') return "Don't"
@@ -349,6 +349,11 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'selectUnitToExhaust') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Exhaust ${target ?? 'unit'}`
+      }
+      if (choice.kind === 'payWith') {
+        // The two ways to pay besides resources: a Credit token is defeated, a paying unit is exhausted.
+        if (action.targetInstanceId === undefined) return 'Defeat a Credit token'
+        return `Exhaust ${anyUnitName(state, action.targetInstanceId) ?? 'unit'} to pay`
       }
       if (choice.kind === 'exploit') {
         if (choice.fromDiscard) {

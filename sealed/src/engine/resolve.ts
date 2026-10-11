@@ -3,8 +3,9 @@ import type { Arena, EngineCard, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, HowPlayed, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef, UsedAbility } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed, upgradeSideId, PLAYED_FROM_HAND, PLAYED_ELSEWHERE } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, recordActionStarted, markAbilityUsed, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
-import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { canTakePilot, effectiveCost, exploitTerms, creditExploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, discardForCostIndices, canAffordFromHand, unitCostPayers, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, smuggleTerms, smuggleCostUnits, type PlayFromTerms } from './legalMoves'
+import { addResourceFromHand, readyAllResources } from './resources'
+import { pay, payAsked, payable, payingStepFor, pickPayWith, finishPayWith, withoutPaying, unitCostPayers } from './payment'
+import { canTakePilot, effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, discardForCostIndices, canAffordFromHand, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, smuggleTerms, smuggleCostUnits, type PlayFromTerms } from './legalMoves'
 import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectAbilityUsed, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
@@ -116,7 +117,22 @@ function withoutOffer(state: GameState): GameState {
   return next
 }
 
+/**
+ * Apply an action, with the paying step in front of it (`payment.ts`). Answering a `payWith` step is
+ * dealt with here, since finishing it runs the action it stood in front of. Any other action that
+ * would ask a player holding a Credit token or a paying unit to pay raises that step and does
+ * nothing else; everything else goes straight to the dispatcher.
+ */
 function resolveAction(state: GameState, action: Action): GameState {
+  const step = state.pendingChoices?.find((c): c is Extract<PendingChoice, { kind: 'payWith' }> => c.kind === 'payWith')
+  if (step && state.winner === null && (action.type === 'skipTrigger' || action.type === 'acceptChoice') && action.choiceId === step.id) {
+    return withoutPaying(action.type === 'skipTrigger' ? finishPayWith(state, step, dispatchAction) : pickPayWith(state, step, action.targetInstanceId, dispatchAction))
+  }
+  const asks = payingStepFor(state, action, dispatchAction)
+  return asks ? pushChoice(state, asks) : dispatchAction(state, action)
+}
+
+function dispatchAction(state: GameState, action: Action): GameState {
   if (state.winner !== null) {
     throw new Error('Cannot resolve actions: the game is over')
   }
@@ -693,8 +709,7 @@ function ackbarEligible(
     if (filter?.trait && !cardHasTrait(state, cardId, filter.trait, owner)) return []
     if (filter?.aspect && !(c.aspects ?? []).some(a => a.toLowerCase() === filter.aspect!.toLowerCase())) return []
     if (costDelta !== undefined && owner) {
-      const ready = state.players[owner].resources.filter(r => !r.exhausted).length
-      return Math.max(0, effectiveCost(state, owner, c) + costDelta) <= ready ? [i] : []
+      return Math.max(0, effectiveCost(state, owner, c) + costDelta) <= payable(state, owner) ? [i] : []
     }
     return (c.cost ?? 0) <= budget ? [i] : []
   })
@@ -730,8 +745,7 @@ function playUnit(state: GameState, handIndex: number): GameState {
   if (exploit) return raiseExploit(state, playerId, card.id, handIndex, exploit)
 
   const cost = effectiveCost(state, playerId, card)
-  const paid = payCost(p, cost)
-  const next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+  const next = updatePlayer(pay(state, playerId, cost), playerId, { hand: p.hand.filter((_, i) => i !== handIndex) })
   // whenPlayed effects can defeat a base, so the win check runs afterwards.
   return checkWin(playUnitCard(next, playerId, card.id, undefined, cost, undefined, undefined, PLAYED_FROM_HAND))
 }
@@ -787,8 +801,7 @@ export function playEventFromHand(state: GameState, playerId: PlayerId, handInde
     return playEventCard(discardFromHand(rest, playerId, at), playerId, card.id, undefined, [], { ...PLAYED_FROM_HAND, paid: 0 })
   }
   const cost = effectiveCost(state, playerId, card)
-  const paid = payCost(p, cost)
-  const next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+  const next = updatePlayer(pay(state, playerId, cost), playerId, { hand: p.hand.filter((_, i) => i !== handIndex) })
   return playEventCard(next, playerId, card.id, undefined, [], { ...PLAYED_FROM_HAND, paid: cost })
 }
 
@@ -862,14 +875,10 @@ function finishExploit(state: GameState, choice: Extract<PendingChoice, { kind: 
   const p = next.players[owner]
   const at = p.hand[choice.handIndex] === choice.cardId ? choice.handIndex : p.hand.indexOf(choice.cardId)
   if (at === -1) return next
-  const paid = payCost(p, cost)
-  if (choice.onto) {
-    // An upgrade: on a base it names no unit, and a Pilot goes on as one for its Piloting bracket.
-    const { targetInstanceId, piloting } = choice.onto
-    if (targetInstanceId !== undefined) return playUpgradeOnto(updatePlayer(next, owner, paid), owner, at, targetInstanceId, piloting === true, cost)
-    return playUpgradeCardOnto(updatePlayer(next, owner, { ...paid, hand: paid.hand.filter((_, i) => i !== at) }), owner, card.id, undefined, undefined, { ...PLAYED_FROM_HAND, paid: cost })
-  }
-  next = updatePlayer(next, owner, { ...paid, hand: paid.hand.filter((_, i) => i !== at) })
+  // A step that took Credit tokens or paying units was itself the paying step for this cost. Any
+  // other (Exploit, The Marauder) leaves the cost to the door every payment goes through.
+  next = choice.credit || choice.droids ? payAsked(next, owner, cost) : pay(next, owner, cost)
+  next = updatePlayer(next, owner, { hand: p.hand.filter((_, i) => i !== at) })
   if (card.type === 'event') return playEventCard(next, owner, card.id, undefined, owed, { ...PLAYED_FROM_HAND, paid: cost })
   return checkWin(playUnitCard(next, owner, card.id, undefined, cost, undefined, { owed, powers, ...(borrowed.length > 0 ? { borrowed } : {}) }, PLAYED_FROM_HAND))
 }
@@ -997,7 +1006,7 @@ function playFromZone(state: GameState, controller: PlayerId, zone: PlayFromZone
   const inResources = zone === 'resources' || zone === 'opponentResources' || (zone === 'handOrResources' && ref.index >= handSize)
   const how: HowPlayed = { from: inHand ? 'hand' : inResources ? 'resources' : 'other', ...(tail?.usingSmuggle ? { smuggle: true } : {}), paid: cost }
 
-  let next = updatePlayer(state, controller, payCost(state.players[controller], cost, selfPayingResource(state, controller, zone, ref.index)))
+  let next = pay(state, controller, cost, selfPayingResource(state, controller, zone, ref.index))
   // "The next card you play using Plot" (Chancellor Palpatine) is this one, whatever its type.
   if (terms.plot) {
     const plotGrants = (next.players[controller].nextUnitGrants ?? []).filter(g => g.viaPlot)
@@ -1444,7 +1453,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     }
     case 'payOrExhaust':
       // Pay the cost; the unit simply stays ready (no exhaust).
-      next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      next = pay(next, choice.controller, choice.cost)
       break
     case 'discardOrDamage':
       // Syril Karn: discarding pays the cost that cancels the damage — it never lands.
@@ -1556,7 +1565,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'mayPayExhaustArena': {
       // Jod Na Nawood: pay the cost, then exhaust every unit in the chosen arena, both sides.
       const arena = (optionIndex ?? 0) === 0 ? 'ground' : 'space'
-      next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      next = pay(next, choice.controller, choice.cost)
       for (const u of inPlayUnits(next)) {
         if (u.arena === arena) next = exhaustUnit(next, u.instanceId)
       }
@@ -1876,7 +1885,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     case 'mayPayToDraw': {
       // Mandalorian: optionally pay the cost, then draw. `cost` 0 = a free "may draw".
-      next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      next = pay(next, choice.controller, choice.cost)
       const handBefore = next.players[choice.controller].hand.length
       next = drawCards(next, choice.controller, choice.draw)
       // Mos Espa Watermonger: "if you do, discard a card" — only when a card was actually drawn.
@@ -2060,7 +2069,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         runIfYouDo(choice.damageSelf && choice.then.sourceInstanceId ? dealDamageToUnit(s, choice.then.sourceInstanceId, choice.damageSelf) : s, choice.then)
       next = choice.useForce
         ? forceUse(next, choice.controller, rest)
-        : rest(updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost)))
+        : rest(pay(next, choice.controller, choice.cost))
       if (choice.revealEvent) {
         const shown = next.players[choice.controller].hand.find(id => next.cards[id]?.type === 'event')
         if (shown) next = revealedFromHand(next, choice.controller, [shown])
@@ -2175,7 +2184,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       const host = findUnit(next, choice.unitId)
       if (card && cardId && host && idx !== undefined && choice.eligibleIndices.includes(idx)) {
         const cost = Math.max(0, effectiveCost(next, owner, card, host.unit) - choice.discount)
-        next = updatePlayer(next, owner, payCost(next.players[owner], cost))
+        next = pay(next, owner, cost)
         next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...choice.revealed.filter((_, i) => i !== idx)] })
         next = playUpgradeCardOnto(next, owner, cardId, choice.unitId, undefined, { ...PLAYED_ELSEWHERE, paid: cost })
       } else {
@@ -2437,7 +2446,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         let resourcesPaid = 0
         if (choice.costDelta !== undefined && played) {
           resourcesPaid = Math.max(0, effectiveCost(next, owner, played) + choice.costDelta)
-          next = updatePlayer(next, owner, payCost(next.players[owner], resourcesPaid))
+          next = pay(next, owner, resourcesPaid)
         }
         const enteredId = `u${next.instanceCounter}`
         next = playUnitCard(next, owner, cardId, choice.entersReady === true, resourcesPaid)
@@ -2612,8 +2621,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       const card = cardId ? next.cards[cardId] : undefined
       if (handIndex !== undefined && card?.type === 'unit') {
         const cost = Math.max(0, effectiveCost(next, choice.controller, card) + choice.costDelta)
-        const paid = payCost(p, cost)
-        next = updatePlayer(next, choice.controller, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+        next = updatePlayer(pay(next, choice.controller, cost), choice.controller, { hand: p.hand.filter((_, i) => i !== handIndex) })
         // `playUnitCard` names the new unit from the counter it is about to consume, so this is its id.
         const enteredId = `u${next.instanceCounter}`
         const fate: EntryFate | undefined = choice.thenDefeatIt ? { defeat: true } : choice.thenCaptureBy ? { capturedBy: choice.thenCaptureBy } : undefined
@@ -2730,11 +2738,8 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
   if (piloting) {
     const host = p.units.find(u => u.instanceId === targetInstanceId)
     if (!host || !canTakePilot(state, host, card.id)) throw new Error(`playUpgrade: ${targetInstanceId} cannot take ${card.id} as a Pilot`)
-    const step = creditExploitTerms(state, playerId)
-    if (step) return raiseExploit(state, playerId, card.id, handIndex, step, { targetInstanceId, piloting: true })
     const pilotCost = effectiveCost(state, playerId, card, host, undefined, card.piloting)
-    const paid = updatePlayer(state, playerId, payCost(p, pilotCost))
-    return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId, true, pilotCost)
+    return playUpgradeOnto(pay(state, playerId, pilotCost), playerId, handIndex, targetInstanceId, true, pilotCost)
   }
 
   const targetOwner = (['player', 'opponent'] as PlayerId[]).find(id =>
@@ -2744,14 +2749,8 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
     throw new Error(`playUpgrade: no unit ${targetInstanceId} to attach to`)
   }
   const targetUnit = state.players[targetOwner].units.find(u => u.instanceId === targetInstanceId)
-  // The standing paying step (Credit tokens, units that pay as resources) is asked before anything is
-  // paid, as it is for a unit or an event; `finishExploit` then pays and attaches.
-  const step = creditExploitTerms(state, playerId)
-  if (step) return raiseExploit(state, playerId, card.id, handIndex, step, { targetInstanceId })
-
   const cost = effectiveCost(state, playerId, card, targetUnit)
-  const paid = updatePlayer(state, playerId, payCost(p, cost))
-  return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId, false, cost)
+  return playUpgradeOnto(pay(state, playerId, cost), playerId, handIndex, targetInstanceId, false, cost)
 }
 
 /**
@@ -2836,10 +2835,8 @@ function playBaseUpgrade(state: GameState, handIndex: number): GameState {
   const cardId = p.hand[handIndex]
   const card = cardId ? state.cards[cardId] : undefined
   if (!isFortify(card)) throw new Error(`playBaseUpgrade: hand index ${handIndex} is not a Fortify upgrade`)
-  const step = creditExploitTerms(state, playerId)
-  if (step) return raiseExploit(state, playerId, cardId, handIndex, step, {})
   const cost = effectiveCost(state, playerId, card!)
-  const paid = updatePlayer(state, playerId, { ...payCost(p, cost), hand: p.hand.filter((_, i) => i !== handIndex) })
+  const paid = updatePlayer(pay(state, playerId, cost), playerId, { hand: p.hand.filter((_, i) => i !== handIndex) })
   return playUpgradeCardOnto(paid, playerId, cardId, undefined, undefined, { ...PLAYED_FROM_HAND, paid: cost })
 }
 
@@ -2883,7 +2880,7 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
   const owner = ability.anyPlayer ? state.activePlayer : found.owner
 
   let next = state
-  if (ability.cost) next = updatePlayer(next, owner, payCost(next.players[owner], ability.cost))
+  if (ability.cost) next = pay(next, owner, ability.cost)
   if (ability.exhaustCost) next = exhaustUnit(next, instanceId) // pay the "[Exhaust]" cost
   if (ability.oncePerRound) {
     const key = actionAbilityKey(cardId, index)
@@ -2913,8 +2910,7 @@ function useLeaderAbility(state: GameState, index: number, targetInstanceId?: st
   const ability = leaderActions(p.leader.cardId)[index]
   if (!ability) throw new Error(`useLeaderAbility: no leader action ${index}`)
 
-  const paid = ability.cost ? payCost(p, ability.cost) : p
-  let next = updatePlayer(state, owner, { ...paid, leader: { ...p.leader, exhausted: true } })
+  let next = updatePlayer(pay(state, owner, ability.cost ?? 0), owner, { leader: { ...p.leader, exhausted: true } })
   const run = (s: GameState) => runAttributed(s, { cardId: p.leader.cardId, controller: owner }, s2 => ability.effect(s2, { owner, cardId: p.leader.cardId, targetInstanceId }))
   next = ability.useForceCost ? forceUse(next, owner, run) : run(next) // the "[use the Force]" cost, as above
   next = checkWin(next)

@@ -22,19 +22,20 @@ const READY_READ = /readyResourceCount\(|!\s*r\.exhausted/g
 
 /** Every direct read of the ready resources outside the door, named. */
 const EXPECTED_READS: Record<string, number> = {
-  // The definition, `canAfford` and `payCost` themselves.
-  'resources.ts': 3,
+  // The count itself (two), and `canAfford` and `payCost` reading it.
+  'resources.ts': 4,
   // `payable` counts them, `pay` in a dry run exhausts what there is, and the step's Done reads what is left.
   'payment.ts': 3,
-  // Greater Sarlacc's step picks ready resources and what is left must still cover the card (three
-  // reads: its terms, `canAffordFromHand`, `exploitAffordable`), and the re-export for the screen.
-  'legalMoves.ts': 4,
+  // Greater Sarlacc's step picks ready resources, so its terms count them, and a card's own Credit
+  // step (Jabba the Hutt) has only ready resources left to finish with.
+  'legalMoves.ts': 2,
   // Resources defeated or exhausted by an effect, which is not a payment: the ready count kept when
   // resources are defeated (three reads) and the one ready resource an effect exhausts.
   'effects.ts': 4,
-  // Effects that exhaust a resource or count the ready ones as a number in their text ("exhaust an
-  // enemy resource", "equal to the number of ready resources you control"), none of them a cost.
-  'cardDefinitions.ts': 5,
+  // Effects that exhaust a resource, look for one to exhaust or to move, or count the ready ones as a
+  // number in their text ("exhaust an enemy resource", "equal to the number of ready resources you
+  // control", "if an opponent controls no ready resources"), none of them a cost.
+  'cardDefinitions.ts': 6,
 }
 
 const sources = readdirSync(join(process.cwd(), DIR))

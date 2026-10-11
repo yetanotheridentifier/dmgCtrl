@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { loadReport, replay, replaySteps, replayUpTo } from './helpers/replayReport'
+import { loadReport, replay, replaySteps, replayUpTo, withPayingStepsAnswered } from './helpers/replayReport'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import { normaliseCard } from '../engine/cardDb'
 import { cardId } from '../data/cards'
@@ -42,9 +42,11 @@ const board = (mine: Side = {}, theirs: Side = {}): GameState =>
 const lookers = (s: GameState): PlayerId[] => (['player', 'opponent'] as const).filter(p => mayLookAtDeckTop(s, p))
 
 describe('the reported game: Hondo Ohnaka played from hand', () => {
-  const report = loadReport('hondoTopCard')
-  /** Move 40 plays Hondo and move 41 finishes paying for him; the report was filed one move later. */
-  const HONDO_PLAY = 40
+  // Recorded before a leader's action asked what else pays: the player held Credit tokens and paid
+  // those costs with resources, so that answer is added where the step now stands.
+  const report = withPayingStepsAnswered(loadReport('hondoTopCard'), ALL_CARDS)
+  /** Hondo is played three moves from the end, the next move finishes paying for him, and the report was filed one move later. */
+  const HONDO_PLAY = report.moves.length - 3
 
   it('plays Hondo at move 40', () => {
     expect(report.moves[HONDO_PLAY]).toMatchObject({ by: 'player', action: { type: 'playUnit' } })

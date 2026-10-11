@@ -99,8 +99,7 @@ describe('the paying step on the other doors, on the game screen', () => {
     const before = handSize()
     // Three to pay with two resources: one token is needed, so there is no Done yet.
     await user.click(screen.getByTestId('player-leader-card'))
-    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/credit token/i)
-    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/pay 3/i)
+    expect(screen.getByTestId('choice-overlay-prompt')).toHaveTextContent(/defeat credit tokens to pay for test leader's action \(3 to pay\)/i)
     expect(creditButtons()).toHaveLength(1)
     expect(doneButton()).toBeNull()
     await user.click(creditButtons()[0])
@@ -111,6 +110,30 @@ describe('the paying step on the other doors, on the game screen', () => {
     expect(creditButtons()).toHaveLength(0)
   })
 
+  it('backs out of the step with nothing paid: the tokens, the resources and the leader are as they were', async () => {
+    const user = await start(deck('TST_970'))
+    await user.click(screen.getByTestId('hand-card-0')) // the Banker
+    await waitFor(() => expect(unitsOn('player')).toHaveLength(1))
+    // Only the player holds any, so theirs is the one pill on screen.
+    const tokens = () => screen.getByTestId('credit-tokens').textContent
+    const before = handSize()
+    await user.click(screen.getByTestId('player-leader-card'))
+    await user.click(creditButtons()[0])
+    // A token is picked and not yet defeated: the count holds until the step finishes.
+    expect(tokens()).toBe('Cred. 2')
+    await user.click(screen.getByRole('button', { name: /cancel: take back the action/i }))
+    expect(creditButtons()).toHaveLength(0)
+    expect(screen.queryByTestId('choice-overlay')).toBeNull()
+    expect(tokens()).toBe('Cred. 2')
+    expect(handSize()).toBe(before)
+    // The action is still there to take, and this time it is paid for.
+    await user.click(screen.getByTestId('player-leader-card'))
+    await user.click(creditButtons()[0])
+    await user.click(doneButton()!)
+    await waitFor(() => expect(handSize()).toBe(before + 1))
+    expect(tokens()).toBe('Cred. 1')
+  })
+
   it("pays a unit action's cost by clicking a unit that pays as a resource", async () => {
     const user = await start(deck('TST_973', 'TST_971'))
     await user.click(screen.getByTestId('hand-card-0')) // the Control Ship
@@ -119,8 +142,8 @@ describe('the paying step on the other doors, on the game screen', () => {
     await waitFor(() => expect(unitsOn('player')).toHaveLength(2))
     // The Tinkerer entered exhausted and the opponent has passed: it is the player's turn again.
     const before = handSize()
-    await user.click(await screen.findByRole('button', { name: /draw a card/i }))
-    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/exhaust/i)
+    await user.click(await screen.findByRole('button', { name: /use tinkerer/i }))
+    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/exhaust friendly units to pay for tinkerer's action as if they were resources \(3 to pay\)/i)
     const ship = unitsOn('player')[0]
     expect(ship).toHaveAttribute('data-target', 'true')
     expect(doneButton()).toBeNull()
@@ -150,7 +173,7 @@ describe('the paying step on the other doors, on the game screen', () => {
     await user.click(screen.getByTestId('hand-card-0')) // the Banker
     await waitFor(() => expect(unitsOn('player')).toHaveLength(1))
     await user.click(await screen.findByRole('button', { name: /smuggle/i }))
-    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/credit token/i)
+    expect(screen.getByTestId('choice-overlay-prompt')).toHaveTextContent(/defeat credit tokens to pay for contraband \(3 to pay\)/i)
     expect(creditButtons()).toHaveLength(1)
     expect(doneButton()).toBeNull()
     await user.click(creditButtons()[0])
@@ -164,7 +187,7 @@ describe('the paying step on the other doors, on the game screen', () => {
     await user.click(screen.getByTestId('hand-card-0')) // the Tinkerer
     await waitFor(() => expect(unitsOn('player')).toHaveLength(1))
     // Two resources against a cost of three: the action is simply not there.
-    expect(screen.queryByRole('button', { name: /draw a card/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /use tinkerer/i })).toBeNull()
     expect(creditButtons()).toHaveLength(0)
   })
 })

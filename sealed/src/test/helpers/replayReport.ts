@@ -115,6 +115,32 @@ export function replaySteps(report: Report, extra: SwuCard[] = [], inserts: Repl
   return states
 }
 
+/**
+ * A report as it would have been recorded with the paying step in front of every cost.
+ *
+ * A game recorded while only a card played from hand asked what else pays has no answer in it for
+ * the step a player holding a Credit token (or a paying unit) now meets on a leader's action, an
+ * ability's cost or a play out of another zone. Those costs were paid with resources alone, so the
+ * answer the reporter would have given is Done with nothing picked: it is added as a move of its own
+ * wherever a step is waiting and the next recorded move does not answer it. Move indices after the
+ * first added move are shifted by the number added before them.
+ */
+export function withPayingStepsAnswered(report: Report, extra: SwuCard[] = []): Report {
+  let s = hydrate(report, extra)
+  const moves: Report['moves'] = []
+  for (const move of report.moves) {
+    const step = s.pendingChoices?.find(c => c.kind === 'payWith')
+    if (step && !('choiceId' in move.action && move.action.choiceId === step.id)) {
+      const done: Action = { type: 'skipTrigger', choiceId: step.id }
+      moves.push({ by: step.controller, action: done })
+      s = resolve(s, done)
+    }
+    moves.push(move)
+    s = resolve(s, move.action)
+  }
+  return { ...report, moves }
+}
+
 /** The state a report ends in, which is the board the reporter was looking at. */
 export function replay(report: Report, extra: SwuCard[] = []): GameState {
   const states = replaySteps(report, extra)

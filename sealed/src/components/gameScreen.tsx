@@ -1369,8 +1369,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // from the menu, one button per resource, like any other card pick.
     // Vernestra Rwoh's step picks cards in the discard pile, also not on the board: it gets the same
     // card picker as any other "choose a card in a pile", below.
-    // A Credit token is the player's rather than a unit's, so paying with one is a button too.
-    const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && (BOARD_TARGET_KINDS as readonly string[]).includes(c.kind) && !(c.kind === 'exploit' && (c.resources || c.fromDiscard || c.credit)))
+    // A Credit token is the player's rather than a unit's, so paying with one is a button too. The
+    // paying step is answered on the board only while a unit that pays as a resource is on offer;
+    // its Credit token button stays in the action column beside it (see `choiceBoardActions`).
+    const paysOnBoard = (c: PendingChoice) => legal.some(a => a.type === 'acceptChoice' && a.choiceId === c.id && a.targetInstanceId !== undefined)
+    const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && (BOARD_TARGET_KINDS as readonly string[]).includes(c.kind) && !(c.kind === 'exploit' && (c.resources || c.fromDiscard || c.credit)) && !(c.kind === 'payWith' && !paysOnBoard(c)))
     const choiceTargetIds = new Map<string, Action>()
     // Base targets (selectDamageTarget): pick a player's base to take the damage.
     const baseTargetActions = new Map<PlayerId, Action>()
@@ -1616,7 +1619,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // Leader abilities are driven from the leader card; a board-target choice is driven
     // from the board + a single Decline button — neither belongs in the action menu.
     const CLICK_HANDLED: Action['type'][] = ['playUnit', 'playEvent', 'playUpgrade', 'playBaseUpgrade', 'attack', 'resourceCard', 'setupResource', 'useLeaderAbility']
-    const choiceBoardActions = targetChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === targetChoice.id) : []
+    // A paying step's Credit token is not on the board, so that one answer is left for the menu.
+    const creditPick = (a: Action) => targetChoice?.kind === 'payWith' && a.type === 'acceptChoice' && a.targetInstanceId === undefined
+    const choiceBoardActions = targetChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === targetChoice.id && !creditPick(a)) : []
     // "Play a unit from hand" accepts are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const isPilotPlay = (a: Action) => a.type === 'playUpgrade' && a.piloting === true

@@ -10,7 +10,8 @@
  * (see abilities.ts), so state stays plain JSON and replays deterministically.
  */
 
-import type { AttackTarget } from './actions'
+import type { Action, AttackTarget } from './actions'
+import type { Paying } from './payment'
 import type { TriggerPoint } from './abilities'
 import { TOKEN_WEAKNESS } from './tokenUpgrades'
 
@@ -594,6 +595,11 @@ export interface GameState {
   winner: PlayerId | 'draw' | null
   /** Who conceded, when the game ended that way rather than on a base. */
   concededBy?: PlayerId
+  /**
+   * A payment in progress inside one `resolve` call (`payment.ts`): a dry run measuring what an action
+   * costs, or what its paying step already covered. Never present in a state the resolver returns.
+   */
+  paying?: Paying
   /** A player offering to concede, while the other answers. `activePlayer` is the answerer meanwhile. */
   concessionOffer?: PlayerId
   /** Players whose offer was declined: they are not asked again this game. */
@@ -1385,6 +1391,7 @@ export function choiceIntent(choice: PendingChoice): TargetIntent | undefined {
       return 'harm'
     case 'exploit':
       return choice.droids ? 'cunning' : 'harm' // Vuutun Palaa's Droids are exhausted, not defeated
+    case 'payWith': // the board picks are units exhausted to pay
     case 'enterAsCopy':
     case 'mayExhaustLeaderExhaustUnit': case 'mayExhaustUnit': case 'selectUnitToExhaust': case 'returnFriendlyUnit':
     case 'selectUnitToReturn': case 'selectUnitToSteal': case 'selectFriendlyUnit': case 'selectDistributeSource':
@@ -1616,6 +1623,15 @@ type ChoiceVariant =
   // `onto` says the card is an upgrade played from hand, which only the two standing modes (`credit`,
   // `droids`) are ever asked for: the unit it attaches to, absent for one that goes on a base, and
   // `piloting` for a Pilot unit played as an upgrade at its Piloting bracket.
+  // The paying step in front of an action that pays a cost (`payment.ts`), raised before the action
+  // runs for a player who holds a usable Credit token or controls a unit that pays as a resource.
+  // `cost` is what the action will ask for. `credits` counts the Credit tokens picked so far (each
+  // answered with `optionIndex`), `units` the paying units picked (each by `targetInstanceId`); every
+  // pick pays 1. Nothing is defeated or exhausted until the step finishes: Done once ready resources
+  // cover the rest, or by itself once the picks cover the cost. `resume` is the action the step stands
+  // in front of, run when it finishes. `except` is a unit that may not pay (the one whose own action
+  // this is).
+  | { kind: 'payWith'; id: string; controller: PlayerId; cost: number; credits: number; units: string[]; resume: Action; except?: string }
   | { kind: 'exploit'; id: string; controller: PlayerId; cardId: string; handIndex: number; picks: string[]; limit: number; discount: number; damage?: number; resources?: boolean; fromDiscard?: boolean; maxCost?: number; credit?: boolean; creditGrant?: KeywordInstance[]; droids?: boolean; onto?: { targetInstanceId?: string; piloting?: boolean } }
   /**
    * "You may have this unit enter play as a copy of a non-leader, non-Vehicle unit in play" (Clone):
