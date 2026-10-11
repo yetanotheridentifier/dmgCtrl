@@ -522,6 +522,16 @@ action looks like a heal that never happened.
 - **A look "at any time" is not a choice at all.** A card that lets its player look at the top card
   of their deck whenever they like raises nothing: the deck itself is the click target, for the
   human's own deck only (see "A standing permission to look" in `abilities.md`).
+- **A triggered look that decides nothing is a view-only choice.** Grand Admiral Thrawn looks at the
+  top card of each player's deck as the action phase starts. It has to be a choice, because it
+  happens at one fixed moment and play waits for it, but it asks nothing: `lookAtDeckTops` carries
+  the cards that were on top when the ability resolved (`tops`, the controller's own deck first, an
+  empty deck left out, and no choice at all when both are empty), and its one legal answer is the
+  Done (`skipTrigger`), which changes nothing. `DeckTopsOverlay` shows the cards with whose deck each
+  is on, and Done or a click beside them answers it, since it comes round every action phase. The
+  card identities live only in the choice and the overlay: the prompt text does not name them, the
+  answer carries only the choice id, so the log line reads "Done" for either seat and a replay's
+  moves hold no card. The kind is in `REVEALING_KINDS`, so a move that led to it cannot be cancelled.
 - **A look that leads somewhere raises the follow-up from both answers.** Qi'ra looks at a hand and
   then names a card, and her look is view-only, so Done is the only way to answer it: a tail hung on
   the accept path alone would never fire. `lookAtHand.thenNameCard` is raised on the skip path too.

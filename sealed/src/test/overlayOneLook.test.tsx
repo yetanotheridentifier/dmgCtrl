@@ -3,8 +3,8 @@ import { describe, it, expect, vi } from 'vitest'
 import type { ReactElement } from 'react'
 import { render, screen, within } from '@testing-library/react'
 import {
-  ButtonChoiceOverlay, CardChoiceOverlay, CardSelectOverlay, GameOverOverlay, NameCardOverlay, NextTriggerOverlay,
-  TriggerOrderOverlay,
+  ButtonChoiceOverlay, CardChoiceOverlay, CardSelectOverlay, DeckTopsOverlay, GameOverOverlay, NameCardOverlay,
+  NextTriggerOverlay, TriggerOrderOverlay,
 } from '../components/gameScreen'
 import { OVERLAY_TITLE, PANEL_BUTTON, PANEL_PRIMARY } from '../components/overlayShell'
 import { CARDS, card, state } from './helpers/engineFixtures'
@@ -37,6 +37,7 @@ const overlays: [string, ReactElement][] = [
   ['name a card', <NameCardOverlay names={['Fleet Lieutenant', 'Admiral Ackbar']} onPick={noop} onDismiss={noop} />],
   ['select a card', <CardSelectOverlay state={s} prompt="Choose an upgrade to defeat" items={[{ cardId: 'A', optionIndex: 0 }]} onPick={noop} onCancel={noop} onDismiss={noop} />],
   ['look at a card', <CardChoiceOverlay card={cards.A} cardId="A" prompt="Look at the top card of your deck"><button className={PANEL_PRIMARY}>Leave it</button></CardChoiceOverlay>],
+  ['look at the top of each deck', <DeckTopsOverlay state={s} prompt="The top card of each deck" tops={[{ deck: 'player', cardId: 'A' }, { deck: 'opponent', cardId: 'C' }]} onDone={noop} />],
 ]
 
 /** The overlay's own content: the panel without the cards it shows, whose faces have their own type. */

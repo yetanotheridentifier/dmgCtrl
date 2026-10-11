@@ -109,7 +109,7 @@ interface Snapshot {
  * state changes when they are raised, so the look itself has to count as hidden information seen.
  */
 const REVEALING_KINDS: ReadonlySet<PendingChoice['kind']> = new Set<PendingChoice['kind']>([
-  'mayPlayTopFree', 'mayDiscardTop', 'search', 'searchDraw', 'searchPlayFree', 'searchPlayUpgrade', 'lookAtHand',
+  'mayPlayTopFree', 'mayDiscardTop', 'search', 'searchDraw', 'searchPlayFree', 'searchPlayUpgrade', 'lookAtHand', 'lookAtDeckTops',
 ])
 
 const revealing = (s: GameState) => (s.pendingChoices ?? []).some(c => REVEALING_KINDS.has(c.kind))

@@ -14280,11 +14280,29 @@ const thrawnReveal = (s: GameState, ctx: Resumable & { playerChosen?: PlayerId }
   return unitThen(s, ctx, targets, `exhaust a unit that costs ${cost} or less (revealed: ${s.cards[top]?.name ?? top})`, 'cunning', false, 'exhaust')
 }
 const THRAWN_REVEAL = "Reveal the top card of any player's deck. Exhaust a unit that costs the same as or less than the revealed card."
+/**
+ * Both sides: a view-only look at the two top cards as they stand, the controller's own deck first.
+ * An empty deck has no top card, and with both empty there is nothing to show, so nothing is asked.
+ */
+const THRAWN_LOOK: AbilityDef = {
+  trigger: 'whenActionPhaseStarts',
+  description: "When the action phase starts: Look at the top card of each player's deck.",
+  effect: (s, ctx) => {
+    const tops = [ctx.owner, opponentOf(ctx.owner)].flatMap(deck => {
+      const cardId = s.players[deck].deck[0]
+      return cardId === undefined ? [] : [{ deck, cardId }]
+    })
+    return tops.length === 0 ? s : pushChoice(s, { kind: 'lookAtDeckTops', id: `${ctx.sourceInstanceId ?? ctx.cardId}-tops`, controller: ctx.owner, tops })
+  },
+}
+const thrawnFront = leaderFront(THRAWN_REVEAL, { cost: 1, effect: (s, ctx) => choosePlayer(s, ctx, 'reveal the top card of the deck of', 'reveal') })
 registerCard('SOR_016', { // Grand Admiral Thrawn
-  // "When the action phase starts: Look at the top card of each player's deck" is information the engine does not model.
-  ...leaderFront(THRAWN_REVEAL, { cost: 1, effect: (s, ctx) => choosePlayer(s, ctx, 'reveal the top card of the deck of', 'reveal') }),
-  ...attacks(`You may ${THRAWN_REVEAL[0].toLowerCase()}${THRAWN_REVEAL.slice(1)}`, (s, ctx) =>
-    pushChoice(s, { kind: 'choosePlayerThen', id: ctx.sourceInstanceId!, controller: ctx.owner, text: 'reveal the top card of the deck of', optional: true, then: resume(ctx, 'reveal') })),
+  leaderAbilities: { ...thrawnFront.leaderAbilities, abilities: [THRAWN_LOOK] },
+  abilities: [
+    ...attacks(`You may ${THRAWN_REVEAL[0].toLowerCase()}${THRAWN_REVEAL.slice(1)}`, (s, ctx) =>
+      pushChoice(s, { kind: 'choosePlayerThen', id: ctx.sourceInstanceId!, controller: ctx.owner, text: 'reveal the top card of the deck of', optional: true, then: resume(ctx, 'reveal') })).abilities!,
+    THRAWN_LOOK,
+  ],
   ifYouDo: (s, ctx) => (ctx.step === 'exhaust' ? exhaustUnit(s, ctx.targetInstanceId!) : thrawnReveal(s, ctx)),
 })
 

@@ -1817,6 +1817,11 @@ type ChoiceVariant =
   // the choice would have no legal move.
   // `thenNameCard` raises a `nameCard` once the look is done (Qi'ra looks, then names).
   | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean; discardFilter?: 'nonUnit' | 'event' | 'unit'; discardAspects?: string[]; thenNameCard?: { unitId: string; surcharge: number }; then?: IfYouDo }
+  // "Look at the top card of each player's deck" (Grand Admiral Thrawn): view-only, so its one answer
+  // is the Done (`skipTrigger`) and answering changes nothing. `tops` holds the cards that were on top
+  // when the ability resolved, the controller's own deck first and an empty deck left out. Private to
+  // the controller: the answer names no card, so neither the log nor a replay's moves do.
+  | { kind: 'lookAtDeckTops'; id: string; controller: PlayerId; tops: { deck: PlayerId; cardId: string }[] }
   // Search the revealed top cards (Clan Wren Loyalist): pick one of the `eligibleIndices`
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.
