@@ -556,7 +556,9 @@ unit" in a borrowed ability means the borrower, and they join the unit's own arr
 controller to order. A card whose "When Played" ability is borrowed this way is never itself played.
 
 - **Legality reads the best case.** `canAffordFromHand` asks whether the effective cost less what the
-  step could save fits the ready resources. For units that is the most it could save. For resources
+  step could save fits what the player could pay (`payable`: ready resources, plus any Credit tokens
+  and paying units, since what the step leaves is paid through the paying step below). For units that
+  is the most it could save. For resources
   each pick is also one fewer resource to pay with, so every number of picks is tried: three ready
   resources play a 9-cost Greater Sarlacc for nothing, and two cannot.
 - **The `exploit` choice comes before anything is paid.** The card stays in hand; the player picks
@@ -575,30 +577,46 @@ controller to order. A card whose "When Played" ability is borrowed this way is 
 - **The exploited units' powers are recorded** on the unit played (`exploitedPowers`), as read when
   they were defeated, for the When Played that counts them (Count Dooku).
 
-The step belongs to the Play a Card action from hand (`playUnit`, `playEvent`, and `playUpgrade` and
-`playBaseUpgrade` for the two standing modes below, which are the only ones an upgrade is asked on),
-to Count Dooku's front, which raises it itself with its Exploit 1, and to Jabba the Hutt's deployed
-action, which raises it so Credit tokens can pay and carries a `creditGrant` (Ambush for the phase
-when one did). An upgrade's step carries the unit it goes on in `onto` (nothing for one that goes on a
-base, `piloting` for a Pilot played as an upgrade), since its cost can depend on the host, and
-`finishExploit` pays and attaches it. **The other ways to play a card do not offer it**:
-`playCardFrom`, `playUnitFromHand`, the free plays and the discard grants pay the card's effective cost
-with no exploit step. No card in the sealed sets both has Exploit and is commonly played that way.
+The step belongs to a card that has it, played with the Play a Card action from hand (`playUnit`,
+`playEvent`), to Count Dooku's front, which raises it itself with its Exploit 1, and to Jabba the
+Hutt's deployed action, which raises it in its `credit` mode to hear whether a Credit token paid and
+carries a `creditGrant` (Ambush for the phase when one did). **The other ways to play a card do not
+offer Exploit**: `playCardFrom`, `playUnitFromHand`, the free plays and the discard grants pay the
+card's effective cost. No card in the sealed sets both has Exploit and is commonly played that way.
+
+**What the step leaves is paid like any other cost**, so a player who also holds a Credit token or a
+paying unit meets the paying step next, in front of the step's last answer, with the units not yet
+defeated.
 
 In the AI the step is an ordinary chain: quiescence scores Done and each pick, within its budget.
 
-**A fourth mode, Credit tokens (#602), is not declared by the card at all.** Its printed rule is a
-standing one ("while paying resources, you may defeat this token. If you do, pay 1 less"), so
-`exploitTerms` offers it as a fallback whenever the payer holds any Credit token and none of the
-other three modes apply to the card being played — `own`/Exploit/Greater Sarlacc/Vernestra Rwoh all
-take priority when they apply, since no sealed card needs both at once. Picks are read by ordinal
-position among however many Credits are held, exactly like Greater Sarlacc's `resources` mode, and a
-defeated Credit triggers nothing and does not reduce what is left to pay with (it is a separate
-currency from ready resources). See `keywords-effects.md` "Credit tokens".
+### Paying: the step in front of every cost
 
-**A fifth, units paying as resources (Vuutun Palaa's Droids), takes Credit's place** when a card in
-play says so (`unitPaysCosts`). Picks are friendly units on the board, each exhausted paying 1, and the
-units are offered ahead of Credit tokens.
+**`payWith` is raised by the dispatcher, not by a card or a door.** When an action would ask a player
+to pay and that player holds a usable Credit token or controls a unit that pays as a resource
+(`unitPaysCosts`, Vuutun Palaa's Droids), the action does not run. A `payWith` choice is raised in its
+place, holding the cost, the picks so far and the action itself as `resume`. See
+`keywords-effects.md` "Paying a cost" for how the cost is measured and how the action resumes.
+
+- **It stands in front of every cost alike**: a card played from hand, a play out of another zone, an
+  ability's cost, a cost another choice carries. Accepting a `mayPayThen` raises it in front of that
+  answer, with the `mayPayThen` still pending underneath.
+- **It is asked even when ready resources would cover the cost**, and never of a player who has
+  nothing but resources to pay with.
+- **Answers**: `acceptChoice` with an `optionIndex` takes one more Credit token (one move, since tokens
+  cannot be told apart), `acceptChoice` with a `targetInstanceId` takes a paying unit, and
+  `skipTrigger` is Done, offered once ready resources cover what the picks leave. Covering the whole
+  cost, or running out of picks, finishes it without a Done.
+- **Nothing is spent until it finishes.** Tokens are defeated and units exhausted as the action
+  resumes, so the count a player sees holds until then, and cancelling the step leaves nothing paid,
+  nothing marked used and the turn where it was.
+- **While it stands it is the only choice on offer** (`legalMoves` gates the queue on it, as it does
+  on a trigger-order question): the action it holds may be the answer to one of the others.
+- **Its id is `exploit-<card id>` for a card played from hand** and `payWith` otherwise. The first is
+  the id that step has always had, so a recorded game with it in still replays.
+- **In the AI it is an ordinary chain** like Exploit's: Done and each pick are moves the search scores.
+  `legalMoves` offers an action exactly when `canPay` says its cost can be met, and the step can
+  always be finished from there, so no offered play is left unpayable.
 
 ### Discarding a card instead of paying
 

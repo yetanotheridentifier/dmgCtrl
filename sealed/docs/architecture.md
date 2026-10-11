@@ -55,7 +55,10 @@ phase with two stages resolved through legalMoves/resolve: mulligan decisions
 which 2 hand cards become starting resources (CR 5.2.1f; all pairs enumerated as actions).
 The AI's setup choices come from `ai/setupAi.ts`: keep only with a turn-1
 play, resource to preserve the early curve),
-`resources.ts` (cost payment/readying).
+`resources.ts` (exhausting and readying resources), `payment.ts` (the one door every cost is paid
+through, and the paying step the dispatcher raises in front of an action for a player who holds a
+Credit token or a unit that pays as a resource; see Paying a cost in
+[keywords-effects.md](keywords-effects.md)).
 
 Design properties that matter for later epics:
 

@@ -14,9 +14,9 @@ import type { Action } from '../engine/actions'
  *
  * Unlike Experience/Shield/Weakness, a Credit token belongs to a PLAYER rather than to a unit: it has
  * no board identity, is fungible, and "take control of an enemy Credit token" is the count moving
- * between the two players. The discount is a standing rule usable on ANY card play, read by
- * `exploitTerms` as a fourth mode of the #473/#683 `exploit`/`whilePlaying` step, not declared by the
- * card being played.
+ * between the two players. The discount is a standing rule usable on any cost, asked in the paying
+ * step that stands in front of the action (`payment.ts`), not declared by the card being played.
+ * `payingStepDoors.test.ts` takes the doors other than a card played from hand through it.
  */
 
 const F: Record<string, EngineCard> = {

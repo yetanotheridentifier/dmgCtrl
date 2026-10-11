@@ -854,6 +854,13 @@ played may now raise a choice the recorded moves never answer, long before the m
 about. Where that card's new behaviour is beside the point, `withInertCard` replays the report with an
 inert copy in its place: the same printed card under a new id nothing has registered.
 
+**So can a prompt the reporter was never shown.** A report recorded while only a card played from
+hand asked what else pays has no answer for the paying step a player holding a Credit token or a
+paying unit meets in front of every other cost. `withPayingStepsAnswered` rewrites the report with
+Done added wherever a step is waiting and the next recorded move does not answer it, which is what
+that player in fact did (those costs were paid with resources). Move indices after the first added
+move shift by the number added before them.
+
 **A `threw` is not necessarily in `resolve`.** A move is appended to the record *before* it is
 resolved, so a throw inside `resolve` leaves the offending move last. If every recorded move replays
 cleanly, the throw is in the AI **choosing the next move**: replay to the end, then call the AI on the

@@ -24,6 +24,7 @@ import type { Action } from '../engine/actions'
 const F: Record<string, EngineCard> = {
   ...CARDS,
   SOR_016: card({ id: 'SOR_016', name: 'Grand Admiral Thrawn', type: 'leader', cost: 6, power: 3, hp: 7 }),
+  LAW_029: card({ id: 'LAW_029', name: 'Citadel Research Center', type: 'base', hp: 25 }),
   SEC_122: card({ id: 'SEC_122', name: 'Vuutun Palaa', arena: 'space', cost: 7, power: 6, hp: 10 }),
   DROID: card({ id: 'DROID', name: 'Battle Droid', arena: 'ground', cost: 1, traits: ['Droid'] }),
   HOST: card({ id: 'HOST', name: 'Host', arena: 'ground', cost: 2, power: 2, hp: 6 }),
@@ -32,13 +33,15 @@ const F: Record<string, EngineCard> = {
   GEAR: card({ id: 'GEAR', name: 'Gear', type: 'upgrade', cost: 3, power: 1, hp: 1 }),
   TST_ACT: card({ id: 'TST_ACT', name: 'Actor', arena: 'ground', cost: 2, power: 1, hp: 5 }),
   TST_PAY: card({ id: 'TST_PAY', name: 'Payer', arena: 'ground', cost: 2, power: 1, hp: 5 }),
+  TST_DACT: card({ id: 'TST_DACT', name: 'Returner', arena: 'ground', cost: 3, power: 1, hp: 5 }),
 }
 
 beforeAll(() => {
   registerCard('TST_ACT', { actionAbilities: [{ description: 'Action [C=2]: Draw a card.', cost: 2, effect: (s, ctx) => drawCards(s, ctx.owner, 1) }] })
   registerCard('TST_PAY', { ifYouDo: (s, ctx) => drawCards(s, ctx.owner, 1) })
+  registerCard('TST_DACT', { discardAction: { description: 'Action: Play this card from your discard pile.', usable: () => true } })
 })
-afterAll(() => { for (const id of ['TST_ACT', 'TST_PAY']) unregisterAbility(id) })
+afterAll(() => { for (const id of ['TST_ACT', 'TST_PAY', 'TST_DACT']) unregisterAbility(id) })
 
 type Means = 'credits' | 'droids'
 interface Holding { resources: number; means?: Means; count?: number }
@@ -52,6 +55,8 @@ interface Door {
   extra?: Partial<GameState>
   /** A move that leads to the door without paying anything, taken while setting the board up when it is offered. */
   lead?: (m: Action) => boolean
+  /** The moves on offer come from a list made when the choice was raised, so a seeded choice says nothing about what is offered. */
+  listedAtRaise?: boolean
   move: (m: Action) => boolean
   happened: (s: GameState) => boolean
 }
@@ -101,6 +106,56 @@ const DOORS: Door[] = [
     move: m => m.type === 'acceptChoice' && m.choiceId === 'pay',
     happened: s => s.players.player.hand.length === 1,
   },
+  {
+    name: 'a payOrExhaust', cost: 2,
+    side: resources => ({ resources }),
+    extra: { pendingChoices: [{ kind: 'payOrExhaust', id: 'keep', controller: 'player', unitId: 'host', cost: 2 }] },
+    move: m => m.type === 'acceptChoice' && m.choiceId === 'keep',
+    happened: s => !s.pendingChoices?.some(c => c.id === 'keep'),
+  },
+  {
+    name: 'a mayPayToDraw', cost: 1,
+    side: resources => ({ resources }),
+    extra: { pendingChoices: [{ kind: 'mayPayToDraw', id: 'draw', controller: 'player', cost: 1, draw: 1 }] },
+    move: m => m.type === 'acceptChoice' && m.choiceId === 'draw',
+    happened: s => s.players.player.hand.length === 1,
+  },
+  {
+    name: 'a mayPayExhaustArena', cost: 4,
+    side: resources => ({ resources }),
+    extra: { pendingChoices: [{ kind: 'mayPayExhaustArena', id: 'arena', controller: 'player', cost: 4 }] },
+    // Space, where none of the Droids are, so the units it exhausts are not mistaken for ones that paid.
+    move: m => m.type === 'acceptChoice' && m.choiceId === 'arena' && m.optionIndex === 1,
+    happened: s => s.players.player.units.some(u => u.instanceId === 'flyer' && u.exhausted),
+  },
+  {
+    name: 'a discard action', cost: 3,
+    side: resources => ({ resources, discard: ['TST_DACT'] }),
+    move: m => m.type === 'useDiscardAction',
+    happened: s => has(s, 'TST_DACT'),
+  },
+  {
+    name: 'a unit played out of a pile through playCardFrom', cost: 3,
+    side: resources => ({ resources, discard: ['PILED'] }),
+    extra: { pendingChoices: [{ kind: 'playCardFrom', id: 'from', controller: 'player', zone: 'discard', candidates: [{ index: 0, cardId: 'PILED' }] }] },
+    move: m => m.type === 'acceptChoice' && m.choiceId === 'from',
+    happened: s => has(s, 'PILED'),
+  },
+  {
+    name: "a base's Epic Action with a cost (Citadel Research Center)", cost: 1,
+    side: resources => ({ resources, base: { cardId: 'LAW_029', damage: 0 } }),
+    move: m => m.type === 'useBaseAbility',
+    happened: s => s.players.player.base.epicActionUsed === true,
+  },
+  {
+    name: 'a playUnitFromHand', cost: 3,
+    side: resources => ({ resources, hand: ['PILED'] }),
+    extra: { pendingChoices: [{ kind: 'playUnitFromHand', id: 'hand', controller: 'player', candidates: [{ handIndex: 0, cardId: 'PILED' }], costDelta: 0, entersReady: false }] },
+    // The candidates are listed by the card that raises the choice, which is where affordability is read.
+    listedAtRaise: true,
+    move: m => m.type === 'acceptChoice' && m.choiceId === 'hand',
+    happened: s => has(s, 'PILED'),
+  },
 ]
 
 /** The board for `door`, with the player holding what the case says. */
@@ -115,7 +170,7 @@ function board(door: Door, holding: Holding): GameState {
       player: player({
         leader: { cardId: 'SOR_016', deployed: false, epicActionUsed: false, exhausted: false },
         deck: ['TST_U1', 'TST_U1', 'TST_U1'],
-        units: [unit('host', 'HOST'), unit('actor', 'TST_ACT'), ...payers],
+        units: [unit('host', 'HOST'), unit('actor', 'TST_ACT'), unit('flyer', 'TST_U2'), ...payers],
         ...(holding.means === 'credits' ? { creditTokens: count } : {}),
         ...door.side(ready(holding.resources)),
       }),
@@ -204,7 +259,7 @@ for (const means of ['credits', 'droids'] as const) {
           expect(readyLeft(end)).toBe(2)
         })
 
-        it('is not offered when resources and everything that could pay still fall short', () => {
+        it.skipIf(door.listedAtRaise)('is not offered when resources and everything that could pay still fall short', () => {
           const s = board(door, { resources: 0, means, count: door.cost - 1 })
           expect(offered(s, door)).toBeUndefined()
         })
@@ -223,7 +278,7 @@ describe('a player with nothing to pay with but resources', () => {
       expect(readyLeft(end)).toBe(0)
     })
 
-    it(`is not offered ${door.name} one resource short`, () => {
+    it.skipIf(door.listedAtRaise)(`is not offered ${door.name} one resource short`, () => {
       expect(offered(board(door, { resources: door.cost - 1 }), door)).toBeUndefined()
     })
   }

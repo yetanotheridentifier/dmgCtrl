@@ -421,37 +421,66 @@ as 0), read and written by `friendlyCreditTokens`/`createCreditTokens`/`defeatCr
 count moving from one player to the other, not a target changing controller.
 
 Its printed rule, "While paying resources, you may defeat this token. If you do, pay 1 less", is a
-**standing payment step**, not a card-level declaration: `exploitTerms` (`engine/legalMoves.ts`) offers
-it as a fourth mode of the Exploit/`whilePlaying` step (see "Exploit" below) whenever the payer holds
-any Credit token and the card being played carries no `whilePlaying` mode of its own. No sealed card
-combines Exploit (or Greater Sarlacc's or Vernestra Rwoh's own `whilePlaying` modes) with holding a
-Credit token, so the two are not offered together; a card with its own mode simply does not also see
-Credit's discount. The `exploit` choice's `credit` flag reads picks by ordinal position (0 to however
-many are held), the same as Greater Sarlacc's `resources` mode, since one Credit token cannot be told
-apart from another. A defeated Credit triggers nothing and, unlike a defeated ready resource, does not
-reduce what is left to pay with: it is a separate currency.
+**standing rule about paying**, not something a card declares. A defeated Credit triggers nothing
+and, unlike a defeated ready resource, does not reduce what is left to pay with: it is a separate
+currency. "Enemy Credit tokens lose all abilities" (Conveyex Security Captain) makes the other
+player's unusable (`usableCreditTokens`): they are not offered and do not make anything affordable.
 
-**Units paying costs as resources take the same step** (Vuutun Palaa: "each friendly Droid unit may
-be exhausted to pay costs as if it were a resource"). A card in play with `unitPaysCosts` names which
-of its controller's units qualify (`unitCostPayers`), and the step's `droids` flag picks them by
-instance id on the board, each exhausted paying 1. They take the step ahead of Credit tokens, so a
-player holding both is offered the units.
+**Units paying costs as resources are the same kind of thing** (Vuutun Palaa: "each friendly Droid
+unit may be exhausted to pay costs as if it were a resource"). A card in play with `unitPaysCosts`
+names which of its controller's ready units qualify (`unitCostPayers`), each exhausted to pay 1. A
+unit does not pay for its own action this way.
 
-**The step belongs to the Play a Card action from hand, for every card type.** A unit or an event
-reaches it through `exploitTerms`. An upgrade has no step of its own, so it is asked on these two
-standing modes alone (`creditExploitTerms`), with the unit it goes on carried in the choice's `onto`
-so its cost is read against that host, and a Pilot played as an upgrade priced by its Piloting
-bracket. A play out of another zone and an ability's own cost are paid with resources only.
+### Paying a cost
 
-On the game screen a Credit pick is a button ("Defeat a Credit token"), one per token, since a Credit
-token is the player's and not on the board, and a unit that pays is clicked on the board like any
-other unit pick. Done appears once what is left is affordable (`creditPaymentOnBoard.test.tsx`).
+**Every cost is paid through one door, `pay` in `engine/payment.ts`,** and every question about
+whether one can be paid is `canPay` (or `payable`, the number behind it: ready resources plus
+everything else the player holds that pays). That covers a card played from hand of any type, a play
+out of any other zone (`playFromZone`: a `playCardFrom` choice and its attach step, Smuggle, Plot, a
+discard-pile grant, a discard action, the searches that buy a card), the `playUnitFromHand` an
+ability raises, an ability's own cost (a unit's action, a leader's, a base's), a cost a choice
+carries (`mayPayThen`, `payOrExhaust`, `mayPayToDraw`, `mayPayExhaustArena`) and "pay any number of
+resources". `paySites.test.ts` reads the source and fails on a payment or an affordability check made
+anywhere else.
 
-An ability that plays a card from hand offers the step only where it raises it itself, as Count
-Dooku's front and Jabba the Hutt's deployed action do (`raiseExploit`). The `exploit` choice's
-`creditGrant` is what the played unit gains for the phase when at least one Credit paid for it
-(Jabba: Ambush): `finishExploit` turns it into a `nextUnitGrant` for that card id before the unit
-enters, so an entry keyword fires exactly as a printed one would.
+**A player who holds a usable Credit token or controls a paying unit is asked what pays, every
+time, before the action happens.** The doors themselves cannot stop half way: each computes a cost,
+pays and carries on in one function, and several do more afterwards. So the dispatcher asks in front
+of them:
+
+1. **Measure.** It runs the action once as a dry run. `pay` records the first cost it is asked for,
+   and the result is thrown away.
+2. **Ask.** If a cost was asked for, it raises a `payWith` choice and does nothing else. Nothing is
+   paid, marked used or handed over, so backing out of the step takes the whole action back. The
+   choice holds the action itself as `resume`, which is the whole continuation, as plain data.
+3. **Resume.** The player picks Credit tokens (one answer, since they cannot be told apart) and
+   paying units (by instance id), each paying 1, up to the cost. Done is offered once ready resources
+   cover what is left, and the step finishes by itself when the picks cover the cost or nothing is
+   left to pick. Only then are the tokens defeated and the units exhausted, and the action runs with
+   that much prepaid: `pay` takes it off the cost and exhausts resources for the rest.
+
+**The step is asked whether or not ready resources would cover the cost**, because which currency to
+spend is a real decision: a token can be worth more spent than kept (it can be taken, and some cards
+reward using one), and a ready unit can be worth more than a ready resource. **A player with nothing
+but resources to pay with is never measured and never asked**, and a cost of 0 asks nothing. For that
+player `pay` is `payCost` and `canPay` is `canAfford`, so a game in which nobody ever holds a Credit
+token or a paying unit plays move for move as it would without any of this.
+
+`GameState.paying` carries the dry run and the prepaid amount inside one `resolve` call. No state
+that leaves the resolver has it, so replay data and bench records never see it.
+
+On the game screen a Credit pick is one button ("Defeat a Credit token"), since a Credit token is the
+player's and not on the board, and a unit that pays is clicked on the board like any other unit
+pick, with the button beside it when both are on offer. The prompt names what is being paid for and
+how much. Done appears once what is left is affordable (`creditPaymentOnBoard.test.tsx`,
+`payingStepDoorsOnBoard.test.tsx`).
+
+**One card raises a Credit step of its own**, to hear the answer: Jabba the Hutt's deployed action
+("If you defeated a Credit while paying its cost, that unit gains Ambush"). That is an `exploit`
+choice in its `credit` mode (or `droids`, when the player has paying units, which this step offers
+in place of tokens), with `creditGrant` naming what the played unit gains: `finishExploit` turns it
+into a `nextUnitGrant` for that card id before the unit enters, so an entry keyword fires exactly as
+a printed one would. Having asked already, it pays with `payAsked` and is not asked again.
 
 **"Defeat a friendly token" spans every kind a player can hold** (Alliance Outpost, Han Solo): a token
 upgrade they own on a unit, a token unit they control, a Credit token, or their Force token. The kind
