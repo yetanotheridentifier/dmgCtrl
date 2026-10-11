@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { tokenLayout, TOKEN_H, TOKEN_W, PILL_W, MAX_TOKENS, TOKEN_SPEC } from '../components/tokens'
+import { tokenLayout, TOKEN_H, TOKEN_W, PILL_W, MAX_TOKENS, TOKEN_SPEC, PLAYER_TOKEN_SPEC } from '../components/tokens'
 import type { TokenOrientation } from '../components/tokens'
 import { CARD_WIDTH_PX, longEdge } from '../components/cardSizing'
 
@@ -38,13 +38,24 @@ describe('token pills: one spec', () => {
     expect(TOKEN_SPEC.weakness.background).toBe('var(--color-token-weakness)')
     expect(TOKEN_SPEC.damage.background).toBe('var(--color-red)')
   })
+
+  it("colours a player's own tokens from their own theme tokens, unlike any unit token", () => {
+    expect(PLAYER_TOKEN_SPEC.credit.background).toBe('var(--color-token-credit)')
+    expect(PLAYER_TOKEN_SPEC.force.background).toBe('var(--color-token-force)')
+    const colours = [...Object.values(TOKEN_SPEC), ...Object.values(PLAYER_TOKEN_SPEC)].map(s => s.background)
+    expect(new Set(colours).size).toBe(colours.length)
+  })
 })
 
 describe('token pills: every colour resolves', () => {
   it('declares in index.css every custom property the token spec reads', () => {
     // jsdom resolves no CSS, so an undeclared var() would pass the style tests and paint nothing.
     const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
-    const used = Object.values(TOKEN_SPEC).flatMap(s => [s.background, s.ink, ...Object.values(s.figures ?? {})])
+    const used = [
+      ...Object.values(TOKEN_SPEC).flatMap(s => [s.background, s.ink, ...Object.values(s.figures ?? {})]),
+      ...Object.values(PLAYER_TOKEN_SPEC).flatMap(s => [s.background, s.ink]),
+    ]
+    expect(used).toContain('var(--color-token-credit)')
     const names = new Set(used.flatMap(v => [...v.matchAll(/var\((--[\w-]+)\)/g)].map(m => m[1])))
     expect(names.size).toBeGreaterThan(5)
     for (const name of names) expect(css, name).toMatch(new RegExp(`^\\s*${name}\\s*:`, 'm'))

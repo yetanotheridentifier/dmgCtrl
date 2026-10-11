@@ -445,6 +445,11 @@ The board is drawn with art-dominant cards, not text rows:
   - Each pile sits in a `BarColumn`: a `bg-surface` column (the same background as the log)
     with an accent all-caps label rotated 90° anticlockwise on its left. The opponent leader
     has no column: it sits directly on the transparent play area, joined with the board.
+  - The tokens a player holds rather than a unit (Credit tokens, the Force token) are pills in
+    the **Resources** column of that player's bar, drawn by `ResourceStack` from
+    `PLAYER_TOKEN_SPEC` (`components/tokens.ts`) in the unit tokens' pill shape. They are
+    absolutely placed over the foot of the two resource slots, so holding one never changes a
+    column's width, and they read the engine's own `friendlyCreditTokens` and `hasForceToken`.
 - **Battlefield layout** (`Board`): a three-column grid, **Space | Leaders+Bases | Ground**,
   set with an inline `grid-template-columns` (Tailwind can't compile a `minmax(0,1fr)`
   arbitrary value). It's transparent and grows to fill the play area's height, centring the

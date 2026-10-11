@@ -33,6 +33,25 @@ describe('ResourceStack', () => {
     expect(screen.queryByTestId('resources-ready')).toBeNull()
     expect(screen.getByTestId('resources-exhausted')).toHaveTextContent('4')
   })
+
+  it('shows no player token unless one is held', () => {
+    render(<ResourceStack ready={3} exhausted={0} />)
+    expect(screen.queryByTestId('credit-tokens')).toBeNull()
+    expect(screen.queryByTestId('force-token')).toBeNull()
+  })
+
+  it('shows the Credit tokens held as a pill with the count, and the Force token as a pill of its own', () => {
+    render(<ResourceStack ready={3} exhausted={0} credits={4} force owner="player" />)
+    expect(screen.getByTestId('credit-tokens')).toHaveTextContent('Cred. 4')
+    expect(screen.getByTestId('credit-tokens')).toHaveAccessibleName('4 Credit tokens')
+    expect(screen.getByTestId('force-token')).toHaveTextContent('Force')
+  })
+
+  it('shows them with no resources at all, since neither depends on a resource', () => {
+    render(<ResourceStack ready={0} exhausted={0} credits={1} />)
+    expect(screen.getByTestId('credit-tokens')).toHaveTextContent('Cred. 1')
+    expect(screen.queryByTestId('force-token')).toBeNull()
+  })
 })
 
 function discardState(discard: string[]): GameState {
