@@ -45,7 +45,10 @@ Supporting modules: `types.ts` (schema), `cardDb.ts` (SWUDB payload → normalis
 static card data; two small data-patch tables feed in here: `upgradeStatOverrides.ts` *fills* the
 Power/HP the source omits for the unit upgrades of ASH, HMW, JTL, LAW, LOF, SEC and TS26 (values from
 the publisher's card list, and a test fails if a unit upgrade in a bundled set is left uncovered), and `cardDataCorrections.ts` *overrides* values the source
-gets wrong, read off the printed card (e.g. Moff Gideon unit cost, Nebulon-C Frigate arena); both
+gets wrong, read off the printed card (e.g. Moff Gideon unit cost, Nebulon-C Frigate arena; a test
+holds every bundled unit's arena to what its traits print, a Fighter or Capital Ship in space, a
+Trooper, Walker, Tank or Speeder on the ground and nothing in space that is not a Vehicle or a
+Creature, with the cards printed otherwise named in it); both
 drop out per-card once upstream is fixed), `initGame.ts` (setup per CR §5.2: shuffle, draw 6. The game opens in a SETUP
 phase with two stages resolved through legalMoves/resolve: mulligan decisions
 (CR 5.2.1e, initiative holder first; a base can forbid one, Nabat Village), then each player picks

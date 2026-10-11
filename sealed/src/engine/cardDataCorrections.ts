@@ -55,6 +55,10 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   // An arena the source gets wrong. "This unit can attack space units" is printed on a GROUND unit;
   // shipped as Space it could not have been printed at all.
   JTL_259: { arena: 'ground' }, // Retrofitted Airspeeder
+  // Two more, each read off the publisher's card list: a starfighter shipped as Ground and a clone
+  // trooper squad shipped as Space.
+  JTL_222: { arena: 'space' }, // Kimogila Heavy Fighter (the source also spells it "Kimoglia")
+  TWI_045: { arena: 'ground' }, // 41st Elite Corps
 
   // A card type the source gets wrong. "When Played: you may attack with attached unit" is an
   // upgrade's text, and the printed card is an upgrade with +1/+1 that the source omits.
