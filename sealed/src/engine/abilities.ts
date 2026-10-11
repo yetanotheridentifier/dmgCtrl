@@ -184,6 +184,14 @@ export interface AbilityDef {
    * defeats the unit. The point is otherwise collected from the units still in play.
    */
   thoughDefeated?: boolean
+  /**
+   * The ability is left out of its controller's ordering question (CR 7.6.9) wherever the queue can
+   * show that its place in the order cannot be seen: it and each other owed ability resolve without
+   * asking anything and reach the same board either way round (`orderShows` in `triggerQueue.ts`).
+   * Then it simply resolves. For an ability that fires constantly and almost never interacts
+   * (Shielded), so that it is ordered where that is a decision and nowhere else.
+   */
+  yieldsOrder?: boolean
 }
 
 /** Whether `ability` is triggered by an event at its point, as collected for `owner`. */

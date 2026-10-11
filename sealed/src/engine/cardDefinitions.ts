@@ -2118,10 +2118,11 @@ registerCard('ASH_137', attackWithRider('Attack with a unit. For this attack, yo
 // ── Keywords that are really When Played abilities ────────────────────────────────────────────
 
 /**
- * Ambush and Support read as keywords but each is a **When Played ability** ("When you play this
- * unit, you may attack …"), so they are registered here and collected into the play batch like any
- * other ability. That is what puts them into the ordering question alongside the card's own When
- * Played and everyone else's reactions.
+ * Ambush, Support and Shielded read as keywords but each resolves as a **When Played ability** ("When
+ * you play this unit, you may attack …", "… give a Shield token to this unit"), so they are registered
+ * here and collected into the play batch like any other ability. That is what puts them into the
+ * ordering question alongside the card's own When Played and everyone else's reactions (CR 7.6.13b:
+ * they "all resolve in the same timing window, in the order that the card's controller chooses").
  *
  * Raising their choice directly from `playUnitCard` instead is what made a Snub Fighter Squadron unable
  * to deal its 1 damage until after it had taken its Ambush attack: a choice on the board stops the
@@ -2158,6 +2159,27 @@ registerCard(KEYWORD_SUPPORT, {
     trigger: 'whenPlayed',
     description: "You may attack with another unit. It gains this unit's other abilities for this attack.",
     effect: (s, ctx) => openSupportChoice(s, ctx.owner, ctx.sourceInstanceId!),
+  }],
+})
+
+/**
+ * Shielded (CR 7.5.12a): "When Played/When Deployed/When Created: Give a Shield token to this unit."
+ *
+ * An ability rather than part of entering play, because when the Shield arrives is its controller's
+ * call: a unit that also has Ambush may take the attack before the Shield or behind it. It resolves
+ * without asking anything and usually changes nothing another ability reads, so it `yieldsOrder`: the
+ * question is put only where its place in the order could be seen.
+ *
+ * Given through `giveToken`, so it counts as a token created and a token upgrade given this phase, and
+ * the unit's "when 1 or more upgrades attach to this unit" hears it.
+ */
+export const KEYWORD_SHIELDED = 'KEYWORD_SHIELDED'
+registerCard(KEYWORD_SHIELDED, {
+  abilities: [{
+    trigger: 'whenPlayed',
+    description: 'Give a Shield token to this unit.',
+    yieldsOrder: true,
+    effect: (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD, ctx.owner),
   }],
 })
 
@@ -11913,7 +11935,7 @@ registerCard('SHD_117', { // Reputable Hunter
   costModifier: (s, playerId) => (enemyHasBounty(s, playerId) ? -1 : 0),
 })
 registerCard('SHD_186', { // Hunter of the Haxion Brood
-  // Live, not printed: like Privateer Scyk's own conditional Shielded, `applyEntryKeywords` reads it
+  // Live, not printed: like Privateer Scyk's own conditional Shielded, `shieldedOnEntry` reads it
   // off the board as the unit enters play, so the entry Shield token still lands whenever the
   // condition already holds by then.
   conditionalKeywords: (s, u) => (enemyHasBounty(s, controllerOf(s, u)) ? [{ name: 'Shielded' }] : []),

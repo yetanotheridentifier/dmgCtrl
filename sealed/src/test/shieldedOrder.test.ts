@@ -125,6 +125,9 @@ describe('the reported game: Mae played into a Rebel Pathfinder', () => {
     expect(s.pendingChoices ?? []).toEqual([])
     expect(s.pendingTriggers).toBeUndefined()
     expect(s.activePlayer).toBe('opponent')
+    // Here it prices the two orders apart and takes the attack first: Mae ends damaged and shielded.
+    expect(mae(s).damage).toBe(2)
+    expect(shields(mae(s))).toBe(1)
   })
 })
 
@@ -138,7 +141,10 @@ const F: Record<string, EngineCard> = {
   ASH_064: real('ASH_064'), // The Armorer: Shielded, "When Played: Give a Shield token to each friendly unit with Shielded (including this one)."
   SOR_079: real('SOR_079'), // Admiral Piett: each friendly non-leader unit that costs 6 or more gains Ambush
   LOF_231: real('LOF_231'), // Darth Tyranus: Shielded, and Ambush while the Force is with you
+  JTL_242: real('JTL_242'), // Shuttle ST-149: Shielded, "When Played/When Defeated: You may take control of a token upgrade on a unit and attach it to a different eligible unit."
   SHIELDED: card({ id: 'SHIELDED', type: 'unit', arena: 'ground', cost: 1, power: 2, hp: 2, keywords: [{ name: 'Shielded' }] }),
+  SOR_050: real('SOR_050'), // The Ghost: Shielded, "When Played/On Attack: You may give a Shield token to another Spectre unit."
+  SPECTRE: card({ id: 'SPECTRE', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 3, traits: ['SPECTRE'] }),
   VIGIL: card({ id: 'VIGIL', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 3, aspects: ['Vigilance'] }),
   FOE: card({ id: 'FOE', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 6 }),
 }
@@ -179,6 +185,19 @@ describe('a Shielded unit is asked nothing when the order cannot show', () => {
     expect(s.players.player.base.damage).toBe(6)
   })
 
+  it('with a When Played that asks something whose every answer comes out the same (The Ghost)', () => {
+    // "You may give a Shield token to another Spectre unit": given or declined, her own Shield is hers.
+    const s = play('SOR_050', { units: [unit('spec', 'SPECTRE')] })
+    expect(orderAsk(s)).toBeUndefined()
+    // The Shield is already on her, and her own question is the only one put.
+    expect(shields(entered(s, 'SOR_050'))).toBe(1)
+    expect(s.pendingChoices).toHaveLength(1)
+    const done = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId: 'spec' })
+    expect(shields(find(done, 'spec')!)).toBe(1)
+    expect(shields(entered(done, 'SOR_050'))).toBe(1)
+    expect(done.pendingChoices ?? []).toEqual([])
+  })
+
   it('The Armorer: her Shielded and her When Played each give her a Shield, in either order', () => {
     const s = play('ASH_064')
     expect(s.pendingChoices ?? []).toEqual([])
@@ -207,21 +226,81 @@ describe('a Shielded unit is asked when the other ability needs an answer of its
     expect(shields(entered(without, 'LOF_231'))).toBe(1)
   })
 
-  it('a When Played that raises a choice is ordered against Shielded (Count Dooku)', () => {
+  it('a When Played that can defeat its own unit is ordered against Shielded (Count Dooku)', () => {
+    // "You may defeat a unit with 4 or less remaining HP" can name Dooku himself (4 HP). Shielded
+    // first, a friendly upgrade was defeated this phase along with him; the other way, none was.
     const s = play('SOR_038', {}, { units: [unit('e1', 'FOE', { damage: 3 })] })
-    const ask = orderAsk(s)
-    expect(ask?.candidates.map(c => c.cardId).sort()).toEqual([KEYWORD_SHIELDED, 'SOR_038'].sort())
-    // Either answer leaves him shielded with his defeat still on offer.
+    expect(orderAsk(s)?.candidates.map(c => c.cardId).sort()).toEqual([KEYWORD_SHIELDED, 'SOR_038'].sort())
+    const own = (first: string): GameState => {
+      const asked = pick(s, first)
+      return resolve(asked, { type: 'acceptChoice', choiceId: asked.pendingChoices![0].id, targetInstanceId: entered(s, 'SOR_038').instanceId })
+    }
+    expect(own(KEYWORD_SHIELDED).phaseEvents?.upgradesDefeated).toEqual(['player'])
+    expect(own('SOR_038').phaseEvents?.upgradesDefeated).toEqual([])
+    // Whichever is first, defeating an enemy leaves him shielded.
     const first = pick(s, 'SOR_038')
-    expect(first.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToDefeat' })
     const done = resolve(first, { type: 'acceptChoice', choiceId: first.pendingChoices![0].id, targetInstanceId: 'e1' })
     expect(find(done, 'e1')).toBeUndefined()
     expect(shields(entered(done, 'SOR_038'))).toBe(1)
   })
 
+  it('a When Played whose answer can move the Shield is ordered against Shielded (Shuttle ST-149)', () => {
+    // "You may take control of a token upgrade on a unit and attach it to a different eligible unit":
+    // its own Shield is there to take only once Shielded has resolved.
+    const s = play('JTL_242', { units: [unit('friend', 'VIGIL')] }, { units: [unit('e1', 'FOE', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'opponent' }] })] })
+    expect(orderAsk(s)?.candidates.map(c => c.cardId).sort()).toEqual(['JTL_242', KEYWORD_SHIELDED].sort())
+  })
+
   it('Shielded is listed first, so a bot that cannot separate the orders keeps the Shield-first one', () => {
     const s = play(MAE, {}, { units: [unit('e1', 'FOE')] })
     expect(orderAsk(s)!.candidates[0].cardId).toBe(KEYWORD_SHIELDED)
+  })
+})
+
+/**
+ * CR 7.5.5f: "If the active player chooses to resolve Ambush before other simultaneous triggered
+ * abilities, those other triggered abilities are not resolved until after the attack resulting from
+ * Ambush and any abilities triggered during the attack are resolved."
+ */
+describe('an attack made by Ambush is over before the abilities waiting behind it resolve', () => {
+  const S: Record<string, EngineCard> = {
+    ...F,
+    ASH_194: real('ASH_194'), // Snub Fighter Squadron: Ambush, "When Played: Deal 1 damage to a space unit."
+    HULK: card({ id: 'HULK', type: 'unit', arena: 'space', cost: 4, power: 2, hp: 7 }),
+  }
+  const played = (): GameState => resolve(state({
+    cards: S,
+    players: { player: player({ hand: ['ASH_194'], resources: ready(10) }), opponent: player({ units: [unit('hulk', 'HULK', { arena: 'space' })] }) },
+  }), { type: 'playUnit', handIndex: 0 })
+  const squadron = (s: GameState): UnitState => entered(s, 'ASH_194')
+
+  it('the When Played is offered after the combat damage, not in the middle of the attack', () => {
+    const s = played()
+    expect(orderAsk(s)?.candidates.map(c => c.cardId).sort()).toEqual(['ASH_194', KEYWORD_AMBUSH].sort())
+    const ambushing = pick(s, KEYWORD_AMBUSH)
+    const attacked = resolve(ambushing, { type: 'attack', attackerId: squadron(ambushing).instanceId, target: { kind: 'unit', instanceId: 'hulk' } })
+    expect(find(attacked, 'hulk')!.damage, 'the Squadron has dealt its 4').toBe(4)
+    expect(squadron(attacked).damage, 'and taken 2 back').toBe(2)
+    expect(attacked.pendingAttack, 'the attack is not waiting on anything').toBeUndefined()
+    expect(attacked.heldTriggers).toBeUndefined()
+    expect(attacked.pendingChoices).toHaveLength(1)
+    expect(attacked.pendingChoices![0]).toMatchObject({ kind: 'mayDamage', amount: 1 })
+    expect(attacked.activePlayer).toBe('player')
+    const done = resolve(attacked, { type: 'acceptChoice', choiceId: attacked.pendingChoices![0].id, targetInstanceId: 'hulk' })
+    expect(find(done, 'hulk')!.damage).toBe(5)
+    expect(done.pendingChoices ?? []).toEqual([])
+    expect(done.pendingTriggers).toBeUndefined()
+    expect(done.activePlayer, 'one play, one turn').toBe('opponent')
+  })
+
+  it('the When Played first, then the attack, still passes the turn once', () => {
+    const first = pick(played(), 'ASH_194')
+    const pinged = resolve(first, { type: 'acceptChoice', choiceId: first.pendingChoices![0].id, targetInstanceId: 'hulk' })
+    expect(find(pinged, 'hulk')!.damage).toBe(1)
+    const attacked = resolve(pinged, { type: 'attack', attackerId: squadron(pinged).instanceId, target: { kind: 'unit', instanceId: 'hulk' } })
+    expect(find(attacked, 'hulk')!.damage).toBe(5)
+    expect(attacked.pendingChoices ?? []).toEqual([])
+    expect(attacked.activePlayer).toBe('opponent')
   })
 })
 

@@ -246,7 +246,7 @@ Neither is ever offered over the opponent's internal order. `chooseNextTrigger` 
 own `cardId` and `sourceInstanceId`: a prompt that cannot name the card is useless where one unit
 carries two, and one that cannot name the unit is useless where two units carry the same card.
 
-Two things keep the question to the cases where it is a decision.
+Three things keep the question to the cases where it is a decision.
 
 **Indistinguishable** abilities are not offered. The same ability, on the same card, on the same unit,
 firing more than once for one event offers nothing to choose between: three upgrades leaving a unit at
@@ -275,6 +275,35 @@ Luke while he was still inert would decide that for the player.
 
 Where nothing in the batch can act, order cannot matter: none of them can change what the others see.
 
+**An ability that `yieldsOrder` is not offered where its place in the order cannot be seen.** Only
+Shielded declares it. Shielded is a triggered ability its controller orders (CR 7.6.13b), and on a
+unit with Ambush the order is the whole decision: attack first and the unit takes the hit and keeps
+the Shield, Shield first and the Shield soaks it. But most Shielded units that have something else to
+resolve reach the same board either way, and a question on each of them would decide nothing.
+
+`orderShows` measures it, the way `inertNow` does. For each other ability that can act, the pair is
+resolved both ways round on a board that owes nothing else, and where an ability asks its controller
+something, every legal answer is walked both ways round too. The order shows unless every line ends
+on an identical board. Then the yielding ability simply resolves, and the rest are ordered among
+themselves.
+
+| played | asked? | why |
+| --- | --- | --- |
+| a Shielded unit with nothing else to resolve | no | one ability |
+| Shielded and Ambush, an enemy unit to attack | **yes** | the attack lands on a different unit in each order |
+| Shielded and Ambush, nothing to attack | no | Ambush is inert |
+| Cargo Juggernaut (heal 4 from your base) | no | the same board either way |
+| The Ghost (may give a Shield to another Spectre) | no | every answer ends on the same board |
+| Shuttle ST-149 (may move a token upgrade) | **yes** | its own Shield is there to take only once Shielded has resolved |
+| Count Dooku (may defeat a unit with 4 or less HP) | **yes** | he can name himself, and a friendly upgrade was defeated this phase only if the Shield was already on him |
+
+The walk treats as a difference everything it cannot settle: a question that falls to the other
+player (whose hand must not decide what this player is asked), answers that differ between the two
+orders, more than 48 answers to walk, a probe that throws, and an ability probed from inside another
+probe. Each of those asks the player. It is pairwise from the board as it stands, which is exact for
+two abilities and an approximation for three or more. The resolver registers itself with the queue
+(`setProbeStepper`) because the queue cannot import it.
+
 **Both gate the queue.** While either is pending, `choiceMoves` offers only that choice. Without the
 gate a player could answer one of their own triggers instead and settle the order by accident.
 
@@ -298,6 +327,16 @@ before control returns to the resolver, so a layer assigned later is assigned to
 The CR's worked example is the test: two units trade, one's When Defeated defeats a third unit, and that
 third unit's trigger resolves before the opponent's original, with no ordering prompt in between.
 
+**An attack made by an ability takes the waiting batch off the queue.** Ambush, Support and "attack
+with a unit" resolve by attacking, and the attack has stages of its own that each ask whether "this
+event's batch" is still going. With the outer batch still queued, the attack reads it as its own
+unfinished business, suspends before combat damage, and the outer abilities resolve in the middle of
+the attack. `holdTriggers` moves the batch to `GameState.heldTriggers` as the attack begins and
+`releaseTriggers` puts it back as the attack ends, with anything the attack still owes nested above it
+(CR 7.5.5f: the other abilities "are not resolved until after the attack resulting from Ambush and any
+abilities triggered during the attack are resolved"). Held batches are keyed by attacker, so an attack
+releases only what it set aside.
+
 ### Draining, and who is active
 
 `drainTriggers` moves `activePlayer` to each ability's controller so a choice it raises reaches the
@@ -316,14 +355,19 @@ option is priced by the boards it reaches rather than the board it starts from. 
 CR 7.6.9. That is a regression guard rather than a preference. Both were fixed sensible answers before
 the questions existed, and asking must not turn them into a coin flip.
 
+Shielded is collected first, so a tie between it and another ability is Shield first. Where the search
+can price the two apart it decides: Mae played into a 2-power unit takes the Ambush attack first and
+ends damaged and shielded, rather than neither.
+
 **Neither is raised by a card**, so both are exemptions in the source-attribution guarantee below.
 `chooseNextTrigger` more than covers the gap: it names every waiting ability's source individually,
 which is more than a single stamped source could say.
 
 **Prompt volume is a known cost.** Three of one player's units dying together asks two questions even
-when all three abilities do the same thing. Suppressing the prompt where order cannot matter is
-deliberately not attempted: "cannot matter" is hard to establish, and getting it wrong silently removes
-a real decision.
+when all three abilities do the same thing. Suppressing the prompt where order cannot matter is not
+attempted in general: "cannot matter" is hard to establish, and getting it wrong silently removes a
+real decision. Shielded is the one exception (`yieldsOrder`, above), and it is measured on the board
+rather than assumed.
 
 ### A decided game has no pending choices
 
@@ -751,12 +795,12 @@ as played:
 | attach | why it is not a play | host's attach reaction |
 | --- | --- | --- |
 | a token given by an effect (`giveTokens`) | tokens are created, not played (CR 3.7.2, 3.7.2b) | fired once per grant |
-| the Shield on a Shielded unit entering (`applyEntryKeywords`) | Shielded gives a Shield token (CR 7.5.12a) | fired in the unit's entry batch |
+| the Shield on a Shielded unit entering (`KEYWORD_SHIELDED`, through `giveTokens`) | Shielded gives a Shield token (CR 7.5.12a) | fired when Shielded resolves, nested under the unit's entry batch |
 | Jocasta Nu moving an upgrade to a different unit | the upgrade detaches and attaches simultaneously (CR 3.6.14) | fired on the new host |
 
 Detaching is not being defeated, so a move fires nothing on the old host ("when a friendly upgrade is
-defeated" stays silent). A leader deploying with Shielded gets its Shield without an attach reaction
-firing; no leader has one. `upgradeAttachSites.test.ts` checks that `attachUpgrades` is the only append to
+defeated" stays silent). A leader deploying with Shielded gets its Shield the same way a played unit
+does. `upgradeAttachSites.test.ts` checks that `attachUpgrades` is the only append to
 a unit's upgrades and names every call to it, so a new attach fails until it is classified.
 
 **Every play of a unit goes through one door too**, `playUnitCard`: from hand as an action (`playUnit`),
