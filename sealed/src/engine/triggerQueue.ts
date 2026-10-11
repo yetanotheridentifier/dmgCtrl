@@ -1,6 +1,7 @@
 import type { GameState, PendingTrigger, PlayerId } from './types'
+import type { Action } from './actions'
 import { pushChoice, hasPendingChoices } from './types'
-import { collectAbilityUsed, runPendingTrigger, usedAbilityOf } from './abilities'
+import { collectAbilityUsed, runPendingTrigger, triggerAbility, usedAbilityOf } from './abilities'
 
 /**
  * Ordering a batch of triggered abilities (CR 7.6.9 - 7.6.12).
@@ -112,6 +113,85 @@ function inertNow(state: GameState, trigger: PendingTrigger): boolean {
   return runPendingTrigger(from, trigger) === from
 }
 
+/** Two boards that differ in nothing. Shared structure is the common case, so identity is tried first. */
+function sameBoard(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
+  if (Array.isArray(a) !== Array.isArray(b)) return false
+  const [left, right] = [a as Record<string, unknown>, b as Record<string, unknown>]
+  // The union of keys, so a field that is absent on one side and `undefined` on the other is the same.
+  return [...new Set([...Object.keys(left), ...Object.keys(right)])].every(k => sameBoard(left[k], right[k]))
+}
+
+/**
+ * How the order probe answers a choice: the legal moves on a board, and the board a move leads to.
+ * The resolver registers itself (`resolve.ts`), since importing it here is the cycle this module is
+ * kept out of. Until it has, a choice raised during a probe simply counts as the order showing.
+ */
+export interface ProbeStepper {
+  moves: (state: GameState) => Action[]
+  step: (state: GameState, move: Action) => GameState
+}
+let stepper: ProbeStepper | undefined
+export function setProbeStepper(registered: ProbeStepper): void {
+  stepper = registered
+}
+
+/** Answers walked per pair before a probe gives up and lets the player decide. */
+const PROBE_NODES = 48
+/** Set while a probe runs, so an ability probed inside it is simply offered instead of probed again. */
+let probing = false
+
+/**
+ * Whether two boards lead to the same place **whatever their controller answers**: both settled and
+ * identical, or both asking `chooser` the same question with every answer leading to the same place
+ * in turn. Anything else is a difference: a question to the other player (whose hand must not decide
+ * what this player is asked), answers that differ, or more to walk than `budget` allows.
+ */
+function sameOutcome(a: GameState, b: GameState, chooser: PlayerId, budget: { nodes: number }): boolean {
+  const open = (s: GameState): boolean => hasPendingChoices(s) || (s.pendingTriggers ?? []).length > 0
+  if (a.winner !== null || b.winner !== null || (!open(a) && !open(b))) return sameBoard(a, b)
+  if (!stepper || --budget.nodes < 0) return false
+  if (a.activePlayer !== chooser || b.activePlayer !== chooser) return false
+  const { moves, step } = stepper
+  const answers = moves(a)
+  if (answers.length === 0 || !sameBoard(answers, moves(b))) return false
+  return answers.every(m => sameOutcome(step(a, m), step(b, m), chooser, budget))
+}
+
+/**
+ * Whether `trigger`'s place in the order could be seen: asked of an ability that `yieldsOrder`
+ * (Shielded), against each other ability it would be ordered with.
+ *
+ * Measured rather than declared, the same way `inertNow` is. Each pair is resolved both ways round on
+ * a board that owes nothing else, and the order shows unless the two reach the same board. Where the
+ * other ability asks its controller something, every answer is walked both ways round too: an Ambush
+ * attack taken before the Shield arrives is damage on the unit and a Shield still on it, and taken
+ * after is neither, which is exactly the difference this exists to keep. "You may give a Shield token
+ * to another unit" comes out the same whichever way it is answered, and is not worth a question.
+ *
+ * Pairwise, from the board as it stands. That is exact for two abilities and an approximation for
+ * three or more, where one could in principle change what a second makes of the Shield; it is
+ * re-asked on every pass like everything else here. A probe that throws is a probe that could not
+ * tell, so the player is asked.
+ */
+function orderShows(state: GameState, trigger: PendingTrigger, others: PendingTrigger[]): boolean {
+  if (probing) return true
+  const bare: GameState = { ...state, pendingTriggers: undefined, triggerTurn: undefined }
+  // Both owed and `first` already named as the next to resolve, as answering the question leaves it.
+  const ordered = (first: PendingTrigger, second: PendingTrigger): GameState =>
+    drainTriggers({ ...bare, pendingTriggers: [{ ...first, layer: 0, picked: true }, { ...second, layer: 0, picked: false }] })
+  probing = true
+  try {
+    return others.some(other =>
+      !sameOutcome(ordered(trigger, other), ordered(other, trigger), trigger.controller, { nodes: PROBE_NODES }))
+  } catch {
+    return true
+  } finally {
+    probing = false
+  }
+}
+
 /**
  * Nothing owed: drop both fields rather than leaving empty ones behind, so states stay comparable, and
  * hand `activePlayer` back to whoever held it on entry.
@@ -172,6 +252,15 @@ export function drainTriggers(state: GameState): GameState {
     // Only worth probing where there is something to order: one ability resolves either way.
     if (mine.length > 1 && !mine[0].picked) {
       const actionable = mine.filter(t => !inertNow(next, t))
+      // An ability that steps aside resolves now, unasked, where its place in the order cannot be
+      // seen; the rest are then ordered among themselves on the next pass.
+      const aside = actionable.length > 1
+        ? actionable.find(t => triggerAbility(t)?.yieldsOrder && !orderShows(next, t, actionable.filter(o => o !== t)))
+        : undefined
+      if (aside) {
+        next = runOne(next, aside)
+        continue
+      }
       if (actionable.length > 1 && distinguishable(actionable)) {
         // CR 7.6.9: their own order, over the abilities that would actually do something. `cardId`
         // rides along so the prompt can name each waiting ability's source, which is the only thing
@@ -192,6 +281,47 @@ export function drainTriggers(state: GameState): GameState {
     next = runOne(next, toRun)
   }
   return next
+}
+
+/**
+ * Set the owed batch aside for an attack made while resolving one of its abilities.
+ *
+ * An Ambush attack is part of resolving Ambush, so whatever triggered alongside it "is not resolved
+ * until after the attack resulting from Ambush and any abilities triggered during the attack are
+ * resolved" (CR 7.5.5f; Support reads the same, and CR 7.6.12 says it of every ability). Left on the
+ * queue, the batch is resolved by the first drain the attack makes: a Shield that was to arrive after
+ * the attack arrives in the middle of it, in time to soak the hit.
+ *
+ * Taken off the queue rather than fenced within it, so that everything asking "is this event's batch
+ * still going" during the attack sees the attack's own abilities and nothing else.
+ */
+export function holdTriggers(state: GameState, attackerId: string): GameState {
+  const triggers = state.pendingTriggers ?? []
+  if (triggers.length === 0) return state
+  const held = { attackerId, triggers, ...(state.triggerTurn ? { turn: state.triggerTurn } : {}) }
+  return { ...state, pendingTriggers: undefined, triggerTurn: undefined, heldTriggers: [...(state.heldTriggers ?? []), held] }
+}
+
+/**
+ * Put back the batch `attackerId`'s attack set aside, now that the attack is over. Anything the
+ * attack triggered that is still owed (it stopped to ask something) is nested above the returning
+ * batch, so it still resolves first (CR 7.6.11). The caller drains.
+ */
+export function releaseTriggers(state: GameState, attackerId: string): GameState {
+  const stack = state.heldTriggers ?? []
+  const held = stack[stack.length - 1]
+  if (!held || held.attackerId !== attackerId) return state
+  const above = innermost(held.triggers) + 1
+  const owed = (state.pendingTriggers ?? []).map(t => ({ ...t, layer: t.layer + above }))
+  const turn = owed.length > 0
+    ? (state.triggerTurn ? { ...state.triggerTurn, layer: state.triggerTurn.layer + above } : undefined)
+    : held.turn
+  return {
+    ...state,
+    pendingTriggers: [...owed, ...held.triggers],
+    triggerTurn: turn,
+    heldTriggers: stack.length > 1 ? stack.slice(0, -1) : undefined,
+  }
 }
 
 /** Move the chosen trigger to the front and flag it, so the next drain resolves it (CR 7.6.9). */

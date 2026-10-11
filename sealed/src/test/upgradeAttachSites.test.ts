@@ -37,9 +37,10 @@ const EXPECTED_ATTACHES: Record<string, number> = {
   // attachCardAsUnitUpgrade: a unit card already in play becoming an upgrade (Poe Dameron, L3-37),
   // which fires the attach reaction and is not "played".
   'effects.ts': 3,
-  // playUpgradeCardOnto (the door, the one "played"), applyEntryKeywords' Shield on a Shielded unit entering, and
-  // deployLeaderAsPilot: a leader deploying as a Pilot upgrade is deployed, not played (fires the attach reaction, not "played")
-  'resolve.ts': 3,
+  // playUpgradeCardOnto (the door, the one "played"), and deployLeaderAsPilot: a leader deploying as a
+  // Pilot upgrade is deployed, not played (fires the attach reaction, not "played"). The Shield on a
+  // Shielded unit entering is an ability's `giveToken`, so it is one of the effects.ts three.
+  'resolve.ts': 2,
   // moveUpgrade: Jocasta Nu and Evidence of the Crime moving an upgrade, and Roger Roger attaching itself
   // from the discard pile to a Battle Droid token (both fire the attach reaction, not "played")
   'cardDefinitions.ts': 2,

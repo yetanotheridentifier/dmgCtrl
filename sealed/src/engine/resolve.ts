@@ -2,14 +2,14 @@ import type { Action, AttackTarget } from './actions'
 import type { Arena, EngineCard, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, HowPlayed, IfYouDo, IndirectDamageFollowUp, PendingChoice, PendingTrigger, PlayFromRef, PlayFromTail, PlayFromZone, TriggerContext, UpgradeRef, UsedAbility } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed, upgradeSideId, PLAYED_FROM_HAND, PLAYED_ELSEWHERE } from './types'
-import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordTokenUpgradeGiven, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, recordActionStarted, markAbilityUsed, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
+import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, recordActionStarted, markAbilityUsed, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { canTakePilot, effectiveCost, exploitTerms, creditExploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, discardForCostIndices, canAffordFromHand, unitCostPayers, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, smuggleTerms, smuggleCostUnits, type PlayFromTerms } from './legalMoves'
+import { legalMoves, canTakePilot, effectiveCost, exploitTerms, creditExploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, discardForCostIndices, canAffordFromHand, unitCostPayers, affordableHandUnits, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, smuggleTerms, smuggleCostUnits, type PlayFromTerms } from './legalMoves'
 import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectAbilityUsed, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
-import { drainTriggers, enqueueTriggers, pickNextTrigger } from './triggerQueue'
-import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, discardCards, discardTaken, revealedFromHand, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, returnControlledResources, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, captureUnit, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, forceUse } from './effects'
+import { drainTriggers, enqueueTriggers, holdTriggers, pickNextTrigger, releaseTriggers, setProbeStepper } from './triggerQueue'
+import { KEYWORD_AMBUSH, KEYWORD_SHIELDED, KEYWORD_SUPPORT } from './cardDefinitions'
+import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, discardCards, discardTaken, revealedFromHand, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, returnControlledResources, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, captureUnit, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, forceUse } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, cardHasTrait, grantMatches, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage, unitDealsCombatDamageByHp } from './keywords'
@@ -42,6 +42,10 @@ export function resolve(state: GameState, action: Action): GameState {
   const swept = checkWin(sweepStateBasedDefeats(returnControlledResources(returnControlledUnits(stepped, false))))
   return rememberActor(settleChoiceControl(swept, actor), actor)
 }
+
+// The trigger queue asks whether an ability's place in the order could be seen by answering the
+// choices on the way, which takes the resolver it cannot import.
+setProbeStepper({ moves: legalMoves, step: resolve })
 
 /**
  * Whether `action` begins a new action-phase action, rather than answering a choice or a trigger
@@ -536,10 +540,8 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // By identity, not by matching again: the unit is now on the board, and a filter that reads the board would see it.
   if (grants.length > 0) next = updatePlayer(next, owner, { nextUnitGrants: spendNextUnitGrants(next.players[owner].nextUnitGrants, grants) })
 
-  // Shielded and Hidden, from the live keywords, before anything reacts to the unit arriving: the
-  // Shield token is part of entering play, so `collectEntersPlay` below fires "when 1 or more
-  // upgrades attach to this unit" for it exactly as it always did.
-  next = applyEntryKeywords(next, owner, newUnit.instanceId)
+  // Hidden, from the live keywords, before anything reacts to the unit arriving.
+  next = applyHidden(next, owner, newUnit.instanceId)
 
   // The unit is in play now, so read Ambush/Support from its LIVE keywords — an aura can strip them
   // (Domesticated Loth-Cat → "enemy units lose Ambush and Support"). Ambush: open the pending
@@ -547,10 +549,10 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   const inPlay = (): UnitState => next.players[owner].units.find(u => u.instanceId === newUnit.instanceId)!
   const exhaust = () => { next = updatePlayer(next, owner, { units: next.players[owner].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: true } : u)) }) }
   const readyUp = () => { next = updatePlayer(next, owner, { units: next.players[owner].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: false } : u)) }) }
-  // Which of the two keyword When Played abilities this unit brings to the batch below. The ready
+  // Which of the keyword When Played abilities this unit brings to the batch below. The ready
   // state is settled here, since entering ready is part of entering play rather than part of the
   // ability; the ability itself is collected with everything else the play triggered.
-  const keywordAbilities: string[] = []
+  const keywordAbilities: string[] = shieldedOnEntry(next, inPlay())
   if (unitHasKeyword(next, inPlay(), 'Ambush')) {
     if (ambushHasTarget(next, inPlay(), owner)) {
       // Ambush always enters the unit ready so it can immediately attack, whether Ambush is printed
@@ -613,9 +615,13 @@ function resumeHeldPlay(state: GameState, choice: Extract<PendingChoice, { kind:
 }
 
 /**
- * Everything that triggers off a unit arriving, as one batch: any upgrades it entered with attaching
- * (a Shielded token → Sabine Wren), its own "When Played" (CR 6.2.0f), and "when you play a unit" on
- * the controller's undeployed leader and their other units.
+ * Everything that triggers off a unit arriving, as one batch: its keyword abilities (Shielded, Ambush,
+ * Support), its own "When Played" (CR 6.2.0f), and "when you play a unit" on the controller's
+ * undeployed leader and their other units.
+ *
+ * **Shielded leads the batch.** Collection order is the order abilities resolve in wherever nobody is
+ * asked, and the answer a bot gives when it cannot separate the options, so the Shield is the first
+ * thing to arrive unless its controller says otherwise.
  *
  * `borrowed` names cards whose "When Played" abilities this unit GAINED as it was played (Vernestra
  * Rwoh's additional cost). They are collected with the arriving unit as their source, so "this unit"
@@ -626,13 +632,14 @@ function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string,
   const entered = state.players[owner].units.find(u => u.instanceId === newUnitId)
   if (!entered) return []
   const owed: PendingTrigger[] = []
-  if (entered.upgrades.length > 0) owed.push(...collectUpgradeAttached(state, newUnitId))
+  // The caller read it from the live keywords, which is where a unit without its abilities loses it.
+  if (keywordAbilities.includes(KEYWORD_SHIELDED)) owed.push(...collectCardTriggers('whenPlayed', KEYWORD_SHIELDED, owner, newUnitId))
   // A unit that arrives without its abilities (a name Galen Erso has named) has no When Played to fire.
   if (!abilityBlank(state, entered, owner)) {
     owed.push(...collectCardTriggers('whenPlayed', cardId, owner, newUnitId, how.from === 'hand' ? { playedFromHand: true } : undefined))
     for (const lent of borrowed) owed.push(...collectCardTriggers('whenPlayed', lent, owner, newUnitId))
     // Ambush / Support: keyword-printed When Played abilities, ordered with the rest.
-    for (const kw of keywordAbilities) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId, keywordCtx))
+    for (const kw of keywordAbilities) if (kw !== KEYWORD_SHIELDED) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId, keywordCtx))
   }
   owed.push(...collectArrivalTriggers(state, 'whenPlayUnit', owner, newUnitId))
   owed.push(...collectPlayCard(state, owner, cardId, how, newUnitId))
@@ -1181,6 +1188,17 @@ function clearAttackGrants(state: GameState): GameState {
     if (expiring.some(e => (e.hp ?? 0) > 0)) next = sweepUnitDefeats(next)
   }
   return next
+}
+
+/**
+ * The attack is over: strip its grants, and hand back the batch it was made from (`holdTriggers`),
+ * which carries on from here. A choice still open (the Ambush offer this attack is answering, or one
+ * the attack raised) stops that drain as it stops any other, and whoever answers it resumes the batch.
+ */
+function endAttack(state: GameState, attackerId: string): GameState {
+  const cleared = clearAttackGrants(state)
+  const released = releaseTriggers(cleared, attackerId)
+  return released === cleared || released.winner !== null ? released : drainTriggers(released)
 }
 
 /** Grant a unit the full abilities (keywords + triggered) of `cardId` for one attack
@@ -3007,16 +3025,18 @@ function deployLeader(state: GameState, epicUsed = true): GameState {
     units: [...p.units, leaderUnit],
   })
   next = recordUnitEntered({ ...next, instanceCounter: state.instanceCounter + 1 }, playerId, leaderUnit.instanceId)
-  // A deployed leader enters ready (CR 3.4.4) and runs its on-enter keywords — including any GRANTED
-  // at deploy (Moff Gideon gains keywords from an Imperial in your discard): a Shield token,
-  // Hidden, and an Ambush or Support attack.
-  next = applyDeployKeywords(next, playerId, leaderUnit.instanceId)
-  // Then its own "When Deployed" and everything reacting to a unit entering play, as ONE batch: one
-  // leader arriving is one event. No route point is passed, so nothing reading "when you play a unit"
-  // fires: a deployed leader is considered deployed, not played (CR 3).
+  // A deployed leader enters ready (CR 3.4.4) and brings its on-enter keywords, including any GRANTED
+  // at deploy (Moff Gideon gains keywords from an Imperial in your discard): Hidden as it arrives, and
+  // Shielded and an Ambush or Support attack as abilities.
+  next = applyHidden(next, playerId, leaderUnit.instanceId)
+  // Those, its own "When Deployed" and everything reacting to a unit entering play are ONE batch: one
+  // leader arriving is one event, and its controller orders it (the keywords resolve like "When
+  // Deployed" abilities, CR 7.5.5a and 7.5.12a). No route point is passed, so nothing reading "when
+  // you play a unit" fires: a deployed leader is considered deployed, not played (CR 3).
   const inPlay = next.players[playerId].units.find(u => u.instanceId === leaderUnit.instanceId)
   next = inPlay
     ? fireBatch(next, [
+      ...collectDeployKeywords(next, playerId, inPlay),
       ...collectUnitTriggers(next, 'whenDeployed', inPlay, playerId),
       ...collectArrivalTriggers(next, undefined, playerId, leaderUnit.instanceId),
     ])
@@ -3070,55 +3090,48 @@ function offerPlotPlays(state: GameState, playerId: PlayerId, sourceId: string):
 }
 
 /**
- * Shielded → a Shield token, Hidden → unattackable until the next phase, read from the unit's LIVE
- * keywords now that it is in play.
+ * Hidden → unattackable until the next phase, read from the unit's LIVE keywords now that it is in
+ * play.
  *
- * Live rather than printed, because a unit can gain either one only once it is on the board:
- * Privateer Scyk has Shielded while you control another Cunning unit, and every friendly Inquisitor
- * gains Hidden from the Grand Inquisitor. Read from the card alone, as it was, both are silently
- * dropped, since the condition needs a unit to look at.
+ * Live rather than printed, because a unit can gain it only once it is on the board: every friendly
+ * Inquisitor gains Hidden from the Grand Inquisitor. Read from the card alone it is silently dropped,
+ * since the condition needs a unit to look at. `shieldedOnEntry` reads Shielded the same way.
  *
- * Shared by a unit played from hand and a leader deploying, which is the one statement of what
- * "entering play with a keyword" does.
+ * Shared by a unit played from hand and a leader deploying.
  */
-function applyEntryKeywords(state: GameState, owner: PlayerId, instanceId: string): GameState {
-  const unitNow = (s: GameState) => s.players[owner].units.find(u => u.instanceId === instanceId)
-  let next = state
-  const shieldable = unitNow(next)
-  if (!shieldable) return next
-  if (unitHasKeyword(next, shieldable, 'Shielded') && !hasToken(shieldable.upgrades, TOKEN_SHIELD)) {
-    // Shielded reads "give a Shield token to it", so it counts for "if you gave a token upgrade to a
-    // unit this phase" (Jar Jar Binks). Attached directly rather than through `giveTokens` because the
-    // attach belongs to the arrival batch, which the caller fires.
-    next = attachUpgrades(recordTokenUpgradeGiven(recordTokenCreated(next, owner), owner), instanceId, [{ cardId: TOKEN_SHIELD, owner }])
-  }
-  const hideable = unitNow(next)!
-  if (unitHasKeyword(next, hideable, 'Hidden') && !hideable.hidden) {
-    next = updatePlayer(next, owner, {
-      units: next.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, hidden: true } : u)),
-    })
-  }
-  return next
+function applyHidden(state: GameState, owner: PlayerId, instanceId: string): GameState {
+  const hideable = state.players[owner].units.find(u => u.instanceId === instanceId)
+  if (!hideable || hideable.hidden || !unitHasKeyword(state, hideable, 'Hidden')) return state
+  return updatePlayer(state, owner, {
+    units: state.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, hidden: true } : u)),
+  })
 }
 
 /**
- * On-enter keyword effects for a just-DEPLOYED leader unit: Shielded → a Shield token,
- * Hidden → unattackable until the next phase, then Ambush (this unit may attack now) or Support
- * (another ready unit may attack). Reads the unit's LIVE keywords, so keywords granted at deploy
- * count (Moff Gideon from a discard Imperial). A leader always enters ready, so an Ambush with no
- * target simply stays ready. (Units played from hand run the equivalent inline in `playUnitCard`.)
+ * The Shielded ability a unit entering play brings to its arrival batch, read from its LIVE keywords
+ * (Privateer Scyk has Shielded while you control another Cunning unit, which only a unit on the
+ * board can be asked). Whether it triggers is settled here, as the unit arrives; when it resolves is
+ * its controller's call. Shared by a unit played and a leader deploying.
  */
-function applyDeployKeywords(state: GameState, owner: PlayerId, instanceId: string): GameState {
-  const unitNow = (s: GameState) => s.players[owner].units.find(u => u.instanceId === instanceId)!
-  let next = applyEntryKeywords(state, owner, instanceId)
-  if (unitHasKeyword(next, unitNow(next), 'Ambush')) {
-    if (ambushHasTarget(next, unitNow(next), owner)) {
-      next = pushChoice(next, { kind: 'ambush', id: instanceId, controller: owner, unitId: instanceId, staysReady: true })
-    }
-  } else if (unitHasKeyword(next, unitNow(next), 'Support')) {
-    next = openSupportChoice(next, owner, instanceId)
+function shieldedOnEntry(state: GameState, entered: UnitState): string[] {
+  return unitHasKeyword(state, entered, 'Shielded') ? [KEYWORD_SHIELDED] : []
+}
+
+/**
+ * The keyword abilities a just-DEPLOYED leader unit brings to its arrival batch: Shielded, then
+ * Ambush (this unit may attack now) or Support (another ready unit may attack). Read from the unit's
+ * LIVE keywords, so keywords granted at deploy count (Moff Gideon from a discard Imperial). A leader
+ * always enters ready, so its Ambush leaves it ready whether or not the attack is taken. (Units
+ * played from hand settle the equivalent inline in `playUnitCard`.)
+ */
+function collectDeployKeywords(state: GameState, owner: PlayerId, leaderUnit: UnitState): PendingTrigger[] {
+  const keywords = shieldedOnEntry(state, leaderUnit)
+  if (unitHasKeyword(state, leaderUnit, 'Ambush')) {
+    if (ambushHasTarget(state, leaderUnit, owner)) keywords.push(KEYWORD_AMBUSH)
+  } else if (unitHasKeyword(state, leaderUnit, 'Support')) {
+    keywords.push(KEYWORD_SUPPORT)
   }
-  return next
+  return keywords.flatMap(kw => collectCardTriggers('whenPlayed', kw, owner, leaderUnit.instanceId, { ambushStaysReady: true }))
 }
 
 function takeInitiative(state: GameState): GameState {
@@ -3220,6 +3233,10 @@ function attack(state: GameState, attackerId: string, target: AttackTarget, viaA
   if (!attacker) throw new Error(`attack: no friendly unit ${attackerId}`)
   if (attacker.exhausted && !mayBeExhausted) throw new Error(`attack: unit ${attackerId} is exhausted`)
 
+  // An attack made by an ability (Ambush) is part of resolving it: the abilities that triggered
+  // alongside wait until the attack is over, and `endAttack` hands them back.
+  state = holdTriggers(state, attackerId)
+
   // Attacking exhausts the attacker (CR 1.5.4d). It is "attacking" from here to the end of the attack,
   // before Restore and the On Attack abilities are read (Condemn blanks its host while it attacks).
   let next = updatePlayer({ ...state, attackingInstanceId: attackerId }, playerId, {
@@ -3306,7 +3323,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   const enemyId = opponentOf(playerId)
   const attacker = state.players[playerId].units.find(u => u.instanceId === attackerId)
   // The attacker may have been defeated before damage (e.g. an On Defense ping).
-  if (!attacker) return clearAttackGrants(checkWin(state))
+  if (!attacker) return endAttack(checkWin(state), attackerId)
 
   // "While attacking a damaged unit …" (Marrok's Fiend Fighter) reads the defender's pre-combat damage.
   const targetUnit = target.kind === 'unit' ? state.players[enemyId].units.find(u => u.instanceId === target.instanceId) : undefined
@@ -3338,7 +3355,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     next = fireBatch(next, collectUnitsTrigger(next, 'whenEnemyAttacksBase', enemyId, { attackerInstanceId: attackerId }))
     next = consumeAdvantage(next, playerId, attackerId) // the attack completed
     next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: dealtToBase })
-    return clearAttackGrants(checkWin(next))
+    return endAttack(checkWin(next), attackerId)
   }
 
   const defenderBefore = state.players[enemyId].units.find(u => u.instanceId === target.instanceId)
@@ -3346,7 +3363,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   if (!defenderBefore) {
     let next = consumeAdvantage(state, playerId, attackerId)
     next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: 0, defenderDefeated: true, combatDamageToDefender: 0 })
-    return clearAttackGrants(checkWin(next))
+    return endAttack(checkWin(next), attackerId)
   }
 
   // Saboteur: when this unit attacks, defeat the defending unit's Shields before combat damage
@@ -3488,7 +3505,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // hit had left over past its remaining HP (Blizzard Assault AT-AT).
   const defeatedCtx = defeated ? { defeatedDefender: defeated, excessCombatDamage: Math.max(0, damageTo(defeated.instanceId, power) - remainingOf(defeated)) } : {}
   next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmDealt, defenderDefeated, combatDamageToDefender: dealtToDefender, ...defeatedCtx }, attacker)
-  return clearAttackGrants(checkWin(next))
+  return endAttack(checkWin(next), attackerId)
 }
 
 /**

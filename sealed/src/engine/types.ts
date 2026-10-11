@@ -666,6 +666,13 @@ export interface GameState {
    */
   pendingTriggers?: PendingTrigger[]
   /**
+   * Batches set aside while an attack made by one of their abilities runs (Ambush, Support, "attack
+   * with a unit"), innermost last. The attack is part of resolving that ability, so the abilities
+   * that triggered alongside it wait until the attack and everything it triggers have resolved
+   * (CR 7.5.5f, 7.6.12). `holdTriggers` and `releaseTriggers` in `triggerQueue.ts` own it.
+   */
+  heldTriggers?: HeldTriggers[]
+  /**
    * The card whose effect is resolving right now, set only for the duration of the effect call and
    * never at rest. Damage the effect deals without naming a source is attributed to it for the damage
    * event (`DamageDealt.dealer`) and for nothing else: prevention still reads only a named source.
@@ -1334,6 +1341,13 @@ export interface PendingTrigger {
   fromLeader?: boolean
   /** The event details the ability triggered with, replayed into its effect when it resolves. */
   ctx?: TriggerContext
+}
+
+/** A batch waiting on the attack `attackerId` is making, with whose turn it was to resolve in it. */
+export interface HeldTriggers {
+  attackerId: string
+  triggers: PendingTrigger[]
+  turn?: GameState['triggerTurn']
 }
 
 /**

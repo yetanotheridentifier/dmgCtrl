@@ -13,6 +13,7 @@ import { poolFor } from '../bench/setPools'
 import { triage, triggerHeads } from '../bench/triage'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
+import { pickTrigger } from './helpers/replayReport'
 import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState } from '../engine/types'
 import type { TriggerPoint } from '../engine/abilities'
 
@@ -601,7 +602,11 @@ describe('compound trigger heads, F: upgrades moved and taken', () => {
 
   it('JTL_242 Shuttle ST-149 may take a token upgrade and attach it to a different unit, when played and when defeated', () => {
     const setup = (extra: UnitState[] = []) => board({ units: [unit('mine', 'GRD'), ...extra] }, { units: [unit('e', 'GRD', { upgrades: [upgrade(TOKEN_EXPERIENCE, 'opponent'), upgrade('UPG', 'opponent')] })] })
-    for (const fired of [played(setup(), 'JTL_242'), killed(setup([unit('src', 'JTL_242')]))]) {
+    // Played, its Shielded is owed too, and the Shield is a token this ability could move, so the order
+    // is the player's: the Shuttle's own ability is taken first here.
+    const whenPlayed = played(setup(), 'JTL_242')
+    expect(choice(whenPlayed).kind).toBe('chooseNextTrigger')
+    for (const fired of [resolve(whenPlayed, pickTrigger(whenPlayed, 'JTL_242')[0]), killed(setup([unit('src', 'JTL_242')]))]) {
       const c = choice(fired) as Extract<PendingChoice, { kind: 'selectUpgradeThen' }>
       expect(c).toMatchObject({ kind: 'selectUpgradeThen', optional: true })
       expect(c.candidates.every(x => x.cardId in { [TOKEN_EXPERIENCE]: 1, [TOKEN_SHIELD]: 1 }), 'only token upgrades').toBe(true)
