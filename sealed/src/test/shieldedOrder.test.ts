@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { loadReport, replayWith, pickTrigger, type ReplayInserts } from './helpers/replayReport'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import { normaliseCard } from '../engine/cardDb'
@@ -7,6 +7,9 @@ import { SET_CODES, poolFor } from '../bench/setPools'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { effectivePower } from '../engine/stats'
+import { registerCard, unregisterAbility } from '../engine/abilities'
+import { drawCards } from '../engine/effects'
+import { pushChoice } from '../engine/types'
 import { KEYWORD_AMBUSH, KEYWORD_SHIELDED } from '../engine/cardDefinitions' // also registers every implemented card
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { AIS } from '../ai/registry'
@@ -353,5 +356,159 @@ describe('a deploying leader orders Shielded and Ambush the same way', () => {
     expect(noTarget.pendingChoices ?? []).toEqual([])
     expect(shields(moff(noTarget))).toBe(1)
     expect(moff(noTarget).exhausted, 'a leader deploys ready').toBe(false)
+  })
+})
+
+/**
+ * A player holding a Credit token is asked what pays before a play that costs anything, and the
+ * engine learns the cost by running the play once and throwing the result away. That dry run reaches
+ * the ordering probe, and the probe answers choices through the same resolver the paying step sits
+ * in. Neither may leave anything behind in the other.
+ */
+describe('the order is asked the same behind the paying step', () => {
+  type PayWith = Extract<PendingChoice, { kind: 'payWith' }>
+  const payAsk = (s: GameState): PayWith | undefined => (s.pendingChoices ?? []).find((c): c is PayWith => c.kind === 'payWith')
+  const readyLeft = (s: GameState): number => s.players.player.resources.filter(r => !r.exhausted).length
+  const tokens = (s: GameState): number => s.players.player.creditTokens ?? 0
+  const foe = { units: [unit('e1', 'FOE')] }
+  const before = (creditTokens: number): GameState => state({
+    cards: F,
+    players: { player: player({ hand: [MAE], resources: ready(10), creditTokens }), opponent: player(foe) },
+  })
+  const playMae = (s: GameState): GameState => resolve(s, { type: 'playUnit', handIndex: 0 })
+  /** What Mae costs on this board (her printed cost and the aspect penalty), read off a play with no token. */
+  const maeCost = 10 - readyLeft(playMae(before(0)))
+  const payDone = (s: GameState): GameState => resolve(s, { type: 'skipTrigger', choiceId: payAsk(s)!.id })
+  const payToken = (s: GameState): GameState => resolve(s, { type: 'acceptChoice', choiceId: payAsk(s)!.id })
+  const ambushFirst = (s: GameState): GameState => {
+    const ambushing = pick(s, KEYWORD_AMBUSH)
+    return resolve(ambushing, { type: 'attack', attackerId: entered(ambushing, MAE).instanceId, target: { kind: 'unit', instanceId: 'e1' } })
+  }
+  /** A board with the fields that differ only by how the cost was paid taken out. */
+  const paidApart = (s: GameState) => ({
+    ...s,
+    players: { ...s.players, player: { ...s.players.player, creditTokens: undefined, resources: undefined, tokensDefeatedThisPhase: undefined } },
+    phaseEvents: undefined,
+    history: undefined,
+    rngSeed: undefined,
+    cancelPoint: undefined,
+  })
+
+  it('with no Credit token, Mae is played and the order asked with no paying step', () => {
+    const s = playMae(before(0))
+    expect(payAsk(s)).toBeUndefined()
+    expect(orderAsk(s)?.candidates.map(c => c.cardId).sort()).toEqual([KEYWORD_AMBUSH, KEYWORD_SHIELDED].sort())
+    expect(maeCost).toBeGreaterThan(1)
+  })
+
+  it('with a Credit token, the paying step comes first and its dry run leaves nothing behind', () => {
+    const start = before(1)
+    const s = playMae(start)
+    expect(payAsk(s)).toMatchObject({ controller: 'player', cost: maeCost, credits: 0 })
+    expect(orderAsk(s), 'no ordering question yet').toBeUndefined()
+    expect(s.pendingChoices).toHaveLength(1)
+    expect(s.players.player.hand, 'Mae is still in hand').toEqual([MAE])
+    expect(s.players.player.units).toEqual([])
+    expect(readyLeft(s)).toBe(10)
+    expect(tokens(s)).toBe(1)
+    expect(s.pendingTriggers).toBeUndefined()
+    expect(s.triggerTurn).toBeUndefined()
+    expect(s.heldTriggers).toBeUndefined()
+    expect('paying' in s).toBe(false)
+    expect(s.players).toEqual(start.players)
+  })
+
+  it('Done with no token picked: the order is asked exactly as it is for a player with no token', () => {
+    const s = payDone(playMae(before(1)))
+    expect(payAsk(s)).toBeUndefined()
+    expect(orderAsk(s)?.candidates.map(c => c.cardId).sort()).toEqual([KEYWORD_AMBUSH, KEYWORD_SHIELDED].sort())
+    expect(shields(entered(s, MAE)), 'no Shield yet').toBe(0)
+    expect(readyLeft(s)).toBe(10 - maeCost)
+    expect(tokens(s)).toBe(1)
+    expect(s.heldTriggers).toBeUndefined()
+    expect('paying' in s).toBe(false)
+    const plain = playMae(before(0))
+    expect(s.pendingChoices).toEqual(plain.pendingChoices)
+    expect(s.pendingTriggers).toEqual(plain.pendingTriggers)
+    expect(legalMoves(s)).toEqual(legalMoves(plain))
+  })
+
+  it('paying with the token: it is defeated, one resource fewer is exhausted, and the order is asked', () => {
+    // One token is all there is to pick, so picking it finishes the step.
+    const s = payToken(playMae(before(1)))
+    expect(payAsk(s)).toBeUndefined()
+    expect(tokens(s)).toBe(0)
+    expect(readyLeft(s)).toBe(10 - (maeCost - 1))
+    expect(orderAsk(s)?.candidates.map(c => c.cardId).sort()).toEqual([KEYWORD_AMBUSH, KEYWORD_SHIELDED].sort())
+    expect(shields(entered(s, MAE))).toBe(0)
+    expect('paying' in s).toBe(false)
+    expect(legalMoves(s)).toHaveLength(2)
+  })
+
+  it('either way of paying, Ambush first ends on the board a player with no token reaches', () => {
+    const plain = ambushFirst(playMae(before(0)))
+    expect(entered(plain, MAE).damage).toBe(1)
+    expect(shields(entered(plain, MAE))).toBe(1)
+    for (const paid of [payDone, payToken]) {
+      const after = ambushFirst(paid(playMae(before(1))))
+      expect(after.pendingChoices ?? []).toEqual([])
+      expect(after.pendingTriggers).toBeUndefined()
+      expect(after.heldTriggers).toBeUndefined()
+      expect('paying' in after).toBe(false)
+      expect(after.activePlayer).toBe('opponent')
+      expect(paidApart(after)).toEqual(paidApart(plain))
+    }
+  })
+
+  describe('a cost met inside the probe', () => {
+    // A free Shielded unit whose When Played offers "pay 2: draw a card". Nothing is paid to play
+    // it, so the first paying step the token holder could meet is the one the probe walks into
+    // when it accepts that offer on a board it will throw away.
+    const FREE = { ...F, TST_SHPAY: card({ id: 'TST_SHPAY', type: 'unit', arena: 'ground', cost: 0, power: 2, hp: 2, keywords: [{ name: 'Shielded' }] }) }
+    beforeAll(() => {
+      registerCard('TST_SHPAY', {
+        abilities: [{
+          trigger: 'whenPlayed',
+          description: 'You may pay 2. If you do, draw a card.',
+          effect: (s, ctx) => pushChoice(s, { kind: 'mayPayThen', id: 'tst-pay', controller: ctx.owner, cost: 2, text: 'draw a card', then: { cardId: 'TST_SHPAY', owner: ctx.owner } }),
+        }],
+        ifYouDo: (s, ctx) => drawCards(s, ctx.owner, 1),
+      })
+    })
+    afterAll(() => unregisterAbility('TST_SHPAY'))
+    const playFree = (creditTokens: number): GameState => resolve(state({
+      cards: FREE,
+      players: { player: player({ hand: ['TST_SHPAY'], deck: ['VIGIL', 'VIGIL'], resources: ready(4), creditTokens }), opponent: player(foe) },
+    }), { type: 'playUnit', handIndex: 0 })
+
+    it('walks the paying step, finds the order cannot show, and leaves nothing paid', () => {
+      for (const held of [0, 1]) {
+        const s = playFree(held)
+        expect(orderAsk(s), `${held} token: the draw is the same either way round`).toBeUndefined()
+        expect(payAsk(s), 'the probe’s paying step is not on the real board').toBeUndefined()
+        expect(shields(entered(s, 'TST_SHPAY'))).toBe(1)
+        expect(s.pendingChoices).toMatchObject([{ kind: 'mayPayThen', cost: 2 }])
+        expect(readyLeft(s)).toBe(4)
+        expect(tokens(s)).toBe(held)
+        expect(s.players.player.hand).toEqual([])
+        expect(s.pendingTriggers).toBeUndefined()
+        expect(s.heldTriggers).toBeUndefined()
+        expect('paying' in s).toBe(false)
+      }
+    })
+
+    it('then asks the real offer through the paying step when it is accepted', () => {
+      const offered = playFree(1)
+      const asked = resolve(offered, { type: 'acceptChoice', choiceId: offered.pendingChoices![0].id })
+      expect(payAsk(asked)).toMatchObject({ cost: 2, credits: 0 })
+      expect(readyLeft(asked)).toBe(4)
+      expect(tokens(asked)).toBe(1)
+      const paid = payToken(asked)
+      expect(tokens(paid)).toBe(0)
+      expect(readyLeft(paid)).toBe(3)
+      expect(paid.players.player.hand).toEqual(['VIGIL'])
+      expect(paid.pendingChoices ?? []).toEqual([])
+      expect('paying' in paid).toBe(false)
+    })
   })
 })
