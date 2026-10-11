@@ -401,6 +401,11 @@ It is **integer-valued**, and zero-sum while both seats read the same role.
 **`handValue`** reads card identities, which are hidden, so it is applied to the scored seat **only**.
 Subtracting the opponent's would be peeking at their hand.
 
+**A card that shows the bot an opponent's hidden card does not change that.** Grand Admiral Thrawn
+shows his controller the top card of each deck as the action phase starts. The bot answers that look
+(it is a choice with one legal move, so the engine never waits on it) and scores nothing from it: no
+term in `ai/` reads a deck, its own or the opponent's.
+
 `evaluate` is therefore subjective rather than zero-sum, which costs nothing at one ply because
 greedy only ever scores from the acting seat.
 

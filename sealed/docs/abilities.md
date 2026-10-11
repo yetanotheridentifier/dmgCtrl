@@ -544,7 +544,11 @@ target (see `architecture.md`). Because looking never passes through `resolve`, 
 log, the replay data or the other seat, and a bot holding the permission is never waited on.
 
 A one-shot "look at the top card of your deck" inside an ability is a different thing: that is a
-pending choice which shows the card as it asks what to do with it (see `choices.md`).
+pending choice which shows the card as it asks what to do with it (see `choices.md`). So is a
+triggered look that asks nothing: Grand Admiral Thrawn's "when the action phase starts, look at the top
+card of each player's deck" is one `whenActionPhaseStarts` ability declared on both sides of the card
+(`leaderAbilities.abilities` for the leader side, `abilities` for the unit), raising the view-only
+`lookAtDeckTops` choice.
 
 `lookAtDeckTop.test.ts` finds every bundled card that prints the standing sentence and fails for one
 that does not declare it.

@@ -23,24 +23,28 @@ const CARDS: SwuCard[] = [
   { Set: 'TST', Number: '001', Name: 'Test Leader', Type: 'Leader', Cost: '5', Power: '4', HP: '7' },
   { Set: 'TST', Number: '002', Name: 'Test Base', Type: 'Base', HP: '30' },
   { Set: 'TST', Number: '300', Name: 'Filler', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
-  { Set: 'TST', Number: '301', Name: 'Deep Filler', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
   { Set: 'TST', Number: '981', Name: 'My Secret', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
   { Set: 'TST', Number: '982', Name: 'Their Secret', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
 ]
 
-/** Six Fillers for the opening hand, then `top` as the seventh card: the top of the deck once play starts. */
-const deck = (leader: string, top: string): SavedDeck => ({
-  id: `${leader}-${top}`, name: leader, leader, base: 'TST_002',
-  cards: [{ id: 'TST_300', count: 6 }, { id: top, count: 1 }, { id: 'TST_301', count: 23 }], importedAt: 1,
-})
 const MINE = 'TST_981'
 const THEIRS = 'TST_982'
+/**
+ * The player's deck is six Fillers for the opening hand, kept, then nothing but My Secret. The
+ * opponent's is nothing but Their Secret, so it is on top whether or not its setup takes a mulligan;
+ * its hand and resources are face-down and at nine resources a card it never plays one.
+ */
+const deck = (leader: string, top: string): SavedDeck => ({
+  id: `${leader}-${top}`, name: leader, leader, base: 'TST_002',
+  cards: top === THEIRS ? [{ id: top, count: 30 }] : [{ id: 'TST_300', count: 6 }, { id: top, count: 24 }], importedAt: 1,
+})
 
 const identity = <T,>(arr: T[]) => arr
 // The opponent answers whatever it is asked and otherwise takes the passive move (listed last).
 const OPTS: UseGameOptions = {
   shuffle: identity,
   firstPlayer: 'player',
+  rngSeed: 1,
   ai: s => {
     const moves = legalMoves(s)
     return moves.length > 0 ? moves[moves.length - 1] : null

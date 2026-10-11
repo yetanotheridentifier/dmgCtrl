@@ -808,6 +808,35 @@ export function OpponentHandOverlay({ state, choice, onDiscard, onDone }: {
 }
 
 /**
+ * "Look at the top card of each player's deck" overlay (Grand Admiral Thrawn): each card face-up
+ * and captioned with whose deck it tops, in the order the look lists them. View-only and raised every round, so
+ * Done and a click beside the cards both answer it. A thin wrapper over `CardGridOverlay`.
+ */
+export function DeckTopsOverlay({ state, prompt, tops, onDone }: {
+  state: GameState
+  prompt: string
+  tops: Extract<PendingChoice, { kind: 'lookAtDeckTops' }>['tops']
+  onDone: () => void
+}) {
+  return (
+    <CardGridOverlay
+      idPrefix="deck-tops"
+      prompt={prompt}
+      cardsById={state.cards}
+      items={tops.map(({ deck, cardId }) => ({
+        cardId, key: deck, caption: deck === 'player' ? 'Your deck' : "Opponent's deck", captionTestId: `deck-tops-caption-${deck}`,
+      }))}
+      onBackdropClick={onDone}
+      footer={
+        <button data-testid="deck-tops-done" onClick={onDone} className={PANEL_PRIMARY}>
+          Done
+        </button>
+      }
+    />
+  )
+}
+
+/**
  * One player's units in one arena, anchored to the battlefront. The grid cell's
  * alignment (items-end for the opponent, items-start for you) pins the lane to
  * the centre line; extra units wrap *away* from it. Keeps `{side}-{arena}-units`.
@@ -1520,6 +1549,13 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
     const lookHandActions = lookHandChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === lookHandChoice.id) : []
 
+    // A "look at the top card of each deck" choice (Grand Admiral Thrawn): view-only, so its Done
+    // lives in the overlay that shows the cards. Only the player's own look is ever found here.
+    const deckTopsChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'lookAtDeckTops' }> => c.kind === 'lookAtDeckTops' && c.controller === 'player',
+    )
+    const deckTopsActions = deckTopsChoice ? legal.filter(a => a.type === 'skipTrigger' && a.choiceId === deckTopsChoice.id) : []
+
     // A "search top N, draw a trait match" choice (Clan Wren Loyalist): draw picks in the overlay.
     const searchDrawChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'searchDraw' }> => c.kind === 'searchDraw' && c.controller === 'player',
@@ -1621,7 +1657,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const isPilotPlay = (a: Action) => a.type === 'playUpgrade' && a.piloting === true
     const unclaimed = gameState.winner === null
-      ? legal.filter(a => (!CLICK_HANDLED.includes(a.type) || isPilotPlay(a)) && !lookActions.includes(a) && !discardTopActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !searchUpgradeActions.includes(a) && !nameCardActions.includes(a) && !nameTraitActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !playFromActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
+      ? legal.filter(a => (!CLICK_HANDLED.includes(a.type) || isPilotPlay(a)) && !lookActions.includes(a) && !discardTopActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !deckTopsActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !searchUpgradeActions.includes(a) && !nameCardActions.includes(a) && !nameTraitActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !playFromActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
       : []
     // Whatever choice is left, answered with buttons, goes to the button overlay rather than the
     // action column. Not while the board or the hand is answering another choice: those keep their
@@ -1810,6 +1846,15 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           choice={lookHandChoice}
           onDiscard={handIndex => actAndClear({ type: 'acceptChoice', choiceId: lookHandChoice.id, handIndex })}
           onDone={() => actAndClear({ type: 'skipTrigger', choiceId: lookHandChoice.id })}
+        />
+      )
+    } else if (deckTopsChoice && deckTopsActions.length > 0) {
+      choiceOverlay = (
+        <DeckTopsOverlay
+          state={gameState}
+          prompt={describeChoiceParts(gameState, deckTopsChoice).map(part => (typeof part === 'string' ? part : part.text)).join('')}
+          tops={deckTopsChoice.tops}
+          onDone={() => actAndClear(deckTopsActions[0])}
         />
       )
     } else if (searchDrawChoice) {

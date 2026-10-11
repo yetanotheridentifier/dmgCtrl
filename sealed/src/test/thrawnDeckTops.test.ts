@@ -190,28 +190,37 @@ describe('the look, with a deck that has run out', () => {
 })
 
 describe('the look, when both players lead with Thrawn', () => {
-  const both = () => nextActionPhase(board(front(), front()))
+  /**
+   * Two abilities of different players triggering together are ordered first (CR 7.6.10), so the board
+   * is driven with each choice's first answer, collecting every look on the way and who answered it.
+   */
+  const both = () => {
+    let s = nextActionPhase(board(front(), front()))
+    const seen: { look: Look; answeredBy: PlayerId }[] = []
+    let guard = 0
+    while ((s.pendingChoices ?? []).length > 0 && guard++ < 8) {
+      const move = legalMoves(s)[0]
+      const look = looks(s).find(c => move.type === 'skipTrigger' && c.id === move.choiceId)
+      if (look) seen.push({ look, answeredBy: s.activePlayer })
+      s = resolve(s, move)
+    }
+    return { seen, after: s }
+  }
 
   it('gives each player their own look at the same two cards, their own deck first', () => {
-    const s = both()
-    expect(looks(s)).toHaveLength(2)
-    const mine = looks(s).find(c => c.controller === 'player')!
-    const theirs = looks(s).find(c => c.controller === 'opponent')!
+    const { seen } = both()
+    expect(seen).toHaveLength(2)
+    const mine = seen.find(x => x.look.controller === 'player')!.look
+    const theirs = seen.find(x => x.look.controller === 'opponent')!.look
     expect(shown(mine)).toEqual([['player', 'MINE_TOP'], ['opponent', 'THEIR_TOP']])
     expect(shown(theirs)).toEqual([['opponent', 'THEIR_TOP'], ['player', 'MINE_TOP']])
   })
 
   it('has each answered by its own controller, then starts play with the initiative holder', () => {
-    let s = both()
-    for (let i = 0; i < 2; i++) {
-      const moves = legalMoves(s)
-      expect(moves).toHaveLength(1)
-      const mine = looks(s).find(c => c.controller === s.activePlayer)!
-      expect(moves[0]).toEqual({ type: 'skipTrigger', choiceId: mine.id })
-      s = resolve(s, moves[0])
-    }
-    expect(s.pendingChoices ?? []).toEqual([])
-    expect(s.activePlayer).toBe(s.initiative)
+    const { seen, after } = both()
+    for (const { look, answeredBy } of seen) expect(answeredBy).toBe(look.controller)
+    expect(after.pendingChoices ?? []).toEqual([])
+    expect(after.activePlayer).toBe(after.initiative)
   })
 })
 
@@ -260,6 +269,15 @@ describe('the bot', () => {
     const answer = opponentAi(s)
     expect(answer).toEqual({ type: 'skipTrigger', choiceId: theLook(s).id })
     expect(resolve(s, answer!).pendingChoices ?? []).toEqual([])
+  })
+
+  it('still finds a move when its lookahead reaches the next action phase, whichever seat will look', () => {
+    // The player has passed, so the bot's own pass ends the round and the look is raised inside its search.
+    const seats: [Side, Side][] = [[front(), {}], [{}, front()], [front(), front()]]
+    for (const [mine, theirs] of seats) {
+      const s = board({ ...mine, hand: ['PLAIN'] }, { ...theirs, hand: ['PLAIN'] }, { activePlayer: 'opponent', consecutivePasses: 1 })
+      expect(legalMoves(s)).toContainEqual(opponentAi(s))
+    }
   })
 
   it('plays whole games leading with Thrawn to the end, looking every round', () => {

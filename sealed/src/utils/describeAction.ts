@@ -210,7 +210,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack' || choice.kind === 'mayAttackAnyUnit') return "Don't attack"
-      if (choice.kind === 'distributeDamage' || choice.kind === 'distributeHealing' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount' || choice.kind === 'exploit') return 'Done'
+      if (choice.kind === 'distributeDamage' || choice.kind === 'distributeHealing' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'lookAtDeckTops' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount' || choice.kind === 'exploit') return 'Done'
       // Acknowledging a reveal that matched nothing (#413), and passing on Reforge's search.
       if (choice.kind === 'searchDraw' || choice.kind === 'search' || choice.kind === 'searchPlayUpgrade') return 'Done'
       if (choice.kind === 'mayDoubleTokens') return "Don't"
