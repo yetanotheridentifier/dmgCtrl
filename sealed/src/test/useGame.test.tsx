@@ -12,6 +12,7 @@ import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { buildGameExport } from '../data/recordExport'
 import { withoutCards } from '../data/replayData'
+import { defaultSettings, saveSettings } from '../data/settingsStore'
 import { OPPONENT_AI } from '../config'
 import { COMMIT_ID, RELEASE } from '../buildIdentity'
 import { replay } from './helpers/replayReport'
@@ -499,6 +500,58 @@ describe('useGame', () => {
         const records = await listGameRecords()
         expect(records).toHaveLength(1)
         expect(records[0].opponentAi).toBe(OPPONENT_AI)
+      })
+    })
+
+    /**
+     * Opting in covers only games finished afterwards, so the record itself has to say whether the
+     * player was opted in when it was written: nothing else on the device remembers.
+     */
+    describe('whether the player was sharing games when it finished', () => {
+      afterEach(() => localStorage.clear())
+
+      it.each([
+        ['has not been asked', undefined],
+        ['said no', 'no'],
+      ] as const)('leaves the record unmarked when the player %s', async (_, shareGames) => {
+        if (shareGames) saveSettings({ ...defaultSettings(), shareGames })
+        const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+        await waitFor(() => expect(result.current.status).toBe('playing'))
+        await winFromTheStart(result)
+
+        await waitFor(async () => {
+          const records = await listGameRecords()
+          expect(records).toHaveLength(1)
+          expect('consentedAtFinish' in records[0]).toBe(false)
+        })
+      })
+
+      it('marks the record when the player is opted in as the game ends', async () => {
+        const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+        await waitFor(() => expect(result.current.status).toBe('playing'))
+        // Opted in part-way through: what counts is the answer when the winner appears.
+        saveSettings({ ...defaultSettings(), shareGames: 'yes' })
+        await winFromTheStart(result)
+
+        await waitFor(async () => {
+          const records = await listGameRecords()
+          expect(records).toHaveLength(1)
+          expect(records[0].consentedAtFinish).toBe(true)
+        })
+      })
+
+      it('leaves a game unmarked when the player opted out before it ended', async () => {
+        saveSettings({ ...defaultSettings(), shareGames: 'yes' })
+        const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+        await waitFor(() => expect(result.current.status).toBe('playing'))
+        saveSettings({ ...defaultSettings(), shareGames: 'no' })
+        await winFromTheStart(result)
+
+        await waitFor(async () => {
+          const records = await listGameRecords()
+          expect(records).toHaveLength(1)
+          expect('consentedAtFinish' in records[0]).toBe(false)
+        })
       })
     })
 

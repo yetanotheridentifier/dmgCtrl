@@ -24,7 +24,18 @@ export interface Settings {
    * shows the opponent's whole reply at once. One of `OPPONENT_DELAYS_MS`.
    */
   opponentDelayMs: number
+  /**
+   * Whether finished games may be sent to train the bot. Opt-in, so only `yes` permits it:
+   * `unasked` and `no` both mean nothing leaves the device, and differ only in whether the setup
+   * screen still shows the notice. The one reader that acts on it is `data/collection.ts`.
+   */
+  shareGames: ShareGames
 }
+
+/** The player's answer about sharing games: not asked yet, opted in, or declined. */
+export type ShareGames = 'unasked' | 'yes' | 'no'
+
+const VALID_SHARE_GAMES: ShareGames[] = ['unasked', 'yes', 'no']
 
 const VALID_BASE_HEALTH_DISPLAY: BaseHealthDisplay[] = ['damage', 'remaining']
 
@@ -41,6 +52,7 @@ export function defaultSettings(): Settings {
     baseHealthDisplay: 'damage',
     showBugReport: isDev(),
     opponentDelayMs: 500,
+    shareGames: 'unasked',
   }
 }
 
@@ -69,6 +81,10 @@ export function loadSettings(): Settings {
       opponentDelayMs: OPPONENT_DELAYS_MS.includes(stored.opponentDelayMs as number)
         ? (stored.opponentDelayMs as number)
         : defaults.opponentDelayMs,
+      // Anything but one of the three answers reads as not asked, so a damaged blob opts nobody in.
+      shareGames: VALID_SHARE_GAMES.includes(stored.shareGames as ShareGames)
+        ? (stored.shareGames as ShareGames)
+        : defaults.shareGames,
     }
   } catch {
     return defaults

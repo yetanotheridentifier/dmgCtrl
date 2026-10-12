@@ -47,6 +47,18 @@ The screen remembers your choices on this device: both sets, **Same set as my de
 
 The current AI opponent plays **random legal moves**. It exists to exercise the full rules engine; smarter opponents are on the roadmap.
 
+## Improving the bot
+
+The AI bot gets better by learning from real games. If you opt in, each game you finish is sent to train it.
+
+**What is sent:** both decks as loaded, every decision made in the game by you and the bot, who won, how long it took, and the app version.
+
+**What is not sent:** your name, your deck names, or anything else that identifies you. There is no account, and your IP address is not linked to games. Because of that, a game cannot be traced back to you, and it also cannot be found and deleted later.
+
+This data export is disabled unless you turn it on, and you can change it at any time in Settings.
+
+Turning it off stops future games being sent and does not recall games already sent.
+
 ## Playing a game
 
 Press **Play** next to your deck. Cards hydrate, both players draw 6, and the board appears in the **setup step**: choose **Keep hand** or **Mulligan** (shuffle your hand back and draw a fresh 6, once only; whoever holds the initiative decides first). Then **resource 2 cards, one pick at a time**: **click a hand card to resource it**, and you can also just avoid resourcing your early plays. Aim to keep a curve: something to play on turn 1 (cost ≤ 2), turn 2 (≤ 3), turn 3 (≤ 4). Once both players have resourced 2, round 1 begins. Resourcing is private: the log shows only that your opponent resourced, never which card.

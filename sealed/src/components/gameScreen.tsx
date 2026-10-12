@@ -42,8 +42,11 @@ interface Props {
   opponentDeck: SavedDeck
   /** Leave the game — wired to the dmgCtrl icon in the game screen's header. */
   onExit: () => void
-  /** Open the Help screen — wired to the ? button in the header. */
-  onHelp: () => void
+  /**
+   * Open Help: the game's own, from the ? button in the header, or the one named section a link
+   * in the settings form asks for.
+   */
+  onHelp: (section?: string) => void
   /** Injectable for deterministic tests; defaults to real randomness. */
   gameOptions?: UseGameOptions
 }
@@ -2067,7 +2070,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
               <GearIcon />
             </button>
             <button
-              onClick={onHelp}
+              onClick={() => onHelp()}
               aria-label="Help"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-line text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
             >
@@ -2127,7 +2130,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         />
       )}
 
-      {settingsOpen && <SettingsOverlay onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <SettingsOverlay onClose={() => setSettingsOpen(false)} onHelp={onHelp} />}
 
       {/* Game over — a modal overlay over the whole screen. */}
       {gameState && gameState.winner !== null && (

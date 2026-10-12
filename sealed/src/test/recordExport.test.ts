@@ -1,14 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { buildGameExport, exportRecord, EXPORT_FORMAT_VERSION } from '../data/recordExport'
 import { withoutCards } from '../data/replayData'
-import type { GameRecord } from '../data/gameRecords'
 import { COMMIT_ID, RELEASE } from '../buildIdentity'
-import { playGame } from '../bench/selfPlay'
-import { benchInputs } from '../bench/decks'
-import { randomAi } from '../ai/randomAi'
-import { resolve } from '../engine/resolve'
 import { replay, type Report } from './helpers/replayReport'
 import { state, CARDS } from './helpers/engineFixtures'
+import { playedRecord } from './helpers/playedRecord'
 
 /**
  * Saved games leave the device as JSON in the replayable-minimum form: the starting position
@@ -19,32 +15,6 @@ import { state, CARDS } from './helpers/engineFixtures'
 
 /** What a file on disk holds: whatever survives `JSON.stringify`. */
 const throughJson = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
-
-/** A record as the app saves it, from a whole game between two bots on the ASH bench deck. */
-function playedRecord(seed: number): GameRecord {
-  const inputs = benchInputs()
-  const game = playGame({
-    deckPlayer: inputs.deck, deckOpponent: inputs.deck, cardDb: inputs.cardDb,
-    aiPlayer: randomAi, aiOpponent: randomAi, firstPlayer: 'player', seed,
-  })
-  const initialState = game.initialState!
-  const finalState = game.moves.reduce((s, m) => resolve(s, m.action), initialState)
-  return {
-    id: `game-${seed}`,
-    playerDeckName: 'Mine',
-    opponentDeckName: 'Theirs',
-    winner: finalState.winner!,
-    startedAt: 1_000,
-    endedAt: 9_000,
-    initialState,
-    moves: game.moves,
-    finalState,
-    undoCount: 2,
-    build: { release: '412', commitId: 'abc1234' },
-    opponentAi: 'beam-reply',
-    humanSeat: 'player',
-  }
-}
 
 describe('withoutCards', () => {
   it('drops the card database and nothing else, leaving the state it was given alone', () => {
@@ -90,6 +60,16 @@ describe('an exported game record', () => {
     expect(exported.undoCount).toBe(2)
     expect(exported.startedAt).toBe(1_000)
     expect(exported.endedAt).toBe(9_000)
+  })
+
+  /**
+   * Whether the player was sharing games is the collection gate's business (`data/collection.ts`).
+   * A file the player downloads by hand is theirs either way, so the mark stays out of it.
+   */
+  it('reads the same whether or not the player was sharing games when it finished', () => {
+    const record = playedRecord(7)
+
+    expect(throughJson(exportRecord({ ...record, consentedAtFinish: true }))).toEqual(throughJson(exportRecord(record)))
   })
 
   /** Absent means unknown, and an export must not turn unknown into a value. */

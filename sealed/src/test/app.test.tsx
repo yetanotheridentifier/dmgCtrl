@@ -5,7 +5,8 @@ import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { saveDeck } from '../data/deckStore'
 import { db } from '../data/db'
-import { defaultSettings, STORAGE_KEY as SETTINGS_KEY } from '../data/settingsStore'
+import { defaultSettings, loadSettings, STORAGE_KEY as SETTINGS_KEY } from '../data/settingsStore'
+import type { Settings } from '../data/settingsStore'
 import type { SwuCard } from '../data/cards'
 
 /**
@@ -30,13 +31,13 @@ const SWU_CARDS: SwuCard[] = [
  * opponent is chosen explicitly as a random built deck, which with one saved deck mirrors it: the
  * default is a generated deck, and these tests are about the shell, not the generator.
  */
-async function startGame(user: ReturnType<typeof userEvent.setup>) {
+async function startGame(user: ReturnType<typeof userEvent.setup>, stored: Partial<Settings> = {}) {
   for (const card of SWU_CARDS) {
     await db.cards.put({ id: `TST_${card.Number}`, json: card, fetchedAt: 1 })
   }
   saveDeck({ name: 'Playable', leader: 'TST_001', base: 'TST_002', cards: [{ id: 'TST_900', count: 30 }] })
   // The opponent replies at once: either side may open, and a paced reply would land mid-assertion.
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), opponentDelayMs: 0 }))
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), opponentDelayMs: 0, ...stored }))
   render(<App />)
 
   await user.selectOptions(screen.getByTestId('opponent-deck-select'), 'random')
@@ -186,5 +187,94 @@ describe('App shell', () => {
     await user.click(screen.getByRole('button', { name: /settings/i }))
 
     expect(screen.getByTestId('setting-base-health')).toHaveValue('remaining')
+  })
+
+  /**
+   * Sharing games to train the bot is asked about once, on the deck screen, and the question must
+   * never stand between the player and a game.
+   */
+  describe('the notice about sharing games', () => {
+    it('is on the deck screen on a first visit, beside the decks and not over them', () => {
+      render(<App />)
+
+      expect(screen.getByTestId('share-games-notice')).toBeInTheDocument()
+      expect(screen.getByTestId('deck-select-screen')).toBeInTheDocument()
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+
+    /** Ignoring it means no: a game starts with the notice untouched, and nobody is opted in. */
+    it('lets a game start without being answered, and takes that as a no', async () => {
+      const user = userEvent.setup()
+      for (const card of SWU_CARDS) {
+        await db.cards.put({ id: `TST_${card.Number}`, json: card, fetchedAt: 1 })
+      }
+      saveDeck({ name: 'Playable', leader: 'TST_001', base: 'TST_002', cards: [{ id: 'TST_900', count: 30 }] })
+      render(<App />)
+      expect(screen.getByTestId('share-games-notice')).toBeInTheDocument()
+
+      await user.selectOptions(screen.getByTestId('opponent-deck-select'), 'random')
+      const row = within(screen.getByTestId('deck-list')).getByText('Playable').closest('li')!
+      const play = within(row).getByRole('button', { name: /^play$/i })
+      expect(play).toBeEnabled()
+      await user.click(play)
+      await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+
+      expect(loadSettings().shareGames).toBe('no')
+
+      // Back on the deck screen it is the pill, and the question is not asked again.
+      await user.click(screen.getByTestId('exit-btn'))
+      expect(screen.queryByTestId('share-games-notice')).toBeNull()
+      expect(screen.getByTestId('share-games-pill')).toHaveTextContent('Improve the bot')
+    })
+
+    it('leaves an opted-in player opted in when a game starts', async () => {
+      const user = userEvent.setup()
+      await startGame(user, { shareGames: 'yes' })
+
+      expect(loadSettings().shareGames).toBe('yes')
+    })
+
+    it('opens Settings from the pill', async () => {
+      const user = userEvent.setup()
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), shareGames: 'no' }))
+      render(<App />)
+
+      await user.click(screen.getByTestId('share-games-pill'))
+
+      expect(screen.getByTestId('settings-overlay')).toBeInTheDocument()
+      expect(screen.getByRole('checkbox', { name: 'Share games to improve the bot' })).not.toBeChecked()
+    })
+
+    it('opens the Help section on what is sent from Settings', async () => {
+      const user = userEvent.setup()
+      render(<App />)
+
+      await user.click(screen.getByRole('button', { name: /settings/i }))
+      await user.click(screen.getByRole('button', { name: 'What is sent?' }))
+
+      const content = screen.getByTestId('help-content')
+      expect(within(content).getByRole('heading', { name: 'Improving the bot' })).toBeInTheDocument()
+      expect(content.innerHTML).not.toContain('Importing a deck')
+
+      // The header's help is the deck screen's whole help again afterwards.
+      await user.click(screen.getByTestId('help-overlay'))
+      await user.click(screen.getByTestId('settings-close'))
+      await user.click(screen.getByRole('button', { name: /help/i }))
+      expect(screen.getByTestId('help-content').innerHTML).toContain('Importing a deck')
+    })
+
+    /** Settings opens in a game too, where the game's own help does not carry this section. */
+    it('opens the same Help section from Settings during a game', async () => {
+      const user = userEvent.setup()
+      await startGame(user)
+
+      await user.click(screen.getByRole('button', { name: /settings/i }))
+      await user.click(screen.getByRole('button', { name: 'What is sent?' }))
+
+      const content = screen.getByTestId('help-content')
+      expect(within(content).getByRole('heading', { name: 'Improving the bot' })).toBeInTheDocument()
+      expect(content.innerHTML).not.toContain('Turn structure')
+      expect(screen.getByTestId('game-board')).toBeInTheDocument()
+    })
   })
 })

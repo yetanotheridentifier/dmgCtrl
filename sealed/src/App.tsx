@@ -3,8 +3,9 @@ import DeckSelectScreen from './components/deckSelectScreen'
 import GameScreen from './components/gameScreen'
 import { HelpOverlay } from './components/helpOverlay'
 import { SettingsOverlay } from './components/settingsOverlay'
+import { ShareGamesNotice } from './components/shareGamesNotice'
 import { GearIcon, HelpIcon } from './components/icons'
-import { SettingsProvider } from './hooks/useSettings'
+import { SettingsProvider, useSettings } from './hooks/useSettings'
 import type { SavedDeck } from './data/deckStore'
 import { RELEASE } from './buildIdentity'
 import { isDev } from './env'
@@ -34,6 +35,13 @@ function AppShell() {
   // unmounted GameScreen and started a different game on the way back (#541). Held here rather
   // than in GameScreen so one overlay serves both screens, with the context taken from `screen`.
   const [helpOpen, setHelpOpen] = useState(false)
+  // Set when help was opened by a link to one section of the guide, which it then shows alone.
+  const [helpSection, setHelpSection] = useState<string | undefined>(undefined)
+  const openHelp = (section?: string) => {
+    setHelpSection(section)
+    setHelpOpen(true)
+  }
+  const { settings, update } = useSettings()
 
   return (
     <div className="min-h-screen text-ink font-sans">
@@ -44,7 +52,7 @@ function AppShell() {
           deck={selectedDeck}
           opponentDeck={opponentDeck}
           onExit={() => setScreen('decks')}
-          onHelp={() => setHelpOpen(true)}
+          onHelp={openHelp}
         />
       ) : (
         <>
@@ -67,7 +75,7 @@ function AppShell() {
                 <GearIcon />
               </button>
               <button
-                onClick={() => setHelpOpen(true)}
+                onClick={() => openHelp()}
                 aria-label="Help"
                 className="w-9 h-9 flex items-center justify-center border-2 border-line rounded-lg text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
               >
@@ -77,26 +85,36 @@ function AppShell() {
           </header>
           <main className="px-6 pt-2 pb-4">
             {screen === 'decks' && (
-              <DeckSelectScreen
-                onPlay={(deck, opponent) => {
-                  setSelectedDeck(deck)
-                  setOpponentDeck(opponent)
-                  setScreen('game')
-                }}
-              />
+              <>
+                {/* Above the deck screen and part of the page: it covers nothing, and every
+                    control below works whether or not it has been answered. */}
+                <ShareGamesNotice onOpenSettings={() => setSettingsOpen(true)} />
+                <DeckSelectScreen
+                  onPlay={(deck, opponent) => {
+                    // The notice is put once. A player who starts a game without answering it has
+                    // not agreed, so that is recorded as a no and the pill takes its place.
+                    if (settings.shareGames === 'unasked') update({ shareGames: 'no' })
+                    setSelectedDeck(deck)
+                    setOpponentDeck(opponent)
+                    setScreen('game')
+                  }}
+                />
+              </>
             )}
           </main>
         </>
       )}
 
       {/* The game screen opens settings from its own header, so this covers the other screens. */}
-      {settingsOpen && screen !== 'game' && <SettingsOverlay onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && screen !== 'game' && <SettingsOverlay onClose={() => setSettingsOpen(false)} onHelp={openHelp} />}
 
       {/* Help serves both screens from here: it renders over whichever is mounted, and takes
-          its content from the screen it was opened on. */}
+          its content from the screen it was opened on. Rendered after settings, so help opened
+          from a link in the settings form sits over it and closing help returns there. */}
       {helpOpen && (
         <HelpOverlay
           context={screen === 'game' ? 'game' : 'decks'}
+          section={helpSection}
           onClose={() => setHelpOpen(false)}
         />
       )}

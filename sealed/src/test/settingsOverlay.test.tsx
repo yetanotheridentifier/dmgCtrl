@@ -5,11 +5,12 @@ import userEvent from '@testing-library/user-event'
 import { SettingsOverlay } from '../components/settingsOverlay'
 import { SettingsProvider } from '../hooks/useSettings'
 import { loadSettings, STORAGE_KEY, defaultSettings, OPPONENT_DELAYS_MS } from '../data/settingsStore'
+import { SHARING_HELP_SECTION } from '../utils/helpSections'
 
-function setup(onClose = vi.fn()) {
+function setup(onClose = vi.fn(), onHelp: (section: string) => void = vi.fn()) {
   render(
     <SettingsProvider>
-      <SettingsOverlay onClose={onClose} />
+      <SettingsOverlay onClose={onClose} onHelp={onHelp} />
     </SettingsProvider>,
   )
   return onClose
@@ -68,7 +69,55 @@ describe('SettingsOverlay', () => {
 
     await user.selectOptions(screen.getByTestId('setting-base-health'), 'remaining')
 
-    expect(loadSettings()).toEqual({ allowUndo: true, baseHealthDisplay: 'remaining', showBugReport: true, opponentDelayMs: 1000 })
+    expect(loadSettings()).toEqual({ allowUndo: true, baseHealthDisplay: 'remaining', showBugReport: true, opponentDelayMs: 1000, shareGames: 'unasked' })
+  })
+
+  describe('sharing games to improve the bot', () => {
+    const toggle = () => screen.getByRole('checkbox', { name: 'Share games to improve the bot' })
+
+    it('says what it does, and that it is off by default', () => {
+      setup()
+      expect(screen.getByTestId('setting-share-games-help')).toHaveTextContent(
+        'Sends finished games (both decks and every decision) to train the bot. Nothing identifies you. Off by default.',
+      )
+    })
+
+    it.each(['unasked', 'no'] as const)('is off when the answer is %s', stored => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ shareGames: stored }))
+      setup()
+      expect(toggle()).not.toBeChecked()
+    })
+
+    it('is on once the player has opted in', () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ shareGames: 'yes' }))
+      setup()
+      expect(toggle()).toBeChecked()
+    })
+
+    it('opts in when turned on and out when turned off', async () => {
+      const user = userEvent.setup()
+      setup()
+
+      await user.click(toggle())
+      expect(toggle()).toBeChecked()
+      expect(loadSettings().shareGames).toBe('yes')
+
+      await user.click(toggle())
+      expect(toggle()).not.toBeChecked()
+      expect(loadSettings().shareGames).toBe('no')
+    })
+
+    it('links to the Help section that says what is sent', async () => {
+      const user = userEvent.setup()
+      const onHelp = vi.fn()
+      setup(vi.fn(), onHelp)
+
+      await user.click(screen.getByRole('button', { name: 'What is sent?' }))
+
+      expect(onHelp).toHaveBeenCalledExactlyOnceWith(SHARING_HELP_SECTION)
+      // Reading about it changes nothing.
+      expect(loadSettings().shareGames).toBe('unasked')
+    })
   })
 
   describe('opponent pace', () => {

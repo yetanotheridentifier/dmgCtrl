@@ -1,18 +1,22 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { RELEASE } from '../buildIdentity'
 import { isDev } from '../env'
-import { helpContentFor } from '../utils/helpSections'
+import { helpContentFor, helpSectionContent } from '../utils/helpSections'
 import type { HelpContext } from '../utils/helpSections'
 
 /**
- * The user guide, showing the part that belongs to the screen it was opened from.
+ * The user guide, showing the part that belongs to the screen it was opened from, or the one
+ * `section` a link asked for, whichever screen that link was on.
  *
  * An overlay rather than a screen: routing away unmounts `GameScreen`, and the game lives
  * entirely in `useGame`'s state and refs, so opening help mid-game used to abandon the game and
  * start a different one. Over the board, nothing unmounts and the game is where it was left.
  */
-export function HelpOverlay({ context, onClose }: { context: HelpContext; onClose: () => void }) {
-  const contentHtml = useMemo(() => helpContentFor(context), [context])
+export function HelpOverlay({ context, section, onClose }: { context: HelpContext; section?: string; onClose: () => void }) {
+  const contentHtml = useMemo(
+    () => (section === undefined ? helpContentFor(context) : helpSectionContent(section)),
+    [context, section],
+  )
   const panel = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

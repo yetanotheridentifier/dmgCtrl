@@ -18,6 +18,7 @@ import { driverAction } from '../ai/concession'
 import type { DescribePart } from '../utils/describeAction'
 import { logEntries } from '../utils/boardDiff'
 import { saveGameRecord } from '../data/gameRecords'
+import { consentStamp } from '../data/collection'
 import { logger } from '../data/log'
 
 export type GameStatus = 'loading' | 'error' | 'playing'
@@ -400,6 +401,8 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       // An opponent handed in as a function has no registered name, so it is left unsaid.
       ...(options.ai ? {} : { opponentAi: OPPONENT_AI }),
       humanSeat: HUMAN,
+      // Marked only if the player is opted in to sharing games at this moment.
+      ...consentStamp(),
     })
   }, [gameState, playerDeck.name, opponentDeck.name, options.ai])
 

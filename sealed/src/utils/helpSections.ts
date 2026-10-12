@@ -4,6 +4,12 @@ import userGuideHtml from '../../docs/userGuide.md'
 export type HelpContext = 'decks' | 'game'
 
 /**
+ * The section on sharing games to train the bot, which Settings links to by name. It belongs to
+ * the deck screen, where the notice is, and is also reachable alone (`helpSectionContent`).
+ */
+export const SHARING_HELP_SECTION = 'Improving the bot'
+
+/**
  * Which of the guide's top-level sections each screen shows, by heading text.
  *
  * The guide stays one file: it is the single owner of player-facing behaviour and is imported
@@ -13,7 +19,7 @@ export type HelpContext = 'decks' | 'game'
  * or newly added heading fails the suite rather than quietly disappearing from the help.
  */
 export const HELP_SECTIONS: Record<HelpContext, string[]> = {
-  decks: ['Importing a deck', 'Caching a full set', 'Choosing an opponent'],
+  decks: ['Importing a deck', 'Caching a full set', 'Choosing an opponent', SHARING_HELP_SECTION],
   game: ['Playing a game', 'After the game'],
 }
 
@@ -71,4 +77,14 @@ export function helpContentFor(context: HelpContext): string {
   const wanted = new Set(HELP_SECTIONS[context])
   const chosen = sections.filter(s => wanted.has(s.title)).map(s => s.html)
   return [preamble, ...chosen, footer].filter(part => part.length > 0).join('\n')
+}
+
+/**
+ * One section by its heading, with the footer and without the preamble: what a link to a single
+ * section shows, whichever screen it is followed from. Empty for a heading the guide lacks.
+ */
+export function helpSectionContent(title: string): string {
+  const { sections, footer } = splitSections(userGuideHtml)
+  const section = sections.find(s => s.title === title)
+  return section ? [section.html, footer].filter(part => part.length > 0).join('\n') : ''
 }

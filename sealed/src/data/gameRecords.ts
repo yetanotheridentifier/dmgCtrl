@@ -50,6 +50,13 @@ export interface GameRecord {
    * whose decisions it is reading.
    */
   humanSeat?: PlayerId
+  /**
+   * Present when the player was opted in to sharing games as this one finished, and the only thing
+   * that says so afterwards: opting in covers games finished from then on, never the ones already
+   * saved. Written with the record (`consentStamp` in `collection.ts`), not an indexed key, and
+   * absent on every record finished without consent, which the collection gate reads as a refusal.
+   */
+  consentedAtFinish?: true
 }
 
 /** Both identifiers of a build: the release a person quotes and the commit that pins the code. */

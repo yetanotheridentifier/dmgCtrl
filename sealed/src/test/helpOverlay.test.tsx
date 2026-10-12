@@ -32,6 +32,17 @@ describe('HelpOverlay', () => {
     }
   })
 
+  /** Opened from a link to one section, it shows that section whichever screen is underneath. */
+  it.each(['decks', 'game'] as const)('shows one named section alone when asked for it over the %s screen', context => {
+    render(<HelpOverlay context={context} section="Improving the bot" onClose={vi.fn()} />)
+    const content = screen.getByTestId('help-content')
+
+    expect(within(content).getByRole('heading', { name: 'Improving the bot' })).toBeInTheDocument()
+    expect(content.innerHTML).not.toContain('Importing a deck')
+    expect(content.innerHTML).not.toContain('Turn structure')
+    expect(content).toHaveTextContent(/unofficial fan site/i)
+  })
+
   it('shows the build tag at the foot of the page in prod', () => {
     render(<HelpOverlay context="decks" onClose={vi.fn()} />)
     expect(screen.getByTestId('build-tag')).toHaveTextContent(RELEASE)
