@@ -12,7 +12,7 @@ import ibhSet from '../test/fixtures/ibhSet.json'
 import { withArt } from '../data/bundledSets'
 import { cardId, fromSearchRow, type SwuCard } from '../data/cards'
 import { SET_PROGRESS } from '../data/implementedCards'
-import { normalPrintings } from './triage'
+import { normalPrintings } from '../data/normalPrintings'
 
 /**
  * The card pools the bench can draw on: one bundled fixture per set, and the rules for naming a list

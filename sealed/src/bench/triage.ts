@@ -1,4 +1,5 @@
 import type { SwuCard } from '../data/cards'
+import { normalPrintings, printingKey } from '../data/normalPrintings'
 import { reprintCanonicalId } from '../data/reprints'
 import { CARD_DATA_CORRECTIONS } from '../engine/cardDataCorrections'
 
@@ -217,17 +218,6 @@ export interface TriageReport {
 }
 
 /**
- * A card's identity across its printings: type, name, subtitle. Type is load-bearing because a
- * leader and a unit can share a name with no subtitle to separate them (ASH has 13 such collisions).
- *
- * This mirrors `printingKey` in `data/printings.ts`, which is asserted by test rather than imported:
- * that module pulls in Dexie, and the bench runs in node with no IndexedDB.
- */
-export function identityKey(card: Pick<SwuCard, 'Type' | 'Name' | 'Subtitle'>): string {
-  return [card.Type ?? '', card.Name ?? '', card.Subtitle ?? ''].join('|').toLowerCase()
-}
-
-/**
  * A unit's keywords as the engine plays them: the source's list, or the corrected one where the source
  * has it wrong (`CARD_DATA_CORRECTIONS`: Sullustan Sapper is listed with Shielded and prints
  * Overwhelm). Read off the raw list, a corrected card's printed keyword looks like ability text and
@@ -248,27 +238,6 @@ export function residualAbility(card: SwuCard): string {
   let t = (card.FrontText ?? '').trim().replace(/\([^)]*\)/g, '')
   for (const k of keywordsOf(card)) t = t.replace(new RegExp(`\\b${k.trim()}\\b(\\s+\\d+)?(\\s*\\[[^\\]]*\\])?`, 'gi'), '')
   return t.replace(/[\s.,]+/g, ' ').trim()
-}
-
-/**
- * Normal printings only, one row per real card. A set listing carries every variant, and some sets
- * reprint one card at several collector numbers (IBH's 104 slots are 51 cards), so implementing it
- * once covers every printing. Name plus subtitle identifies a card; the lowest number wins.
- *
- * **De-duplication is within a set, never across sets.** A card reprinted in a later set is a
- * separate card id, and the engine registers abilities per id, so collapsing the two would
- * undercount the work. The set code is therefore part of the key, and cross-set reprints are
- * reported separately by `triage` because one registration can cover several ids.
- */
-export function normalPrintings(pool: SwuCard[]): SwuCard[] {
-  const seen = new Map<string, SwuCard>()
-  for (const c of pool) {
-    if (c.VariantType != null && c.VariantType !== 'Normal') continue
-    const key = `${c.Set}||${identityKey(c)}`
-    const prev = seen.get(key)
-    if (!prev || Number(c.Number) < Number(prev.Number)) seen.set(key, c)
-  }
-  return [...seen.values()]
 }
 
 /**
@@ -399,7 +368,7 @@ export function triage(pool: SwuCard[]): TriageReport {
   for (const c of triaged) {
     const source = cards.find(x => `${x.Set}_${x.Number}` === c.id)
     if (!source) continue
-    const key = identityKey(source)
+    const key = printingKey(source)
     const group = byIdentity.get(key)
     if (group) group.push(c)
     else byIdentity.set(key, [c])
