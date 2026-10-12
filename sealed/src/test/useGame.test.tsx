@@ -245,6 +245,25 @@ describe('useGame', () => {
       expect(result.current.log).toHaveLength(logBefore)
     })
 
+    /** What an action changed is logged under it, and is taken back with it. */
+    it('logs what an attack changed under the attack, and rewinds those lines with it', async () => {
+      const result = await atRoundOne()
+      act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
+      // Round 2: the unit readied in the regroup, so it can attack.
+      act(() => result.current.act({ type: 'pass' }))
+      while (result.current.gameState!.phase !== 'action') act(() => result.current.act(result.current.legal[result.current.legal.length - 1]))
+      const logBefore = result.current.log
+      const attack = result.current.legal.find(a => a.type === 'attack' && a.target.kind === 'base')!
+
+      act(() => result.current.act(attack))
+      const added = result.current.log.slice(logBefore.length)
+      expect(added[0]).toMatchObject({ by: 'player', text: 'Attack base with Big Test Unit' })
+      expect(added[1]).toMatchObject({ by: 'player', outcome: true, text: "Opponent's base takes 30 damage" })
+
+      act(() => result.current.undo())
+      expect(result.current.log).toEqual(logBefore)
+    })
+
     it('rolls back the AI’s reply along with the player’s action', async () => {
       const result = await atRoundOne()
       // The AI has already acted during setup, so count its replies rather than their presence.

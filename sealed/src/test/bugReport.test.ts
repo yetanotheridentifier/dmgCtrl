@@ -91,6 +91,16 @@ describe('buildReportMarkdown', () => {
     expect(md).toContain('Pass')
   })
 
+  /** What an action changed sits under it, indented, with no actor of its own. */
+  it('indents outcome lines under the action that caused them', () => {
+    const md = report({ log: [
+      { by: 'player', text: 'Attack base with Big Unit' },
+      { by: 'player', text: "Opponent's base takes 3 damage", outcome: true },
+      { by: 'opponent', text: 'Pass' },
+    ] })
+    expect(md).toContain("You  Attack base with Big Unit\n       Opponent's base takes 3 damage\nOpp  Pass")
+  })
+
   /**
    * The replay data is the point of the report: `initialState` + `moves` re-resolve to the exact
    * final state (see deterministicReplay.test.ts), so a report is a runnable fixture rather than a

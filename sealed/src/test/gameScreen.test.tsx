@@ -684,6 +684,22 @@ describe('GameScreen', () => {
     expect(gameState).toHaveTextContent(/init/i)
   })
 
+  /** What an action changed is a line of its own under the action, with no actor repeated beside it. */
+  it('renders an outcome line under its action, with no actor label', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+    await user.click(screen.getByTestId('hand-card-3'))
+    // Pass through the regroup so the unit readies, then attack the base with it.
+    await user.click(screen.getByRole('button', { name: /^pass$/i }))
+    await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+    await user.click(screen.getByTestId('board-unit-u1'))
+    await user.click(screen.getByTestId('target-opponent-base'))
+
+    const outcomes = within(screen.getByTestId('game-log')).getAllByTestId('log-outcome')
+    expect(outcomes.some(o => /Opponent's base takes \d+ damage/.test(o.textContent ?? ''))).toBe(true)
+    for (const o of outcomes) expect(o).not.toHaveTextContent(/^(You|Opp)/)
+  })
+
   it('does not label an empty arena "empty"', async () => {
     await renderBoard()
     expect(screen.getByTestId('player-space-units')).not.toHaveTextContent(/empty/i)
