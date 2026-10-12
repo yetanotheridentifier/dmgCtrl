@@ -19,9 +19,17 @@ export interface Settings {
    * while developing, off in the shipped build, and available to anyone who wants to report.
    */
   showBugReport: boolean
+  /**
+   * The least time, in milliseconds, between one opponent action being shown and the next. Zero
+   * shows the opponent's whole reply at once. One of `OPPONENT_DELAYS_MS`.
+   */
+  opponentDelayMs: number
 }
 
 const VALID_BASE_HEALTH_DISPLAY: BaseHealthDisplay[] = ['damage', 'remaining']
+
+/** The opponent paces on offer, fastest first. Zero is instant. */
+export const OPPONENT_DELAYS_MS: readonly number[] = [0, 250, 500, 1000, 2000]
 
 /**
  * A function rather than a constant: `allowUndo` reads the build, and `env.isDev` is mocked
@@ -32,6 +40,7 @@ export function defaultSettings(): Settings {
     allowUndo: isDev(),
     baseHealthDisplay: 'damage',
     showBugReport: isDev(),
+    opponentDelayMs: 500,
   }
 }
 
@@ -57,6 +66,9 @@ export function loadSettings(): Settings {
         ? (stored.baseHealthDisplay as BaseHealthDisplay)
         : defaults.baseHealthDisplay,
       showBugReport: typeof stored.showBugReport === 'boolean' ? stored.showBugReport : defaults.showBugReport,
+      opponentDelayMs: OPPONENT_DELAYS_MS.includes(stored.opponentDelayMs as number)
+        ? (stored.opponentDelayMs as number)
+        : defaults.opponentDelayMs,
     }
   } catch {
     return defaults

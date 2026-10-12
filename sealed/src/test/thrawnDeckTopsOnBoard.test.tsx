@@ -44,6 +44,7 @@ const identity = <T,>(arr: T[]) => arr
 const OPTS: UseGameOptions = {
   shuffle: identity,
   firstPlayer: 'player',
+  opponentDelayMs: 0,
   rngSeed: 1,
   ai: s => {
     const moves = legalMoves(s)

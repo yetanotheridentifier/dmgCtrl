@@ -257,7 +257,7 @@ describe('GameScreen', () => {
       expect(screen.getByTestId('game-log')).not.toHaveTextContent('Opp')
 
       // Half a second later it has, and the player is asked for resources.
-      await waitFor(() => expect(screen.queryByText('Opponent…')).toBeNull())
+      await waitFor(() => expect(screen.queryByText('Opponent…')).toBeNull(), { timeout: 5000 })
       expect(screen.getByTestId('hand-card-0')).toBeInTheDocument()
     })
 

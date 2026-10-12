@@ -52,6 +52,7 @@ const identity = <T,>(arr: T[]) => arr
 const OPTS: UseGameOptions = {
   shuffle: identity,
   firstPlayer: 'player',
+  opponentDelayMs: 0,
   ai: s => {
     const moves = legalMoves(s)
     return moves.length > 0 ? moves[moves.length - 1] : null

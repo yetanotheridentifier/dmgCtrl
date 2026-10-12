@@ -80,6 +80,7 @@ The **cog** in the header opens **Settings**, from the deck screen and from insi
 
 - **Allow undo**: shows the **Undo** button. Off by default. See **Undo** above for what it does and why it's a practice tool.
 - **Show the bug report button**: shows the **bug button** in the game header. Off by default.
+- **Opponent pace**: how quickly the opponent's actions follow one another. The opponent's actions appear **one at a time**, each with its lines in the log, so you can see what an action did before the next one lands. The pace is the **least** time between two of them: **half a second** by default, with quicker and slower choices and **Instant**, which shows the opponent's whole reply at once. It is not added to the opponent's thinking time: when the opponent takes longer than the pace to decide, its action appears as soon as it is ready. While its actions are still appearing the **Action** column reads **Opponent…** and there is nothing for you to click, **Undo** included; your turn comes back when the last one has been shown. Changing the pace mid-game applies from the opponent's very next action.
 - **Base health**: whether a base shows the **damage it has taken**, counting up to its printed health (the default, matching the physical game's damage tokens), or the **health it has left**, counting down to zero. Purely what's drawn on the base card: the game is played and won identically either way.
 
 ### Turn structure

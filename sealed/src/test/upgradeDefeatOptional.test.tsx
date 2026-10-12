@@ -55,7 +55,7 @@ const aggressiveAi = (s: GameState): Action | null => {
   const moves = legalMoves(s)
   return moves.find(m => m.type === 'playUnit') ?? moves.find(m => m.type === 'attack') ?? moves[moves.length - 1] ?? null
 }
-const OPTS: UseGameOptions = { shuffle: identity, firstPlayer: 'player', ai: aggressiveAi }
+const OPTS: UseGameOptions = { shuffle: identity, firstPlayer: 'player', ai: aggressiveAi, opponentDelayMs: 0 }
 
 describe('Clan Vizsla Soldier: the may-defeat-an-upgrade choice is reachably optional (#416)', () => {
   it('offers a Decline button, and declining leaves the upgrade in place', async () => {

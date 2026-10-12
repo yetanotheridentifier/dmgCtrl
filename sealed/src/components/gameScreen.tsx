@@ -1236,7 +1236,9 @@ function PlayerBar({ state, hand, action }: { state: GameState; hand: ReactNode;
 }
 
 export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOptions }: Props) {
-  const { status, errorDetail, gameState, legal, log, act, undo, canUndo, cancelChoice, rematch, replayData, unresolvedPrintings } = useGame(deck, opponentDeck, gameOptions)
+  const { settings } = useSettings()
+  // The opponent's pace is the player's setting; `gameOptions` (tests) may pin one of its own.
+  const { status, errorDetail, gameState, legal, log, act, undo, canUndo, cancelChoice, rematch, replayData, unresolvedPrintings } = useGame(deck, opponentDeck, { opponentDelayMs: settings.opponentDelayMs, ...gameOptions })
   // Board affordance: click an actionable friendly unit to select it,
   // then click a highlighted target to attack. Any action clears the selection.
   const [selectedAttacker, setSelectedAttacker] = useState<string | null>(null)
@@ -1262,7 +1264,6 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // A button choice put aside to read the board (only where it cannot be cancelled): the id of the
   // choice whose overlay is hidden. Any action clears it, so the next choice always shows.
   const [hiddenChoice, setHiddenChoice] = useState<string | null>(null)
-  const { settings } = useSettings()
 
   async function submitReport(title: string, description: string) {
     const { initialState, moves } = replayData()
