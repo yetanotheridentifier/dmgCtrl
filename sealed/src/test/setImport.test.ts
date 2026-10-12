@@ -4,6 +4,15 @@ import { db } from '../data/db'
 import { importSet, cachedSetCount } from '../data/setImport'
 import { getCard, SWU_DB_API, type SwuCard } from '../data/cards'
 
+// These tests are about importing a set into the cache and reading it back. They name real sets,
+// which are bundled in full, so nothing is bundled here. The bundled sets, and the cache laid over
+// them, are covered in `bundledSetTier.test.ts`.
+vi.mock('../data/bundledSets', async importOriginal => ({
+  ...(await importOriginal<typeof import('../data/bundledSets')>()),
+  bundledCard: () => Promise.resolve(undefined),
+  bundledSetCards: () => Promise.resolve([]),
+}))
+
 const SEARCH_PAYLOAD = {
   total_cards: 3,
   data: [

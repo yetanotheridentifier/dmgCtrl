@@ -47,7 +47,7 @@ describe('a first visit with the card API unreachable', () => {
     render(<DeckSelectScreen onPlay={onPlay} />)
 
     // The set both generators start on is here without an import, so there is no failed fetch to report.
-    expect(await screen.findByTestId('generated-deck-subtitle')).toHaveTextContent(`Built from HMW (${hmwSet.length} cards cached)`)
+    await waitFor(() => expect(screen.getByTestId('generated-deck-subtitle')).toHaveTextContent(`Built from HMW (${hmwSet.length} cards cached)`))
     await user.click(screen.getByTestId('generate-deck-button'))
     await user.click(screen.getByTestId('play-generated-button'))
 
@@ -65,8 +65,8 @@ describe('a first visit with the card API unreachable', () => {
     expect(game.players.player.hand).toHaveLength(6)
     expect(result.current.unresolvedPrintings).toEqual([])
     // The art still streams from the proxy, so every card has to know where its own is.
-    expect(game.cardDb[deck.leader].frontArt).toMatch(/^https:\/\/cdn\.swu-db\.com\/images\/cards\/HMW\//)
-    expect(game.cardDb[deck.leader].backArt).toBeDefined()
+    expect(game.cards[deck.leader].frontArt).toMatch(/^https:\/\/cdn\.swu-db\.com\/images\/cards\/HMW\//)
+    expect(game.cards[deck.leader].backArt).toBeDefined()
     expect(fetchMock).not.toHaveBeenCalled()
     expect(await db.cards.count()).toBe(0)
   })
@@ -86,7 +86,7 @@ describe('a first visit with the card API unreachable', () => {
     const { result } = renderHook(() => useGame(deck, deck, OPTS))
     await waitFor(() => expect(result.current.status).toBe('playing'))
 
-    expect(result.current.gameState!.cardDb.SOR_010.name).toBe('Darth Vader')
+    expect(result.current.gameState!.cards.SOR_010.name).toBe('Darth Vader')
     expect(result.current.unresolvedPrintings).toEqual([])
     expect(fetchMock).not.toHaveBeenCalled()
   })

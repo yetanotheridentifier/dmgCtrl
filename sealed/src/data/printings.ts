@@ -4,6 +4,7 @@ import type { SwuCard } from './cards'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { logger } from './log'
 import { bundledCanonicalId } from './bundledPrintings'
+import { bundledSetCards } from './bundledSets'
 import { reprintCanonicalId } from './reprints'
 
 /**
@@ -21,7 +22,8 @@ import { reprintCanonicalId } from './reprints'
  * Two tiers. First, a bundled static map (`bundledPrintings.ts`, `scripts/generatePrintingMap.mjs`)
  * generated from a set's FULL printing listing, resolved synchronously with no IndexedDB or
  * network dependency. Second, for anything not bundled (another set, or a printing released since
- * the map was last generated), the dynamic path below: cache first, then a network fetch of the
+ * the map was last generated), the dynamic path below: cache first, then the bundled set
+ * (`bundledSets.ts`, which is a Normal-only listing), then a network fetch of the
  * set's Normal-only listing, joined by `Type|Name|Subtitle` since the listing cannot be joined on
  * number. That join was verified unambiguous for ASH across its full 925-row printing list, not
  * just the 264 Normal rows (#389): every variant joins to exactly one Normal row.
@@ -109,9 +111,15 @@ async function indexFromNetwork(set: string): Promise<PrintingIndex | undefined>
   }
 }
 
-/** The set's index, cache first then network. One lookup per set, whatever the card count. */
+/** A bundled set is its Normal listing, which is what the network would be asked for. */
+async function indexFromBundle(set: string): Promise<PrintingIndex | undefined> {
+  const cards = await bundledSetCards(set)
+  return cards.length > 0 ? buildPrintingIndex(cards) : undefined
+}
+
+/** The set's index: cache first, then the bundled set, then network. One lookup per set, whatever the card count. */
 async function printingIndex(set: string, cache: Map<string, PrintingIndex | undefined>): Promise<PrintingIndex | undefined> {
-  if (!cache.has(set)) cache.set(set, (await indexFromCache(set)) ?? (await indexFromNetwork(set)))
+  if (!cache.has(set)) cache.set(set, (await indexFromCache(set)) ?? (await indexFromBundle(set)) ?? (await indexFromNetwork(set)))
   return cache.get(set)
 }
 
