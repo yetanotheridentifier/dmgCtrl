@@ -753,6 +753,15 @@ more.
 cards use and which is answered by `handIndex`; `playCardFrom` is what a play of any other type, or
 out of any other zone, uses.
 
+**Both are read against the board they are answered on, not the one they were raised on.** A
+choice's `candidates` are what could be played when it was raised, and its controller can answer
+another of their choices first: a second Plot card played while Fully Armed and Operational's "play a
+unit from your hand" is still waiting spends resources that play was counting on. So `legalMoves`
+offers a candidate only while its slot still holds that card and its controller can still pay for it
+(`canPlayFrom`, and `handUnitCost` with `canPay` for a hand unit, which is also the price
+`resolveAccept` charges). A `playUnitFromHand` with nothing left to offer gets a decline whether or
+not its card says "may": the play lapses, as it does when there is nothing to list at the raise.
+
 ### "For this phase, you may play that card from a discard pile"
 
 The one play-from-a-pile shape that is **not** a choice. It is a standing permission on the **Play a

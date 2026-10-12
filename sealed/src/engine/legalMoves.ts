@@ -425,6 +425,11 @@ export function eventsBannedFor(state: GameState, playerId: PlayerId): boolean {
   return (state.eventsBanned ?? []).includes(playerId)
 }
 
+/** What `owner` pays for a hand unit an ability plays at `costDelta` off (or on) its price. */
+export function handUnitCost(state: GameState, owner: PlayerId, card: EngineCard, costDelta: number): number {
+  return Math.max(0, effectiveCost(state, owner, card) + costDelta)
+}
+
 export function affordableHandUnits(state: GameState, owner: PlayerId, extraResourceCost: number, costDelta: number): HandCardRef[] {
   const p = state.players[owner]
   const budget = payable(state, owner) - extraResourceCost
@@ -432,9 +437,20 @@ export function affordableHandUnits(state: GameState, owner: PlayerId, extraReso
   p.hand.forEach((cardId, handIndex) => {
     const card = state.cards[cardId]
     if (card?.type !== 'unit') return
-    if (Math.max(0, effectiveCost(state, owner, card) + costDelta) <= budget) out.push({ handIndex, cardId })
+    if (handUnitCost(state, owner, card, costDelta) <= budget) out.push({ handIndex, cardId })
   })
   return out
+}
+
+/**
+ * Whether a unit a `playUnitFromHand` choice listed can still be played: its hand slot still holds
+ * it, and its controller can still pay for it. Asked when the choice is answered rather than trusted
+ * from the raise, since another of their choices can be answered first and spend resources.
+ */
+function handUnitStillPlayable(state: GameState, owner: PlayerId, ref: HandCardRef, costDelta: number): boolean {
+  const card = state.cards[ref.cardId]
+  if (card?.type !== 'unit' || state.players[owner].hand[ref.handIndex] !== ref.cardId) return false
+  return canPay(state, owner, handUnitCost(state, owner, card, costDelta))
 }
 
 /**
@@ -1076,9 +1092,12 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'playUnitFromHand': {
-        // Play a chosen hand unit — one move per affordable candidate. Optional for a "may" (Crix Madine).
-        for (const { handIndex } of choice.candidates) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
-        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        // Play a chosen hand unit: one move per candidate that can still be paid for, which is read
+        // here as it is for `playCardFrom`. Optional for a "may" (Crix Madine). A mandatory play
+        // with nothing left to offer lapses, as it does when there is nothing to list at the raise.
+        const offered = choice.candidates.filter(ref => handUnitStillPlayable(state, choice.controller, ref, choice.costDelta))
+        for (const { handIndex } of offered) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
+        if (choice.optional || offered.length === 0) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'selectUnitToExhaust': {

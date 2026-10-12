@@ -15,6 +15,7 @@ import triggerOrderNotOffered from '../fixtures/reports/triggerOrderNotOffered.j
 import minefieldArenaChoice from '../fixtures/reports/minefieldArenaChoice.json'
 import nestedDeployShieldTarget from '../fixtures/reports/nestedDeployShieldTarget.json'
 import palpatinesReturnTwoPlays from '../fixtures/reports/palpatinesReturnTwoPlays.json'
+import plotSpendsBeforePlayUnit from '../fixtures/reports/plotSpendsBeforePlayUnit.json'
 import rampResourceReady from '../fixtures/reports/rampResourceReady.json'
 import shieldedSentinelLockout from '../fixtures/reports/shieldedSentinelLockout.json'
 import sloaneSelfSentinel from '../fixtures/reports/sloaneSelfSentinel.json'
@@ -55,7 +56,7 @@ const ashCards = ashSet as SwuCard[]
 const REPORTS: Record<string, unknown> = {
   advantageToEnemy, attackBuffPersists, baylanExhaust, cassianBaseAttackerAttacked, debuffOnOwnUnit, deployedLeaderExhaust,
   exhaustedLeaderDraw, grassrootsHeal, haulcraftPrompt, hondoTopCard, kimogilaArena, maeShieldAmbush, minefieldArenaChoice,
-  nestedDeployShieldTarget, palpatinesReturnTwoPlays, rampResourceReady,
+  nestedDeployShieldTarget, palpatinesReturnTwoPlays, plotSpendsBeforePlayUnit, rampResourceReady,
   shieldedSentinelLockout, shieldedSentinelPing, sloaneSelfSentinel, triggerOrderNotOffered,
   triggerProbeOverflow, vaneFriendlyUpgrade, warriorAmbushDecline,
 }
