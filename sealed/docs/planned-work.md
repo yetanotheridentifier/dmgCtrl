@@ -106,8 +106,8 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
 
 ## After the baseline
 
-- **Epic 7 data pipeline** (#403 export, #404 consent, #405 collection Worker, #406 training store).
-  #403 is small and would let a self-play corpus accumulate from the current bot immediately.
+- **Epic 7 data pipeline** (#404 consent, #405 collection Worker, #406 training store). Saved games
+  already export to a local JSON file, so a corpus can be pulled off a device by hand in the meantime.
 
 ## The card programme (second stream)
 
