@@ -247,6 +247,14 @@ less `cards`. The reader rebuilds the database from the cards the position names
 record also leaves out `finalState`, which replaying the moves produces, and its `id`. See
 "Exporting game records" in [operations.md](operations.md) for the file.
 
+**Replaying it is one implementation.** `engine/replay.ts` puts a card database back on a starting
+position (`withCardDb`, which names any card the database lacks) and re-resolves the moves to every
+state in order (`replayStates`). The test harness that replays a filed report builds on it with the
+ASH fixture, and the bench's `--rows` mode builds on it with every bundled set to turn exported games
+into training rows, one per move (`bench/trainingRows.ts`, see "Training rows" in
+[ai-benchmark.md](ai-benchmark.md)). That transformation is offline and reads only export files:
+nothing in the app calls it.
+
 **Sending a game to train the bot goes through one gate.** `recordForCollection`
 (`data/collection.ts`) is the only function that turns a record into an outbound payload, and it
 returns `null` unless both of these hold:

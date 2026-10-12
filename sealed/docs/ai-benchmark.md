@@ -840,7 +840,9 @@ how the bench found and pinned two real hangs during its own construction.
 
 **Load it with that harness, never by parsing the JSON.** `cards` is stripped when a fixture is
 written and the harness rebuilds it from the ASH snapshot on load; a hand-rolled loader throws on the
-first move, inside `defeated`, for reasons that have nothing to do with the bug being chased.
+first move, inside `defeated`, for reasons that have nothing to do with the bug being chased. Code
+outside the tests that replays a game uses what the harness is built on, `withCardDb` and
+`replayStates` in `src/engine/replay.ts`, and brings its own card data.
 
 **A fixed engine can make an older report unreplayable**, because its moves answer the position the
 defect produced. `replayUpTo` stops before that point. `replayWith` and `replaySteps` take inserts,
@@ -1673,6 +1675,86 @@ FROM matchups a JOIN matchups b ON a.deck_a = b.deck_a AND a.deck_b = b.deck_b
 WHERE a.run_id = ? AND b.run_id = ? GROUP BY a.deck_a ORDER BY delta;
 ```
 
+## Training rows: exported games as model input
+
+```bash
+npm run bench --prefix sealed -- --rows EXPORT.json [EXPORT.json ...] --out ROWS.jsonl [--legal]
+```
+
+Takes the files `__sealedExportGames()` downloads (see "Exporting game records" in
+[operations.md](operations.md)), replays every record through the resolver, and writes **one row per
+recorded move** to `--out` as JSON Lines: a JSON object to a line, in game order and then move order.
+`--out` is required and is written afresh on each run, so the file holds exactly its inputs' rows. As
+with `npm run tune`, prefer absolute paths: `npm run --prefix sealed` runs with `sealed/` as the
+working directory.
+
+One row shape serves both uses. Imitation reads `state` and `action`; value learning reads `state` and
+`outcome`. The state is nearly all of a row's bytes and both need it, so two files would hold it twice.
+
+| Field | Meaning |
+| --- | --- |
+| `formatVersion` | the row format, 1. Raised when a reader of older rows would misread newer ones |
+| `gameKey` | groups a game's rows: a hash of the record's starting position and moves |
+| `moveIndex`, `moveCount` | which of the game's moves this is, from zero, and how many there were |
+| `mover` | the seat that made the move, `player` or `opponent` |
+| `decidedBy` | `human` when the mover is the record's `humanSeat`, `ai` when it is the other seat, `unknown` when the record has no `humanSeat` |
+| `outcome` | `win`, `loss` or `draw`, **from the mover's side** |
+| `information` | `full`, always. See below |
+| `build`, `opponentAi`, `humanSeat`, `undoCount` | the record's provenance as exported, each left out when the record never had it |
+| `action` | the move that was made |
+| `chosenIndex`, `legalMoves` | only with `--legal`: every move the engine offered in the position, and where `action` is in that list |
+| `state` | the position the move was made in: the engine's game state without its card database |
+
+So a corpus splits by who decided (`decidedBy`), by which bot (`opponentAi`) and by which build played
+the game, and a game played with take-backs can be told from one played straight through (`undoCount`).
+
+**The state holds everything, including what the mover could not see.** Both hands and both decks, in
+draw order, are in every state. Nothing in the engine projects a state down to one seat's view, and
+the transformation does not invent one: each row names its `mover` and says `information: 'full'`, and
+hiding the other seat's hand and both decks' order is the job of whatever derives features from a row.
+A model fed the state as it stands learns from cards the mover never saw. The bot's own evaluation
+draws that line by reading only its own hand and no deck (see "The two halves of `evaluate`" in
+[ai-model.md](ai-model.md)).
+
+**No features are derived.** No model is chosen, so the row keeps the engine's own state and whatever a
+model needs is computed from it later. A reader that needs card data joins it back on with
+`trainingCardDb()`, which is how the rows are made.
+
+**The outcome is replayed, and checked.** The winner comes from replaying the moves, and a record whose
+replay does not end in its stored `winner` is refused: it is named on standard error with the reason,
+contributes no rows, and the run exits 1. The records that do replay are still written. A record is
+refused when
+
+- it names a card that is in none of the bundled set fixtures (the ids are listed),
+- a move throws in the resolver, which includes a move left over after the game is won,
+- the moves run out before there is a winner, or
+- the replayed winner is not the recorded one.
+
+Any of the last three on a record with a `build` usually means the game was played by a build whose
+rules have since changed. A file that is not an export, or is in an export format this build does not
+read, stops the run with exit 2.
+
+**Any bundled set replays.** The card database is built from every set fixture (`bench/setPools.ts`),
+which are the files the app ships as its bundled sets. The app plays a game on the Normal ids of its
+cards, so those are the ids a record holds, reprints under the id the engine implements. The one case
+that cannot be replayed is a printing the app could not resolve when the game started, which played
+under its own id as a card with no abilities and is in no fixture.
+
+**Legal moves are opt-in.** `legalMoves(state)` lists them again from a row's own state, so by default
+they are left out. `--legal` carries them for a reader with no engine, at about 11% more bytes (a
+position offers 6 moves on average, 34 at most, over the games below). `chosenIndex` is -1 for an
+offer to concede, which the engine never lists; the summary counts those as moves off the list.
+
+**The same game exported twice gives the same rows twice.** Nothing is deduplicated here. `gameKey`
+depends only on the starting position and the moves, so a later stage can drop the repeat by it, and
+the export needs no record id for that.
+
+Size, measured over ten `beam-reply` mirror games on the bench deck: 883 rows, **88 a game**, **about
+3.0 KB a row** (states run from 1.2 KB at the start to 4.2 KB late), so 264 KB a game against 8 KB for
+the same game in the export. Consecutive states differ by little, so gzip takes the file to 3% of its
+size (76 KB for the ten games). The transformation itself takes 0.2s for those ten games. A game
+against a person will differ in length; that has not been measured.
+
 ## Where results go: the SQLite database
 
 Every run is saved to a local SQLite database at `bench-results/bench.db` (both `bench-results/` and
@@ -1822,6 +1904,10 @@ eight of eighteen modules were missing.
 - `bench/triage.ts` the card-pool classifier behind `--triage`. Pure, apart from `fetchSets`. Holds
   the tool's model of the engine: implemented keywords, dispatched trigger points, unexpressible
   mechanics. Those lists shrink as mechanics land.
+- `bench/trainingRows.ts` exported games as training rows behind `--rows`: one row per recorded move,
+  made by replaying the record, with the replayed winner checked against the stored one. Also owns the
+  card database a record is replayed against (`trainingCardDb`, every bundled set) and the key that
+  groups a game's rows.
 - `bench/main.ts` the command line: the only impure file (reads arguments, prints, saves).
 
 ## A note on trusting numbers while the engine still has bugs

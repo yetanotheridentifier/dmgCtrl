@@ -407,6 +407,28 @@ bundled ASH set, so a game whose decks hold cards from another set needs those c
 `extra`; it throws naming the missing ids otherwise. A record does not say which sets it needs: read
 them off the card ids in its `initialState`.
 
+### Turning an export into training rows
+
+One command replays every game in one or more export files and writes a row per move, as JSON Lines:
+
+```bash
+npm run bench --prefix sealed -- --rows /path/to/dmgctrl-sealed-games-<timestamp>.json --out /path/to/rows.jsonl
+```
+
+Use absolute paths: the command runs with `sealed/` as its working directory. `--out` is overwritten.
+Add `--legal` to carry each position's legal moves on its row. It prints how many games and rows it
+wrote, the size, and the time, and it needs no network and no card cache: the cards come from the
+bundled set fixtures, so a game from any bundled set replays.
+
+A game that does not replay to its recorded winner is listed as `refused` with the reason, gives no
+rows, and makes the command exit 1; the other games are still written. That usually means the game
+was played by a build whose rules have since changed, so check the record's `build`. Exit 2 means a
+file was not an export at all, or is in a newer export format.
+
+Each row holds the whole game state, both hands and both decks included, with the seat that moved
+named beside it. The row format, what each field means and the measured sizes are under "Training
+rows" in [ai-benchmark.md](ai-benchmark.md).
+
 ## Diagnostics & logging
 
 ### Where bench artefacts live

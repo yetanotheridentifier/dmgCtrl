@@ -106,11 +106,17 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
 
 ## After the baseline
 
-- **Epic 7 data pipeline** (#405 collection Worker, #406 training store). Saved games already export
-  to a local JSON file, so a corpus can be pulled off a device by hand in the meantime. The consent
-  notice, the setting and the gated outbound function are in place and nothing calls the function:
-  #405 adds the endpoint and the sender, and has to make two claims in the notice true (the IP
-  address is not linked to games, and a sent game cannot be found and deleted).
+- **Epic 7 data pipeline** (#405 collection Worker, #821 durable store). Saved games already export
+  to a local JSON file and the bench turns an export into training rows, so a corpus can be pulled off
+  a device by hand and made into rows in the meantime. The consent notice, the setting and the gated
+  outbound function are in place and nothing calls the function: #405 adds the endpoint and the
+  sender, and has to make two claims in the notice true (the IP address is not linked to games, and a
+  sent game cannot be found and deleted). #821 chooses where records live for the long term, with
+  the schema, retention and deduplication; rows carry a key made from the game itself, which is what
+  it can deduplicate on.
+  **Before a model imitates from the rows, it needs the mover's view of a state**: a row holds both
+  hands and both decks, and nothing yet projects a state down to what one seat could see. Not
+  ticketed; it belongs with the first model that reads the rows.
 
 ## The card programme (second stream)
 
