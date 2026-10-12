@@ -3,7 +3,7 @@ import DeckSelectScreen from './components/deckSelectScreen'
 import GameScreen from './components/gameScreen'
 import { HelpOverlay } from './components/helpOverlay'
 import { SettingsOverlay } from './components/settingsOverlay'
-import { ShareGamesNotice } from './components/shareGamesNotice'
+import { ShareGamesNotice, ShareGamesPill } from './components/shareGamesNotice'
 import { GearIcon, HelpIcon } from './components/icons'
 import { SettingsProvider, useSettings } from './hooks/useSettings'
 import type { SavedDeck } from './data/deckStore'
@@ -66,6 +66,9 @@ function AppShell() {
               <h1 className="text-2xl font-extralight tracking-[0.15em] text-ink">dmgCtrl</h1>
             </div>
             <div className="flex items-center gap-2">
+              {/* Deck screen only, since the game screen has its own header. Quieter than the two
+                  buttons it sits beside, and absent until the notice in the page is answered. */}
+              <ShareGamesPill onOpenSettings={() => setSettingsOpen(true)} />
               <button
                 data-testid="settings-btn"
                 onClick={() => setSettingsOpen(true)}
@@ -89,10 +92,10 @@ function AppShell() {
                 // Part of the page, at the head of the catalogue column: it covers nothing, and
                 // every control works whether or not it has been answered. Passed in so the deck
                 // screen itself needs no settings.
-                catalogueNotice={<ShareGamesNotice onOpenSettings={() => setSettingsOpen(true)} />}
+                catalogueNotice={<ShareGamesNotice />}
                 onPlay={(deck, opponent) => {
                   // The notice is put once. A player who starts a game without answering it has
-                  // not agreed, so that is recorded as a no and the pill takes its place.
+                  // not agreed, so that is recorded as a no and the header pill replaces it.
                   if (settings.shareGames === 'unasked') update({ shareGames: 'no' })
                   setSelectedDeck(deck)
                   setOpponentDeck(opponent)

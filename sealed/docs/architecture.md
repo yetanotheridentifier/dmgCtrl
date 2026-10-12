@@ -417,9 +417,14 @@ record holds" above):
   notice is a refusal and the question is put once.
 - **The settings form**, where a checkbox maps on to `yes` and off to `no`.
 
-Once the answer is not `unasked`, the same component renders a pill in the same slot, right-aligned
-at the head of the catalogue column, that opens the settings form: "Improve the bot" after a no, and a fainter "Your games are improving
-the bot" after a yes. It carries no badge, count or animation in either state.
+Once the answer is not `unasked`, the notice renders nothing, so the catalogue column starts at its
+heading, level with the other two. In its place `ShareGamesPill` (same file) shows in the app
+header, immediately left of the cog and help buttons, and opens the settings form: "Improve the
+bot" after a no, and a fainter "Your games are improving the bot" after a yes. It carries no badge,
+count or animation in either state, and is smaller and lighter than the two icon buttons. The app
+header belongs to the deck screen (the game screen is full-bleed with its own), so the pill is not
+shown during a game. The header row never wraps for it: the label stays on one line, and below
+Tailwind's `sm` width (640px) the pill is hidden, leaving the cog as the route to the setting.
 
 The surface is an **overlay** (`SettingsOverlay`), opened from the cog in the app header and
 from the cog in the game header. Not a screen: routing away unmounts `GameScreen` and the game

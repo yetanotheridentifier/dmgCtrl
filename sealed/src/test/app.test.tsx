@@ -219,17 +219,63 @@ describe('App shell', () => {
       expect(within(screen.getByTestId('opponent-column')).queryByTestId('share-games-notice')).toBeNull()
     })
 
-    /** The pill takes the card's place exactly, so answering moves nothing else on the screen. */
-    it('puts the pill where the card was', async () => {
+    /** While the card is asking, there is no pill anywhere: the header holds the two buttons only. */
+    it('shows no pill while the notice is unanswered', () => {
+      render(<App />)
+
+      expect(screen.getByTestId('share-games-notice')).toBeInTheDocument()
+      expect(screen.queryByTestId('share-games-pill')).toBeNull()
+    })
+
+    /**
+     * Once answered, the pill sits in the app header alongside the settings and help buttons, just
+     * to their left, and not in the page below.
+     */
+    it.each([
+      ['no', 'Improve the bot'],
+      ['yes', 'Your games are improving the bot'],
+    ] as const)('puts the pill in the header beside the settings and help buttons after a %s', (stored, label) => {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), shareGames: stored }))
+      render(<App />)
+      const header = screen.getByRole('banner')
+
+      const pill = within(header).getByTestId('share-games-pill')
+      expect(pill).toHaveTextContent(label)
+      const settings = within(header).getByRole('button', { name: 'Settings' })
+      const help = within(header).getByRole('button', { name: 'Help' })
+      // One row of three: the pill, then the cog, then the question mark.
+      expect([...pill.parentElement!.children]).toEqual([pill, settings, help])
+      expect(pill.parentElement!.className).toContain('items-center')
+      expect(within(screen.getByTestId('deck-select-screen')).queryByTestId('share-games-pill')).toBeNull()
+    })
+
+    /** With the pill in the header, an answered notice leaves nothing above the column's heading. */
+    it.each(['yes', 'no'] as const)('starts the catalogue column at its heading after a %s, level with the other columns', stored => {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), shareGames: stored }))
+      render(<App />)
+      const column = screen.getByTestId('catalogue-column')
+
+      expect(column.firstElementChild).toBe(within(column).getByRole('heading', { name: 'Card catalogue' }))
+    })
+
+    it('moves the pill into the header as the card is answered', async () => {
       const user = userEvent.setup()
       render(<App />)
       const column = screen.getByTestId('catalogue-column')
 
       await user.click(within(column).getByRole('button', { name: 'Not now' }))
 
-      const pill = within(column).getByTestId('share-games-pill')
-      const heading = within(column).getByRole('heading', { name: 'Card catalogue' })
-      expect(pill.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(within(column).queryByTestId('share-games-pill')).toBeNull()
+      expect(within(screen.getByRole('banner')).getByTestId('share-games-pill')).toHaveTextContent('Improve the bot')
+      expect(column.firstElementChild).toBe(within(column).getByRole('heading', { name: 'Card catalogue' }))
+    })
+
+    /** The pill belongs to the deck screen. A game has its own header, and the pill is not in it. */
+    it.each(['yes', 'no'] as const)('shows no pill during a game after a %s', async stored => {
+      const user = userEvent.setup()
+      await startGame(user, { shareGames: stored })
+
+      expect(screen.queryByTestId('share-games-pill')).toBeNull()
     })
 
     /** Ignoring it means no: a game starts with the notice untouched, and nobody is opted in. */
