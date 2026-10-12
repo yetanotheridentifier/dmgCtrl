@@ -39,7 +39,7 @@ import '../engine/cardDefinitions'
 const L = {
   ...CARDS,
   LEADER: card({ id: 'LEADER', type: 'leader', cost: 5, power: 4, hp: 7, aspects: ['Command', 'Heroism'] }),
-  // Three bodies a full pool can deploy in one round. Cheap on purpose: the point is that the hand is
+  // Three bodies a full pool can play in one round. Cheap on purpose: the point is that the hand is
   // entirely affordable, so an extra resource is dead weight while every card is still live.
   SMALL: card({ id: 'SMALL', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2, aspects: ['Command'], rarity: 'Common' }),
   MID: card({ id: 'MID', type: 'unit', arena: 'ground', cost: 3, power: 3, hp: 3, aspects: ['Command'], rarity: 'Common' }),

@@ -1137,7 +1137,7 @@ directly rather than through a proxy.
   declines, Moff Gideon 36 against 12. Four of the six most-declined are unique units whose value
   depends on board state. Holding is situational, not a failure to develop, so the resourcing decision
   is not downstream of a play-quality problem.
-- **"The bot will not deploy expensive bodies."** It plays an 8-cost 6/6 into an empty board, a board it
+- **"The bot will not play expensive bodies."** It plays an 8-cost 6/6 into an empty board, a board it
   outclasses, and a board that could trade with it. Repeated declines of specific bombs in the corpus
   are positional and remain unexplained; the general claim is not.
 - **Per-candidate role assignment.** The role belongs to the decision, not the candidate.

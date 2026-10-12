@@ -9,7 +9,7 @@ import type { Arena } from '../engine/types'
  * **A unit is played into the arena its card prints, whatever the source data says.**
  *
  * The arena comes straight from the source's `Arenas` field, and the source gets a few wrong: a
- * starfighter shipped as Ground deploys beside the infantry, is attacked by them and cannot reach the
+ * starfighter shipped as Ground is played beside the infantry, is attacked by them and cannot reach the
  * ships it was printed to fight. `cardDataCorrections.ts` holds the fixes, and the checks below are
  * what finds the next one.
  */
