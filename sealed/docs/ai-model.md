@@ -342,8 +342,8 @@ move that opens the **shortest** one.
 
 Under that assumption most of the question is closed form. Aggregate ready reach IS lethal, because
 the attacks are taken consecutively while the opponent passes, so `attacksToFinish` settles it by
-counting rather than searching. Search only adds what the board cannot show: the **hand** (a burn
-event, a pump), the **leader** (which deploys ready and is not in `units` until it does), and
+counting rather than searching. Search only adds what the board cannot show: the **hand** (an event
+that deals damage, a pump), the **leader** (which deploys ready and is not in `units` until it does), and
 **Sentinel clearing**, where one attack removes a blocker so the rest can reach.
 
 Measured over 36,384 decisions: lethal exists in **6.6%**, of which 4.8 points are the closed form and

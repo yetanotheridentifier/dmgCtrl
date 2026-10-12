@@ -7,7 +7,7 @@ import { unitKeywords } from '../engine/keywords'
  * Whether an upgrade is bad for the unit it is attached to (#509).
  *
  * A class of upgrades exists whose whole effect lies in the future: Pointless to Resist takes 3 power
- * off an attack on a base, Deadly Vulnerability doubles incoming damage, Grav Charge burns the host
+ * off an attack on a base, Deadly Vulnerability doubles incoming damage, Grav Charge damages the host
  * when its attack ends, The Conflict Within taxes it every time it readies. **None of them changes the
  * board the moment they are played.** The evaluation prices boards, so it sees two identical positions
  * whether such a card lands on a friendly unit or an enemy one, and the seeded pick decides.

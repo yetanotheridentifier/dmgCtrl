@@ -447,7 +447,7 @@ from 59.2% of decisions to 38.2%.
 
 That is a measurement on this card pool rather than a proof. The bound sums printed power, so an
 event that deals damage with none is invisible to it, and the reason it measures safe is that a lethal
-carried entirely by events does not occur in this corpus. A set with stronger burn would need this
+carried entirely by events does not occur in this corpus. A set with stronger damage events would need this
 re-run before the gate could be trusted, and the failure would be silent.
 
 **`skipWhenSingleAction` is nearly inert**, worth 51 decisions of skipping in 3,119. It accounts for
@@ -459,7 +459,7 @@ evaluation cannot get wrong.
 Every gate above is admissible: it sums generously so it can never skip a real line, and that safety
 is exactly why each saves so little. The alternative is to start from what can actually attack now,
 ready units plus the leader (which deploys ready), and allow a fixed number of points for what might
-materialise from a pump, an upgrade or a burn event. That is deliberately lossy, so the allowance is
+materialise from a pump, an upgrade or an event that deals damage. That is deliberately lossy, so the allowance is
 a measurement rather than a judgement.
 
 Same corpus, 3,119 decisions:
@@ -550,7 +550,7 @@ found; whether 12 wins more is unmeasured.
 
 **Overcharging is the failure mode to watch**, since a bot that must not pass will play a card for no
 benefit instead, which is worse than the habit being fixed. Forced passes are the tripwire, because
-burning a hand means running out of legal moves sooner, and they move only from 223 to 232 across the
+emptying a hand means running out of legal moves sooner, and they move only from 223 to 232 across the
 whole range. It did not appear at any value tested.
 
 Two measurement notes that cost time to learn. Every round ends with a pass by construction, so a raw
@@ -653,8 +653,8 @@ tie rate of the five decision kinds.
 ### A class of upgrades is invisible to a board evaluation
 
 Some upgrades do nothing when played and everything later: -3 power while attacking a base, doubled
-incoming damage, a burn when the attack ends, a tax on every ready. **The evaluation prices boards, so
-it cannot tell a friendly target from an enemy one**, and the seeded pick decides.
+incoming damage, damage to the host when its attack ends, a tax on every ready. **The evaluation
+prices boards, so it cannot tell a friendly target from an enemy one**, and the seeded pick decides.
 
 It only bites when nothing can act inside the horizon. Where the host or the enemy target can attack,
 the search plays it out, the engine applies the effect, and it chooses correctly: **5 of 5 over 126

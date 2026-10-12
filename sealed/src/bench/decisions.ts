@@ -154,7 +154,7 @@ export interface UnspentHandStat {
    *
    * Identity rather than a rate, because legality is not desirability and no counter can bridge the
    * gap. An upgrade is legal on an ENEMY unit and is usually wrong there unless it is a debuff; an
-   * event is legal with no target and simply burns itself; a unit can be right to hold for the board,
+   * event is legal with no target and is simply wasted; a unit can be right to hold for the board,
    * for a bluff, or for what the pool is known to hold. Each of those reads as "declined a play", and
    * only the card's name tells them apart. So the count is deliberately not a verdict: it is the
    * evidence a reader uses to reach one.
@@ -316,7 +316,7 @@ export interface SuspendedStat {
  * How often a lethal line is available at all (#432).
  *
  * The ceiling on every rule built over a lethal solver: "claim the initiative when it converts to
- * lethal", "claim when it denies theirs", and the tap-out risk gate can each only fire as often as
+ * lethal", "claim when it denies theirs", and the exposure risk gate can each only fire as often as
  * lethal exists. Measuring it with `canFinishNow` costs a comparison, where learning it after
  * building a solver and a sampled belief model on top would cost several tickets.
  *
@@ -388,7 +388,7 @@ export function tallyDecided(
 }
 
 /**
- * Headroom for a tap-out risk gate (#432): not how often the opponent *could* finish, but how often
+ * Headroom for an exposure risk gate (#432): not how often the opponent *could* finish, but how often
  * the AI **chose** to let them when it had a legal alternative, and what that cost.
  *
  * Needs no oracle, which is the point of measuring it this way. It also splits the question the
@@ -1976,7 +1976,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
               unspentHeld += s.players[me].hand.length
               unspentPlayable += playable.size
               // Which cards, by name. Legality is not desirability, and no aggregate can separate a
-              // burnt event from a held bluff: the identity is what a reader needs to tell them apart.
+              // wasted event from a held bluff: the identity is what a reader needs to tell them apart.
               for (const idx of playable) {
                 const cardId = s.players[me].hand[idx]
                 const c = s.cards[cardId]

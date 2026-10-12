@@ -1264,7 +1264,7 @@ and so read as behaviour rather than as a gap:
 
   **It is evidence, not a verdict**, which is why it names cards rather than reporting a rate. Legality
   is not desirability: an upgrade is legal on an enemy unit and usually wrong there, an event is legal
-  with no target and simply burns itself, and a unit can be right to hold for the board or for a bluff.
+  with no target and is simply wasted, and a unit can be right to hold for the board or for a bluff.
   A second copy of a unique forces a mandatory defeat, so the copy-out column separates declines the
   rules decided from declines the bot judged, without hiding the case where replacing a spent copy is
   right. The plays columns are the denominator: declined often and played often is situational holding,
@@ -1337,7 +1337,7 @@ The same run reports how often either seat could finish the enemy base with what
 ready, via `canFinishNow` (a clock of 1, so Sentinel, Saboteur, arena and Hidden resolve through the
 rules' own targeting rather than a second damage sum).
 
-It is the ceiling on every rule built over a lethal solver: an initiative-lethal rule or a tap-out
+It is the ceiling on every rule built over a lethal solver: an initiative-lethal rule or an exposure
 risk gate can only fire as often as lethal exists.
 
 **Read the one-action figure, not the aggregate.** `canFinishNow` sums every ready unit, but players
@@ -1376,7 +1376,7 @@ judging one. A rule about deploying into a punish needs a measure of the punish,
 
 The same run asks the sharper question: not how often the opponent *could* finish, but how often the
 AI **chose** to let them when a legal move existed that would not have. That is the headroom a
-tap-out risk gate could recover, and it needs no opponent model to measure.
+exposure risk gate could recover, and it needs no opponent model to measure.
 
 Measured with the **one-action** predicate, since that is what the opponent can take before we act
 again. Every decision is classified `safe`, `avoidable` or `unavoidable`.
@@ -1411,7 +1411,7 @@ Two things to hold onto when reading it:
 
 - **It under-counts.** Only damage that can already connect is seen, so a line needing a card played
   first, an event finisher or a when-played trigger is invisible. Early-game lethal is the figure to
-  trust least, since it would most likely come from a burn event rather than from board damage.
+  trust least, since it would most likely come from an event that deals damage rather than from board damage.
 - **"They could finish" is not "the bot blundered".** Many such positions are already lost. The rate
   bounds how often a risk gate is *live*, not how often it would *help*.
 

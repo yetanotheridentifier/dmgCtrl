@@ -25,7 +25,7 @@ import '../engine/cardDefinitions'
  * while they pass. So `canFinishNow` already answers attacks-only lethal, and what a solver adds is
  * the parts it cannot see:
  *
- *   - the HAND: a burn event, a pump lifting a unit over the line, a when-played base hit;
+ *   - the HAND: an event that deals damage, a pump lifting a unit over the line, a when-played base hit;
  *   - the LEADER, which deploys READY and is not in `units` until it does;
  *   - SENTINEL clearing, where one attack removes a blocker so the rest can reach. `unitReach` reads
  *     a Sentinel-locked unit as 0, so `canFinishNow` under-reads exactly these lines.
@@ -478,11 +478,11 @@ describe('the gate', () => {
   })
 
   /**
-   * The power bound is OFF by default and that is deliberate. It bounds damage by POWER, while a burn
-   * event deals damage with none, and a burn event is one of the three things this solver exists to
+   * The power bound is OFF by default and that is deliberate. It bounds damage by POWER, while an
+   * event can deal damage with no power at all, and such an event is one of the three things this solver exists to
    * find. Available as an option so its false-skip rate can be measured rather than assumed.
    */
-  it('leaves the power bound off by default, because a burn event has no power', () => {
+  it('leaves the power bound off by default, because an event that deals damage has no power', () => {
     expect(DEFAULT_LETHAL_GATE.powerBound).toBe(false)
     const hopeless = { ...position(['SMALL']), round: 6 }
     expect(shouldSearchLethal(hopeless, 'player', DEFAULT_LETHAL_GATE)).toBe(true)

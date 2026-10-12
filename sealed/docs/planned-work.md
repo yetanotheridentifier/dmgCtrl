@@ -101,7 +101,7 @@ one-action lethal is available to the opponent in 2.2% of decisions, absent befo
 those positions are unavoidable. The belief model does not need to beat zero, it needs to beat the
 public version, and it is the heaviest machinery in the series.
 
-If it is built, the first customer should be the **general tap-out risk gate**, which applies to every
+If it is built, the first customer should be the **general exposure risk gate**, which applies to every
 action-phase decision, rather than the carried initiative rules, which are worth 2 to 3 points across
 about nine decisions a game.
 

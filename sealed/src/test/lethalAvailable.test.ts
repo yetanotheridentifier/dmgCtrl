@@ -109,7 +109,7 @@ describe('canFinishThisAction', () => {
 })
 
 /**
- * The counterfactual that sizes a tap-out risk gate (#432 measurement 2, option D).
+ * The counterfactual that sizes an exposure risk gate (#432 measurement 2, option D).
  *
  * "The opponent could finish" is not the same as "the bot blundered": many such positions are
  * already lost, and a gate cannot save a game that is over. What a gate could actually recover is

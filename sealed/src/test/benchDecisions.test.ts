@@ -536,7 +536,7 @@ describe('runDecisions', () => {
   /**
    * Sizing for the lethal work (#432): how often a lethal line is available at all. Every rule built
    * on a lethal solver (#433) can only fire as often as this, so if it is vanishingly rare the
-   * initiative-lethal rules and the tap-out risk gate are both low value, and that is much cheaper to
+   * initiative-lethal rules and the exposure risk gate are both low value, and that is much cheaper to
    * learn here than after building a solver and a belief model on top.
    */
   it('reports how often either seat could finish the enemy base', () => {
@@ -561,7 +561,7 @@ describe('runDecisions', () => {
   })
 
   /**
-   * The headroom a tap-out risk gate could actually recover (#432). Not "how often could they
+   * The headroom an exposure risk gate could actually recover (#432). Not "how often could they
    * finish", which includes positions already lost, but "how often did the bot walk into a lethal it
    * had a legal move to avoid", and how often that preceded losing the game.
    */

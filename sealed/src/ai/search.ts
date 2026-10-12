@@ -610,7 +610,7 @@ export interface BeamLimits {
    *
    * **Bounded from both sides, and the sweep is finding where in between.** Too small and nothing
    * changes. Too large and the bot plays a card for no benefit rather than pass, which is a worse
-   * behaviour than the one being fixed: the floor is that passing must still beat burning a card for
+   * behaviour than the one being fixed: the floor is that passing must still beat playing a card for
    * nothing.
    *
    * Applied at the root only, which is the only place `pass` is ever a candidate: the frontier skips it

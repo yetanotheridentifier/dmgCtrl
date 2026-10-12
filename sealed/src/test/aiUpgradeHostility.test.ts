@@ -60,7 +60,7 @@ describe('upgrade hostility', () => {
    * cannot be priced without simulating it, and both are CONDITIONs.
    */
   it('reads a hostile granted trigger as hostile', () => {
-    expect(hostility('ASH_085'), 'Grav Charge burns its host when its attack ends').toBeGreaterThan(0)
+    expect(hostility('ASH_085'), 'Grav Charge damages its host when its attack ends').toBeGreaterThan(0)
     expect(hostility('ASH_088'), 'The Conflict Within taxes its host on every ready').toBeGreaterThan(0)
   })
 

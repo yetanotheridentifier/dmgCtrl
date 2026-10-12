@@ -142,7 +142,7 @@ export const beamAi = makeBeamGreedy(DEFAULT_WEIGHTS)
  * unmeasured. Smaller was chosen deliberately: overcharging pushes the bot into playing cards for no
  * benefit, which is a worse habit than the one being fixed.
  *
- * That failure mode did **not** appear at any swept value. Forced passes, which rise when a bot burns
+ * That failure mode did **not** appear at any swept value. Forced passes, which rise when a bot empties
  * its hand and runs out of legal moves, move only from 223 to 232 across the whole range.
  *
  * `beam-reply/pass=0` names the pre-fix bot, so the control stays addressable without a registry entry.

@@ -224,7 +224,7 @@ describe('Cards that only read "has a Bounty"', () => {
     expect(notAttacked.players.opponent.base.damage).toBe(0)
   })
 
-  it('SHD_139 Krrsantan: When Played may ready itself only if an enemy has a Bounty; On Attack may burn its own damage into a ground unit', () => {
+  it('SHD_139 Krrsantan: When Played may ready itself only if an enemy has a Bounty; On Attack may deal 1 damage to a ground unit for each damage on itself', () => {
     const noBounty = board({ hand: ['SHD_139'] }, {})
     const playedNoBounty = resolve(noBounty, { type: 'playUnit', handIndex: 0 })
     expect(playedNoBounty.pendingChoices ?? []).toHaveLength(0)
