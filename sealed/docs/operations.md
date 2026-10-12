@@ -416,7 +416,10 @@ npm run bench --prefix sealed -- --rows /path/to/dmgctrl-sealed-games-<timestamp
 ```
 
 Use absolute paths: the command runs with `sealed/` as its working directory. `--out` is overwritten.
-Add `--legal` to carry each position's legal moves on its row. It prints how many games and rows it
+Add `--legal` to carry each position's legal moves on its row, and `--view mover` to write each
+position as the seat that moved saw it, with the other seat's hand, deck and face-down resources
+replaced by placeholders (rows for imitation; see "The two views of a state" in
+[ai-benchmark.md](ai-benchmark.md) for exactly what that hides). It prints how many games and rows it
 wrote, the size, and the time, and it needs no network and no card cache: the cards come from the
 bundled set fixtures, so a game from any bundled set replays.
 

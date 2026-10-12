@@ -1678,7 +1678,7 @@ WHERE a.run_id = ? AND b.run_id = ? GROUP BY a.deck_a ORDER BY delta;
 ## Training rows: exported games as model input
 
 ```bash
-npm run bench --prefix sealed -- --rows EXPORT.json [EXPORT.json ...] --out ROWS.jsonl [--legal]
+npm run bench --prefix sealed -- --rows EXPORT.json [EXPORT.json ...] --out ROWS.jsonl [--legal] [--view mover]
 ```
 
 Takes the files `__sealedExportGames()` downloads (see "Exporting game records" in
@@ -1699,22 +1699,74 @@ One row shape serves both uses. Imitation reads `state` and `action`; value lear
 | `mover` | the seat that made the move, `player` or `opponent` |
 | `decidedBy` | `human` when the mover is the record's `humanSeat`, `ai` when it is the other seat, `unknown` when the record has no `humanSeat` |
 | `outcome` | `win`, `loss` or `draw`, **from the mover's side** |
-| `information` | `full`, always. See below |
+| `information` | which view `state` is: `full`, or `mover` with `--view mover`. See below |
 | `build`, `opponentAi`, `humanSeat`, `undoCount` | the record's provenance as exported, each left out when the record never had it |
 | `action` | the move that was made |
 | `chosenIndex`, `legalMoves` | only with `--legal`: every move the engine offered in the position, and where `action` is in that list |
-| `state` | the position the move was made in: the engine's game state without its card database |
+| `state` | the position the move was made in, in the row's view: the engine's game state without its card database |
 
 So a corpus splits by who decided (`decidedBy`), by which bot (`opponentAi`) and by which build played
 the game, and a game played with take-backs can be told from one played straight through (`undoCount`).
 
-**The state holds everything, including what the mover could not see.** Both hands and both decks, in
-draw order, are in every state. Nothing in the engine projects a state down to one seat's view, and
-the transformation does not invent one: each row names its `mover` and says `information: 'full'`, and
-hiding the other seat's hand and both decks' order is the job of whatever derives features from a row.
-A model fed the state as it stands learns from cards the mover never saw. The bot's own evaluation
-draws that line by reading only its own hand and no deck (see "The two halves of `evaluate`" in
-[ai-model.md](ai-model.md)).
+### The two views of a state
+
+**A row's state is the whole position unless the run asks for the mover's view, and the row says
+which.** `--view full` is the default and need not be given.
+
+- **`information: 'full'`**: everything, including what the mover could not see. Both hands and both
+  decks, in draw order, are in every state. This is the view for value learning from an all-seeing
+  position. A model that imitates decisions from it learns from cards the mover never saw.
+- **`information: 'mover'`** (`--view mover`): the state as the seat that moved saw it, made by
+  `seatView` (`engine/seatView.ts`). This is the view to imitate from.
+
+Everything else on a row is the same in both views: the move, the mover, the result, the provenance,
+and with `--legal` the legal moves, which are the mover's own and are listed from the real position
+either way. The row format version is 1 for both: a full row is unchanged, and a mover's row has the
+same shape.
+
+What the mover's view does to a state, following the rules on open and hidden information (a hand
+and face-down resources are hidden from the opponent, a deck from both players, and zone sizes,
+discard piles, everything in play and captured cards are open):
+
+| Part of the state | In the mover's view |
+| --- | --- |
+| the other seat's hand and deck | one `__unseen__` a card: the size and nothing else |
+| the other seat's resources | `__unseen__` for each card, with its ready or exhausted state. A resource the mover owns in that row stays, since its ownership is open |
+| the mover's own deck | its cards, sorted. Which cards are left follows from the deck list; their order is hidden from its owner too |
+| `rngSeed` | 0. The seed advances on every move and seeds the mulligan shuffle, so with a known deck list it leads back to a deck's order |
+| `pendingChoices`, `pendingTriggers`, `heldTriggers` | the mover's own only. What the other seat is being asked or is owed is dropped whole |
+| `triggerTurn`, `paying`, `resolvingSource` | dropped: resolver bookkeeping |
+| everything else | passed through: the mover's hand and resources, both discard piles, units, upgrades, captured cards, leaders, bases, tokens, and every phase, turn and effect field |
+
+**The guarantee runs one way.** Two states that differ only in what the mover could not see give the
+same view, so a hidden card cannot be read back out of a row's state by any field. That is what the
+tests assert, zone by zone and for both seats, and over whole played games. The other direction does
+not hold: the view hides some things the mover did know.
+
+**What the mover's view cannot give back.** A state records where each card is, not who has been
+shown it, so these are hidden although the mover knew them:
+
+- a card the mover looked at, was shown or searched past earlier in the game, and where it put a card
+  it placed on the top or bottom of a deck;
+- a card it watched return to a hand or a deck from somewhere open, such as a unit returned to hand;
+- the cards a choice of its own shows it by pointing at a zone instead of carrying them: looking at a
+  hand keeps the choice and leaves the hand unseen, while a search carries the cards it turned up and
+  those stay;
+- the abilities the other seat is owed, most of which both players can see at the table. They are
+  dropped with the rest because one kind belongs to a card still in a hand.
+
+The view also takes the mover not to know the other deck's list. In the app a generated opponent deck
+is never shown to the player.
+
+**A view is of one row.** A game's rows share a `gameKey` and its seats take turns, so one game's rows
+read together hold both hands, whichever view they are in. Keeping a model to one row at a time is the
+reader's job, as is not reading `outcome` as something the mover knew.
+
+**The card database is outside the view.** Rows never carry it, and `trainingCardDb()` is every
+bundled set, so joining it back on says nothing about either deck.
+
+The bot does not use this view. Its evaluation reads only its own hand and no deck (see "The two
+halves of `evaluate`" in [ai-model.md](ai-model.md)).
 
 **No features are derived.** No model is chosen, so the row keeps the engine's own state and whatever a
 model needs is computed from it later. A reader that needs card data joins it back on with
@@ -1740,8 +1792,10 @@ cards, so those are the ids a record holds, reprints under the id the engine imp
 that cannot be replayed is a printing the app could not resolve when the game started, which played
 under its own id as a card with no abilities and is in no fixture.
 
-**Legal moves are opt-in.** `legalMoves(state)` lists them again from a row's own state, so by default
-they are left out. `--legal` carries them for a reader with no engine, at about 11% more bytes (a
+**Legal moves are opt-in.** `legalMoves(state)` lists them again from a full row's own state, so by
+default they are left out. A mover's row cannot be asked, since its hidden cards are placeholders, so a
+reader that wants the legal moves alongside the mover's view passes `--legal`. It carries them for a
+reader with no engine, at about 11% more bytes (a
 position offers 6 moves on average, 34 at most, over the games below). `chosenIndex` is -1 for an
 offer to concede, which the engine never lists; the summary counts those as moves off the list.
 
@@ -1754,6 +1808,12 @@ Size, measured over ten `beam-reply` mirror games on the bench deck: 883 rows, *
 the same game in the export. Consecutive states differ by little, so gzip takes the file to 3% of its
 size (76 KB for the ten games). The transformation itself takes 0.2s for those ten games. A game
 against a person will differ in length; that has not been measured.
+
+The mover's view is not smaller. Over ten such games (816 rows) a full row averages 2,876 bytes and a
+mover's row 2,946, 2.4% more: a row hides 26 cards on average, and the placeholder is three characters
+longer than a card id. In those games the other seat had a choice waiting in none of the rows and an
+ability owed in one, so dropping them costs almost nothing there. Bot games on one deck are a narrow
+sample of that.
 
 ## Where results go: the SQLite database
 
@@ -1905,7 +1965,8 @@ eight of eighteen modules were missing.
   the tool's model of the engine: implemented keywords, dispatched trigger points, unexpressible
   mechanics. Those lists shrink as mechanics land.
 - `bench/trainingRows.ts` exported games as training rows behind `--rows`: one row per recorded move,
-  made by replaying the record, with the replayed winner checked against the stored one. Also owns the
+  made by replaying the record, with the replayed winner checked against the stored one, holding the
+  whole state or the mover's view of it (`engine/seatView.ts`, which is not a bench module). Also owns the
   card database a record is replayed against (`trainingCardDb`, every bundled set) and the key that
   groups a game's rows.
 - `bench/main.ts` the command line: the only impure file (reads arguments, prints, saves).

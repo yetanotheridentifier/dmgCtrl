@@ -8,7 +8,8 @@ import { engineDeck, sweepCardDb } from '../bench/sweep'
 import { buildGameExport, exportRecord, EXPORT_FORMAT_VERSION, type ExportedRecord } from '../data/recordExport'
 import { withoutCards } from '../data/replayData'
 import { legalMoves } from '../engine/legalMoves'
-import { resolve } from '../engine/resolve'
+import { resolve, UNSEEN_CARD } from '../engine/resolve'
+import { seatView } from '../engine/seatView'
 import type { GameState } from '../engine/types'
 import { playedRecord } from './helpers/playedRecord'
 
@@ -182,6 +183,65 @@ describe('the legal moves, when asked for', () => {
     expect(rows.filter(r => r.chosenIndex === -1).map(r => r.moveIndex)).toEqual([offer])
     expect(rows[offer + 1].action).toEqual({ type: 'acceptConcession' })
     expect(rows[offer + 1].legalMoves![rows[offer + 1].chosenIndex!]).toEqual({ type: 'acceptConcession' })
+  })
+})
+
+/**
+ * A row can hold the position as its mover saw it instead of the whole of it. Everything about the
+ * row but its state and what it says of that state is the same either way, and a run that does not
+ * ask for the mover's view writes what it always wrote.
+ */
+describe('rows in the mover\'s view', () => {
+  const record = exported(11)
+  const fullRows = throughJson(rowsForRecord(record, CARDS))
+  const rows = throughJson(rowsForRecord(record, CARDS, { view: 'mover' }))
+  const other = (row: TrainingRow) => (row.mover === 'player' ? 'opponent' : 'player')
+
+  it('say so, where the others say they hold everything', () => {
+    expect(rows.every(r => r.information === 'mover')).toBe(true)
+    expect(fullRows.every(r => r.information === 'full')).toBe(true)
+  })
+
+  it('hold the position as the engine shows it to the seat that moved', () => {
+    expect(rows).toHaveLength(fullRows.length)
+    rows.forEach((row, i) => {
+      expect(row.state, `move ${i}`).toEqual(throughJson(withoutCards(seatView(withCards(fullRows[i]), row.mover))))
+    })
+  })
+
+  it('hold none of the other seat\'s hand or deck, and all of the mover\'s own hand', () => {
+    rows.forEach((row, i) => {
+      const theirs = row.state.players[other(row)]
+      const whole = fullRows[i].state.players
+      expect(new Set([...theirs.hand, ...theirs.deck, UNSEEN_CARD])).toEqual(new Set([UNSEEN_CARD]))
+      expect(theirs.hand).toHaveLength(whole[other(row)].hand.length)
+      expect(theirs.deck).toHaveLength(whole[other(row)].deck.length)
+      expect(row.state.players[row.mover].hand).toEqual(whole[row.mover].hand)
+    })
+    expect(rows.some(r => r.state.players[other(r)].hand.length > 0)).toBe(true)
+  })
+
+  it('are the same rows in everything else: the move, the mover, the result and the provenance', () => {
+    const rest = (row: TrainingRow) => ({ ...row, state: null, information: null })
+    expect(rows.map(rest)).toEqual(fullRows.map(rest))
+    expect(Object.keys(rows[0])).toEqual(Object.keys(fullRows[0]))
+    expect(rows[0].formatVersion).toBe(ROWS_FORMAT_VERSION)
+  })
+
+  /** The legal moves are the mover's own, listed from the real position: a view cannot be asked. */
+  it('carry the same legal moves and the same pointer as the full rows', () => {
+    const legal = throughJson(rowsForRecord(record, CARDS, { view: 'mover', legalMoves: true }))
+    const fullLegal = throughJson(rowsForRecord(record, CARDS, { legalMoves: true }))
+    expect(legal.map(r => r.legalMoves)).toEqual(fullLegal.map(r => r.legalMoves))
+    expect(legal.map(r => r.chosenIndex)).toEqual(fullLegal.map(r => r.chosenIndex))
+  })
+
+  it('are not what a run writes unless it asks: the full view is the default, byte for byte', () => {
+    const lines = (all: TrainingRow[]) => all.map(r => JSON.stringify(r)).join('\n')
+    expect(lines(rowsForRecord(record, CARDS, { view: 'full' }))).toBe(lines(rowsForRecord(record, CARDS)))
+    const file = throughJson(buildGameExport([playedRecord(11)]))
+    expect(lines(rowsForExport(file, CARDS).games[0].rows)).toBe(lines(rowsForRecord(record, CARDS)))
+    expect(rowsForExport(file, CARDS, { view: 'mover' }).games[0].rows[0].information).toBe('mover')
   })
 })
 

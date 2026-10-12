@@ -207,6 +207,19 @@ per-phase event log (`phaseEvents`) all live on the state, JSON-serialisable. Ab
 (functions don't serialise), so it sits in the module-level **ability registry**,
 `registerCard(cardId, …)`, consulted by the engine.
 
+**The state holds everything, and `seatView` is the one account of what a seat may read off it.** A
+`GameState` has both hands, both decks in draw order and every face-down resource, because the
+resolver needs them. `seatView(state, seat)` (`engine/seatView.ts`) is a pure projection to the same
+shape as that seat sees it: the other seat's hand, deck and face-down resources become `UNSEEN_CARD`
+placeholders that keep the sizes, the seat's own deck becomes its cards without their order,
+`rngSeed` is zeroed since it leads back to a shuffle, and the choices and owed abilities of the other
+seat are dropped whole. Two states that differ only in what the seat cannot see have the same view.
+It reads one state, so it cannot give back what a seat learned earlier in the game (a card it was
+shown, or put on the bottom of a deck), and it hides those too. The training rows use it for the
+mover's view (see "The two views of a state" in [ai-benchmark.md](ai-benchmark.md), which lists every
+field); the app and the bot do not: the board draws the human's side from the full state, and the
+bot's own line on hidden information is drawn in its evaluation ([ai-model.md](ai-model.md)).
+
 ## Game flow at runtime
 
 ![Data flow diagram: card hydration at game start, then the runtime action and AI loop](diagrams/data-flow.svg)

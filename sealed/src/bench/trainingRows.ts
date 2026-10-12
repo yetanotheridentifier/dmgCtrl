@@ -7,6 +7,7 @@ import type { Action } from '../engine/actions'
 import { buildCardDb } from '../engine/cardDb'
 import { legalMoves } from '../engine/legalMoves'
 import { replayStates, withCardDb } from '../engine/replay'
+import { seatView } from '../engine/seatView'
 import type { CardDb, GameState, PlayerId } from '../engine/types'
 import { poolFor, SET_CODES } from './setPools'
 
@@ -22,18 +23,28 @@ import { poolFor, SET_CODES } from './setPools'
  * whatever a model turns out to need can be computed from it later, by joining the card data back
  * on (`trainingCardDb`) the way this module does.
  *
- * **Every row holds the whole game state, both hands and both decks in draw order included.** That
- * is more than the mover could see. Nothing in the engine projects a state down to one seat's view
- * of it, and this module does not invent one: a row names its `mover` and says `information: 'full'`,
- * and hiding what the mover could not see is the job of whoever derives features from it. The bot's
- * own evaluation draws that line in `ai/evaluate.ts` (see "The two halves of `evaluate`" in
- * ai-model.md).
+ * **A row's state comes in one of two views, and the row says which** (`information`). `full` is
+ * the whole game state, both hands and both decks in draw order included: more than the mover
+ * could see, and what value learning from an all-seeing position wants. `mover` is that state as
+ * the seat that moved saw it (`engine/seatView.ts`, which says what it hides and what it cannot
+ * give back), and is the one to imitate from: a model that copies decisions out of `full` rows
+ * learns from cards the mover never saw.
+ *
+ * **The view is of one row.** A game's rows share a `gameKey` and its two seats take turns, so the
+ * rows of one game read together hold both hands, whichever view they are in. Keeping a model to
+ * one row at a time is the reader's job.
  */
 
-/** Raised when a reader of older rows would misread newer ones. */
+/**
+ * Raised when a reader of older rows would misread newer ones. The mover's view did not raise it: a
+ * `full` row is what it was, and a `mover` row has the same shape and says what it is.
+ */
 export const ROWS_FORMAT_VERSION = 1
 
 export type Outcome = 'win' | 'loss' | 'draw'
+
+/** What a row's state holds: the whole position, or the position as the mover saw it. */
+export type RowView = 'full' | 'mover'
 
 export interface TrainingRow {
   formatVersion: number
@@ -48,8 +59,8 @@ export interface TrainingRow {
   decidedBy: 'human' | 'ai' | 'unknown'
   /** How the game ended, from the mover's side. */
   outcome: Outcome
-  /** `state` is the whole game state, not what the mover could see. The only value there is. */
-  information: 'full'
+  /** Which view `state` is: the whole game state, or what the mover could see of it. */
+  information: RowView
   /** The record's provenance, as exported. Each is absent when the record never had it. */
   build?: BuildIdentity
   opponentAi?: string
@@ -59,13 +70,19 @@ export interface TrainingRow {
   action: Action
   /** With `legalMoves`: where `action` is in it, or -1 when the engine's list does not hold it. */
   chosenIndex?: number
-  /** Every move the engine offered in this position. Only when asked for (`RowOptions`). */
+  /**
+   * Every move the engine offered in this position. Only when asked for (`RowOptions`). Listed
+   * from the real position in either view: they are the mover's own moves, which the mover was
+   * offered, and a view cannot be asked for them (its hidden cards are placeholders).
+   */
   legalMoves?: Action[]
-  /** The position the move was made in, without its card database. */
+  /** The position the move was made in, in the row's view, without its card database. */
   state: StateWithoutCards
 }
 
 export interface RowOptions {
+  /** Which view each row's state is in. `full` unless asked. */
+  view?: RowView
   /**
    * Carry each position's legal moves on its row. Off by default: `legalMoves(state)` lists them
    * again from the row's own state, so carrying them trades file size for a reader that needs no
@@ -136,6 +153,7 @@ export function rowsForRecord(record: ExportedRecord, cards: CardDb, options: Ro
   const states = replayedStates(record, cards)
   const key = gameKey(record)
   const { build, opponentAi, humanSeat, undoCount, winner } = record
+  const view = options.view ?? 'full'
   return record.moves.map((move, i): TrainingRow => {
     const state = states[i]
     const legal = options.legalMoves ? legalMoves(state) : undefined
@@ -147,14 +165,14 @@ export function rowsForRecord(record: ExportedRecord, cards: CardDb, options: Ro
       mover: move.by,
       decidedBy: humanSeat === undefined ? 'unknown' : move.by === humanSeat ? 'human' : 'ai',
       outcome: outcomeFor(winner, move.by),
-      information: 'full',
+      information: view,
       ...(build !== undefined && { build }),
       ...(opponentAi !== undefined && { opponentAi }),
       ...(humanSeat !== undefined && { humanSeat }),
       ...(undoCount !== undefined && { undoCount }),
       action: move.action,
       ...(legal && { chosenIndex: legal.findIndex(a => sameAction(a, move.action)), legalMoves: legal }),
-      state: withoutCards(state),
+      state: withoutCards(view === 'mover' ? seatView(state, move.by) : state),
     }
   })
 }
