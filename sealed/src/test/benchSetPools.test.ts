@@ -146,12 +146,13 @@ describe('toFixture', () => {
     })
 
     it('names a row filed anywhere else, or a back the app would not expect', () => {
+      // Named apart, since rows that share a name are one card and a fixture keeps one of them.
       const rows = [
         apiRow({ FrontArt: art('LAW/010') }),
-        apiRow({ Number: '011', FrontArt: 'https://cdn.example/LAW/011.png' }),
-        apiRow({ Number: '005', Type: 'Leader', FrontArt: art('LAW/005'), BackArt: art('LAW/005-back') }),
-        apiRow({ Number: '006', Type: 'Leader', FrontArt: art('LAW/006') }),
-        apiRow({ Number: '012', FrontArt: art('LAW/012'), BackArt: art('LAW/012-b') }),
+        apiRow({ Number: '011', Name: 'Filed Elsewhere', FrontArt: 'https://cdn.example/LAW/011.png' }),
+        apiRow({ Number: '005', Name: 'Odd Back', Type: 'Leader', FrontArt: art('LAW/005'), BackArt: art('LAW/005-back') }),
+        apiRow({ Number: '006', Name: 'No Back', Type: 'Leader', FrontArt: art('LAW/006') }),
+        apiRow({ Number: '012', Name: 'Unit With A Back', FrontArt: art('LAW/012'), BackArt: art('LAW/012-b') }),
       ]
       expect(artOffRule(rows)).toEqual(['LAW_011', 'LAW_005', 'LAW_006', 'LAW_012'])
     })

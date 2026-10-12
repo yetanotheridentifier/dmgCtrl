@@ -42,7 +42,7 @@ import { saveMatrix, deckStrength, leaderStrength, baseStrength, firstPlayerAdva
 import type { FirstPlayerSplit } from './stats'
 import { resolveAi } from '../ai/registry'
 import { fetchSets, formatTriage, triage } from './triage'
-import { fixtureFile, poolFor, resolveSealedSets, SET_CODES, toFixture } from './setPools'
+import { artOffRule, fixtureFile, poolFor, resolveSealedSets, SET_CODES, toFixture } from './setPools'
 
 /**
  * The bench command line: `npm run bench --prefix sealed -- [--games N] [--seed N] [aiA] [aiB]`.
@@ -1557,23 +1557,27 @@ async function runTriageMode(args: Args): Promise<void> {
 /**
  * `--fixture LAW SEC` (or `all`): fetch sets from the card API and write each as the bench's bundled
  * fixture. Committed rather than fetched per run, so a sweep is reproducible without the network.
- * A new set also needs its import in `setPools.ts` and its counts in `data/implementedCards.ts`, and
- * `benchSetPools.test.ts` fails until both are there.
+ * A new set also needs its import in `setPools.ts`, its loader in `data/bundledSets.ts` (the app
+ * ships these files) and its counts in `data/implementedCards.ts`, and `benchSetPools.test.ts` and
+ * `bundledSets.test.ts` fail until all three are there.
  */
 async function runFixtureMode(args: Args): Promise<void> {
   const codes = args.sets.includes('ALL') ? [...SET_CODES] : args.sets
   for (const code of codes) {
-    let cards
+    let listing
     try {
-      cards = toFixture(await fetchSets([code]))
+      listing = await fetchSets([code])
     } catch (err) {
       console.error(`bench: ${(err as Error).message}`)
       process.exit(2)
       return
     }
+    const cards = toFixture(listing)
     const file = fixtureFile(code)
     writeFileSync(file, JSON.stringify(cards))
     console.log(row(code, `${cards.length} cards -> ${file}`))
+    const offRule = artOffRule(listing)
+    if (offRule.length > 0) console.warn(row(code, `art not under set and number, so the app would show none: ${offRule.join(', ')}`))
   }
 }
 

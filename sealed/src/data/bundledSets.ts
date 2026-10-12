@@ -43,9 +43,10 @@ const ART = 'https://cdn.swu-db.com/images/cards'
 /**
  * A snapshot row with its art named. The card API files every card's art under its set and number,
  * and a leader's back under the same with `-b`, so the fields a snapshot leaves out are a rule
- * rather than data, and the art itself still streams from the proxy.
+ * rather than data, and the art itself still streams from the proxy. `--fixture` checks the rule
+ * against the listing each time a snapshot is written (`artOffRule` in `bench/setPools.ts`).
  */
-function withArt(card: SwuCard): SwuCard {
+export function withArt(card: SwuCard): SwuCard {
   const front = `${ART}/${card.Set}/${card.Number}`
   return { ...card, FrontArt: `${front}.png`, ...(card.Type === 'Leader' && { BackArt: `${front}-b.png` }) }
 }
