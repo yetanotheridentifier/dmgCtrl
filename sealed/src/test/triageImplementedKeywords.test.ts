@@ -3,7 +3,8 @@ import { normaliseCard } from '../engine/cardDb'
 import { registeredCardIds } from '../engine/abilities'
 import '../engine/cardDefinitions' // side effect: registers every implemented card
 import { reprintCanonicalId } from '../data/reprints'
-import { normalPrintings, triage } from '../bench/triage'
+import { normalPrintings } from '../data/normalPrintings'
+import { triage } from '../bench/triage'
 import { SET_CODES, poolFor } from '../bench/setPools'
 
 /**

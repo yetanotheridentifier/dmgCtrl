@@ -154,13 +154,18 @@ describe('printings with the card API unreachable', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('still use the cache first, so a visitor with a cached set resolves as before', async () => {
+  it('read the cache together with the bundled set, so a cached card the snapshot does not hold still resolves', async () => {
     vi.stubGlobal('fetch', unreachable())
-    const renumbered = { Set: 'SOR', Number: '900', Name: '2-1B Surgical Droid', Type: 'Unit', VariantType: 'Normal' } as SwuCard
-    await db.cards.put({ id: 'SOR_900', json: renumbered, fetchedAt: 1 })
-    const hyperspace = { ...renumbered, Number: '323', VariantType: 'Hyperspace' } as SwuCard
+    const added = { Set: 'SOR', Number: '900', Name: 'Printed Since The Snapshot', Type: 'Unit', VariantType: 'Normal' } as SwuCard
+    await db.cards.put({ id: 'SOR_900', json: added, fetchedAt: 1 })
+    const hyperspace = { ...added, Number: '950', VariantType: 'Hyperspace' } as SwuCard
+    const bundled = SOR.find(c => c.Number === '059')!
 
-    expect((await canonicaliseCards([hyperspace])).map.get('SOR_323')).toBe('SOR_900')
+    const { map, unresolved } = await canonicaliseCards([hyperspace, bundled])
+
+    expect(map.get('SOR_950')).toBe('SOR_900')
+    expect(map.get('SOR_059')).toBe('SOR_059')
+    expect(unresolved).toEqual([])
   })
 })
 
