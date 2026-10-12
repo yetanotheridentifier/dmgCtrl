@@ -408,7 +408,9 @@ record holds" above):
 
 - **The notice** (`components/shareGamesNotice.tsx`), shown while the answer is `unasked`. `App`
   passes it to `DeckSelectScreen` as `catalogueNotice`, a slot the screen renders at the head of
-  its card catalogue column, above that column's heading and note. So the notice reads the
+  its card catalogue column. That column stacks three sections (the notice, the Implemented cards
+  panel, then the Card catalogue heading and its note) and spaces them itself, with the gap the
+  screen puts between columns, so none carries a margin of its own. So the notice reads the
   settings and the deck screen does not, and the deck and opponent columns start at the top of
   the page. It is a card in the page, never a dialog: it covers nothing and the deck screen works
   untouched. Its two buttons share one class, so neither answer is the highlighted one, and
@@ -418,7 +420,7 @@ record holds" above):
 - **The settings form**, where a checkbox maps on to `yes` and off to `no`.
 
 Once the answer is not `unasked`, the notice renders nothing, so the catalogue column starts at its
-heading, level with the other two. In its place `ShareGamesPill` (same file) shows in the app
+first heading (Implemented cards), level with the other two. In its place `ShareGamesPill` (same file) shows in the app
 header, immediately left of the cog and help buttons, and opens the settings form: "Improve the
 bot" after a no, and a fainter "Your games are improving the bot" after a yes. It carries no badge,
 count or animation in either state, and is smaller and lighter than the two icon buttons. The app

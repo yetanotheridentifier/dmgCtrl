@@ -22,8 +22,9 @@ import type { SetProgress, SetGroup, TypeCounts } from '../data/implementedCards
 interface Props {
   onPlay: (deck: SavedDeck, opponentDeck: SavedDeck) => void
   /**
-   * Rendered at the head of the card catalogue column, above its heading. The caller owns what it
-   * is and anything it needs, and brings its own gap below.
+   * Rendered at the head of the card catalogue column, above Implemented cards. The caller owns
+   * what it is and anything it needs. The column spaces it from what follows, so it brings no
+   * margin, and it must be one element or nothing.
    */
   catalogueNotice?: ReactNode
 }
@@ -248,14 +249,15 @@ const TYPE_LABEL: Record<keyof TypeCounts, string> = {
 
 /**
  * One set's breakdown: a summary line carrying its overall count, then a row per card type. Sets
- * with nothing built still appear (all zeroes), so the panel doubles as the roadmap.
+ * with nothing built still appear (all zeroes), so the panel doubles as the roadmap. Every set
+ * starts shut and opens on its own line, a native disclosure the browser keeps the state of.
  */
-function SetRow({ set, defaultOpen }: { set: SetProgress; defaultOpen: boolean }) {
+function SetRow({ set }: { set: SetProgress }) {
   const done = sumCounts(set.done)
   const total = sumCounts(set.total)
   const pct = pctOf(done, total)
   return (
-    <details data-testid={`set-progress-${set.code}`} open={defaultOpen} className="mt-2 border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
+    <details data-testid={`set-progress-${set.code}`} className="mt-2 border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
       <summary className="flex items-baseline justify-between gap-2 px-3 py-1.5 cursor-pointer select-none text-xs">
         <span className="text-accent uppercase tracking-[0.12em] font-light">{set.code}</span>
         <span className="ml-auto text-ink-dim tabular-nums">{done} / {total}</span>
@@ -276,7 +278,7 @@ function SetRow({ set, defaultOpen }: { set: SetProgress; defaultOpen: boolean }
 }
 
 /**
- * Reference panel (foot of the card catalogue column): how much of each set's card abilities are built into
+ * Reference panel (first section of the card catalogue column): how much of each set's card abilities are built into
  * the engine. One collapsible block per set, newest first, each broken down by card type. Sourced
  * from the manifest in `data/implementedCards`, which a test pins to the ability registry.
  *
@@ -287,7 +289,7 @@ function ImplementationStatus() {
   const [open, setOpen] = useState(false)
   const breakdownId = useId()
   return (
-    <aside data-testid="implemented-cards" className="mt-8">
+    <aside data-testid="implemented-cards">
       <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">
         <button
           type="button"
@@ -308,7 +310,7 @@ function ImplementationStatus() {
 
       <ProgressBar />
 
-      {/* Sets by legality block, newest first within each. Only the newest set starts expanded. */}
+      {/* Sets by legality block, newest first within each, every one shut. */}
       {open && (
         <div id={breakdownId} data-testid="set-progress">
           {SET_GROUPS.map(({ group, heading }) => {
@@ -317,7 +319,7 @@ function ImplementationStatus() {
             return (
               <section key={group} data-testid={`set-group-${group}`}>
                 {heading && <h3 className="mt-4 text-ink-faint text-[0.65rem] uppercase tracking-[0.12em] font-light">{heading}</h3>}
-                {sets.map(set => <SetRow key={set.code} set={set} defaultOpen={set.code === SET_PROGRESS[0].code} />)}
+                {sets.map(set => <SetRow key={set.code} set={set} />)}
               </section>
             )
           })}
@@ -748,16 +750,21 @@ export default function DeckSelectScreen({ onPlay, catalogueNotice }: Props) {
         </fieldset>
       </div>
 
-      <div data-testid="catalogue-column" className="min-w-0">
+      {/* The column spaces its own sections, with the gap the grid puts between columns, so none of
+          them carries a margin and whatever heads the column sits that far above the next heading. */}
+      <div data-testid="catalogue-column" className="min-w-0 space-y-8">
         {catalogueNotice}
-        <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Card catalogue</h2>
-        <p className="mt-1 text-ink-faint text-xs">
-          Cards are cached on this device as the decks here need them: the set each generator builds
-          from, and every card your own decks name, bases included. Games and deck views then work
-          offline. Each panel reports its own caching, so there is nothing to fetch by hand.
-        </p>
 
         <ImplementationStatus />
+
+        <section data-testid="card-catalogue">
+          <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Card catalogue</h2>
+          <p className="mt-1 text-ink-faint text-xs">
+            Cards are cached on this device as the decks here need them: the set each generator builds
+            from, and every card your own decks name, bases included. Games and deck views then work
+            offline. Each panel reports its own caching, so there is nothing to fetch by hand.
+          </p>
+        </section>
       </div>
     </div>
   )

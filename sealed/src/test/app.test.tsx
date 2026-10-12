@@ -204,19 +204,31 @@ describe('App shell', () => {
 
     /**
      * It heads the right-hand column, so the deck and opponent columns start at the top of the
-     * page and nothing is pushed down by it.
+     * page and nothing is pushed down by it. Implemented cards follows it, then Card catalogue.
      */
-    it('heads the card catalogue column, above the catalogue heading and its note', () => {
+    it('heads the card catalogue column, above Implemented cards and then the catalogue heading and its note', () => {
       render(<App />)
 
       const column = screen.getByTestId('catalogue-column')
       const notice = within(column).getByTestId('share-games-notice')
-      const heading = within(column).getByRole('heading', { name: 'Card catalogue' })
-      const note = within(column).getByText(/cached on this device/i)
-      expect(notice.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      expect(notice.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      const catalogue = within(column).getByTestId('card-catalogue')
+      expect([...column.children]).toEqual([notice, within(column).getByTestId('implemented-cards'), catalogue])
+      expect(within(catalogue).getByRole('heading', { name: 'Card catalogue' })).toBeInTheDocument()
+      expect(within(catalogue).getByText(/cached on this device/i)).toBeInTheDocument()
       expect(within(screen.getByTestId('player-column')).queryByTestId('share-games-notice')).toBeNull()
       expect(within(screen.getByTestId('opponent-column')).queryByTestId('share-games-notice')).toBeNull()
+    })
+
+    /**
+     * The card brings no margin of its own: the column spaces its sections, so the gap under the
+     * card is the gap between any two of them.
+     */
+    it('leaves the gap below the card to the column', () => {
+      render(<App />)
+
+      const column = screen.getByTestId('catalogue-column')
+      expect(column.className).toMatch(/(^| )space-y-8( |$)/)
+      expect(within(column).getByTestId('share-games-notice').className).not.toMatch(/(^| )m[tby]-/)
     })
 
     /** While the card is asking, there is no pill anywhere: the header holds the two buttons only. */
@@ -249,13 +261,13 @@ describe('App shell', () => {
       expect(within(screen.getByTestId('deck-select-screen')).queryByTestId('share-games-pill')).toBeNull()
     })
 
-    /** With the pill in the header, an answered notice leaves nothing above the column's heading. */
-    it.each(['yes', 'no'] as const)('starts the catalogue column at its heading after a %s, level with the other columns', stored => {
+    /** With the pill in the header, an answered notice leaves nothing above the column's first heading. */
+    it.each(['yes', 'no'] as const)('starts the catalogue column at Implemented cards after a %s, level with the other columns', stored => {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), shareGames: stored }))
       render(<App />)
       const column = screen.getByTestId('catalogue-column')
 
-      expect(column.firstElementChild).toBe(within(column).getByRole('heading', { name: 'Card catalogue' }))
+      expect([...column.children]).toEqual([within(column).getByTestId('implemented-cards'), within(column).getByTestId('card-catalogue')])
     })
 
     it('moves the pill into the header as the card is answered', async () => {
@@ -267,7 +279,7 @@ describe('App shell', () => {
 
       expect(within(column).queryByTestId('share-games-pill')).toBeNull()
       expect(within(screen.getByRole('banner')).getByTestId('share-games-pill')).toHaveTextContent('Improve the bot')
-      expect(column.firstElementChild).toBe(within(column).getByRole('heading', { name: 'Card catalogue' }))
+      expect(column.firstElementChild).toBe(within(column).getByTestId('implemented-cards'))
     })
 
     /** The pill belongs to the deck screen. A game has its own header, and the pill is not in it. */

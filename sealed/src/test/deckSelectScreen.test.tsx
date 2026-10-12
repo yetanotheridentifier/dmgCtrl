@@ -135,21 +135,44 @@ describe('DeckSelectScreen', () => {
    * The screen leaves the head of the catalogue column to its caller, so what goes there (the
    * notice about sharing games, which needs the settings) is not this screen's concern.
    */
-  it('renders what it is given at the head of the catalogue column, above the heading and note', () => {
+  it('stacks the catalogue column as what it is given, then Implemented cards, then Card catalogue', () => {
+    render(<DeckSelectScreen onPlay={vi.fn()} catalogueNotice={<p data-testid="slot">Slotted</p>} />)
+    const column = screen.getByTestId('catalogue-column')
+    const catalogue = within(column).getByTestId('card-catalogue')
+
+    expect([...column.children]).toEqual([
+      within(column).getByTestId('slot'),
+      within(column).getByTestId('implemented-cards'),
+      catalogue,
+    ])
+    // Each heading sits directly above its own content: the note belongs to Card catalogue.
+    expect(catalogue.firstElementChild).toBe(within(catalogue).getByRole('heading', { name: 'Card catalogue' }))
+    expect(within(catalogue).getByText(/cached on this device/i)).toBeInTheDocument()
+  })
+
+  it('starts the catalogue column at Implemented cards when given nothing', () => {
+    render(<DeckSelectScreen onPlay={vi.fn()} />)
+    const column = screen.getByTestId('catalogue-column')
+    expect([...column.children]).toEqual([
+      within(column).getByTestId('implemented-cards'),
+      within(column).getByTestId('card-catalogue'),
+    ])
+  })
+
+  /**
+   * The gap between the column's sections is the column's, stated once, and it is the gap the
+   * screen puts between its columns. No section brings a margin of its own, so whatever heads the
+   * column sits the same distance above the next heading as any two sections do.
+   */
+  it('spaces the catalogue column from the column itself, with the gap the screen uses', () => {
     render(<DeckSelectScreen onPlay={vi.fn()} catalogueNotice={<p data-testid="slot">Slotted</p>} />)
     const column = screen.getByTestId('catalogue-column')
 
-    const slot = within(column).getByTestId('slot')
-    expect(column.firstElementChild).toContainElement(slot)
-    const heading = within(column).getByRole('heading', { name: 'Card catalogue' })
-    expect(slot.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(slot.compareDocumentPosition(within(column).getByText(/cached on this device/i)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-
-  it('starts the catalogue column at its heading when given nothing', () => {
-    render(<DeckSelectScreen onPlay={vi.fn()} />)
-    const column = screen.getByTestId('catalogue-column')
-    expect(column.firstElementChild).toBe(within(column).getByRole('heading', { name: 'Card catalogue' }))
+    expect(screen.getByTestId('deck-select-screen').className).toMatch(/(^| )gap-8( |$)/)
+    expect(column.className).toMatch(/(^| )space-y-8( |$)/)
+    for (const id of ['implemented-cards', 'card-catalogue']) {
+      expect(within(column).getByTestId(id).className, id).not.toMatch(/(^| )m[tby]-/)
+    }
   })
 
   it('breaks progress down per set, newest first, with a row per card type', async () => {
@@ -169,9 +192,8 @@ describe('DeckSelectScreen', () => {
     expect(within(within(panel).getByTestId('set-group-retired')).getByText(/rotated out/i)).toBeInTheDocument()
     expect(within(within(panel).getByTestId('set-group-out-of-cycle')).getByText(/other sets/i)).toBeInTheDocument()
 
-    // Only the newest set is expanded.
-    expect((within(panel).getByTestId('set-progress-HMW') as HTMLDetailsElement).open).toBe(true)
-    for (const code of codes.slice(1)) {
+    // Every set starts shut, the newest included: the panel opens as a list of set lines.
+    for (const code of codes) {
       expect((within(panel).getByTestId(`set-progress-${code}`) as HTMLDetailsElement).open, code).toBe(false)
     }
 
@@ -181,6 +203,24 @@ describe('DeckSelectScreen', () => {
         expect(within(panel).getByTestId(`set-${set.code}-${type}`)).toHaveTextContent(`${set.done[type]} / ${set.total[type]}`)
       }
     }
+  })
+
+  it('opens one set on its own line, leaving the others shut', async () => {
+    const user = userEvent.setup()
+    render(<DeckSelectScreen onPlay={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: 'Implemented cards' }))
+    const panel = screen.getByTestId('set-progress')
+    const [first, second, ...rest] = SET_PROGRESS.map(s => within(panel).getByTestId(`set-progress-${s.code}`) as HTMLDetailsElement)
+
+    await user.click(second.querySelector('summary')!)
+
+    expect(second.open).toBe(true)
+    for (const other of [first, ...rest]) {
+      expect(other.open, other.dataset.testid).toBe(false)
+    }
+
+    await user.click(second.querySelector('summary')!)
+    expect(second.open).toBe(false)
   })
 
   it('shows a total implementation progress bar (every set)', () => {

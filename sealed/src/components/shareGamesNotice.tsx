@@ -41,9 +41,9 @@ export function ShareGamesPill({ onOpenSettings }: { onOpenSettings: () => void 
  * Until the player answers, a card in the page: not a dialog, covering nothing, with a game
  * startable beside it. The two answers are styled alike and neither is chosen for the player.
  *
- * `App` hands it to the deck screen, which puts it at the head of the card catalogue column. It
- * carries its own gap below, and once answered it renders nothing, so the column starts at its
- * heading.
+ * `App` hands it to the deck screen, which puts it at the head of the card catalogue column. The
+ * column spaces its sections, so the card has no margin of its own, and once answered it renders
+ * nothing, so the column starts at its first heading.
  *
  * The card's wording is the Help section's ("Improving the bot" in `docs/userGuide.md`), and a test
  * holds the two together.
@@ -53,7 +53,7 @@ export function ShareGamesNotice() {
   if (settings.shareGames !== 'unasked') return null
 
   return (
-    <aside data-testid="share-games-notice" className="mb-6 rounded-xl border-2 border-line/60 bg-surface px-4 py-3">
+    <aside data-testid="share-games-notice" className="rounded-xl border-2 border-line/60 bg-surface px-4 py-3">
       <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Help improve gameplay</h2>
       <div className="mt-2 space-y-2 text-sm text-ink-dim">
         <p>
