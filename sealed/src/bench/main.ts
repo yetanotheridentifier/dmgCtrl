@@ -16,7 +16,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { COMMIT_ID } from '../buildIdentity'
 import {
   runShards, poolShards, poolFirstPlayer, pendingSeeds, loadShardResults, shardRunKey, shardPayload,
-  spawnShards, shardPayloadPath, SHARD_DIR, type ShardResult,
+  spawnShards, shardPayloadPath, SHARD_DIR, type ShardConfig, type ShardResult,
 } from './shard'
 import {
   renderStatus, loadAllProgress, preflight, makeManifest, writeStatusFile, MANIFEST_FILE,
@@ -44,6 +44,7 @@ import { resolveAi } from '../ai/registry'
 import { fetchSets, formatTriage, triage } from './triage'
 import { artOffRule, fixtureFile, poolFor, resolveSealedSets, SET_CODES, toFixture } from './setPools'
 import { ROWS_FORMAT_VERSION, rowsForExport, trainingCardDb, type RowView } from './trainingRows'
+import { benchRecord, missingRecords, recordsPath, recordsWriter, RECORDS_DIR } from './records'
 
 /**
  * The bench command line: `npm run bench --prefix sealed -- [--games N] [--seed N] [aiA] [aiB]`.
@@ -124,6 +125,8 @@ interface Args {
   view: RowView
   /** The export files for `--rows`, taken from the positional arguments as typed. */
   files: string[]
+  /** Keep the head-to-head run's completed games as records (`records.ts`). */
+  record: boolean
   aiExplicit: boolean
   /**
    * Every AI named positionally. The head-to-head modes take the first two; `--cost` and `--budget`
@@ -167,6 +170,7 @@ export function parseArgs(argv: string[]): Args {
   let rows = false
   let legal = false
   let view: RowView = 'full'
+  let record = false
   let poolSets = ['ASH']
   let decks: DeckSource | undefined
   for (let i = 0; i < argv.length; i++) {
@@ -206,6 +210,7 @@ export function parseArgs(argv: string[]): Args {
     else if (arg === '--fixture') fixture = true
     else if (arg === '--rows') rows = true
     else if (arg === '--legal') legal = true
+    else if (arg === '--record') record = true
     else if (arg === '--view') {
       const v = argv[++i]
       if (v !== 'full' && v !== 'mover') throw new Error(`--view must be full or mover, got "${v}"`)
@@ -231,10 +236,14 @@ export function parseArgs(argv: string[]): Args {
   if (rows && positional.length === 0) throw new Error('--rows needs at least one export file, e.g. --rows games.json --out rows.jsonl')
   // No default and no standard output: `npm run` prints its own lines there, which are not rows.
   if (rows && out === undefined) throw new Error('--rows needs --out, the file to write the rows to')
+  // Only the head-to-head run hands its games to a recorder. Refused here, so a mode that keeps no
+  // records says so before it plays anything, where taking the flag and writing nothing would not.
+  const otherMode = sweep || generalise || matrix || decisions || terms || cost || budget || lethal || matchups || status || history || triage || fixture || rows
+  if (record && otherMode) throw new Error('--record applies to the head-to-head game run only (with or without --shard)')
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
   // The matrix rates one set's leaders against each other; a mixed pool builds decks nobody builds.
   if (matrix && poolSets.length !== 1) throw new Error(`--matrix takes one set, got ${poolSets.join(',')}`)
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, poolSets, decks, sets: positional.map(s => s.toUpperCase()), rows, legal, view, files: positional, aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, poolSets, decks, sets: positional.map(s => s.toUpperCase()), rows, legal, view, files: positional, record, aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 /**
@@ -1110,7 +1119,7 @@ function runBudgetMode(args: Args): void {
 async function runShardMode(args: Args): Promise<void> {
   const shards = args.shards ?? 1
   const start = Date.now()
-  const config = { shards, games: args.games, baseSeed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks }
+  const config: ShardConfig = { shards, games: args.games, baseSeed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks, record: args.record }
   const dir = join(SHARD_DIR, shardRunKey(config))
   const todo = pendingSeeds(config, loadShardResults(dir))
 
@@ -1186,9 +1195,34 @@ async function runShardMode(args: Args): Promise<void> {
     )
   }
 
+  if (args.record) {
+    // The control is a run of its own (the baseline against itself), recorded to its own files.
+    const runs = args.control ? [config, { ...config, aiA: args.aiB }] : [config]
+    for (const run of runs) lines.push(...recordsLines(run))
+  }
+
   lines.push(row('wall clock', `${((Date.now() - start) / 1000).toFixed(1)}s`), '')
   console.log(lines.join('\n'))
   if (failed.length > 0) process.exit(1)
+}
+
+/**
+ * What a recording sharded run left on disk, and which shards left nothing.
+ *
+ * A shard banked by an earlier attempt is skipped, so it records nothing now. Named, with what to
+ * do about it, because the pooled result above counts those games and the records would otherwise
+ * be short of them without a word.
+ */
+function recordsLines(config: ShardConfig): string[] {
+  const missing = missingRecords(config)
+  const lines = [row(`records (${config.aiA} vs ${config.aiB})`, `${config.shards - missing.length} of ${config.shards} shard files in ${join(RECORDS_DIR, COMMIT_ID)}/`)]
+  if (missing.length > 0) {
+    lines.push(
+      `  WARNING: no records for seed ${missing.map(m => m.seed).join(', ')}: banked before this run, or failed.`,
+      `  A banked shard is not played again. To record it, delete its seed-N.json in ${join(SHARD_DIR, shardRunKey(config))}/ and re-run.`,
+    )
+  }
+  return lines
 }
 
 /**
@@ -1661,7 +1695,7 @@ function main(): void {
     args = parseArgs(process.argv.slice(2))
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
-    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N]')
+    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--shard N] [--record]')
     console.error('       [--sweep|--generalise|--matrix|--decisions|--terms|--cost|--budget|--lethal|--matchups] [ai ...]')
     console.error('       npm run bench --prefix sealed -- --sweep [--set SET[,SET ...]|all] [--games N] [--seed N[,N ...]] [ai]')
     console.error('       npm run bench --prefix sealed -- --triage SET [SET ...]')
@@ -1693,10 +1727,16 @@ function main(): void {
 
   let report: BenchReport
   const start = Date.now()
+  // The one recorder there is, on the one run that takes one. A shard is this same run, started by
+  // its parent with `--record`, so it writes its own seed's file and needs telling nothing else.
+  const records = args.record
+    ? recordsWriter(recordsPath({ games: args.games, seed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks }))
+    : undefined
   try {
     report = runBench({
       games: args.games, seed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks,
       onProgress: shardProgress(args.out, args.games),
+      onGame: records && (game => records.record(benchRecord(game))),
     })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
@@ -1704,6 +1744,10 @@ function main(): void {
     return
   }
   console.log(format(report, Date.now() - start))
+  if (records) {
+    const file = records.close()
+    console.log(row('records', `${file.games} games, ${file.bytes.toLocaleString('en-GB')} bytes  →  ${file.path}`))
+  }
 
   // Written before the database save, so a shard whose save fails is still counted by its parent.
   // This is what replaced regexing the printed report: what a run measured no longer depends on how

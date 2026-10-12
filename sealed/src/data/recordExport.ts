@@ -1,4 +1,5 @@
 import { COMMIT_ID, RELEASE } from '../buildIdentity'
+import type { PlayerId } from '../engine/types'
 import type { BuildIdentity, GameRecord } from './gameRecords'
 import { withoutCards, type StateWithoutCards } from './replayData'
 
@@ -21,6 +22,27 @@ export const EXPORT_FORMAT_VERSION = 1
  */
 export type ExportedRecord = Omit<GameRecord, 'id' | 'initialState' | 'finalState' | 'consentedAtFinish'> & {
   initialState: StateWithoutCards
+  /** Only on a game the bench played between two bots (`bench/records.ts`). */
+  bench?: BenchProvenance
+}
+
+/**
+ * What a record of a bench game says that a person's game cannot: a bot sat at both seats, and the
+ * game is one of a seeded run. With it the record carries no `opponentAi` and no `humanSeat`, which
+ * describe a game one person played, and its two deck names are the bench's own.
+ *
+ * The type is here because the record it sits on is; nothing in the app writes or reads it. It is
+ * not on the list of what is sent for a player's game (`collection.ts`), and does not belong there.
+ */
+export interface BenchProvenance {
+  /** The name each seat played as, exactly as the run was given it, suffixes included (`ai/registry.ts`). */
+  ais: Record<PlayerId, string>
+  /** The seed this game was dealt and played from. */
+  seed: number
+  /** The run the game came from: its seed, which of its games this was from zero, and its deck set. */
+  runSeed: number
+  game: number
+  decks: string
 }
 
 export interface GameExport {

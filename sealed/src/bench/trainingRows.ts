@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 import type { BuildIdentity } from '../data/gameRecords'
-import { EXPORT_FORMAT_VERSION, type ExportedRecord, type GameExport } from '../data/recordExport'
+import { EXPORT_FORMAT_VERSION, type BenchProvenance, type ExportedRecord, type GameExport } from '../data/recordExport'
 import { withoutCards, type StateWithoutCards } from '../data/replayData'
 import type { Action } from '../engine/actions'
 import { buildCardDb } from '../engine/cardDb'
@@ -55,7 +55,10 @@ export interface TrainingRow {
   moveCount: number
   /** The seat that made the move. */
   mover: PlayerId
-  /** Who was sitting there: the person, the bot named by `opponentAi`, or not recorded. */
+  /**
+   * Who was sitting there: the person, a bot, or not recorded. The bot is the one `opponentAi` names
+   * in a person's game, and the one `ai` names in a game the bench played, where it is every seat.
+   */
   decidedBy: 'human' | 'ai' | 'unknown'
   /** How the game ended, from the mover's side. */
   outcome: Outcome
@@ -66,6 +69,18 @@ export interface TrainingRow {
   opponentAi?: string
   humanSeat?: PlayerId
   undoCount?: number
+  /**
+   * Only on the rows of a game the bench played (a record with `bench`): the bot that sat where this
+   * move was made, the deck it played, and the record's own account of its run.
+   *
+   * `ai` names the seat's bot, and a bot does not choose every move made from its seat. The setup
+   * phase (the mulligan and the opening resources) and an offer to concede come from the driver
+   * every bot plays under (`ai/concession.ts`), in the bench as in the app, whatever the name, and
+   * the bench accepts an offer for the seat it is made to (`selfPlay.ts`).
+   */
+  ai?: string
+  deck?: string
+  bench?: BenchProvenance
   /** The move that was made. */
   action: Action
   /** With `legalMoves`: where `action` is in it, or -1 when the engine's list does not hold it. */
@@ -152,7 +167,7 @@ function replayedStates(record: ExportedRecord, cards: CardDb): GameState[] {
 export function rowsForRecord(record: ExportedRecord, cards: CardDb, options: RowOptions = {}): TrainingRow[] {
   const states = replayedStates(record, cards)
   const key = gameKey(record)
-  const { build, opponentAi, humanSeat, undoCount, winner } = record
+  const { build, opponentAi, humanSeat, undoCount, winner, bench } = record
   const view = options.view ?? 'full'
   return record.moves.map((move, i): TrainingRow => {
     const state = states[i]
@@ -163,13 +178,19 @@ export function rowsForRecord(record: ExportedRecord, cards: CardDb, options: Ro
       moveIndex: i,
       moveCount: record.moves.length,
       mover: move.by,
-      decidedBy: humanSeat === undefined ? 'unknown' : move.by === humanSeat ? 'human' : 'ai',
+      // A bench game has a bot on both seats and no person to name, so it is asked first.
+      decidedBy: bench !== undefined ? 'ai' : humanSeat === undefined ? 'unknown' : move.by === humanSeat ? 'human' : 'ai',
       outcome: outcomeFor(winner, move.by),
       information: view,
       ...(build !== undefined && { build }),
       ...(opponentAi !== undefined && { opponentAi }),
       ...(humanSeat !== undefined && { humanSeat }),
       ...(undoCount !== undefined && { undoCount }),
+      ...(bench !== undefined && {
+        ai: bench.ais[move.by],
+        deck: move.by === 'player' ? record.playerDeckName : record.opponentDeckName,
+        bench,
+      }),
       action: move.action,
       ...(legal && { chosenIndex: legal.findIndex(a => sameAction(a, move.action)), legalMoves: legal }),
       state: withoutCards(view === 'mover' ? seatView(state, move.by) : state),
