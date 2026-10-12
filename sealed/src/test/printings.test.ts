@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { db } from '../data/db'
-import { printingKey, buildPrintingIndex, canonicaliseCards } from '../data/printings'
+import { buildPrintingIndex, canonicaliseCards } from '../data/printings'
+import { printingKey } from '../data/normalPrintings'
 import type { SwuCard } from '../data/cards'
 
 /**

@@ -4,6 +4,14 @@ import { db } from '../data/db'
 import { syncCatalogue } from '../data/catalogueSync'
 import { SWU_DB_API } from '../data/cards'
 
+// These tests are about fetching what is not on the device. They name real cards, which a bundled
+// set would answer before the network was asked, so nothing is bundled here. A deck list of bundled
+// cards is covered in `bundledSetTier.test.ts`.
+vi.mock('../data/bundledSets', async importOriginal => ({
+  ...(await importOriginal<typeof import('../data/bundledSets')>()),
+  bundledCard: () => Promise.resolve(undefined),
+}))
+
 function makeCard(set: string, number: string) {
   return {
     Set: set,

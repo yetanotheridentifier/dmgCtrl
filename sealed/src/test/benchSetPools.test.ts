@@ -6,7 +6,7 @@ import type { SwuCard } from '../data/cards'
 import { SET_PROGRESS } from '../data/implementedCards'
 import { CARD_DATA_CORRECTIONS } from '../engine/cardDataCorrections'
 import {
-  SEALED_MIN_CARDS, SEALED_SET_CODES, SET_CODES, fixtureFile, poolFor, resolveSealedSets, resolveSetCodes, toFixture,
+  SEALED_MIN_CARDS, SEALED_SET_CODES, SET_CODES, artOffRule, fixtureFile, poolFor, resolveSealedSets, resolveSetCodes, toFixture,
 } from '../bench/setPools'
 
 /**
@@ -127,6 +127,43 @@ describe('toFixture', () => {
     // IBH prints single cards at up to three collector numbers: 104 slots, 51 cards.
     const rows = [apiRow({ Set: 'IBH', Number: '89' }), apiRow({ Set: 'IBH', Number: '70' }), apiRow({ Set: 'IBH', Number: '103' })]
     expect(toFixture(rows).map(c => c.Number)).toEqual(['70'])
+  })
+
+  /**
+   * A fixture keeps no art fields, and the app ships the fixtures: it names each card's art from its
+   * set and number instead. That holds only while the card API files art that way, so writing a
+   * fixture checks the listing it was written from and names any row that does not.
+   */
+  describe('the art the listing names', () => {
+    const art = (path: string) => `https://cdn.swu-db.com/images/cards/${path}.png`
+
+    it('is where the app looks for it: under the set and number, a leader\'s back with -b', () => {
+      const rows = [
+        apiRow({ FrontArt: art('LAW/010') }),
+        apiRow({ Number: '005', Type: 'Leader', FrontArt: art('LAW/005'), BackArt: art('LAW/005-b') }),
+      ]
+      expect(artOffRule(rows)).toEqual([])
+    })
+
+    it('names a row filed anywhere else, or a back the app would not expect', () => {
+      // Named apart, since rows that share a name are one card and a fixture keeps one of them.
+      const rows = [
+        apiRow({ FrontArt: art('LAW/010') }),
+        apiRow({ Number: '011', Name: 'Filed Elsewhere', FrontArt: 'https://cdn.example/LAW/011.png' }),
+        apiRow({ Number: '005', Name: 'Odd Back', Type: 'Leader', FrontArt: art('LAW/005'), BackArt: art('LAW/005-back') }),
+        apiRow({ Number: '006', Name: 'No Back', Type: 'Leader', FrontArt: art('LAW/006') }),
+        apiRow({ Number: '012', Name: 'Unit With A Back', FrontArt: art('LAW/012'), BackArt: art('LAW/012-b') }),
+      ]
+      expect(artOffRule(rows)).toEqual(['LAW_011', 'LAW_005', 'LAW_006', 'LAW_012'])
+    })
+
+    it('reads only the rows a fixture keeps', () => {
+      const rows = [
+        apiRow({ Number: '300', VariantType: 'Hyperspace', FrontArt: 'https://cdn.example/LAW/300.png' }),
+        apiRow({ Number: 'T01', Name: 'Shield', Subtitle: undefined, Type: 'Token', FrontArt: 'https://cdn.example/LAW/T01.png' }),
+      ]
+      expect(artOffRule(rows)).toEqual([])
+    })
   })
 
   it('keeps a card printed in two sets as two cards', () => {

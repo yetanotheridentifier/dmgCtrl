@@ -979,6 +979,12 @@ the engine reads. The set search wraps aspects and traits as `{ S: value }`, whi
 panel shows. A new set needs its import in `bench/setPools.ts` and its totals in
 `data/implementedCards.ts`, and that test fails until both are there.
 
+**The fixtures are also the sets the app ships** (`data/bundledSets.ts` loads each on demand), so a
+refreshed fixture is what players get on their next visit, and a new set needs its loader there too
+(`bundledSets.test.ts` fails without it). A fixture keeps no art fields: the app names a bundled
+card's art from its set and number, and `--fixture` warns about any listing row whose art is filed
+anywhere else (`artOffRule`), since that card would show no art.
+
 **Refreshing a fixture can change the decks every bench plays.** The deck generator reads a fixture's
 cost directly, and `cardDataCorrections` never reaches it, so a corrected cost reshapes every curve
 built around that card. `coverageDecks.test.ts` pins a fingerprint of the ASH coverage deck set so
@@ -1091,7 +1097,7 @@ still needs reading before it is built.
 
 The setup panel credits each set with the cards that play as printed, from `PLAYABLE_AS_PRINTED` in
 `data/implementedCards.ts`. Those counts are recorded rather than computed, since computing them would
-ship every fixture in the app, and `implementedCards.test.ts` triages each set's bundled fixture and
+put every fixture in the script the page loads first, and `implementedCards.test.ts` triages each set's bundled fixture and
 fails if any count by card type differs. When a keyword lands and cards move over, that test names the
 new numbers. It also fails if a card with a registered ability is counted as playing as printed, which
 would count it twice.

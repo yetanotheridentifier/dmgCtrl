@@ -2,12 +2,10 @@ import { describe, it, expect } from 'vitest'
 import ashSet from './fixtures/ashSet.json'
 import type { SwuCard } from '../data/cards'
 import { SWU_DB_API } from '../data/cards'
-import { printingKey } from '../data/printings'
+import { normalPrintings } from '../data/normalPrintings'
 import {
   IMPLEMENTED_KEYWORDS,
   TRIAGE_API_BASE,
-  identityKey,
-  normalPrintings,
   residualAbility,
   triage,
   triggerHeads,
@@ -472,11 +470,6 @@ describe('the ASH anchor', () => {
 })
 
 describe('card identity', () => {
-  it('matches the printing key the app canonicalises with, so the two cannot drift', () => {
-    const c = card({ Type: 'Unit', Name: 'Grogu', Subtitle: 'Irresistible' })
-    expect(identityKey(c)).toBe(printingKey(c))
-  })
-
   it('separates a leader from a unit that shares its name with no subtitle', () => {
     // ASH has 13 unit names that collide with leader names. Without Type in the key one is lost.
     const pool = [
