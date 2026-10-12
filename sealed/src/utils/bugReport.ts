@@ -14,6 +14,8 @@ import type { Action } from '../engine/actions'
 export interface ReportLogEntry {
   by: PlayerId
   text: string
+  /** Something the action above it changed, not an action: printed under it with no actor. */
+  outcome?: true
 }
 
 export interface ReportInput {
@@ -73,7 +75,7 @@ function replayPayload(initialState: GameState | null, moves: ReportInput['moves
 
 export function buildReportMarkdown({ description, release, commitId, isDev, log, initialState, moves, unresolvedPrintings = [] }: ReportInput): string {
   const payload = replayPayload(initialState, moves)
-  const logLines = log.map(e => `${e.by === 'player' ? 'You' : 'Opp'}  ${e.text}`).join('\n')
+  const logLines = log.map(e => (e.outcome ? `       ${e.text}` : `${e.by === 'player' ? 'You' : 'Opp'}  ${e.text}`)).join('\n')
 
   const sections = [
     '### What happened',

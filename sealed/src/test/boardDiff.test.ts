@@ -288,6 +288,9 @@ describe('hidden information never reaches the log', () => {
     const parts = describeActionParts(s, 'opponent', action, { redact: true })
     expect(namesSecret({ text: partsText(parts), parts })).toBe(false)
     expect(partsText(parts)).toBe(describeAction(s, 'opponent', action, { redact: true }))
+    // The same line unredacted does name it, so the check above can see a leak when there is one.
+    const open = describeAction(s, 'opponent', action)
+    expect(namesSecret({ text: open, parts: [open] }), open).toBe(true)
   })
 
   /**
@@ -333,7 +336,8 @@ describe('hidden information never reaches the log', () => {
     const publicIds = (s: GameState) => new Set((['player', 'opponent'] as PlayerId[]).flatMap(id => [...inPlay(s.players[id]), ...s.players[id].discard]))
     const hiddenIds = (p: PlayerState) => new Set([...p.hand, ...p.deck, ...p.resources.map(r => r.cardId)])
 
-    const NAMES = ['grassrootsHeal', 'attackBuffPersists', 'baylanExhaust', 'debuffOnOwnUnit', 'exhaustedLeaderDraw', 'hondoTopCard', 'kimogilaArena', 'rampResourceReady', 'sloaneSelfSentinel']
+    // The reports that replay from start to finish on the bundled card set with no inserted moves.
+    const NAMES = ['grassrootsHeal', 'advantageToEnemy', 'debuffOnOwnUnit', 'deployedLeaderExhaust', 'sloaneSelfSentinel']
 
     it.each(NAMES)('%s: no outcome line links a card the player could not see', name => {
       const report = loadReport(name)
@@ -347,13 +351,13 @@ describe('hidden information never reaches the log', () => {
           for (const ref of refs(entry.parts)) expect(seen.has(ref.cardId), `move ${i}: "${entry.text}" links ${ref.cardId}`).toBe(true)
         }
       })
-      expect(outcomes, 'a real game changes the board: zero lines would mean the walk measured nothing').toBeGreaterThan(10)
+      expect(outcomes, 'a real game changes the board: zero lines would mean the walk measured nothing').toBeGreaterThan(5)
     })
 
     it.each(NAMES)("%s: no line of the opponent's names a card that stayed hidden", name => {
       const report = loadReport(name)
       const steps = replaySteps(report)
-      let checked = 0
+      let checked = 0, secrets = 0
       report.moves.forEach((move, i) => {
         if (move.by !== 'opponent') return
         const before = steps[i], after = steps[i + 1]
@@ -362,6 +366,7 @@ describe('hidden information never reaches the log', () => {
         const stayedHidden = [...hiddenIds(before.players.opponent)].filter(id => hiddenIds(after.players.opponent).has(id) && !seen.has(id) && !seenNames.has(before.cards[id]?.name))
         for (const entry of logEntries(before, after, 'opponent', move.action)) {
           checked++
+          secrets += stayedHidden.length
           for (const id of stayedHidden) {
             expect(refs(entry.parts).some(r => r.cardId === id), `move ${i}: "${entry.text}" links hidden ${id}`).toBe(false)
             expect(entry.text.includes(before.cards[id]?.name ?? id), `move ${i}: "${entry.text}" names hidden ${before.cards[id]?.name}`).toBe(false)
@@ -369,6 +374,7 @@ describe('hidden information never reaches the log', () => {
         }
       })
       expect(checked).toBeGreaterThan(10)
+      expect(secrets, 'cards that stayed hidden were actually compared against').toBeGreaterThan(100)
     })
   })
 })

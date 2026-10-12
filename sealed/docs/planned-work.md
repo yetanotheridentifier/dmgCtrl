@@ -389,11 +389,6 @@ rule read off the payload rather than a table of the kinds that exist on the day
   centre-screen overlay when two abilities trigger and as small buttons beside Pass when one does. The
   split to aim for is by how a choice is answered: click-a-unit stays on the board, pick-a-button moves
   to an overlay. The action column keeps what the player initiates.
-- **#578 the log should say what changed, not just what was chosen.** Lowest of the three. The log
-  is one entry per submitted action, so an effect that resolves without a choice of its own leaves no
-  trace: a base healed and hit again before the player looks reads as a heal that never fired. A
-  board diff in `useGame` covers the common case with no engine change. Its limit is that it says
-  what changed and never why, which is what #579 is for.
 
 ## Deferred
 
@@ -402,8 +397,11 @@ rule read off the payload rather than a table of the kinds that exist on the day
   only if a winning configuration lands in the hundreds of milliseconds, or if mobile happens.
 - **Mobile and PWA adaptation** (#482). A redesign rather than breakpoints, and it would reinstate the
   Web Worker question.
-- **#579 an engine record of the effects it applies.** The correct answer to what #578 approximates,
-  and it **replaces** #578 rather than joining it. Held back on cost: most effect helpers do not know
+- **#579 an engine record of the effects it applies.** The correct answer to what the log's board
+  diff (`utils/boardDiff.ts`) approximates, and it **replaces** the diff rather than joining it. It is
+  also the only way to log a reveal that leaves no trace in the state (Disclose, an event revealed
+  as a cost, cards shown out of a hand with no choice) and to say which card caused a change. Held
+  back on cost: most effect helpers do not know
   their cause, so attribution has to be threaded through `effects.ts`, and a journal on `GameState`
   sits in the search's hot path, so landing it needs a bench run against a matched control rather
   than a green suite.

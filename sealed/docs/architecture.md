@@ -391,7 +391,37 @@ The board is drawn with art-dominant cards, not text rows:
   obscure it mid-play, which doesn't apply to a line of text. It is a `<span>`, not an `<a>`:
   nothing navigates, so an anchor would mislead a screen reader. **Redacted entries never emit a
   token**, since an opponent's resource pick is hidden information (CR 1.17) and a card reference
-  would leak it through the zoom regardless of the text saying "a card".
+  would leak it through the zoom regardless of the text saying "a card". The same holds for every
+  card the opponent moves between two hidden zones: one resourced or put on a deck out of a hand,
+  and one a search takes without revealing it. A search choice records only which of the cards
+  looked at were eligible, so its pick counts as revealed when some card looked at was not
+  eligible (a search for a kind of card, which every printing reveals) and as private otherwise.
+  A card an answer reveals or discards is public, and `describeActionParts` links it.
+- **What an action changed**: the engine returns a state and keeps no record of the effects it
+  applied, so an action's own line says what was chosen and nothing about what happened.
+  `logEntries` (`utils/boardDiff.ts`) is what `useGame` calls for every action, the player's and
+  the AI's: it returns the action's line followed by one `outcome` entry per change `boardChanges`
+  finds between the state before and the state after. That covers damage and healing on units and
+  bases, upgrades and tokens gained or lost, units taken, leaving and entering play, and cards
+  arriving in a discard pile. It runs in the UI only, once per logged action: nothing in the
+  engine or the AI search calls it, and `GameState` carries nothing for it. Three properties
+  follow from it being a diff:
+  - **It says what changed, never why.** It cannot name the card that caused a change or separate
+    two effects inside one action, it sees only the net of an action, and damage that lands when a
+    later choice is answered is listed under that answer.
+  - **It names only what is face up.** A line links a card that was a unit, an upgrade or a token
+    in play, or one that arrived in a discard pile. Hands, decks and resources are never read for
+    a name, so a card moving between them produces no line. A card that is revealed and stays
+    where it was leaves no trace in the state, so the diff cannot report it: such a reveal reaches
+    the log only where the answer to a choice carries the card.
+  - **It does not repeat the action.** Numbers are always stated, even when the action's line
+    already promised them, because one is the choice and the other the result. A card the action's
+    line links is not reported again for arriving: the played unit entering play, the played event
+    reaching the discard pile, the played upgrade being gained.
+
+  Outcome entries sit directly after their action in the log, inside the range a history
+  snapshot's `logLength` cuts back to, so undo and cancel remove them with the action. The bug
+  report prints them indented under the action. Saved game records hold moves, not the log.
 - **Action prompt**: `describeChoiceParts` says what the current board highlights are
   asking for, rendered between the two bases. It covers the `BOARD_TARGET_KINDS` choices, the
   ones resolved by clicking a highlighted card rather than a menu button, plus upgrade

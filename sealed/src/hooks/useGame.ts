@@ -14,8 +14,8 @@ import { resolve } from '../engine/resolve'
 import { nextSeed } from '../engine/rng'
 import { opponentAi } from '../config'
 import { driverAction } from '../ai/concession'
-import { describeActionParts, partsText } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
+import { logEntries } from '../utils/boardDiff'
 import { saveGameRecord } from '../data/gameRecords'
 import { logger } from '../data/log'
 
@@ -30,6 +30,11 @@ export interface LogEntry {
    * unaffected by the richer form.
    */
   parts: DescribePart[]
+  /**
+   * A follow-up line: something the action above it changed on the board (`boardChanges`), not an
+   * action of its own. It sits directly after the entry for that action, so it is rewound with it.
+   */
+  outcome?: true
 }
 
 export interface GameValue {
@@ -202,10 +207,10 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
           logLength: logRef.current.length + entries.length,
           movesLength: movesRef.current.length,
         })
-        const aiParts = describeActionParts(current, AI, action, { redact: true })
-        entries.push({ by: AI, text: partsText(aiParts), parts: aiParts })
         movesRef.current.push({ by: AI, action })
-        current = resolve(current, action)
+        const next = resolve(current, action)
+        entries.push(...logEntries(current, next, AI, action))
+        current = next
         steps++
       }
       return current
@@ -331,10 +336,9 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
         logLength: logRef.current.length,
         movesLength: movesRef.current.length,
       })
-      const humanParts = describeActionParts(prev, HUMAN, action)
-      const entries: LogEntry[] = [{ by: HUMAN, text: partsText(humanParts), parts: humanParts }]
       movesRef.current.push({ by: HUMAN, action })
       let next = resolve(prev, action)
+      const entries: LogEntry[] = logEntries(prev, next, HUMAN, action)
       next = driveAi(next, entries)
       gameStateRef.current = next
       setGameState(next)

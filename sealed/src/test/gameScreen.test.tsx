@@ -697,7 +697,7 @@ describe('GameScreen', () => {
 
     const outcomes = within(screen.getByTestId('game-log')).getAllByTestId('log-outcome')
     expect(outcomes.some(o => /Opponent's base takes \d+ damage/.test(o.textContent ?? ''))).toBe(true)
-    for (const o of outcomes) expect(o).not.toHaveTextContent(/^(You|Opp)/)
+    for (const o of outcomes) expect(o).not.toHaveTextContent(/^(You|Opp)(?![a-z])/)
   })
 
   it('does not label an empty arena "empty"', async () => {

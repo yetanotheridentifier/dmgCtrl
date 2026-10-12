@@ -2092,10 +2092,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Log</h3>
             <ol data-testid="game-log" className="mt-2 space-y-0.5 text-xs text-ink-dim">
               {log.map((entry, i) => (
-                // Actor in its own fixed-width column so the actions line up.
-                <li key={i} className="flex gap-2">
+                // Actor in its own fixed-width column so the actions line up. What an action changed
+                // sits under it with that column left empty: it is an outcome, not another action.
+                <li key={i} data-testid={entry.outcome ? 'log-outcome' : undefined} className={`flex gap-2 ${entry.outcome ? 'pl-2 opacity-80' : ''}`}>
                   <span className={`w-8 shrink-0 ${entry.by === 'player' ? 'text-accent' : 'text-amber'}`}>
-                    {entry.by === 'player' ? 'You' : 'Opp'}
+                    {entry.outcome ? '' : entry.by === 'player' ? 'You' : 'Opp'}
                   </span>
                   <DescribedParts state={gameState} parts={entry.parts} />
                 </li>
