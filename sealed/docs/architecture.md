@@ -406,16 +406,19 @@ stored value that is none of the three reads as `unasked`: a damaged blob opts n
 surfaces write it, and one module reads it to act on it (`data/collection.ts`, see "What a game
 record holds" above):
 
-- **The notice** (`components/shareGamesNotice.tsx`), which `App` renders above the deck screen
-  while the answer is `unasked`. It is a card in the page, never a dialog: it covers nothing and
-  the deck screen below works untouched. Its two buttons share one class, so neither answer is the
-  highlighted one, and nothing is chosen in advance.
+- **The notice** (`components/shareGamesNotice.tsx`), shown while the answer is `unasked`. `App`
+  passes it to `DeckSelectScreen` as `catalogueNotice`, a slot the screen renders at the head of
+  its card catalogue column, above that column's heading and note. So the notice reads the
+  settings and the deck screen does not, and the deck and opponent columns start at the top of
+  the page. It is a card in the page, never a dialog: it covers nothing and the deck screen works
+  untouched. Its two buttons share one class, so neither answer is the highlighted one, and
+  nothing is chosen in advance.
 - **Starting a game.** `App` turns `unasked` into `no` as the first game starts, so ignoring the
   notice is a refusal and the question is put once.
 - **The settings form**, where a checkbox maps on to `yes` and off to `no`.
 
-Once the answer is not `unasked`, the same component renders a pill in the notice's place that
-opens the settings form: "Improve the bot" after a no, and a fainter "Your games are improving
+Once the answer is not `unasked`, the same component renders a pill in the same slot, right-aligned
+at the head of the catalogue column, that opens the settings form: "Improve the bot" after a no, and a fainter "Your games are improving
 the bot" after a yes. It carries no badge, count or animation in either state.
 
 The surface is an **overlay** (`SettingsOverlay`), opened from the cog in the app header and

@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useId, useMemo, useRef, useCallback } from 'react'
+import type { ReactNode } from 'react'
 import { useDecks } from '../hooks/useDecks'
 import type { SavedDeck } from '../data/deckStore'
 import type { SwuCard } from '../data/cards'
@@ -20,6 +21,11 @@ import type { SetProgress, SetGroup, TypeCounts } from '../data/implementedCards
 
 interface Props {
   onPlay: (deck: SavedDeck, opponentDeck: SavedDeck) => void
+  /**
+   * Rendered at the head of the card catalogue column, above its heading. The caller owns what it
+   * is and anything it needs, and brings its own gap below.
+   */
+  catalogueNotice?: ReactNode
 }
 
 const ERROR_MESSAGES: Record<ParseDeckError, string> = {
@@ -273,36 +279,56 @@ function SetRow({ set, defaultOpen }: { set: SetProgress; defaultOpen: boolean }
  * Reference panel (foot of the card catalogue column): how much of each set's card abilities are built into
  * the engine. One collapsible block per set, newest first, each broken down by card type. Sourced
  * from the manifest in `data/implementedCards`, which a test pins to the ability registry.
+ *
+ * It is reference material, so it opens as its heading and the overall total, and the heading is
+ * the button that shows the rest. Open or shut is not stored: every visit starts shut.
  */
 function ImplementationStatus() {
+  const [open, setOpen] = useState(false)
+  const breakdownId = useId()
   return (
     <aside data-testid="implemented-cards" className="mt-8">
-      <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Implemented cards</h2>
-      <p className="mt-1 text-ink-faint text-xs">
-        Which card abilities are built in. Others still play as vanilla stats / resources.
-      </p>
+      <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={open ? breakdownId : undefined}
+          onClick={() => setOpen(o => !o)}
+          className="flex w-full items-center justify-between gap-2 text-left uppercase tracking-[0.12em] font-light hover:text-ink"
+        >
+          Implemented cards
+          <span aria-hidden="true" className={`text-xs transition-transform ${open ? 'rotate-90' : ''}`}>▸</span>
+        </button>
+      </h2>
+      {open && (
+        <p className="mt-1 text-ink-faint text-xs">
+          Which card abilities are built in. Others still play as vanilla stats / resources.
+        </p>
+      )}
 
       <ProgressBar />
 
       {/* Sets by legality block, newest first within each. Only the newest set starts expanded. */}
-      <div data-testid="set-progress">
-        {SET_GROUPS.map(({ group, heading }) => {
-          const sets = SET_PROGRESS.filter(s => s.group === group)
-          if (sets.length === 0) return null
-          return (
-            <section key={group} data-testid={`set-group-${group}`}>
-              {heading && <h3 className="mt-4 text-ink-faint text-[0.65rem] uppercase tracking-[0.12em] font-light">{heading}</h3>}
-              {sets.map(set => <SetRow key={set.code} set={set} defaultOpen={set.code === SET_PROGRESS[0].code} />)}
-            </section>
-          )
-        })}
-      </div>
+      {open && (
+        <div id={breakdownId} data-testid="set-progress">
+          {SET_GROUPS.map(({ group, heading }) => {
+            const sets = SET_PROGRESS.filter(s => s.group === group)
+            if (sets.length === 0) return null
+            return (
+              <section key={group} data-testid={`set-group-${group}`}>
+                {heading && <h3 className="mt-4 text-ink-faint text-[0.65rem] uppercase tracking-[0.12em] font-light">{heading}</h3>}
+                {sets.map(set => <SetRow key={set.code} set={set} defaultOpen={set.code === SET_PROGRESS[0].code} />)}
+              </section>
+            )
+          })}
+        </div>
+      )}
 
     </aside>
   )
 }
 
-export default function DeckSelectScreen({ onPlay }: Props) {
+export default function DeckSelectScreen({ onPlay, catalogueNotice }: Props) {
   const { decks, importDeck, removeDeck } = useDecks()
   const [importText, setImportText] = useState('')
   const [importError, setImportError] = useState<ParseDeckError | null>(null)
@@ -723,6 +749,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
       </div>
 
       <div data-testid="catalogue-column" className="min-w-0">
+        {catalogueNotice}
         <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Card catalogue</h2>
         <p className="mt-1 text-ink-faint text-xs">
           Cards are cached on this device as the decks here need them: the set each generator builds

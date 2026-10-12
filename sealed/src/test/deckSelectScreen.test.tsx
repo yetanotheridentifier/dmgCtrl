@@ -70,8 +70,92 @@ describe('DeckSelectScreen', () => {
     expect(screen.getByTestId('deck-empty-state')).toBeInTheDocument()
   })
 
-  it('breaks progress down per set, newest first, with a row per card type', () => {
+  /**
+   * The implementation panel is reference material, so it opens as its heading and the overall
+   * total only. The per-set breakdown is one click away, on a real button.
+   */
+  describe('the implemented-cards panel', () => {
+    const total = `${TOTAL_PROGRESS.done} / ${TOTAL_PROGRESS.total} cards`
+
+    it('starts collapsed: the heading and the total, without the per-set breakdown', () => {
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      const panel = screen.getByTestId('implemented-cards')
+
+      const toggle = within(panel).getByRole('button', { name: 'Implemented cards' })
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      expect(within(panel).getByRole('heading', { name: 'Implemented cards' })).toContainElement(toggle)
+      expect(within(panel).getByText(total)).toBeInTheDocument()
+      expect(screen.queryByTestId('set-progress')).toBeNull()
+      for (const set of SET_PROGRESS) {
+        expect(screen.queryByTestId(`set-progress-${set.code}`), set.code).toBeNull()
+      }
+    })
+
+    it('shows the breakdown on one click, and hides it again on the next', async () => {
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      const panel = screen.getByTestId('implemented-cards')
+      const toggle = within(panel).getByRole('button', { name: 'Implemented cards' })
+
+      await user.click(toggle)
+      expect(toggle).toHaveAttribute('aria-expanded', 'true')
+      const breakdown = within(panel).getByTestId('set-progress')
+      expect(toggle).toHaveAttribute('aria-controls', breakdown.id)
+      expect(within(panel).getByText(total)).toBeInTheDocument()
+
+      await user.click(toggle)
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByTestId('set-progress')).toBeNull()
+      expect(within(panel).getByText(total)).toBeInTheDocument()
+    })
+
+    it('opens from the keyboard', async () => {
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      const toggle = screen.getByRole('button', { name: 'Implemented cards' })
+
+      toggle.focus()
+      await user.keyboard('{Enter}')
+
+      expect(screen.getByTestId('set-progress')).toBeInTheDocument()
+    })
+
+    it('is collapsed again on the next visit: the choice is not stored', async () => {
+      const user = userEvent.setup()
+      const first = render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await user.click(screen.getByRole('button', { name: 'Implemented cards' }))
+      first.unmount()
+
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      expect(screen.getByRole('button', { name: 'Implemented cards' })).toHaveAttribute('aria-expanded', 'false')
+    })
+  })
+
+  /**
+   * The screen leaves the head of the catalogue column to its caller, so what goes there (the
+   * notice about sharing games, which needs the settings) is not this screen's concern.
+   */
+  it('renders what it is given at the head of the catalogue column, above the heading and note', () => {
+    render(<DeckSelectScreen onPlay={vi.fn()} catalogueNotice={<p data-testid="slot">Slotted</p>} />)
+    const column = screen.getByTestId('catalogue-column')
+
+    const slot = within(column).getByTestId('slot')
+    expect(column.firstElementChild).toContainElement(slot)
+    const heading = within(column).getByRole('heading', { name: 'Card catalogue' })
+    expect(slot.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(slot.compareDocumentPosition(within(column).getByText(/cached on this device/i)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('starts the catalogue column at its heading when given nothing', () => {
     render(<DeckSelectScreen onPlay={vi.fn()} />)
+    const column = screen.getByTestId('catalogue-column')
+    expect(column.firstElementChild).toBe(within(column).getByRole('heading', { name: 'Card catalogue' }))
+  })
+
+  it('breaks progress down per set, newest first, with a row per card type', async () => {
+    const user = userEvent.setup()
+    render(<DeckSelectScreen onPlay={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: 'Implemented cards' }))
     const panel = screen.getByTestId('set-progress')
 
     // Newest set first, in the order the manifest declares.

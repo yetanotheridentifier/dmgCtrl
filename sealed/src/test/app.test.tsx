@@ -202,6 +202,36 @@ describe('App shell', () => {
       expect(screen.queryByRole('dialog')).toBeNull()
     })
 
+    /**
+     * It heads the right-hand column, so the deck and opponent columns start at the top of the
+     * page and nothing is pushed down by it.
+     */
+    it('heads the card catalogue column, above the catalogue heading and its note', () => {
+      render(<App />)
+
+      const column = screen.getByTestId('catalogue-column')
+      const notice = within(column).getByTestId('share-games-notice')
+      const heading = within(column).getByRole('heading', { name: 'Card catalogue' })
+      const note = within(column).getByText(/cached on this device/i)
+      expect(notice.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(notice.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(within(screen.getByTestId('player-column')).queryByTestId('share-games-notice')).toBeNull()
+      expect(within(screen.getByTestId('opponent-column')).queryByTestId('share-games-notice')).toBeNull()
+    })
+
+    /** The pill takes the card's place exactly, so answering moves nothing else on the screen. */
+    it('puts the pill where the card was', async () => {
+      const user = userEvent.setup()
+      render(<App />)
+      const column = screen.getByTestId('catalogue-column')
+
+      await user.click(within(column).getByRole('button', { name: 'Not now' }))
+
+      const pill = within(column).getByTestId('share-games-pill')
+      const heading = within(column).getByRole('heading', { name: 'Card catalogue' })
+      expect(pill.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
     /** Ignoring it means no: a game starts with the notice untouched, and nobody is opted in. */
     it('lets a game start without being answered, and takes that as a no', async () => {
       const user = userEvent.setup()

@@ -85,21 +85,20 @@ function AppShell() {
           </header>
           <main className="px-6 pt-2 pb-4">
             {screen === 'decks' && (
-              <>
-                {/* Above the deck screen and part of the page: it covers nothing, and every
-                    control below works whether or not it has been answered. */}
-                <ShareGamesNotice onOpenSettings={() => setSettingsOpen(true)} />
-                <DeckSelectScreen
-                  onPlay={(deck, opponent) => {
-                    // The notice is put once. A player who starts a game without answering it has
-                    // not agreed, so that is recorded as a no and the pill takes its place.
-                    if (settings.shareGames === 'unasked') update({ shareGames: 'no' })
-                    setSelectedDeck(deck)
-                    setOpponentDeck(opponent)
-                    setScreen('game')
-                  }}
-                />
-              </>
+              <DeckSelectScreen
+                // Part of the page, at the head of the catalogue column: it covers nothing, and
+                // every control works whether or not it has been answered. Passed in so the deck
+                // screen itself needs no settings.
+                catalogueNotice={<ShareGamesNotice onOpenSettings={() => setSettingsOpen(true)} />}
+                onPlay={(deck, opponent) => {
+                  // The notice is put once. A player who starts a game without answering it has
+                  // not agreed, so that is recorded as a no and the pill takes its place.
+                  if (settings.shareGames === 'unasked') update({ shareGames: 'no' })
+                  setSelectedDeck(deck)
+                  setOpponentDeck(opponent)
+                  setScreen('game')
+                }}
+              />
             )}
           </main>
         </>

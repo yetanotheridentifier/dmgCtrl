@@ -14,6 +14,10 @@ const PILL_CLASS = 'rounded-full border px-3 py-1 text-xs hover:text-ink'
  * After an answer, or once a first game has started (which `App` records as a no), it is a small
  * pill that opens Settings, and the question is never put again.
  *
+ * `App` hands it to the deck screen, which puts it at the head of the card catalogue column. Card
+ * and pill both fill the column's width and carry their own gap below, so the pill sits exactly
+ * where the card was.
+ *
  * The card's wording is the Help section's ("Improving the bot" in `docs/userGuide.md`), and a test
  * holds the two together.
  */
@@ -37,7 +41,7 @@ export function ShareGamesNotice({ onOpenSettings }: { onOpenSettings: () => voi
   }
 
   return (
-    <aside data-testid="share-games-notice" className="mb-6 max-w-3xl rounded-xl border-2 border-line/60 bg-surface px-4 py-3">
+    <aside data-testid="share-games-notice" className="mb-6 rounded-xl border-2 border-line/60 bg-surface px-4 py-3">
       <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Help improve gameplay</h2>
       <div className="mt-2 space-y-2 text-sm text-ink-dim">
         <p>
