@@ -263,6 +263,11 @@ npm run build && npm run build --prefix sealed
 mkdir -p dist/sealed && cp -r sealed/dist/* dist/sealed/
 ```
 
+The sealed build is one main script and stylesheet plus one script per bundled set
+(`assets/<set>Set-<hash>.js`, about 870 kB between the eleven, 140 kB gzipped), each requested from
+the same `assets/` folder when its set is first needed. A set that appears inside the main script
+instead has been imported statically somewhere: `bundledSets.test.ts` guards against that.
+
 **Worker dependency**: card detail is proxied through the worker's fallback route
 and card art through its `/art/<path>` route (`proxy/worker.js`). If the worker's
 routing changes, keep paths that forward `/cards/...` to `api.swu-db.com` and
@@ -383,18 +388,35 @@ message (e.g. `Card ASH_020 could not be loaded (SWUDB 502, no swuapi match)`),
 and the log records each stage. Card hydration tries, in order:
 
 1. IndexedDB cache
-2. SWUDB card detail via the worker (`worker.dmgctrl.app/cards/{set}/{number}`). A 404 on a
+2. The bundled set (`data/bundledSets.ts`): the Normal printings of every set the setup panel lists
+   ship with the app, one file per set, loaded when the set is first asked for. No network, and
+   nothing is written to the cache. Either spelling of a number finds the card (`IBH_052` and
+   `IBH_52`), which plays under the number its set uses
+3. SWUDB card detail via the worker (`worker.dmgctrl.app/cards/{set}/{number}`). A 404 on a
    zero-padded number is asked once more without the padding: SWUDB files a few sets unpadded
    (`IBH/52` is a card and `IBH/052` is a 404, and TS26 is the same), while deck lists pad every
    number. The card is cached under the deck's spelling and plays under the id it is served as
    (`IBH_52`), which is the id its abilities are registered against
-3. swuapi.com Base list fallback. SWUDB's detail endpoint is known to 502 on
+4. swuapi.com Base list fallback. SWUDB's detail endpoint is known to 502 on
    some base ranges (observed: all ASH bases); swuapi is the same source the
    main app uses for base data
 
-If a card fails on all sources, the thrown error names the card id and the
+So the network is asked only for a card no bundled set holds: a Hyperspace, foil, prestige or
+showcase printing, a second collector number of a card its set prints more than once (IBH), or a
+set with no snapshot. If a card fails on all sources, the thrown error names the card id and the
 upstream status. Check whether the id exists on swudb.com, whether the worker
 is up, and whether the browser is offline.
+
+**What works with the card API down, and what does not.** With the site itself reachable, a first
+visit builds a generated deck from any set and plays it, and plays a deck list of Normal printings,
+without one card request. Card art still streams from the worker, so with the worker down the
+cards show their text summaries. **The app shell is not available offline**: Sealed registers no
+service worker, and the PWA's worker precaches only the PWA's own files, so opening `/sealed` with
+no connection at all fails before any of this runs.
+
+**The cache is read before the bundled set**, so a browser that cached a card keeps playing that
+copy after a release ships a newer snapshot. To put a browser back on the shipped data, delete the
+`dmgctrl-sealed` database (see the support playbook above).
 
 **"Failed to fetch" in the log** means the browser rejected the request before
 any HTTP status existed, usually a response without CORS headers. The worker
@@ -414,17 +436,45 @@ upstream state (2026-07): SWUDB card detail 502s on the ASH bases
 (ASH_019/020/023 confirmed); all recover via the swuapi fallback.
 
 A broken IndexedDB cannot break card loading: cache reads/writes are
-non-fatal (logged as warnings, hydration continues from the network). If the
+non-fatal (logged as warnings, hydration continues from the bundled set and the network). If the
 `dmgctrl-sealed` database gets into a crossed-version state during dev (e.g. a
 `VersionError` in the log after switching between old and new code), delete it
 in devtools → Application → IndexedDB; it rebuilds on the next game.
 
 ## Updating for new card sets
 
-Nothing to do: cards are fetched by `{set}/{number}` straight from SWUDB via the
-worker, so new sets work as soon as SWUDB serves them. If SWUDB changes its payload
-field names, update `SwuCard` (`data/cards.ts`) and `normaliseCard`
+A deck list from a set the app does not list needs nothing: its cards are fetched by
+`{set}/{number}` straight from SWUDB via the worker, so they load as soon as SWUDB serves them. If
+SWUDB changes its payload field names, update `SwuCard` (`data/cards.ts`) and `normaliseCard`
 (`engine/cardDb.ts`); both are test-covered.
+
+### The bundled sets
+
+The app ships a snapshot of every set the setup panel lists, and the snapshots are the bench
+fixtures, so there is one file per set and one command that writes it:
+
+```bash
+npm run bench --prefix sealed -- --fixture LAW SEC     # or --fixture all
+```
+
+Run it when a set is added, and when upstream corrects a card that the shipped copy still has
+wrong. It warns about any card whose art is not filed under its set and number, which is where the
+app looks for the art of a bundled card. Then:
+
+1. **A new set** needs its loader in `data/bundledSets.ts`, its import in `bench/setPools.ts` and
+   its totals in `data/implementedCards.ts`. `bundledSets.test.ts` and `benchSetPools.test.ts` fail
+   until all three are there.
+2. **Read the diff before committing it.** The snapshot is what players get and what every bench
+   plays: a changed cost reshapes generated decks, and `coverageDecks.test.ts` pins a fingerprint so
+   that is seen (see "The card pools" in [ai-benchmark.md](ai-benchmark.md)).
+3. Run `npm run check --prefix sealed` and deploy as usual. Each set is its own hashed file in the
+   build, so a refreshed set is one changed file.
+
+A value the card API gets wrong does not need a refresh: `engine/cardDataCorrections.ts` overrides
+it by card id whichever tier served the card, and `engine/upgradeStatOverrides.ts` does the same
+for an upgrade whose modifier the snapshot does not carry.
+
+### Printing maps
 
 When a set gains card-ability support (or FFG ships a new print run for one that already has a
 bundled map), generate/refresh its printing map so every printing resolves offline with no

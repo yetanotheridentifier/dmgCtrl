@@ -1,4 +1,5 @@
 import { db } from './db'
+import { bundledCard, unpadded } from './bundledSets'
 import { logger } from './log'
 
 // api.swu-db.com serves no CORS headers, so browser fetches are blocked.
@@ -142,8 +143,12 @@ async function fetchBaseFromSwuApi(set: string, number: string): Promise<SwuCard
 }
 
 /**
- * Local-first card lookup: cached record → SWUDB (via worker) → swuapi base
+ * Local-first card lookup: cached record → bundled set → SWUDB (via worker) → swuapi base
  * fallback. Failed fetches cache nothing and throw an error naming the card.
+ *
+ * The cache comes first, so a visitor who has cards cached plays the copies they had. A bundled
+ * card is not written to the cache: it is on the device already, and a cached copy would be read
+ * ahead of the snapshot a later release ships.
  */
 export async function getCard(set: string, number: string): Promise<SwuCard> {
   const id = cardId(set, number)
@@ -158,6 +163,11 @@ export async function getCard(set: string, number: string): Promise<SwuCard> {
     logger.warn('card cache read failed — continuing to network', { id, error: String(err) })
   }
 
+  // The sets the app ships (Normal printings): no network, so a first visit hydrates with the card
+  // API out of reach. Anything else (another printing, a set with no snapshot) goes on to the network.
+  const bundled = await bundledCard(set, number)
+  if (bundled) return bundled
+
   // A browser rejects the whole fetch for CORS-blocked responses ("Failed to
   // fetch") — e.g. Cloudflare's 1101 worker-exception page, which carries no
   // CORS headers. Treat a rejection exactly like an error status: try the
@@ -169,8 +179,8 @@ export async function getCard(set: string, number: string): Promise<SwuCard> {
   // is asked once more without the padding. The card comes back under the number its set uses, which
   // is the id the engine knows it by: the caller files the deck's spelling under it.
   let primaryStatus = ''
-  const unpadded = number.replace(/^0+(?=.)/, '')
-  for (const candidate of unpadded === number ? [number] : [number, unpadded]) {
+  const bare = unpadded(number)
+  for (const candidate of bare === number ? [number] : [number, bare]) {
     try {
       const response = await fetch(`${SWU_DB_API}/cards/${set.toUpperCase()}/${candidate}`)
       if (response.ok) {

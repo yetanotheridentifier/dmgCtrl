@@ -9,7 +9,8 @@ import shdSet from '../test/fixtures/shdSet.json'
 import sorSet from '../test/fixtures/sorSet.json'
 import ts26Set from '../test/fixtures/ts26Set.json'
 import ibhSet from '../test/fixtures/ibhSet.json'
-import { fromSearchRow, type SwuCard } from '../data/cards'
+import { withArt } from '../data/bundledSets'
+import { cardId, fromSearchRow, type SwuCard } from '../data/cards'
 import { SET_PROGRESS } from '../data/implementedCards'
 import { normalPrintings } from './triage'
 
@@ -17,6 +18,9 @@ import { normalPrintings } from './triage'
  * The card pools the bench can draw on: one bundled fixture per set, and the rules for naming a list
  * of them. Fixtures are written by `--fixture` from the live card API and committed, so a run never
  * depends on the network and is reproducible from its seed and set list alone.
+ *
+ * The app ships the same files as its bundled sets (`data/bundledSets.ts`), loading each on demand
+ * where the bench imports them all up front.
  */
 
 /** Every set, in the order the setup panel lists them. This order is canonical for a multi-set pool. */
@@ -109,14 +113,33 @@ const FIXTURE_FIELDS = [
  * fixture fields, in fixture order. A field the row does not carry is left out rather than defaulted.
  */
 export function toFixture(rows: readonly object[]): SwuCard[] {
-  return normalPrintings(rows.map(fromSearchRow))
-    .filter(card => card.Type !== 'Token')
-    .map(card => {
-      const source = card as unknown as Record<string, unknown>
-      const out: Record<string, unknown> = {}
-      for (const field of FIXTURE_FIELDS) {
-        if (source[field] !== undefined) out[field] = source[field]
-      }
-      return out as unknown as SwuCard
+  return fixtureRows(rows).map(card => {
+    const source = card as unknown as Record<string, unknown>
+    const out: Record<string, unknown> = {}
+    for (const field of FIXTURE_FIELDS) {
+      if (source[field] !== undefined) out[field] = source[field]
+    }
+    return out as unknown as SwuCard
+  })
+}
+
+/** The listing rows a fixture keeps, with every field the listing gave them. */
+function fixtureRows(rows: readonly object[]): SwuCard[] {
+  return normalPrintings(rows.map(fromSearchRow)).filter(card => card.Type !== 'Token')
+}
+
+/**
+ * The ids of the rows a fixture keeps whose art the listing files somewhere other than where the app
+ * looks for it. A fixture drops the art fields and the app, which ships the fixtures, names each
+ * card's art from its set and number (`withArt` in `data/bundledSets.ts`). `--fixture` reports these,
+ * since a card listed here would show no art when it is served from the bundled set.
+ */
+export function artOffRule(rows: readonly object[]): string[] {
+  return fixtureRows(rows)
+    .filter(card => {
+      // What the app would name for the row as a fixture keeps it, which is without its art fields.
+      const expected = withArt({ ...card, FrontArt: undefined, BackArt: undefined })
+      return card.FrontArt !== expected.FrontArt || card.BackArt !== expected.BackArt
     })
+    .map(card => cardId(card.Set, card.Number))
 }

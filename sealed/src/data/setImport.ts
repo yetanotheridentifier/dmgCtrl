@@ -1,4 +1,5 @@
 import { db } from './db'
+import { bundledSetCards } from './bundledSets'
 import { cardId, fromSearchRow, SWU_DB_API } from './cards'
 import type { SwuCard } from './cards'
 import { logger } from './log'
@@ -9,6 +10,9 @@ import { logger } from './log'
  * endpoint 502s). Caching the set makes every later lookup cache-first, and
  * is the substrate for deck inspection. Sideboards remain out of
  * scope for pool import (user decision on).
+ *
+ * A bundled set (`bundledSets.ts`) is on the device in full already, so the deck screen only imports
+ * a set that has no snapshot.
  */
 
 export interface SetImportResult {
@@ -53,21 +57,38 @@ export async function importSet(setCode: string, opts: SetImportOptions = {}): P
   return { cached, total: normals.length }
 }
 
-/** How many cards of a set are in the local cache. */
+/**
+ * How many cards of a set are on the device. A bundled set counts in full from the first visit, which
+ * is what tells the deck screen it has nothing to import.
+ */
 export async function cachedSetCount(setCode: string): Promise<number> {
-  const prefix = `${setCode.toUpperCase()}_`
-  return db.cards.where('id').startsWith(prefix).count()
+  return (await cachedSetCards(setCode)).length
 }
 
 /**
- * Every cached card of a set, as the generator wants them.
+ * Every card of a set that is on the device, as the generator wants them: the bundled set, with the
+ * cached copy of a card in place of the bundled one (the order `getCard` reads them in), and then
+ * whatever else of the set the cache holds, such as a printing a deck list named.
  *
  * `json` is the raw SWUDB payload, which is what `SwuCard` describes, so this is a cast rather than a
- * conversion. Cards that failed to cache simply are not here, and a generator asked to build from a
- * short pool reports the shortfall rather than throwing.
+ * conversion. For a set with no snapshot, cards that failed to cache simply are not here, and a
+ * generator asked to build from a short pool reports the shortfall rather than throwing. A cache that
+ * cannot be read leaves the bundled set.
  */
 export async function cachedSetCards(setCode: string): Promise<SwuCard[]> {
-  const prefix = `${setCode.toUpperCase()}_`
-  const rows = await db.cards.where('id').startsWith(prefix).toArray()
-  return rows.map(r => r.json as SwuCard)
+  const set = setCode.toUpperCase()
+  const cached = new Map<string, SwuCard>()
+  try {
+    for (const row of await db.cards.where('id').startsWith(`${set}_`).toArray()) cached.set(row.id, row.json as SwuCard)
+  } catch (err) {
+    logger.warn('card cache read failed, set read from the bundle alone', { set, error: String(err) })
+  }
+
+  const cards = (await bundledSetCards(set)).map(card => {
+    const id = cardId(card.Set, card.Number)
+    const copy = cached.get(id)
+    cached.delete(id)
+    return copy ?? card
+  })
+  return [...cards, ...cached.values()]
 }

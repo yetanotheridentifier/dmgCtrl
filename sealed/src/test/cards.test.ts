@@ -3,6 +3,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { db } from '../data/db'
 import { getCard, cardId, SWU_DB_API } from '../data/cards'
 
+// These tests are about the tiers either side of the bundled sets: the cache, the card API and its
+// fallback. They name real cards, which a bundled set would answer before the network was asked, so
+// nothing is bundled here. The bundled tier is covered in `bundledSetTier.test.ts`.
+vi.mock('../data/bundledSets', async importOriginal => ({
+  ...(await importOriginal<typeof import('../data/bundledSets')>()),
+  bundledCard: () => Promise.resolve(undefined),
+}))
+
 const VADER = {
   Set: 'SOR',
   Number: '010',
