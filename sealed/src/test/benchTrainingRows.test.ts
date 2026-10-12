@@ -114,6 +114,60 @@ describe('the rows of one exported game', () => {
   })
 })
 
+/**
+ * A game the bench recorded has a bot on both seats and says which (`bench` on the record). Its rows
+ * name the bot that sat where each move was made. A person's game has no such field, and its rows
+ * are the ones above, unchanged.
+ */
+describe('the rows of a game two bots played', () => {
+  const { opponentAi, humanSeat, undoCount, ...played } = exported(11)
+  void opponentAi; void humanSeat; void undoCount
+  const record: ExportedRecord = {
+    ...played,
+    playerDeckName: 'Deck One',
+    opponentDeckName: 'Deck Two',
+    bench: { ais: { player: 'beam-reply', opponent: 'greedy+base=9' }, seed: 11, runSeed: 3, game: 6, decks: 'coverage' },
+  }
+  const rows = throughJson(rowsForRecord(record, CARDS))
+
+  it('say a bot decided every move, and which one', () => {
+    for (const row of rows) {
+      expect(row.decidedBy).toBe('ai')
+      expect(row.ai).toBe(row.mover === 'player' ? 'beam-reply' : 'greedy+base=9')
+    }
+    expect(new Set(rows.map(r => r.ai))).toEqual(new Set(['beam-reply', 'greedy+base=9']))
+  })
+
+  it('name the deck the mover played and carry the run the game came from', () => {
+    for (const row of rows) {
+      expect(row.deck).toBe(row.mover === 'player' ? 'Deck One' : 'Deck Two')
+      expect(row.bench).toEqual(record.bench)
+    }
+  })
+
+  it('have exactly these keys, with none of a person\'s provenance', () => {
+    for (const row of rows) {
+      expect(Object.keys(row)).toEqual([
+        'formatVersion', 'gameKey', 'moveIndex', 'moveCount', 'mover', 'decidedBy', 'outcome', 'information',
+        'build', 'ai', 'deck', 'bench', 'action', 'state',
+      ])
+      expect(row.formatVersion).toBe(ROWS_FORMAT_VERSION)
+    }
+  })
+
+  it('are the same rows in everything else as the same game without the field', () => {
+    const plain = throughJson(rowsForRecord(played, CARDS))
+    const rest = (row: TrainingRow) => ({ ...row, decidedBy: null, ai: null, deck: null, bench: null })
+    expect(rows.map(rest)).toEqual(plain.map(rest))
+    expect(plain.every(r => r.decidedBy === 'unknown' && !('ai' in r) && !('deck' in r) && !('bench' in r))).toBe(true)
+  })
+
+  /** The key is the game's own, so the same game is the same game whoever is said to have played it. */
+  it('keep the game\'s key', () => {
+    expect(rows[0].gameKey).toBe(gameKey(played))
+  })
+})
+
 describe('the result as the mover saw it', () => {
   it('is a win for the winner, a loss for the other seat and a draw for both', () => {
     expect(outcomeFor('player', 'player')).toBe('win')

@@ -116,6 +116,11 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
   it can deduplicate on.
   Rows come in the whole state or the mover's view of it (`--view mover`), which is the one to
   imitate from.
+  Bench self-play is the second source of records, and needs no consent: `--record` on the
+  head-to-head run keeps its completed games in the exported shape, with the bot on each seat named.
+  The per-card, per-deck question the epic set out to answer (#407) is a function over those records
+  with no command in front of it. Recording is on that one run only: #565 is where a recorder becomes
+  a choice on every game run, and the callback it is built on is meant to be taken up there unchanged.
   **Deferred: what a seat learned during the game.** The mover's view is made from one state, which
   records where cards are and not who has been shown them, so it hides a card the mover looked at,
   searched past or put on the bottom of a deck, a unit it watched return to a hand, and a hand it is

@@ -17,6 +17,7 @@ import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { resolveAi } from '../ai/registry'
 import { setupAi } from '../ai/setupAi'
 import { role, reachSteady, canFinishNow, canFinishThisAction, lockedLanes, lossIsCertain, type Role } from '../ai/race'
+import { isCardPlay, playableHandIndexes } from './cardUse'
 import { benchDeckSet, type DeckSource } from './decks'
 import { firstPlayerFor } from './seating'
 
@@ -1918,7 +1919,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         // played twenty-five is being held situationally, which is correct play; declined thirty times
         // and never played is a card the bot cannot use. Counted for every play, then merged onto the
         // declined rows at the end, so ordering within a game cannot lose one.
-        if (action.type === 'playUnit' || action.type === 'playUpgrade' || action.type === 'playBaseUpgrade' || action.type === 'playEvent') {
+        if (isCardPlay(action)) {
           const playedId = s.players[me].hand[action.handIndex]
           if (playedId !== undefined) {
             playedByCard.set(playedId, (playedByCard.get(playedId) ?? 0) + 1)
@@ -1968,10 +1969,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
               // no enemy unit and an attack event with no ready unit are all affordable and none of
               // them is playable, so counting cost would report the bot declining plays that do not
               // exist. The engine's play restrictions already encode every one of those conditions.
-              const playable = new Set(
-                moves.filter(m => m.type === 'playUnit' || m.type === 'playUpgrade' || m.type === 'playBaseUpgrade' || m.type === 'playEvent')
-                  .map(m => (m as { handIndex: number }).handIndex),
-              )
+              const playable = playableHandIndexes(moves)
               unspentPasses++
               unspentHeld += s.players[me].hand.length
               unspentPlayable += playable.size

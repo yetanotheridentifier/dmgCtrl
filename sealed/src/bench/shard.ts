@@ -108,6 +108,12 @@ export interface ShardConfig {
    * merging the two would average a real measurement with a vacuous one.
    */
   decks?: DeckSource
+  /**
+   * Have each shard keep its completed games as records (`records.ts`). Not part of the run key: it
+   * changes what a run leaves on disk and nothing it measures, so a recording run resumes the same
+   * banked shards a plain one would.
+   */
+  record?: boolean
 }
 
 /**
@@ -349,6 +355,7 @@ export function seedJobs(config: ShardConfig, seeds: number[], dir: string): Sha
       'src/bench/main.ts', '--games', String(config.games), '--seed', String(seed),
       '--out', shardPayloadPath(dir, `seed-${seed}`),
       ...(config.decks ? ['--decks', config.decks] : []),
+      ...(config.record ? ['--record'] : []),
       config.aiA, config.aiB,
     ],
   }))

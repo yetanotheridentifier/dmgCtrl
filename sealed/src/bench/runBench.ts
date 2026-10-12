@@ -11,6 +11,7 @@ import { seating, resultForA, movedFirstForA } from './seating'
 export const SEATING_CYCLE = 4
 import { playGame } from './selfPlay'
 import type { DropReason, GameResult } from './selfPlay'
+import type { GameRecorder } from './records'
 
 export interface BenchConfig {
   games: number
@@ -34,6 +35,16 @@ export interface BenchConfig {
    * heartbeat file; this stays a bare callback so the run layer keeps doing no I/O of its own.
    */
   onProgress?: (gamesPlayed: number) => void
+  /**
+   * Called with each completed game while its moves and starting position are still on it, which is
+   * the only moment they are: the run drops them straight after to bound its memory. A dropped game
+   * is not passed, since it is kept whole on the report already.
+   *
+   * What a recorder does with the game is its own business (`records.ts` writes it to a file); like
+   * `onProgress`, this stays a bare callback so the run layer does no I/O of its own. Absent, the run
+   * does nothing it did not do before.
+   */
+  onGame?: GameRecorder
 }
 
 export interface Failure {
@@ -151,6 +162,15 @@ export function runBench(config: BenchConfig): BenchReport {
     if (result.status === 'dropped') {
       failures.push({ gameIndex: i, seed: result.seed, reason: result.dropReason! })
     } else {
+      // A copy, so what the recorder was handed keeps its moves when the run lets go of its own below.
+      config.onGame?.({
+        index: i,
+        runSeed: config.seed,
+        decks: source,
+        deck,
+        ais: { player: seats.swapped ? config.aiB : config.aiA, opponent: seats.swapped ? config.aiA : config.aiB },
+        result: { ...result },
+      })
       // Bound memory over a long run: a completed game's moves and starting position are not needed
       // once counted. Only dropped games are kept whole, to be written out as replayable fixtures.
       result.moves = []

@@ -446,10 +446,14 @@ All under `sealed/bench-results/`, which is gitignored, so none of it appears in
 | `shards/<run-key>/seed-N.json` | that shard's banked result, written the moment it finishes |
 | `shards/<run-key>/seed-N.log` | that shard's streamed output, for following or post-mortem |
 | `shards/<run-key>/seed-N.out` | the child's structured result, read by the parent |
+| `failures/` | each dropped game as a replayable fixture |
+| `records/<commit>/<run-key for one seed>.json` | only from a `--record` run: that seed's completed games as replayable records, in the shape the app exports. A `.partial` beside it is a run still in flight, or one that died |
 
 A run directory is keyed by the AI names, games per shard, base seed and deck source, but **not** by
 shard count, so an interrupted run can resume at a different one. Deleting a run directory forces a
-full re-run; deleting a single `seed-N.json` re-runs just that shard.
+full re-run; deleting a single `seed-N.json` re-runs just that shard. Records are kept apart from the
+run directory and under the build that played them, so neither of those deletes them; see "Recording
+games" in [ai-benchmark.md](ai-benchmark.md).
 
 ### The app
 
