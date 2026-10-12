@@ -220,15 +220,18 @@ describe('App shell', () => {
     })
 
     /**
-     * The card brings no margin of its own: the column spaces its sections, so the gap under the
-     * card is the gap between any two of them.
+     * The card brings no margin of its own. The gap under it is the top margin of the section that
+     * follows, the same one that separates any two sections of the column.
      */
-    it('leaves the gap below the card to the column', () => {
+    it('leaves the gap below the card to the section that follows it', () => {
       render(<App />)
 
       const column = screen.getByTestId('catalogue-column')
-      expect(column.className).toMatch(/(^| )space-y-8( |$)/)
-      expect(within(column).getByTestId('share-games-notice').className).not.toMatch(/(^| )m[tby]-/)
+      const notice = within(column).getByTestId('share-games-notice')
+      const sectionGap = (el: Element | null) => (el?.className ?? '').split(/\s+/).filter(c => /^([a-z]+:)?mt-/.test(c))
+      expect(notice.className).not.toMatch(/(^| )m[tby]-/)
+      expect(sectionGap(notice.nextElementSibling)).toContain('mt-8')
+      expect(sectionGap(notice.nextElementSibling)).toEqual(sectionGap(within(column).getByTestId('card-catalogue')))
     })
 
     /** While the card is asking, there is no pill anywhere: the header holds the two buttons only. */

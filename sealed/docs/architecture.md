@@ -409,8 +409,11 @@ record holds" above):
 - **The notice** (`components/shareGamesNotice.tsx`), shown while the answer is `unasked`. `App`
   passes it to `DeckSelectScreen` as `catalogueNotice`, a slot the screen renders at the head of
   its card catalogue column. That column stacks three sections (the notice, the Implemented cards
-  panel, then the Card catalogue heading and its note) and spaces them itself, with the gap the
-  screen puts between columns, so none carries a margin of its own. So the notice reads the
+  panel, then the Card catalogue heading and its note) on the rhythm of the other two columns,
+  from the same two constants in `deckSelectScreen.tsx`: `BLOCK_GAP` under a heading and between
+  panels, `SECTION_GAP` above a section that follows another, which gives way on a column's first
+  child. Each is a top margin on the block it pushes down, so the notice carries none and leaves
+  no gap behind once it renders nothing. So the notice reads the
   settings and the deck screen does not, and the deck and opponent columns start at the top of
   the page. It is a card in the page, never a dialog: it covers nothing and the deck screen works
   untouched. Its two buttons share one class, so neither answer is the highlighted one, and

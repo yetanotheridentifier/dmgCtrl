@@ -160,19 +160,72 @@ describe('DeckSelectScreen', () => {
   })
 
   /**
-   * The gap between the column's sections is the column's, stated once, and it is the gap the
-   * screen puts between its columns. No section brings a margin of its own, so whatever heads the
-   * column sits the same distance above the next heading as any two sections do.
+   * The three columns share one vertical rhythm, and the catalogue column is held to what the
+   * other two render, not to a class name of its own: the top margin under a heading is read off
+   * the deck and opponent columns, the top margin above a following section off the deck column's
+   * Import deck section, and every block of the catalogue column must carry the same.
+   *
+   * The margin sits on the block that is pushed down. A rule on the column that reaches for its
+   * children is a second mechanism, and it is the one that left these sections touching.
    */
-  it('spaces the catalogue column from the column itself, with the gap the screen uses', () => {
-    render(<DeckSelectScreen onPlay={vi.fn()} catalogueNotice={<p data-testid="slot">Slotted</p>} />)
-    const column = screen.getByTestId('catalogue-column')
+  describe('vertical rhythm of the catalogue column', () => {
+    const topMargin = (el: Element | null) =>
+      (el?.className ?? '').split(/\s+/).filter(c => /^([a-z]+:)?mt-/.test(c))
+    const afterHeading = (within_: HTMLElement, name: string) =>
+      within(within_).getByRole('heading', { name }).nextElementSibling
 
-    expect(screen.getByTestId('deck-select-screen').className).toMatch(/(^| )gap-8( |$)/)
-    expect(column.className).toMatch(/(^| )space-y-8( |$)/)
-    for (const id of ['implemented-cards', 'card-catalogue']) {
-      expect(within(column).getByTestId(id).className, id).not.toMatch(/(^| )m[tby]-/)
+    /** What the deck and opponent columns do, read from what they render. */
+    function reference() {
+      const underHeading = topMargin(afterHeading(screen.getByTestId('player-column'), 'Your deck'))
+      const nextSection = topMargin(screen.getByTestId('deck-import-textarea').parentElement)
+      expect(underHeading).toEqual(['mt-4'])
+      expect(topMargin(afterHeading(screen.getByTestId('opponent-column'), 'Opponent'))).toEqual(underHeading)
+      expect(nextSection).toContain('mt-8')
+      return { underHeading, nextSection }
     }
+
+    it('puts the gap under each heading that the deck and opponent columns put under theirs', async () => {
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      const { underHeading } = reference()
+      const column = screen.getByTestId('catalogue-column')
+
+      expect(afterHeading(column, 'Implemented cards')).toBe(screen.getByTestId('implementation-progress'))
+      expect(topMargin(afterHeading(column, 'Implemented cards'))).toEqual(underHeading)
+      expect(topMargin(afterHeading(column, 'Card catalogue'))).toEqual(underHeading)
+
+      // Open, the note comes between the heading and the bar, and both keep the gap.
+      await user.click(screen.getByRole('button', { name: 'Implemented cards' }))
+      expect(topMargin(afterHeading(column, 'Implemented cards'))).toEqual(underHeading)
+      expect(topMargin(screen.getByTestId('implementation-progress'))).toEqual(underHeading)
+    })
+
+    it('puts the gap above each following section that the deck column puts above Import deck', () => {
+      render(<DeckSelectScreen onPlay={vi.fn()} catalogueNotice={<p data-testid="slot">Slotted</p>} />)
+      const { nextSection } = reference()
+      const column = screen.getByTestId('catalogue-column')
+
+      expect(topMargin(within(column).getByTestId('implemented-cards'))).toEqual(nextSection)
+      expect(topMargin(within(column).getByTestId('card-catalogue'))).toEqual(nextSection)
+    })
+
+    /**
+     * With nothing in the slot, Implemented cards is the column's first child, and the section
+     * margin gives way there, so its heading lines up with "Your deck" and "Opponent".
+     */
+    it('starts level with the other columns when nothing heads it', () => {
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      const column = screen.getByTestId('catalogue-column')
+
+      expect(column.firstElementChild).toBe(screen.getByTestId('implemented-cards'))
+      expect(topMargin(column.firstElementChild)).toContain('first:mt-0')
+      expect(topMargin(within(column).getByTestId('card-catalogue'))).toEqual(topMargin(column.firstElementChild))
+    })
+
+    it('states no spacing rule on the column itself', () => {
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      expect(screen.getByTestId('catalogue-column').className).not.toMatch(/space-y-|gap-|\[&/)
+    })
   })
 
   it('breaks progress down per set, newest first, with a row per card type', async () => {

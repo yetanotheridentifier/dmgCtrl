@@ -42,8 +42,8 @@ export function ShareGamesPill({ onOpenSettings }: { onOpenSettings: () => void 
  * startable beside it. The two answers are styled alike and neither is chosen for the player.
  *
  * `App` hands it to the deck screen, which puts it at the head of the card catalogue column. The
- * column spaces its sections, so the card has no margin of its own, and once answered it renders
- * nothing, so the column starts at its first heading.
+ * section after it brings the gap between them, so the card has no margin of its own, and once
+ * answered it renders nothing, so the column starts at its first heading.
  *
  * The card's wording is the Help section's ("Improving the bot" in `docs/userGuide.md`), and a test
  * holds the two together.
