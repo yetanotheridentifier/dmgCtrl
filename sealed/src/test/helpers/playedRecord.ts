@@ -4,9 +4,11 @@ import { benchInputs } from '../../bench/decks'
 import { randomAi } from '../../ai/randomAi'
 import { resolve } from '../../engine/resolve'
 
-/** A record as the app saves it, from a whole game between two bots on the ASH bench deck. */
-export function playedRecord(seed: number): GameRecord {
-  const inputs = benchInputs()
+/**
+ * A record as the app saves it, from a whole game between two bots. On the ASH bench deck unless
+ * `inputs` names another deck and the card database it plays from.
+ */
+export function playedRecord(seed: number, inputs: ReturnType<typeof benchInputs> = benchInputs()): GameRecord {
   const game = playGame({
     deckPlayer: inputs.deck, deckOpponent: inputs.deck, cardDb: inputs.cardDb,
     aiPlayer: randomAi, aiOpponent: randomAi, firstPlayer: 'player', seed,

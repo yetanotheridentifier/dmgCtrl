@@ -28,7 +28,8 @@ import { buildCardDb } from '../../engine/cardDb'
 import { resolve } from '../../engine/resolve'
 import '../../engine/cardDefinitions' // side-effect: registers every implemented card
 import { cardId as cardIdOf, type SwuCard } from '../../data/cards'
-import type { GameState, PlayerId, CardDb } from '../../engine/types'
+import { replayStates, withCardDb, type ReplayData, type ReplayInserts } from '../../engine/replay'
+import type { GameState, PlayerId } from '../../engine/types'
 import type { Action } from '../../engine/actions'
 
 /**
@@ -41,11 +42,12 @@ import type { Action } from '../../engine/actions'
  * divergence, which is exactly what stepping through a replay finds and a screenshot cannot.
  */
 
-/** The shape of the `<details>` payload in a report. `cards` is stripped when a report is filed. */
-export interface Report {
-  initialState: Omit<GameState, 'cards'> & { cards?: CardDb }
-  moves: { by: PlayerId; action: Action }[]
-}
+/**
+ * The shape of the `<details>` payload in a report, which is replay data like any other: the
+ * hydrating and the stepping are the engine's (`engine/replay.ts`), shared with everything else
+ * that replays a recorded game.
+ */
+export type Report = ReplayData
 
 const ashCards = ashSet as SwuCard[]
 
@@ -69,19 +71,6 @@ export const REPORT_CARDS: Record<string, SwuCard[]> = {
   vaneFriendlyUpgrade: vaneFriendlyUpgradeCards as SwuCard[],
 }
 
-/** Every card id a report's starting position refers to. */
-function referencedIds(state: Report['initialState']): string[] {
-  const ids = new Set<string>()
-  for (const side of ['player', 'opponent'] as PlayerId[]) {
-    const p = state.players[side]
-    ids.add(p.leader.cardId)
-    ids.add(p.base.cardId)
-    for (const id of [...p.hand, ...p.deck, ...p.discard]) ids.add(id)
-    for (const u of p.units) ids.add(u.cardId)
-  }
-  return [...ids]
-}
-
 /**
  * Rebuild the card database the report omitted. `extra` supplies cards from outside ASH: reports
  * from mixed-set pools reference them, and the bundled fixture only covers ASH.
@@ -89,19 +78,15 @@ function referencedIds(state: Report['initialState']): string[] {
  * Throws naming the missing ids rather than failing later in an unrelated place.
  */
 export function hydrate(report: Report, extra: SwuCard[] = []): GameState {
-  const cards = buildCardDb([...ashCards, ...extra])
-  const missing = referencedIds(report.initialState).filter(id => !cards[id])
-  if (missing.length > 0) {
-    throw new Error(
-      `replayReport: no card data for ${missing.join(', ')}. `
-      + 'The bundled fixture is ASH only; pass the other sets\' cards as `extra`.',
-    )
-  }
-  return { ...report.initialState, cards } as GameState
+  return withCardDb(
+    report,
+    buildCardDb([...ashCards, ...extra]),
+    'The bundled fixture is ASH only; pass the other sets\' cards as `extra`.',
+  )
 }
 
 /** Actions to apply just before a report's move `i`, as a function of the live board (see `replayWith`). */
-export type ReplayInserts = Record<number, (s: GameState) => Action[]>
+export type { ReplayInserts }
 
 /**
  * Every state in order: index 0 is the starting position, index n is the state after move n-1. Use
@@ -109,12 +94,7 @@ export type ReplayInserts = Record<number, (s: GameState) => Action[]>
  * adds its own state too, so the indices no longer line up with move numbers.
  */
 export function replaySteps(report: Report, extra: SwuCard[] = [], inserts: ReplayInserts = {}): GameState[] {
-  const states = [hydrate(report, extra)]
-  report.moves.forEach((move, i) => {
-    for (const action of inserts[i]?.(states[states.length - 1]) ?? []) states.push(resolve(states[states.length - 1], action))
-    states.push(resolve(states[states.length - 1], move.action))
-  })
-  return states
+  return replayStates(hydrate(report, extra), report.moves, inserts)
 }
 
 /**

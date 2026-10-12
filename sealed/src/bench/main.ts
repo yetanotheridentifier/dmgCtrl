@@ -12,7 +12,7 @@ import type { WeightKey } from './tune'
 import { runCost } from './cost'
 import { runBudget, type BudgetReport } from './budget'
 import { dirname, join } from 'node:path'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { COMMIT_ID } from '../buildIdentity'
 import {
   runShards, poolShards, poolFirstPlayer, pendingSeeds, loadShardResults, shardRunKey, shardPayload,
@@ -43,6 +43,7 @@ import type { FirstPlayerSplit } from './stats'
 import { resolveAi } from '../ai/registry'
 import { fetchSets, formatTriage, triage } from './triage'
 import { artOffRule, fixtureFile, poolFor, resolveSealedSets, SET_CODES, toFixture } from './setPools'
+import { ROWS_FORMAT_VERSION, rowsForExport, trainingCardDb } from './trainingRows'
 
 /**
  * The bench command line: `npm run bench --prefix sealed -- [--games N] [--seed N] [aiA] [aiB]`.
@@ -115,6 +116,12 @@ interface Args {
   decks?: DeckSource
   /** Set codes for `--triage` and `--fixture`, taken from the positional arguments. */
   sets: string[]
+  /** Turn exported games into training rows, written to `out` as JSON Lines. */
+  rows: boolean
+  /** With `--rows`: carry each position's legal moves on its row. */
+  legal: boolean
+  /** The export files for `--rows`, taken from the positional arguments as typed. */
+  files: string[]
   aiExplicit: boolean
   /**
    * Every AI named positionally. The head-to-head modes take the first two; `--cost` and `--budget`
@@ -155,6 +162,8 @@ export function parseArgs(argv: string[]): Args {
   let shardCount: number | undefined
   let triage = false
   let fixture = false
+  let rows = false
+  let legal = false
   let poolSets = ['ASH']
   let decks: DeckSource | undefined
   for (let i = 0; i < argv.length; i++) {
@@ -192,6 +201,8 @@ export function parseArgs(argv: string[]): Args {
     }
     else if (arg === '--triage') triage = true
     else if (arg === '--fixture') fixture = true
+    else if (arg === '--rows') rows = true
+    else if (arg === '--legal') legal = true
     // `--set LAW,SEC` names the sweep's pool, or the matrix's one set. A flag, because both modes'
     // positionals are AI names.
     else if (arg === '--set') {
@@ -209,10 +220,13 @@ export function parseArgs(argv: string[]): Args {
   assertPositiveInt(deckCount, '--deck-count')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
   if (fixture && positional.length === 0) throw new Error('--fixture needs at least one set code, e.g. --fixture LAW SEC, or --fixture all')
+  if (rows && positional.length === 0) throw new Error('--rows needs at least one export file, e.g. --rows games.json --out rows.jsonl')
+  // No default and no standard output: `npm run` prints its own lines there, which are not rows.
+  if (rows && out === undefined) throw new Error('--rows needs --out, the file to write the rows to')
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
   // The matrix rates one set's leaders against each other; a mixed pool builds decks nobody builds.
   if (matrix && poolSets.length !== 1) throw new Error(`--matrix takes one set, got ${poolSets.join(',')}`)
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, poolSets, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, poolSets, decks, sets: positional.map(s => s.toUpperCase()), rows, legal, files: positional, aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 /**
@@ -1581,6 +1595,56 @@ async function runFixtureMode(args: Args): Promise<void> {
   }
 }
 
+/**
+ * `--rows FILE [FILE ...] --out rows.jsonl`: replay each exported game and write one training row
+ * per move, a JSON object to a line. `--out` is written afresh, so a run's output is exactly its
+ * inputs' rows. A record that does not replay to its stored result is named with its reason, gives
+ * no rows, and makes the run exit non-zero; the records that do replay are written all the same.
+ */
+function runRowsMode(args: Args): void {
+  const out = args.out!
+  const start = Date.now()
+  const cards = trainingCardDb()
+  mkdirSync(dirname(out), { recursive: true })
+  writeFileSync(out, '')
+  let games = 0
+  let rowCount = 0
+  let bytes = 0
+  let offList = 0
+  const refused: string[] = []
+  for (const file of args.files) {
+    let result
+    try {
+      result = rowsForExport(JSON.parse(readFileSync(file, 'utf8')), cards, { legalMoves: args.legal })
+    } catch (err) {
+      console.error(`bench: ${file}: ${(err as Error).message}`)
+      process.exit(2)
+      return
+    }
+    for (const game of result.games) {
+      const lines = game.rows.map(r => `${JSON.stringify(r)}\n`).join('')
+      appendFileSync(out, lines)
+      games++
+      rowCount += game.rows.length
+      bytes += Buffer.byteLength(lines)
+      offList += game.rows.filter(r => r.chosenIndex === -1).length
+    }
+    for (const r of result.rejected) refused.push(`${file} record ${r.index}: ${r.reason}`)
+  }
+  const each = (n: number, per: number): string => (per === 0 ? '-' : Math.round(n / per).toLocaleString('en-GB'))
+  console.log(`\ntraining rows  (engine ${COMMIT_ID}, row format ${ROWS_FORMAT_VERSION})`)
+  console.log(row('files', String(args.files.length)))
+  console.log(row('games / refused', `${games} / ${refused.length}`))
+  console.log(row('rows', `${rowCount.toLocaleString('en-GB')}  (${each(rowCount, games)} a game)`))
+  console.log(row('size', `${bytes.toLocaleString('en-GB')} bytes  (${each(bytes, rowCount)} a row, ${each(bytes, games)} a game)`))
+  if (args.legal) console.log(row('moves off the list', `${offList}  (made, but not among the engine's legal moves)`))
+  console.log(row('time', `${((Date.now() - start) / 1000).toFixed(1)}s`))
+  console.log(row('written to', out))
+  for (const line of refused) console.error(`  refused: ${line}`)
+  console.log('')
+  if (refused.length > 0) process.exit(1)
+}
+
 function main(): void {
   let args: Args
   try {
@@ -1592,10 +1656,12 @@ function main(): void {
     console.error('       npm run bench --prefix sealed -- --sweep [--set SET[,SET ...]|all] [--games N] [--seed N[,N ...]] [ai]')
     console.error('       npm run bench --prefix sealed -- --triage SET [SET ...]')
     console.error('       npm run bench --prefix sealed -- --fixture SET [SET ...]|all')
+    console.error('       npm run bench --prefix sealed -- --rows EXPORT.json [EXPORT.json ...] --out ROWS.jsonl [--legal]')
     process.exit(2)
     return
   }
 
+  if (args.rows) { runRowsMode(args); return }
   if (args.triage) { void runTriageMode(args); return }
   if (args.fixture) { void runFixtureMode(args); return }
   if (args.sweep) { runSweepMode(args); return }

@@ -187,6 +187,36 @@ describe('bench argument parsing', () => {
   })
 
   /**
+   * `--rows` turns export files into training rows. Its positionals are file paths, which must
+   * arrive as typed: a path upper-cased like a set code names a file that does not exist.
+   */
+  describe('transforming exported games into training rows', () => {
+    it('takes the export files positionally, as typed, and where to write the rows', () => {
+      const args = parseArgs(['--rows', 'Games/one.json', 'two.json', '--out', '/tmp/rows.jsonl'])
+      expect(args.rows).toBe(true)
+      expect(args.files).toEqual(['Games/one.json', 'two.json'])
+      expect(args.out).toBe('/tmp/rows.jsonl')
+      expect(args.legal).toBe(false)
+    })
+
+    it('carries the legal moves only when asked', () => {
+      expect(parseArgs(['--rows', 'one.json', '--out', 'rows.jsonl', '--legal']).legal).toBe(true)
+    })
+
+    it('needs at least one export file', () => {
+      expect(() => parseArgs(['--rows', '--out', 'rows.jsonl'])).toThrow('--rows needs at least one export file')
+    })
+
+    it('needs somewhere to write the rows', () => {
+      expect(() => parseArgs(['--rows', 'one.json'])).toThrow('--rows needs --out')
+    })
+
+    it('is not switched on by a run that does not ask for it', () => {
+      expect(parseArgs(['beam-reply']).rows).toBe(false)
+    })
+  })
+
+  /**
    * `--solver-nodes` is a new flag on a parser that rejects unknown ones, so this guards the
    * boring failure: a typo'd flag name silently becoming a positional AI name, which would run
    * the shipped bot under a candidate's name and report no difference.
