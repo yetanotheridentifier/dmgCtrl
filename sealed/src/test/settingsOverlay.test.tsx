@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SettingsOverlay } from '../components/settingsOverlay'
 import { SettingsProvider } from '../hooks/useSettings'
-import { loadSettings, STORAGE_KEY, defaultSettings } from '../data/settingsStore'
+import { loadSettings, STORAGE_KEY, defaultSettings, OPPONENT_DELAYS_MS } from '../data/settingsStore'
 
 function setup(onClose = vi.fn()) {
   render(
@@ -63,12 +63,32 @@ describe('SettingsOverlay', () => {
 
   it('changing one setting leaves the others alone', async () => {
     const user = userEvent.setup()
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ allowUndo: true, baseHealthDisplay: 'damage', showBugReport: true }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ allowUndo: true, baseHealthDisplay: 'damage', showBugReport: true, opponentDelayMs: 1000 }))
     setup()
 
     await user.selectOptions(screen.getByTestId('setting-base-health'), 'remaining')
 
-    expect(loadSettings()).toEqual({ allowUndo: true, baseHealthDisplay: 'remaining', showBugReport: true })
+    expect(loadSettings()).toEqual({ allowUndo: true, baseHealthDisplay: 'remaining', showBugReport: true, opponentDelayMs: 1000 })
+  })
+
+  describe('opponent pace', () => {
+    it('shows half a second by default, and offers instant', () => {
+      setup()
+      const select = screen.getByTestId('setting-opponent-delay')
+      expect(select).toHaveValue('500')
+      expect(within(select).getByRole('option', { name: /instant/i })).toHaveValue('0')
+      expect(within(select).getAllByRole('option').map(o => Number((o as HTMLOptionElement).value))).toEqual([...OPPONENT_DELAYS_MS])
+    })
+
+    it('persists a change as a number of milliseconds', async () => {
+      const user = userEvent.setup()
+      setup()
+
+      await user.selectOptions(screen.getByTestId('setting-opponent-delay'), '0')
+
+      expect(screen.getByTestId('setting-opponent-delay')).toHaveValue('0')
+      expect(loadSettings().opponentDelayMs).toBe(0)
+    })
   })
 
   it('closes on the close button and on Escape', async () => {

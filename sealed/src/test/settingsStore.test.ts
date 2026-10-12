@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { loadSettings, saveSettings, defaultSettings, STORAGE_KEY } from '../data/settingsStore'
+import { loadSettings, saveSettings, defaultSettings, STORAGE_KEY, OPPONENT_DELAYS_MS } from '../data/settingsStore'
 import { isDev } from '../env'
 
 // isDev is mocked per test: `allowUndo` defaults differently per build, and both
@@ -37,6 +37,18 @@ describe('settingsStore', () => {
       mockIsDev.mockReturnValue(false)
       expect(defaultSettings().showBugReport).toBe(false)
     })
+
+    /** Half a second between the opponent's actions, in every build. */
+    it('paces the opponent at 500ms', () => {
+      expect(defaultSettings().opponentDelayMs).toBe(500)
+      mockIsDev.mockReturnValue(true)
+      expect(defaultSettings().opponentDelayMs).toBe(500)
+    })
+
+    it('offers instant and the default among the opponent delays', () => {
+      expect(OPPONENT_DELAYS_MS).toContain(0)
+      expect(OPPONENT_DELAYS_MS).toContain(defaultSettings().opponentDelayMs)
+    })
   })
 
   describe('loadSettings', () => {
@@ -55,8 +67,19 @@ describe('settingsStore', () => {
     })
 
     it('reads back what was saved', () => {
-      saveSettings({ allowUndo: true, baseHealthDisplay: 'remaining', showBugReport: true })
-      expect(loadSettings()).toEqual({ allowUndo: true, baseHealthDisplay: 'remaining', showBugReport: true })
+      saveSettings({ allowUndo: true, baseHealthDisplay: 'remaining', showBugReport: true, opponentDelayMs: 0 })
+      expect(loadSettings()).toEqual({ allowUndo: true, baseHealthDisplay: 'remaining', showBugReport: true, opponentDelayMs: 0 })
+    })
+
+    /** A delay that is not one of the offered ones could not be shown in the settings form. */
+    it.each([123, -500, '500', null, true])('replaces an opponent delay of %j with the default', stored => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ allowUndo: true, opponentDelayMs: stored }))
+      expect(loadSettings()).toEqual({ ...defaultSettings(), allowUndo: true, opponentDelayMs: 500 })
+    })
+
+    it.each([...OPPONENT_DELAYS_MS])('keeps a stored opponent delay of %ims', stored => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ opponentDelayMs: stored }))
+      expect(loadSettings().opponentDelayMs).toBe(stored)
     })
 
     it('falls back to the defaults when the stored blob is corrupt', () => {
@@ -71,7 +94,7 @@ describe('settingsStore', () => {
 
     it('replaces an unrecognised value with that field’s default, keeping the rest', () => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ allowUndo: true, baseHealthDisplay: 'sideways' }))
-      expect(loadSettings()).toEqual({ allowUndo: true, baseHealthDisplay: 'damage', showBugReport: false })
+      expect(loadSettings()).toEqual({ allowUndo: true, baseHealthDisplay: 'damage', showBugReport: false, opponentDelayMs: 500 })
     })
 
     it('replaces a wrongly typed value with that field’s default', () => {
@@ -85,7 +108,7 @@ describe('settingsStore', () => {
      */
     it('fills in fields the stored blob omits', () => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ baseHealthDisplay: 'remaining' }))
-      expect(loadSettings()).toEqual({ allowUndo: false, baseHealthDisplay: 'remaining', showBugReport: false })
+      expect(loadSettings()).toEqual({ allowUndo: false, baseHealthDisplay: 'remaining', showBugReport: false, opponentDelayMs: 500 })
     })
   })
 })

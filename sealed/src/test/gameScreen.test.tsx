@@ -41,7 +41,7 @@ const identity = <T,>(arr: T[]) => arr
 // Passive opponent injected outright — the real AI draws from the state seed, so an rng near 1
 // no longer steers it. legalMoves puts the do-nothing move (pass / skipResource) last, so the
 // last move is passive in every phase — what the old `rng: () => 0.999999` meant.
-const OPTS: UseGameOptions = {
+const PASSIVE: UseGameOptions = {
   shuffle: identity,
   firstPlayer: 'player',
   ai: s => {
@@ -49,6 +49,9 @@ const OPTS: UseGameOptions = {
     return moves.length > 0 ? moves[moves.length - 1] : null
   },
 }
+// The opponent replies at once, whatever the pacing setting says: these tests click straight through
+// its turns. The pacing tests below leave the delay to the setting.
+const OPTS: UseGameOptions = { ...PASSIVE, opponentDelayMs: 0 }
 
 async function seedCards() {
   for (const card of SWU_CARDS) {
@@ -234,6 +237,56 @@ describe('GameScreen', () => {
     // A unit is on the board, so there is certainly something to take back.
     expect(within(screen.getByTestId('player-ground-units')).getAllByTestId('card-face')).toHaveLength(1)
     expect(screen.queryByTestId('undo-btn')).toBeNull()
+  })
+
+  /**
+   * The opponent's actions are shown one at a time, at the pace set in Settings. While they are
+   * pending the board shows that the opponent is acting and offers the player nothing to do.
+   */
+  describe('opponent pacing', () => {
+    it('paces the opponent at the default setting, and says the opponent is acting meanwhile', async () => {
+      const user = userEvent.setup()
+      renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={PASSIVE} />)
+      await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+
+      await user.click(screen.getByRole('button', { name: /keep hand/i }))
+
+      // The player's own action has landed; the opponent's mulligan call has not.
+      expect(screen.getByText('Opponent…')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /keep hand/i })).toBeNull()
+      expect(screen.getByTestId('game-log')).not.toHaveTextContent('Opp')
+
+      // Half a second later it has, and the player is asked for resources.
+      await waitFor(() => expect(screen.queryByText('Opponent…')).toBeNull())
+      expect(screen.getByTestId('hand-card-0')).toBeInTheDocument()
+    })
+
+    it('offers no undo, concession or move while the opponent’s actions are pending', async () => {
+      const user = userEvent.setup()
+      seedSettings({ allowUndo: true, opponentDelayMs: 2000 })
+      renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={PASSIVE} />)
+      await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+      expect(screen.getByTestId('concede-btn')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: /keep hand/i }))
+
+      expect(screen.getByText('Opponent…')).toBeInTheDocument()
+      expect(screen.queryByTestId('undo-btn')).toBeNull()
+      expect(screen.queryByTestId('concede-btn')).toBeNull()
+      expect(within(screen.getByTestId('player-mat')).queryAllByRole('button')).toEqual([])
+    })
+
+    it('plays instantly with the setting at instant', async () => {
+      const user = userEvent.setup()
+      seedSettings({ opponentDelayMs: 0 })
+      renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={PASSIVE} />)
+      await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+
+      await user.click(screen.getByRole('button', { name: /keep hand/i }))
+
+      expect(screen.queryByText('Opponent…')).toBeNull()
+      expect(screen.getByTestId('game-log')).toHaveTextContent('Opp')
+    })
   })
 
   /** #370: cards named in the log are hover-to-zoom references, coloured by who controls them. */
