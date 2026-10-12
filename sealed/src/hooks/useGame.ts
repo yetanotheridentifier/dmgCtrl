@@ -12,7 +12,8 @@ import type { GameState, PendingChoice, PlayerId } from '../engine/types'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { nextSeed } from '../engine/rng'
-import { opponentAi } from '../config'
+import { opponentAi, OPPONENT_AI } from '../config'
+import { COMMIT_ID, RELEASE } from '../buildIdentity'
 import { driverAction } from '../ai/concession'
 import type { DescribePart } from '../utils/describeAction'
 import { logEntries } from '../utils/boardDiff'
@@ -202,6 +203,9 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
   // Rewinds actually performed, for the saved record's provenance. A ref, not state: it is
   // read once at save time and must not re-render the board on every undo.
   const undoCountRef = useRef(0)
+  // When the board was dealt, for the saved record. Set with the initial state, so a rematch
+  // starts it again.
+  const startedAtRef = useRef(0)
 
   // The opponent's pace, read by timers that outlive the render that set them.
   const delayRef = useRef(0)
@@ -349,6 +353,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
           rngSeed: options.rngSeed,
         })
         initialStateRef.current = state
+        startedAtRef.current = Date.now()
 
         // If the AI won the initiative roll it moves first: before the human sees the board when it
         // is instant, and onto the opening board when it is paced.
@@ -385,14 +390,18 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       playerDeckName: playerDeck.name,
       opponentDeckName: opponentDeck.name,
       winner: gameState.winner,
-      startedAt: Date.now(),
+      startedAt: startedAtRef.current,
       endedAt: Date.now(),
       initialState: initial,
       moves: movesRef.current,
       finalState: gameState,
       undoCount: undoCountRef.current,
+      build: { release: RELEASE, commitId: COMMIT_ID },
+      // An opponent handed in as a function has no registered name, so it is left unsaid.
+      ...(options.ai ? {} : { opponentAi: OPPONENT_AI }),
+      humanSeat: HUMAN,
     })
-  }, [gameState, playerDeck.name, opponentDeck.name])
+  }, [gameState, playerDeck.name, opponentDeck.name, options.ai])
 
   const act = useCallback(
     (action: Action) => {

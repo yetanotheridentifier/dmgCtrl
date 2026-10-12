@@ -315,7 +315,7 @@ Everything is on-device; there is no account or server state.
 |---|---|---|
 | Imported decks | localStorage key `sealed_decks` | Remove buttons in-app, or clear the key |
 | Card cache | IndexedDB `dmgctrl-sealed` → `cards` | Delete the DB in devtools, it re-hydrates on next play |
-| Game records | IndexedDB `dmgctrl-sealed` → `games` | See "Clearing game records" below |
+| Game records | IndexedDB `dmgctrl-sealed` → `games` | See "Clearing game records" and "Exporting game records" below |
 
 ### Clearing game records
 
@@ -354,6 +354,59 @@ diverges from the stored final state. Records are the substrate for E7 training,
 store once before collecting anything you intend to train on. Records written since are exact
 replays, and there's a test pinning that (`deterministicReplay.test.ts`).
 
+### Exporting game records
+
+Saved games come off the device as one JSON file, from the same console as above:
+
+```js
+__sealedExportGames()
+```
+
+The browser downloads `dmgctrl-sealed-games-<timestamp>.json`, and the call logs
+`[sealed] exported N game records` and resolves to the number in the file, newest first. With
+nothing saved it logs `0` and downloads nothing. Exporting only reads: the store is unchanged, so
+exporting twice gives the same games twice. Nothing is sent anywhere; the file goes wherever you
+put it, and it carries your deck names.
+
+```json
+{
+  "formatVersion": 1,
+  "build": { "release": "...", "commitId": "..." },
+  "records": [
+    {
+      "initialState": {},
+      "moves": [{ "by": "player", "action": { "type": "pass" } }],
+      "playerDeckName": "...",
+      "opponentDeckName": "...",
+      "winner": "player",
+      "startedAt": 0,
+      "endedAt": 0,
+      "undoCount": 0,
+      "build": { "release": "...", "commitId": "..." },
+      "opponentAi": "beam-reply",
+      "humanSeat": "player"
+    }
+  ]
+}
+```
+
+- The top-level `build` is the build that wrote the file. Each record's `build` is the build that
+  played that game, which is the one that matters when replaying it.
+- `initialState` has no `cards`: the card database is rebuilt by the reader. There is no
+  `finalState` either, since replaying `moves` from `initialState` produces it.
+- `startedAt` and `endedAt` are milliseconds since the epoch. `winner` is `player`, `opponent` or
+  `draw`.
+- `undoCount`, `build`, `opponentAi` and `humanSeat` are left out of a record saved before they
+  were captured. Absent means unknown, not zero or a default. A record with no `build` also
+  has no real start time: its `startedAt` is its `endedAt`, give or take a millisecond.
+
+**Each record is a report the replay harness reads as it stands** (`src/test/helpers/replayReport.ts`):
+save one record as a file under `src/test/fixtures/reports/`, register it, and `replay` it, exactly
+as for a filed bug report or a dropped bench game. The harness rebuilds the card database from the
+bundled ASH set, so a game whose decks hold cards from another set needs those cards passed as
+`extra`; it throws naming the missing ids otherwise. A record does not say which sets it needs: read
+them off the card ids in its `initialState`.
+
 ## Diagnostics & logging
 
 ### Where bench artefacts live
@@ -382,6 +435,7 @@ also mirrors to the devtools console with a `[sealed]` prefix.
 - **Support dump**: run `__sealedLogs()` in the devtools console for the last 200
   entries (`{at, level, message, detail}`), useful to paste into a bug report.
 - **Wipe game records**: `__sealedClearGames()`, see "Clearing game records" above.
+- **Export game records**: `__sealedExportGames()`, see "Exporting game records" above.
 
 **"Couldn't load the cards for this deck"** now shows the specific cause under the
 message (e.g. `Card ASH_020 could not be loaded (SWUDB 502, no swuapi match)`),

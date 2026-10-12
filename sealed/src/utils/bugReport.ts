@@ -1,5 +1,6 @@
 import type { GameState, PlayerId } from '../engine/types'
 import type { Action } from '../engine/actions'
+import { withoutCards } from '../data/replayData'
 
 /**
  * Assembling an in-app bug report (#373).
@@ -70,7 +71,7 @@ export function reportTitle(title: string): string {
 function replayPayload(initialState: GameState | null, moves: ReportInput['moves']): string {
   if (!initialState) return ''
   // `cards` is ~12KB of a ~13KB state and is reconstructible, so it never goes in the report.
-  return JSON.stringify({ initialState: { ...initialState, cards: undefined }, moves })
+  return JSON.stringify({ initialState: withoutCards(initialState), moves })
 }
 
 export function buildReportMarkdown({ description, release, commitId, isDev, log, initialState, moves, unresolvedPrintings = [] }: ReportInput): string {

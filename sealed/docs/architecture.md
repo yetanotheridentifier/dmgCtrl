@@ -223,6 +223,30 @@ per-phase event log (`phaseEvents`) all live on the state, JSON-serialisable. Ab
    a certain loss, else the setup heuristic, else the AI.
 5. When `winner` is set, the game record persists once to IndexedDB.
 
+**What a game record holds** (`GameRecord`, `data/gameRecords.ts`): the two deck names, the
+`winner`, `startedAt` (when the board was dealt, so a rematch starts it again) and `endedAt` (when
+the winner appeared), the `initialState`, every move with the seat that made it, and the
+`finalState`. Beside those sits its provenance, written when the record is saved because none of it
+can be worked out from the moves afterwards:
+
+| Field | Says |
+|---|---|
+| `undoCount` | How many rewinds the player performed (see "Undo" below) |
+| `build` | `{ release, commitId }` of the build that played the game: its rules and AI produced these moves |
+| `opponentAi` | The registered name the opponent played as (`OPPONENT_AI`). Absent when the opponent was injected as a function, which has no name |
+| `humanSeat` | The seat the person held; the other seat's moves are the AI's |
+
+All four are optional and none is an indexed key, so the `games` store's schema does not change for
+them. A field is absent on a record written before it was captured, which means unknown, and it
+cannot be backfilled.
+
+**Replay data travels without the card database.** `withoutCards` (`data/replayData.ts`) is the one
+place that strips it, and the bug report, the bench's failure fixtures and the game export
+(`data/recordExport.ts`) all write the shape it returns: the state's own keys in their own order,
+less `cards`. The reader rebuilds the database from the cards the position names. An exported
+record also leaves out `finalState`, which replaying the moves produces, and its `id`. See
+"Exporting game records" in [operations.md](operations.md) for the file.
+
 `useGame` reads live state from a ref inside `act` (not a setState updater) so that
 under React `StrictMode`, which double-invokes updaters in dev, each action logs
 and drives the AI exactly once.
@@ -567,7 +591,7 @@ The board is drawn with art-dominant cards, not text rows:
 | Bundled sets ← `bundledSets.ts` | Every set the setup panel lists, as shipped with the app: Normal printings, one row per card, no tokens. The files are the bench fixtures (`src/test/fixtures/<set>Set.json`), each loaded with `import()` so it is a file of its own, fetched when its set is first asked for | A first visit plays with the card API unreachable; the game plays the card data the bench and tests run against |
 | IndexedDB `cards` ← `setImport.ts` | Whole sets via one SWUDB search call (`?q=set:XXX`), each row passed through `fromSearchRow` first because the search wraps aspects and traits as `{ S: value }` | A set with no bundled snapshot; includes bases the detail endpoint 502s on |
 | IndexedDB `cards` (Dexie v1) | Card JSON + thumbnail bytes | ~KBs per card; queryable; offline |
-| IndexedDB `games` (Dexie v2) | Completed game records | Replayable substrate for E7 training |
+| IndexedDB `games` (Dexie v2) | Completed game records, with their provenance; exported to a JSON file from the console | Replayable substrate for E7 training |
 
 **A card is read from the cache, then the bundled set, then the network** (`getCard`), and a whole
 set is the bundled set with the cache laid over it (`cachedSetCards`): a cached copy of a card stands

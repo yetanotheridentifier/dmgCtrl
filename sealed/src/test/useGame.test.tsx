@@ -10,6 +10,11 @@ import type { SwuCard } from '../data/cards'
 import type { GameState } from '../engine/types'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
+import { buildGameExport } from '../data/recordExport'
+import { withoutCards } from '../data/replayData'
+import { OPPONENT_AI } from '../config'
+import { COMMIT_ID, RELEASE } from '../buildIdentity'
+import { replay } from './helpers/replayReport'
 
 // Seeded SWUDB-shaped cards. TST_900 is a 0-cost 30-power unit so a game can
 // be won in two rounds, keeping tests fast and deterministic.
@@ -388,6 +393,132 @@ describe('useGame', () => {
           expect(records[0].undoCount).toBe(0)
         })
       })
+    })
+  })
+
+  /**
+   * What a saved record says about where it came from. All of it is written when the game is saved,
+   * because none of it can be recovered from the moves afterwards.
+   */
+  describe('provenance on the saved record', () => {
+    async function winFromTheStart(result: { current: ReturnType<typeof useGame> }) {
+      act(() => result.current.act({ type: 'keepHand' }))
+      act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+      act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+      act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
+      act(() => result.current.act({ type: 'pass' }))
+      act(() => result.current.act({ type: 'skipResource' }))
+      const unitId = result.current.gameState!.players.player.units[0].instanceId
+      act(() => result.current.act({ type: 'attack', attackerId: unitId, target: { kind: 'base' } }))
+      expect(result.current.gameState!.winner).toBe('player')
+    }
+
+    /** The start is when the board was dealt, not when the record was written. */
+    it('records when the game started and when it ended as two different moments', async () => {
+      let now = 1_000
+      vi.spyOn(Date, 'now').mockImplementation(() => now)
+      try {
+        const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+        await waitFor(() => expect(result.current.status).toBe('playing'))
+        now = 61_000
+        await winFromTheStart(result)
+
+        await waitFor(async () => {
+          const records = await listGameRecords()
+          expect(records).toHaveLength(1)
+          expect(records[0].startedAt).toBe(1_000)
+          expect(records[0].endedAt).toBe(61_000)
+        })
+      } finally {
+        vi.restoreAllMocks()
+      }
+    })
+
+    it('starts the clock again on a rematch', async () => {
+      let now = 1_000
+      vi.spyOn(Date, 'now').mockImplementation(() => now)
+      try {
+        const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+        await waitFor(() => expect(result.current.status).toBe('playing'))
+        const first = result.current.gameState
+        now = 30_000
+        act(() => result.current.rematch())
+        await waitFor(() => {
+          expect(result.current.status).toBe('playing')
+          expect(result.current.gameState).not.toBe(first)
+        })
+        now = 61_000
+        await winFromTheStart(result)
+
+        await waitFor(async () => {
+          const records = await listGameRecords()
+          expect(records).toHaveLength(1)
+          expect(records[0].startedAt).toBe(30_000)
+        })
+      } finally {
+        vi.restoreAllMocks()
+      }
+    })
+
+    it('records the build that played the game and the seat the person held', async () => {
+      const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+      await waitFor(() => expect(result.current.status).toBe('playing'))
+      await winFromTheStart(result)
+
+      await waitFor(async () => {
+        const records = await listGameRecords()
+        expect(records).toHaveLength(1)
+        expect(records[0].build).toEqual({ release: RELEASE, commitId: COMMIT_ID })
+        expect(records[0].humanSeat).toBe('player')
+      })
+    })
+
+    /** An opponent handed in as a function has no registered name, and unknown is left unsaid. */
+    it('leaves the opponent AI unnamed when one was injected', async () => {
+      const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+      await waitFor(() => expect(result.current.status).toBe('playing'))
+      await winFromTheStart(result)
+
+      await waitFor(async () => {
+        const records = await listGameRecords()
+        expect(records).toHaveLength(1)
+        expect('opponentAi' in records[0]).toBe(false)
+      })
+    })
+
+    it('names the deployed opponent AI when the game was played against it', async () => {
+      const { result } = renderHook(() => useGame(DECK, DECK, { shuffle: identity, firstPlayer: 'player' }))
+      await waitFor(() => expect(result.current.status).toBe('playing'))
+      // Whoever wins: the first legal move is never the do-nothing one, so the game ends quickly.
+      for (let i = 0; i < 200 && result.current.gameState!.winner === null; i++) {
+        act(() => result.current.act(result.current.legal[0]))
+      }
+      expect(result.current.gameState!.winner).not.toBeNull()
+
+      await waitFor(async () => {
+        const records = await listGameRecords()
+        expect(records).toHaveLength(1)
+        expect(records[0].opponentAi).toBe(OPPONENT_AI)
+      })
+    })
+
+    /**
+     * The whole route a game takes off the device: played through the hook, saved, exported, written
+     * as JSON, and read back by the replay harness as it stands. The deck here is not ASH, so its
+     * cards are passed to the harness the way any report from another set's pool needs.
+     */
+    it('exports a played game that replays to the final state it was saved with', async () => {
+      const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+      await waitFor(() => expect(result.current.status).toBe('playing'))
+      await winFromTheStart(result)
+      await waitFor(async () => expect(await listGameRecords()).toHaveLength(1))
+      const [record] = await listGameRecords()
+
+      const file = JSON.parse(JSON.stringify(buildGameExport([record]))) as ReturnType<typeof buildGameExport>
+      const end = replay(file.records[0], SWU_CARDS)
+
+      expect(end.winner).toBe(record.winner)
+      expect(withoutCards(end)).toEqual(withoutCards(record.finalState))
     })
   })
 

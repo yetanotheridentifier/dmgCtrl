@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { GameState } from '../engine/types'
+import { withoutCards, type StateWithoutCards } from '../data/replayData'
 import type { GameResult, MoveRecord } from './selfPlay'
 
 /**
@@ -14,16 +14,14 @@ import type { GameResult, MoveRecord } from './selfPlay'
 export const FAILURES_DIR = 'bench-results/failures'
 
 export interface FailureFixture {
-  initialState: Omit<GameState, 'cards'>
+  initialState: StateWithoutCards
   moves: MoveRecord[]
 }
 
 /** The `{ initialState, moves }` fixture for one game (card database stripped). */
 export function failureFixture(game: GameResult): FailureFixture {
   if (!game.initialState) throw new Error('failureFixture: game has no retained initial state (was it completed?)')
-  const initialState: Partial<GameState> = { ...game.initialState }
-  delete initialState.cards
-  return { initialState: initialState as Omit<GameState, 'cards'>, moves: game.moves }
+  return { initialState: withoutCards(game.initialState), moves: game.moves }
 }
 
 /** Filenames must survive every OS, so the ISO timestamp's colons and dots are replaced. */

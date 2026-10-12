@@ -35,6 +35,14 @@ describe('failureFixture', () => {
     expect(fx.initialState.players.player.leader.cardId).toBeTruthy()
   })
 
+  /** A fixture file is the state's own keys in their own order, less `cards`, then the moves. */
+  it('serialises to the state without its cards, byte for byte', () => {
+    const game = playGame({ ...base, seed: 7 })
+    const { cards, ...rest } = game.initialState!
+    void cards
+    expect(JSON.stringify(failureFixture(game))).toBe(JSON.stringify({ initialState: rest, moves: game.moves }))
+  })
+
   it('replays through the standard harness to the same outcome', () => {
     const game = playGame({ ...base, seed: 11 })
     const end = replay(failureFixture(game))

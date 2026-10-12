@@ -128,6 +128,16 @@ describe('buildReportMarkdown', () => {
     expect(md).not.toContain('Big Unit"') // no card-db entry leaked into the payload
   })
 
+  /**
+   * Reports already filed are fixtures, and anything that reads the payload out of an issue reads
+   * these bytes: the state's own keys in their own order, less `cards`.
+   */
+  it('writes the payload as the state without its cards, byte for byte', () => {
+    const { cards, ...rest } = initialState
+    void cards
+    expect(report()).toContain('```json\n' + JSON.stringify({ initialState: rest, moves }) + '\n```')
+  })
+
   it('keeps the replay data collapsed so the report reads as prose', () => {
     expect(report()).toContain('<details>')
   })
