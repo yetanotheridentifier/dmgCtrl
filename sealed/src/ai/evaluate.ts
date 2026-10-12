@@ -146,14 +146,14 @@ export interface EvalWeights {
   resource: number // per resource in the pool up to the knee (total, not ready: all ready each round)
   /**
    * Per resource ABOVE the knee. Lower than `resource`, which is what makes the pool's value
-   * concave: once you can already cast what you hold, resourcing another card buys nothing and the card
+   * concave: once you can already play what you hold, resourcing another card buys nothing and the card
    * is worth more. Below `card` means the bot stops resourcing; at or above it, it never does.
    */
   resourceSurplus: number
   /**
    * Pool size at which resources stop being fully valuable. Grounded in the pool rather than taste:
    * ASH's non-leader costs have p90 = 6, and only 21 of 238 cards cost 7 or more, so 7 resources
-   * casts 91% of the set. Raised to the leader's deploy cost while it is still undeployed.
+   * pays for 91% of the set. Raised to the leader's deploy cost while it is still undeployed.
    */
   saturation: number
   /**
@@ -780,7 +780,7 @@ function kneeFor(state: GameState, id: PlayerId, w: EvalWeights): number {
  * Whether another resource would buy this player anything.
  *
  * **The half of the scarcity rule that was missing, and a scripted position caught it.** Charged on
- * hand size alone, the bonus fired at a pool of 2 holding three cards that could not be cast, which is
+ * hand size alone, the bonus fired at a pool of 2 holding three cards that could not be played, which is
  * precisely when a resource is worth most: below the knee it still buys reach. The rule is a
  * conjunction, and only the conjunction is defensible: decline when the hand is small **and** the pool
  * has already run past what it can spend.

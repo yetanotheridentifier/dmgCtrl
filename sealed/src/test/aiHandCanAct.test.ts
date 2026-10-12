@@ -23,7 +23,7 @@ import '../engine/cardDefinitions'
  * and zeroing it changes the pick zero times. Dead even through the search built to wake it.
  *
  * It is still not removable on that reading. `handValue.test.ts` asserts a LOWER bound, that keeping a
- * castable card must beat holding the biggest uncastable bomb in the pool, and the bound inverts at
+ * playable card must beat holding the biggest unplayable bomb in the pool, and the bound inverts at
  * `canAct: 0`. Both readings are true at once because they describe different populations: the weight
  * changes no decision the bench reaches, and removing it inverts a preference in a position the bench
  * does not reach. A measured null is evidence about the corpus, not about the rule.
@@ -46,7 +46,7 @@ const db: Record<string, EngineCard> = { ...buildCardDb(ashSet as unknown as Swu
 /**
  * One resource in the pool, so resourcing leaves two.
  *
- * Small on purpose: it is what makes "the only card you can cast" a real category rather than a
+ * Small on purpose: it is what makes "the only card you can play" a real category rather than a
  * contrivance, and it puts the bomb three or more beyond reach, where `reach` bottoms out at 0.3 and
  * the bound is at its tightest.
  */
@@ -80,9 +80,9 @@ const stranded = playable.filter(c => cost(c) > AFTER_BANKING)
 /**
  * The two cards, DERIVED from the pool rather than named, so the position cannot rot as cards land.
  *
- * `keep` is the poorest thing castable once the resourcing is done: the weakest possible reason to keep
+ * `keep` is the poorest thing playable once the resourcing is done: the weakest possible reason to keep
  * a play, which is the hardest case for the bound and the same quantity it calls `poorest`. `bank` is
- * the richest thing that is not castable and will not be for three turns, which is the hardest case
+ * the richest thing that is not playable and will not be for three turns, which is the hardest case
  * in the other direction and the bound's `richest`.
  */
 const keep = castable.slice().sort((a, b) => value(a) - value(b))[0]
@@ -95,7 +95,7 @@ const bankMove = (handIndex: number) => ({ type: 'resourceCard', handIndex }) as
  * The same trap at the size the bot actually meets it.
  *
  * Measured over the 44 coverage decks, a resourcing decision holds **five** cards 44.4% of the time and
- * two cards 3.5%, and of the 36 decisions where exactly one card was castable, 22 were at five cards.
+ * two cards 3.5%, and of the 36 decisions where exactly one card was playable, 22 were at five cards.
  * So the two-card fixture above is the bound's worst case and a 3.5% tail; this is the population.
  */
 const REALISTIC = [keep, ...stranded.slice().sort((a, b) => value(b) - value(a)).slice(0, 4)]
@@ -112,8 +112,8 @@ function banked(w: number, limits: BeamLimits = BEAM_REPLY_LIMITS, from = positi
 
 describe('the position the lower bound describes', () => {
   /** The fixture has to be the described position, or the rest proves nothing. */
-  it('holds exactly one castable card beside a better one it cannot cast', () => {
-    expect(keep, 'a castable card must exist in the pool').toBeDefined()
+  it('holds exactly one playable card beside a better one it cannot play', () => {
+    expect(keep, 'a playable card must exist in the pool').toBeDefined()
     expect(bank, 'an out-of-reach card must exist in the pool').toBeDefined()
     expect(cost(keep)).toBeLessThanOrEqual(AFTER_BANKING)
     expect(cost(bank)).toBeGreaterThan(AFTER_BANKING + 2)
@@ -121,7 +121,7 @@ describe('the position the lower bound describes', () => {
     expect(value(bank), 'the card we want resourced must be the better card').toBeGreaterThan(value(keep))
   })
 
-  it('leaves the kept card castable next round, and the resourced one still out of reach', () => {
+  it('leaves the kept card playable next round, and the resourced one still out of reach', () => {
     const after = resolve(position(), bankMove(1))
     expect(after.players.player.resources.length).toBe(AFTER_BANKING)
     expect(after.players.player.hand).toContain(keep.id)
@@ -149,9 +149,9 @@ describe('hand.canAct decides it', () => {
 
   /**
    * The answer to the ticket. At zero the bot resources the only card it can play and keeps one it cannot
-   * cast for at least three turns, holding a hand it has no way to use.
+   * play for at least three turns, holding a hand it has no way to use.
    */
-  it('at zero, resources its last castable card and keeps a card it cannot play', () => {
+  it('at zero, resources its last playable card and keeps a card it cannot play', () => {
     expect(banked(0)).toBe(keep.id)
   })
 
@@ -169,11 +169,11 @@ describe('hand.canAct decides it', () => {
   /**
    * And at the hand size the bot actually meets, which is where 22 of the 36 measured live decisions
    * were. A five-card hand does not dilute the trap: `canAct` is a property of the whole hand, so it
-   * still turns on the single castable card whatever else is held beside it.
+   * still turns on the single playable card whatever else is held beside it.
    */
   it('holds at a five-card hand, not just at the two-card extreme', () => {
     expect(REALISTIC).toHaveLength(5)
-    expect(REALISTIC.filter(c => cost(c) <= AFTER_BANKING), 'exactly one castable card').toHaveLength(1)
+    expect(REALISTIC.filter(c => cost(c) <= AFTER_BANKING), 'exactly one playable card').toHaveLength(1)
     expect(banked(0, BEAM_REPLY_LIMITS, realistic)).toBe(keep.id)
     expect(banked(DEFAULT_HAND_WEIGHTS.canAct, BEAM_REPLY_LIMITS, realistic)).not.toBe(keep.id)
   })
@@ -182,13 +182,13 @@ describe('hand.canAct decides it', () => {
 /**
  * Breadth, so the finding cannot be dismissed as one contrived pair.
  *
- * Over every (castable, stranded) pair the pool can make at this pool size, the term flips the pick in
+ * Over every (playable, stranded) pair the pool can make at this pool size, the term flips the pick in
  * about a third of them: measured 35.8% at a pool of 1, and 34% to 40% at every pool from 1 to 6. This
  * is prevalence over CARD PAIRS, not over positions the game reaches: it says the region is wide, and
  * says nothing about how often play enters it.
  */
 describe('how wide the region is', () => {
-  it('flips a third of all castable-against-stranded pairs in the pool', () => {
+  it('flips a third of all playable-against-stranded pairs in the pool', () => {
     let flips = 0
     for (const k of castable) {
       for (const b of stranded) {

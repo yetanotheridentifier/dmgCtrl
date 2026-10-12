@@ -116,7 +116,7 @@ leaks.** Since the beam maximises over leaves, it systematically prefers the bra
 the assumption holding.
 
 It models this format better than it sounds. There is no instant-speed interaction and a played unit
-arrives exhausted, so an opponent cannot answer mid-sequence with a card they have just cast. Their
+arrives exhausted, so an opponent cannot answer mid-sequence with a card they have just played. Their
 whole in-sequence toolkit is: attack with something already ready, play an event, play an Ambush
 unit, deploy their leader (which arrives ready, and is the largest of these), or claim.
 
@@ -554,8 +554,8 @@ reading the Bearing column rather than Varies: `resourceSurplus` is alive and on
 
 **Inert is not the same as removable.** `hand.canAct` changes no decision the bench reaches, and
 deleting it inverts the lower bound asserted in `handValue.test.ts`, which keeps the model from resourcing
-its last castable card. A scripted position decides it: at a weight of 0 the shipped bot resources its only
-castable card, at 3 it keeps it, and no `reach` curve removes the need. See
+its last playable card. A scripted position decides it: at a weight of 0 the shipped bot resources its only
+playable card, at 3 it keeps it, and no `reach` curve removes the need. See
 [experiments.md](experiments.md).
 
 ### Resourcing: `resource` must exceed `card`
@@ -633,7 +633,7 @@ Per-decision cost is unchanged.
 
 ### The hand
 
-`ai/cardValue.ts` scores a card as if it were cast: effective cost, stat total, keywords, **registered
+`ai/cardValue.ts` scores a card as if it were played: effective cost, stat total, keywords, **registered
 abilities**, rarity, aspect icons, uniqueness. Counting implemented abilities rather than parsing
 printed text is deliberate and more accurate, because a card whose ability is not built genuinely
 does nothing in this engine.
@@ -642,14 +642,14 @@ Statless cards take a cost-scaled stat equivalent, so an event is not ranked bel
 is a placeholder: an event's worth is its effect magnitude, which needs the same machinery as
 optional-ability scoring.
 
-`ai/handValue.ts` combines a **flat** bonus for holding at least one castable card with a discounted
-sum over the whole hand, where the discount reflects how soon each card can be cast and never reaches
+`ai/handValue.ts` combines a **flat** bonus for holding at least one playable card with a discounted
+sum over the whole hand, where the discount reflects how soon each card can be played and never reaches
 zero.
 
-The bonus is flat because scaling it by the castable card's value makes a bomb's hand value and board
+The bonus is flat because scaling it by the playable card's value makes a bomb's hand value and board
 value the same size, so the bot refuses to play its own bombs: **40.5%**. It is bounded on both
 sides, and both bounds are tests: below what the board pays for the cheapest body, above the
-discounted value of the best uncastable card in the pool.
+discounted value of the best unplayable card in the pool.
 
 Two properties of the private half fall out of its design rather than its tuning, and a
 `canAct` × `hold` grid confirmed both exactly, to four decimal places:
@@ -659,17 +659,17 @@ Two properties of the private half fall out of its design rather than its tuning
   0.12 and 0.4 measure identically; **0 measures 46.6%**, because the ordering collapses and the coin
   flip returns.
 - **`canAct` is inert in self-play, and still required.** It is flat over the whole hand, so it cancels
-  between candidate moves unless one of them spends the last castable card. Values 0, 3 and 6 change no
+  between candidate moves unless one of them spends the last playable card. Values 0, 3 and 6 change no
   decision at any `hold` setting. It is a guard against a position self-play does not reach rather than
   a working term, and a scripted position is what decides it.
 
-  **Bounded below at 2.07**, the largest margin by which a stranded card outscores a castable one over
+  **Bounded below at 2.07**, the largest margin by which a stranded card outscores a playable one over
   the real pool. The binding case is a card **one** resource out of reach, so no change to `reach`'s
   floor relaxes it. **Unbounded above**: the upper bound predates the squash, and a term confined to
   `[0, 1)` cannot override an integer-valued public preference, so at a weight of 100000 the bot still
   develops. The shipped 3 sits just above the only edge that binds.
 
-  Exactly one card is castable in **6.7%** of resourcing decisions, 21.6% of them in round 1 and almost
+  Exactly one card is playable in **6.7%** of resourcing decisions, 21.6% of them in round 1 and almost
   none from round 4, so this guards the opening.
 
 ### What the hand model cannot express
@@ -679,8 +679,8 @@ end of its useful improvements, and the next real gain in play strength comes fr
 rather than from another hand-tuned term, so these are recorded as understood rather than queued.
 Anyone reaching for the hand model should know they are here, and that none of them is an oversight.
 
-**The castable test is a single bit, where the real question is curve coverage.** `canAct` asks whether
-*anything* is castable now. It cannot express that holding a card three turns out is fine when there
+**The playable test is a single bit, where the real question is curve coverage.** `canAct` asks whether
+*anything* is playable now. It cannot express that holding a card three turns out is fine when there
 are plays to make on each turn until it lands. `setupAi` computes exactly that shape for the opening
 hand, scoring a hand on whether it fills turn-1, turn-2 and turn-3 slots, and nothing computes it at
 regroup. Related: the hand is priced as if it were final, and two cards arrive every regroup, so the

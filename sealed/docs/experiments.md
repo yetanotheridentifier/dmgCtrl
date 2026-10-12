@@ -842,7 +842,7 @@ pick zero times. Dead **even with the horizon that was supposed to wake it**, wh
 form of that answer available.
 
 **That does not make it deletable, and the reason generalises.** `handValue.test.ts` asserts a lower
-bound: keeping a castable card must beat holding the biggest uncastable bomb in the pool, or the model
+bound: keeping a playable card must beat holding the biggest unplayable bomb in the pool, or the model
 resources its last play. At `canAct` of 0 that bound reduces to `poorest > 0.3 x richest` over the real
 pool, which it does not satisfy, so removing the weight inverts a preference.
 
@@ -855,9 +855,9 @@ to trim on an inert reading. The section below settles which of the two readings
 
 The inert reading and the arithmetic bound describe different populations, so a scripted position
 decides between them rather than more games. `aiHandCanAct.test.ts` builds it from the real pool: the
-poorest castable card beside the richest card three or more resources out of reach.
+poorest playable card beside the richest card three or more resources out of reach.
 
-**At `canAct` of 0 the shipped bot resources its only castable card** and keeps one it cannot play, at a
+**At `canAct` of 0 the shipped bot resources its only playable card** and keeps one it cannot play, at a
 two-card hand and again at a five-card hand. At 3 it resources the bomb and keeps the play. The candidate
 scores are 18.115 against 18.035 at zero and 18.115 against 18.252 at three, so this is a decision and
 not a tie broken by a seed.
@@ -867,23 +867,23 @@ hand size and pool identical, so every public term scores both options alike and
 value is the only thing left to order them.
 
 **The position is not rare, and it is not about small hands.** Over the 44 coverage decks, 540 resourcing
-decisions: exactly one card is castable in **6.7%** of them (7.0% on a `greedy` screen), and 22 of
+decisions: exactly one card is playable in **6.7%** of them (7.0% on a `greedy` screen), and 22 of
 those 36 decisions were at a **five-card** hand against 1 at two cards. It is an opening phenomenon:
 **21.6% in round 1**, 11.4% in round 2, and 4 cases in 276 decisions from round 4 on, because
 resources outgrow the curve. Forced discards raise the same quantity and are covered by the same term.
 
 **The weight must exceed 2.07**, measured as the largest margin by which a stranded card outscores a
-castable one across every pool size. The binding pair is a high-value card **one** resource out of
+playable one across every pool size. The binding pair is a high-value card **one** resource out of
 reach, not a distant bomb. The shipped 3 clears it; 0.0% of pairs are still wrong at 3.
 
 **The upper bound cannot bind.** It predates the squash. At `canAct` of 3, 10, 100, 1000 and 100000 the
-bot develops its castable card every time, and the evaluated gain converges to 7.0 against a public
+bot develops its playable card every time, and the evaluated gain converges to 7.0 against a public
 gain of 8, because a term confined to `[0, 1)` cannot override an integer-valued public preference. The
 bound is correct and inert; the lower bound is the one that governs the weight.
 
 ### Reshaping `reach` does not retire `hand.canAct`
 
-Eleven decay curves over the real pool, at six pool sizes, scoring the share of castable-against-
+Eleven decay curves over the real pool, at six pool sizes, scoring the share of playable-against-
 stranded card pairs that resource the last play at `canAct` of 0, and the smallest weight that fixes every
 pair.
 

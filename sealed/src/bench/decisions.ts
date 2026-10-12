@@ -120,7 +120,7 @@ export interface ResourcingStat {
  *
  * **The question this ticket may be downstream of.** Every gate here prices keeping a card against
  * taking a resource, and that trade only pays if the card is eventually played. If the bot routinely
- * reaches the regroup still holding cards it could have cast, then its hand is worth less than
+ * reaches the regroup still holding cards it could have played, then its hand is worth less than
  * `hand.hold` claims, and swapping a card it will not play for a resource it will not spend is the
  * better half whatever the position looks like. That would make always-resourcing correct **for this
  * bot** and make the whole ticket a play-quality problem wearing a resourcing costume.

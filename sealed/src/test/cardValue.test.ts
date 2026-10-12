@@ -5,7 +5,7 @@ import { state, player, card, CARDS } from './helpers/engineFixtures'
 import type { EngineCard, GameState } from '../engine/types'
 
 /**
- * How good a card is IF you get to cast it (#393).
+ * How good a card is IF you get to play it (#393).
  *
  * The greedy evaluation reads only `hand.length`, so it has no way to prefer one card in hand over
  * another. This is the quality scale that gives it one: cost, stats, keywords, implemented

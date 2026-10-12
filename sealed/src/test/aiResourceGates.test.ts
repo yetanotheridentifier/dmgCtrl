@@ -88,7 +88,7 @@ const handCost = (s: GameState): number =>
 const banks = (ai: typeof shipped, s: GameState): boolean => ai(s)?.type === 'resourceCard'
 
 describe('the position where a resource buys nothing', () => {
-  // Pool 8 against a hand costing 8: everything held is castable next round with nothing left over,
+  // Pool 8 against a hand costing 8: everything held is playable next round with nothing left over,
   // so the ninth resource is unspendable and the card it costs is not.
   const saturated = regroup(8, ['SMALL', 'MID', 'MID'])
 
@@ -127,7 +127,7 @@ describe('the position where a resource buys nothing', () => {
 describe('the positions where a resource still buys something', () => {
   it('resources a card from a full hand it cannot yet afford', () => {
     const early = regroup(2, ['SMALL', 'MID', 'MID', 'MID', 'SMALL'])
-    expect(handCost(early), 'the pool cannot cast the hand, so reach is still worth buying')
+    expect(handCost(early), 'the pool cannot play the hand, so reach is still worth buying')
       .toBeGreaterThan(early.players.player.resources.length)
     expect(banks(shipped, early)).toBe(true)
     expect(banks(gated, early)).toBe(true)

@@ -11,7 +11,7 @@ import type { GameState } from '../engine/types'
  *
  * The bot resources a card at EVERY regroup, because resourcing is a flat public +1 (`resource` 3 minus
  * `card` 2) however many resources it already holds. Late on that looks wrong: you draw 2 at regroup
- * either way, so resourcing is "+1 resource against +1 card retained", and once the pool casts what you
+ * either way, so resourcing is "+1 resource against +1 card retained", and once the pool pays for what you
  * hold the card should be the better half.
  *
  * The mechanism below implements exactly that and works. It also **lost**, monotonically in how much
@@ -246,7 +246,7 @@ describe('resourcing, once the marginal card is priced by scarcity', () => {
   /**
    * **The conjunction, and the half a scripted position caught missing.**
    *
-   * Charged on hand size alone the bonus fired at a pool of 2 holding three uncastable cards, which is
+   * Charged on hand size alone the bonus fired at a pool of 2 holding three unplayable cards, which is
    * precisely when a resource is worth most: below the knee it still buys reach. A small hand is not a
    * reason to decline; a small hand over a pool that has run out of things to buy is.
    */

@@ -649,7 +649,7 @@ export const DEFAULT_BEAM_LIMITS: BeamLimits = {
  *
  * It is a better model of THIS format than it sounds. There is no instant-speed interaction, and a
  * played unit arrives exhausted, so an opponent cannot answer mid-sequence with a card they have just
- * cast. Their whole in-sequence toolkit is: attack with something already ready, play an event, play
+ * played. Their whole in-sequence toolkit is: attack with something already ready, play an event, play
  * an Ambush unit, deploy their leader (which arrives READY and is the largest of these), or claim.
  * Sealed pools are thin on all of them. The assumption should still be expected to degrade against a
  * stronger opponent, which is what the #425 matrix is for.

@@ -355,7 +355,7 @@ describe('runTerms', () => {
     expect(canAct.hasQuantity).toBe(true)
     expect(canAct.pivotal).toBe(0)
     // Not literally never varying: the flag moves in the few decisions where a candidate spends the
-    // last castable card, which is exactly the exception the mechanism predicts. Asserted against a
+    // last playable card, which is exactly the exception the mechanism predicts. Asserted against a
     // live term rather than a fixed rate, so the claim survives a different sample size.
     const power = report.stats.find(s => s.weight === 'power')!
     expect(canAct.varies).toBeLessThan(power.varies / 5)
