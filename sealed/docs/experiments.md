@@ -28,7 +28,7 @@ Rules learned the hard way, each of them from getting it wrong first.
 - **Screen at ~80 games before booking a long run**, with a matched control. It is a disaster filter,
   never evidence of parity.
 - **Measure a lethal or a threat as a single action.** Players alternate actions, so aggregate reach
-  across ready units is an intention the opponent gets several chances to answer, not a kill. Reading
+  across ready units is an intention the opponent gets several chances to answer, not lethal. Reading
   it as aggregate overstated lethal threefold.
 - **A corpus is filled game by game, so a short one is all openings.** A search costing 142.6 ms
   measured 5.8 ms at 30 states; a width whose real effect is 2.7% of decisions measured 0.5% at 200.
@@ -301,7 +301,7 @@ rather than to a belief model.
 
 ### A decided game is lost every time, and stopping it early saves almost nothing
 
-A seat is **decided** when, in the action phase, every legal move hands the opponent a one-action kill
+A seat is **decided** when, in the action phase, every legal move hands the opponent a one-action lethal
 on their turn. Measured over the coverage decks with that reading, pending choices included (the
 `--decisions` readout now reports the narrower `lossIsCertain`, which leaves them out, so it reads
 lower: 14 of 144 seat-games over the same 72 greedy games, all lost):
@@ -446,8 +446,8 @@ the shipped gate and **not one of them held a line**: `had lethal` is 51 either 
 from 59.2% of decisions to 38.2%.
 
 That is a measurement on this card pool rather than a proof. The bound sums printed power, so an
-event that deals damage with none is invisible to it, and the reason it measures safe is that a kill
-carried entirely by events does not occur in this corpus. A set with stronger burn would need this
+event that deals damage with none is invisible to it, and the reason it measures safe is that a lethal
+carried entirely by events does not occur in this corpus. A set with stronger damage events would need this
 re-run before the gate could be trusted, and the failure would be silent.
 
 **`skipWhenSingleAction` is nearly inert**, worth 51 decisions of skipping in 3,119. It accounts for
@@ -459,7 +459,7 @@ evaluation cannot get wrong.
 Every gate above is admissible: it sums generously so it can never skip a real line, and that safety
 is exactly why each saves so little. The alternative is to start from what can actually attack now,
 ready units plus the leader (which deploys ready), and allow a fixed number of points for what might
-materialise from a pump, an upgrade or a burn event. That is deliberately lossy, so the allowance is
+materialise from a pump, an upgrade or an event that deals damage. That is deliberately lossy, so the allowance is
 a measurement rather than a judgement.
 
 Same corpus, 3,119 decisions:
@@ -550,7 +550,7 @@ found; whether 12 wins more is unmeasured.
 
 **Overcharging is the failure mode to watch**, since a bot that must not pass will play a card for no
 benefit instead, which is worse than the habit being fixed. Forced passes are the tripwire, because
-burning a hand means running out of legal moves sooner, and they move only from 223 to 232 across the
+emptying a hand means running out of legal moves sooner, and they move only from 223 to 232 across the
 whole range. It did not appear at any value tested.
 
 Two measurement notes that cost time to learn. Every round ends with a pass by construction, so a raw
@@ -653,8 +653,8 @@ tie rate of the five decision kinds.
 ### A class of upgrades is invisible to a board evaluation
 
 Some upgrades do nothing when played and everything later: -3 power while attacking a base, doubled
-incoming damage, a burn when the attack ends, a tax on every ready. **The evaluation prices boards, so
-it cannot tell a friendly target from an enemy one**, and the seeded pick decides.
+incoming damage, damage to the host when its attack ends, a tax on every ready. **The evaluation
+prices boards, so it cannot tell a friendly target from an enemy one**, and the seeded pick decides.
 
 It only bites when nothing can act inside the horizon. Where the host or the enemy target can attack,
 the search plays it out, the engine applies the effect, and it chooses correctly: **5 of 5 over 126
@@ -696,7 +696,7 @@ discriminating weakly across the horizon buckets to discriminating strongly, Ï‡Â
 Two candidate explanations were open: the modelled opponent tail may be dead weight (it is most of the
 cost, and the free run changes nothing measurable in 79% of claims), or crossing may make **passing**
 more attractive, since a line that ends the phase now lands on a regroup where both sides ready
-everything and bank a resource.
+everything and resource a card.
 
 **It is the second, and the tail is not required for it.** A crossing-only arm
 (`beam-reply/horizon=cross:1,tail:0`) against the shipped bot, `--decisions`, 44 games on the same
@@ -804,7 +804,7 @@ not a check at each crossing site: there were three, and the property has to hol
 is reached.
 
 The rest of the model is settled and not up for rediscovery: the two drawn cards are not read, one is
-assumed banked (the shipped weights put `resource - card` at +2, so banking is always chosen), the cards
+assumed resourced (the shipped weights put `resource - card` at +2, so resourcing is always chosen), the cards
 still leave the deck so the deck-out clock is honest, and the resourcing choice is settled rather than
 offered, since deciding the opponent's would mean reading their hand.
 
@@ -842,8 +842,8 @@ pick zero times. Dead **even with the horizon that was supposed to wake it**, wh
 form of that answer available.
 
 **That does not make it deletable, and the reason generalises.** `handValue.test.ts` asserts a lower
-bound: keeping a castable card must beat holding the biggest uncastable bomb in the pool, or the model
-banks its last play. At `canAct` of 0 that bound reduces to `poorest > 0.3 x richest` over the real
+bound: keeping a playable card must beat holding the biggest unplayable bomb in the pool, or the model
+resources its last play. At `canAct` of 0 that bound reduces to `poorest > 0.3 x richest` over the real
 pool, which it does not satisfy, so removing the weight inverts a preference.
 
 Both are true at once: **it changes no decision the bench reaches, and removing it would invert a
@@ -855,36 +855,36 @@ to trim on an inert reading. The section below settles which of the two readings
 
 The inert reading and the arithmetic bound describe different populations, so a scripted position
 decides between them rather than more games. `aiHandCanAct.test.ts` builds it from the real pool: the
-poorest castable card beside the richest card three or more resources out of reach.
+poorest playable card beside the richest card three or more resources out of reach.
 
-**At `canAct` of 0 the shipped bot banks its only castable card** and keeps one it cannot play, at a
-two-card hand and again at a five-card hand. At 3 it banks the bomb and keeps the play. The candidate
+**At `canAct` of 0 the shipped bot resources its only playable card** and keeps one it cannot play, at a
+two-card hand and again at a five-card hand. At 3 it resources the bomb and keeps the play. The candidate
 scores are 18.115 against 18.035 at zero and 18.115 against 18.252 at three, so this is a decision and
 not a tie broken by a seed.
 
-**The decision is a public tie**, which is why the term can reach it at all: banking any card leaves
+**The decision is a public tie**, which is why the term can reach it at all: resourcing any card leaves
 hand size and pool identical, so every public term scores both options alike and the squashed hand
 value is the only thing left to order them.
 
-**The position is not rare, and it is not about small hands.** Over the 44 coverage decks, 540 banking
-decisions: exactly one card is castable in **6.7%** of them (7.0% on a `greedy` screen), and 22 of
+**The position is not rare, and it is not about small hands.** Over the 44 coverage decks, 540 resourcing
+decisions: exactly one card is playable in **6.7%** of them (7.0% on a `greedy` screen), and 22 of
 those 36 decisions were at a **five-card** hand against 1 at two cards. It is an opening phenomenon:
 **21.6% in round 1**, 11.4% in round 2, and 4 cases in 276 decisions from round 4 on, because
 resources outgrow the curve. Forced discards raise the same quantity and are covered by the same term.
 
 **The weight must exceed 2.07**, measured as the largest margin by which a stranded card outscores a
-castable one across every pool size. The binding pair is a high-value card **one** resource out of
+playable one across every pool size. The binding pair is a high-value card **one** resource out of
 reach, not a distant bomb. The shipped 3 clears it; 0.0% of pairs are still wrong at 3.
 
 **The upper bound cannot bind.** It predates the squash. At `canAct` of 3, 10, 100, 1000 and 100000 the
-bot develops its castable card every time, and the evaluated gain converges to 7.0 against a public
+bot develops its playable card every time, and the evaluated gain converges to 7.0 against a public
 gain of 8, because a term confined to `[0, 1)` cannot override an integer-valued public preference. The
 bound is correct and inert; the lower bound is the one that governs the weight.
 
 ### Reshaping `reach` does not retire `hand.canAct`
 
-Eleven decay curves over the real pool, at six pool sizes, scoring the share of castable-against-
-stranded card pairs that bank the last play at `canAct` of 0, and the smallest weight that fixes every
+Eleven decay curves over the real pool, at six pool sizes, scoring the share of playable-against-
+stranded card pairs that resource the last play at `canAct` of 0, and the smallest weight that fixes every
 pair.
 
 | curve | needs the guard | guard must exceed | stranded pairs scoring alike |
@@ -956,7 +956,7 @@ it charges for what it already sees.
   weight 8. Flat then harmful, so no peak exists above zero.
 
   Two lessons worth more than the result. A flat per-token weight buys **indiscriminate strips** when
-  the value is entirely contextual: large when the strip enables a kill this action, nil otherwise.
+  the value is entirely contextual: large when the strip enables a defeat this action, nil otherwise.
   Only a contextual version is worth revisiting. And "worse than random" was an overstatement: random
   strips by accident rather than correctly, so stripping less often than chance is not by itself
   evidence of an error.
@@ -1047,7 +1047,7 @@ it charges for what it already sees.
 
 ### Too rare to measure
 
-- **Offensive pinning.** Holding a ready unit that would kill an enemy leader on deployment is the one
+- **Offensive pinning.** Holding a ready unit that would defeat an enemy leader on deployment is the one
   behaviour no depth reaches, since the value is in *not* acting. It is also far too rare: **17
   decisions in 44 games (0.8%)**, of which the bot spent the pin on 3. Leaders deploy around 7-8 HP and
   most units are power 2-5, so single-unit pins barely exist in this pool. The opponent deploys into a
@@ -1137,7 +1137,7 @@ directly rather than through a proxy.
   declines, Moff Gideon 36 against 12. Four of the six most-declined are unique units whose value
   depends on board state. Holding is situational, not a failure to develop, so the resourcing decision
   is not downstream of a play-quality problem.
-- **"The bot will not deploy expensive bodies."** It plays an 8-cost 6/6 into an empty board, a board it
+- **"The bot will not play expensive bodies."** It plays an 8-cost 6/6 into an empty board, a board it
   outclasses, and a board that could trade with it. Repeated declines of specific bombs in the corpus
   are positional and remain unexplained; the general claim is not.
 - **Per-candidate role assignment.** The role belongs to the decision, not the candidate.

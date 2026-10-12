@@ -22,7 +22,7 @@ describe('When Attack Ends after the attacker is defeated', () => {
       cards: { ...CARDS, TST_AEND: card({ id: 'TST_AEND', type: 'unit', arena: 'ground', power: 2, hp: 1 }) },
       players: {
         player: player({ units: [unit('u1', 'TST_AEND')] }),
-        opponent: player({ units: [unit('e1', 'TST_U3')] }), // power 5 → kills u1 on the counter
+        opponent: player({ units: [unit('e1', 'TST_U3')] }), // power 5 → defeats u1 on the counter
       },
     })
     const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } })
@@ -51,7 +51,7 @@ describe('whenDefeated trigger', () => {
       cards: { ...CARDS, TST_DEATH_UNIT: card({ id: 'TST_DEATH_UNIT', type: 'unit', arena: 'ground', power: 1, hp: 1 }) },
       players: {
         player: player({ units: [unit('u1', 'TST_DEATH_UNIT')] }),
-        opponent: player({ units: [unit('e1', 'TST_U3')] }), // TST_U3 power 5 → kills u1
+        opponent: player({ units: [unit('e1', 'TST_U3')] }), // TST_U3 power 5 → defeats u1
       },
     })
     const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } })
@@ -71,7 +71,7 @@ describe('whenDefeated trigger', () => {
       cards: { ...CARDS, TST_DEATH_UP: card({ id: 'TST_DEATH_UP', type: 'upgrade', power: 0, hp: 0 }) },
       players: {
         player: player({ units: [unit('u1', 'TST_U3', { upgrades: [{ cardId: 'TST_DEATH_UP', owner: 'player' }] })] }), // hp 1
-        opponent: player({ units: [unit('e1', 'TST_U3')] }), // power 5 → kills u1
+        opponent: player({ units: [unit('e1', 'TST_U3')] }), // power 5 → defeats u1
       },
     })
     const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } })

@@ -204,9 +204,9 @@ describe('Cards that only read "has a Bounty"', () => {
     expect(U(hit2, 'atk2')?.damage).toBe(F.WEAK_DEF.power)
   })
 
-  it('SHD_138 Jango Fett: +3/+0 and Overwhelm only while attacking a unit with a Bounty; draws on a kill', () => {
-    // SHD_027 (power 1, hp 4, undamaged) needs 4 to kill. Jango's printed power alone (3) survives it;
-    // only the Bounty bonus (+3/+0 = 6) both kills it AND, with the also-conditional Overwhelm, spills
+  it('SHD_138 Jango Fett: +3/+0 and Overwhelm only while attacking a unit with a Bounty; draws on a defeat', () => {
+    // SHD_027 (power 1, hp 4, undamaged) needs 4 to defeat. Jango's printed power alone (3) survives it;
+    // only the Bounty bonus (+3/+0 = 6) both defeats it AND, with the also-conditional Overwhelm, spills
     // the 2 excess to the opponent's base.
     const s = board({ units: [unit('atk', 'SHD_138')], deck: ['GRD'] }, { units: [unit('def', 'SHD_027')] })
     const attackedRaw = resolve(s, { type: 'attack', attackerId: 'atk', target: { kind: 'unit', instanceId: 'def' } })
@@ -224,7 +224,7 @@ describe('Cards that only read "has a Bounty"', () => {
     expect(notAttacked.players.opponent.base.damage).toBe(0)
   })
 
-  it('SHD_139 Krrsantan: When Played may ready itself only if an enemy has a Bounty; On Attack may burn its own damage into a ground unit', () => {
+  it('SHD_139 Krrsantan: When Played may ready itself only if an enemy has a Bounty; On Attack may deal 1 damage to a ground unit for each damage on itself', () => {
     const noBounty = board({ hand: ['SHD_139'] }, {})
     const playedNoBounty = resolve(noBounty, { type: 'playUnit', handIndex: 0 })
     expect(playedNoBounty.pendingChoices ?? []).toHaveLength(0)

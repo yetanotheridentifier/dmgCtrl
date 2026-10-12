@@ -1254,7 +1254,7 @@ registerCard('ASH_036', { abilities: [{ trigger: 'onAttackEnd', description: 'If
 const defeatDamagedDefender: AbilityDef['effect'] = (s, ctx) => {
   if (!ctx.combatDamageToDefender || ctx.attackTarget?.kind !== 'unit') return s
   const d = allUnits(s).find(u => u.instanceId === (ctx.attackTarget as { instanceId: string }).instanceId)
-  return d && !isLeaderUnit(s, d) ? defeatUnit(s, d.instanceId) : s // already gone if combat killed it
+  return d && !isLeaderUnit(s, d) ? defeatUnit(s, d.instanceId) : s // already gone if combat defeated it
 }
 registerCard('ASH_101', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a non-leader unit, defeat that unit.', effect: defeatDamagedDefender }] }) // The Great Mothers
 registerCard('SOR_085', { abilities: [{ trigger: 'onAttackEnd', description: 'When this unit deals combat damage to a non-leader unit while attacking: Defeat that unit.', effect: defeatDamagedDefender }] }) // Rukh

@@ -82,8 +82,8 @@ describe('evaluate', () => {
     expect(evaluate(theirsUpgraded, 'player')).toBe(evaluate(base, 'player'))
   })
 
-  /** The hand term itself: a castable hand beats an uncastable one of the same size. */
-  it('prefers a hand it can actually cast', () => {
+  /** The hand term itself: a playable hand beats an unplayable one of the same size. */
+  it('prefers a hand it can actually play', () => {
     const cards = { ...CARDS, BIG: card({ id: 'BIG', type: 'unit', cost: 9, power: 9, hp: 9 }) }
     const castable = state({ cards, players: { player: player({ hand: ['TST_U1'], resources: ready(2) }), opponent: player() } })
     const stranded = state({ cards, players: { player: player({ hand: ['BIG'], resources: ready(2) }), opponent: player() } })
@@ -99,7 +99,7 @@ describe('evaluate', () => {
   it('can never override a public preference, only break a public tie', () => {
     const cards = { ...CARDS, BIG: card({ id: 'BIG', type: 'unit', cost: 9, power: 9, hp: 9 }) }
     // Identical hand SIZE, so the public halves differ only by one point of base damage. The hand
-    // CONTENTS point the other way: a cheap castable card against a stranded 9-drop.
+    // CONTENTS point the other way: a cheap playable card against a stranded 9-drop.
     const goodHand = state({
       cards,
       players: {

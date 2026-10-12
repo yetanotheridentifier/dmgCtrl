@@ -47,11 +47,6 @@ engine or the horizon invalidates a calibration done before it.
    and `runBench` read 50.4% and 48.70% for the same AI on the same decks, which is why every harness
    needs its own baseline established before a number from it can be trusted. The benefit is mostly
    for repeated A/B runs.
-4. **#585 use the game's own terms for game actions.** Units are played and only leaders are
-   deployed; cards are resourced rather than banked; things are defeated rather than killed.
-   [glossary.md](glossary.md) records the correct terms and the ones this project invented. Not
-   urgent and not blocking anything, but it is prose-level debt that makes comments carrying measured
-   facts harder to check, and it grows with every new comment written in the wrong vocabulary.
 
 ## Deferred
 
@@ -101,7 +96,7 @@ one-action lethal is available to the opponent in 2.2% of decisions, absent befo
 those positions are unavoidable. The belief model does not need to beat zero, it needs to beat the
 public version, and it is the heaviest machinery in the series.
 
-If it is built, the first customer should be the **general tap-out risk gate**, which applies to every
+If it is built, the first customer should be the **general exposure risk gate**, which applies to every
 action-phase decision, rather than the carried initiative rules, which are worth 2 to 3 points across
 about nine decisions a game.
 

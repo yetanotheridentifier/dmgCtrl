@@ -16,7 +16,7 @@ import '../engine/cardDefinitions'
  *
  * A root move's value is the **max over every board reachable from it**, so the two things needed to
  * explain it are **which board was the peak** and **how the search got there**. With those, "the pass
- * line recovers to 52 by killing the Sentinel one action later" is something you read rather than
+ * line recovers to 52 by defeating the Sentinel one action later" is something you read rather than
  * something you argue.
  *
  * Off by default: the path tracking allocates per frontier node, and the shipped bot should not pay

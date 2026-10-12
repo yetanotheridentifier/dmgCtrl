@@ -373,7 +373,7 @@ describe('runDecisions', () => {
    * valuation is ever removed or neutralised, this fails loudly rather than showing up as a slow
    * drift in win rate.
    */
-  it('shows the AI has an opinion about which card to bank', () => {
+  it('shows the AI has an opinion about which card to resource', () => {
     const resourcing = report.stats.find(s => s.label === 'regroup: which card')!
     expect(resourcing.avgCandidates, 'several cards to choose between').toBeGreaterThan(2)
     expect(resourcing.tied / resourcing.offered).toBeLessThan(0.1)
@@ -391,7 +391,7 @@ describe('runDecisions', () => {
    * when the same bonus was charged on hand size alone. A pooled rate cannot tell the two apart, so
    * this checks the round split, not just the total.
    */
-  it('reports whether the AI banks or skips, and at what pool size', () => {
+  it('reports whether the AI resources a card or skips, and at what pool size', () => {
     const { banked, skipped, avgPoolWhenBanked, avgPoolWhenSkipped, byRound } = report.resourcing
     expect(banked).toBeGreaterThan(0)
     expect(avgPoolWhenBanked).toBeGreaterThan(0)
@@ -399,7 +399,7 @@ describe('runDecisions', () => {
     // counted here is a choice.
     expect(DEFAULT_WEIGHTS.cardScarcity, 'the term that produces skips is live').toBeGreaterThan(0)
     expect(skipped, 'the shipped bot does decline, sometimes').toBeGreaterThan(0)
-    expect(avgPoolWhenSkipped, 'and only on a deeper pool than it banks on').toBeGreaterThan(avgPoolWhenBanked)
+    expect(avgPoolWhenSkipped, 'and only on a deeper pool than it resources a card on').toBeGreaterThan(avgPoolWhenBanked)
 
     // The failure mode, stated as a property: a resource declined early is the one that hurts.
     const early = byRound.filter(b => b.key < 6).reduce((n, b) => n + b.skipped, 0)
@@ -409,7 +409,7 @@ describe('runDecisions', () => {
   /**
    * #519. A single skip rate cannot tell "skips late holding two cards" from "skips at random", and
    * that distinction is the whole behavioural claim the threshold terms make. It is also the guard
-   * against the named failure mode, since the 1.8% catastrophe is banking that stops EARLY, which a
+   * against the named failure mode, since the 1.8% catastrophe is resourcing that stops EARLY, which a
    * pooled rate of, say, 12% hides completely.
    *
    * Two one-dimensional breakouts rather than a grid. Round and hand size are correlated but are not
@@ -435,7 +435,7 @@ describe('runDecisions', () => {
    * holding at least one card. A zero bucket here would mean the hand is being read AFTER the card
    * leaves it, which would shift the whole distribution by one and still look plausible.
    */
-  it('reads the hand size before the banked card leaves the hand', () => {
+  it('reads the hand size before the resourced card leaves the hand', () => {
     for (const b of report.resourcing.byHandSize) expect(b.key).toBeGreaterThanOrEqual(1)
   })
 
@@ -444,7 +444,7 @@ describe('runDecisions', () => {
    *
    * Every gate in it prices keeping a card against taking a resource, and that trade only pays if the
    * card is eventually played. If the bot routinely passes while holding cards it can afford, its hand
-   * is worth less than the model claims and banking is right whatever the position looks like.
+   * is worth less than the model claims and resourcing is right whatever the position looks like.
    */
   it('records WHICH cards could legally have been played and were not', () => {
     const u = report.unspentHand
@@ -536,7 +536,7 @@ describe('runDecisions', () => {
   /**
    * Sizing for the lethal work (#432): how often a lethal line is available at all. Every rule built
    * on a lethal solver (#433) can only fire as often as this, so if it is vanishingly rare the
-   * initiative-lethal rules and the tap-out risk gate are both low value, and that is much cheaper to
+   * initiative-lethal rules and the exposure risk gate are both low value, and that is much cheaper to
    * learn here than after building a solver and a belief model on top.
    */
   it('reports how often either seat could finish the enemy base', () => {
@@ -561,7 +561,7 @@ describe('runDecisions', () => {
   })
 
   /**
-   * The headroom a tap-out risk gate could actually recover (#432). Not "how often could they
+   * The headroom an exposure risk gate could actually recover (#432). Not "how often could they
    * finish", which includes positions already lost, but "how often did the bot walk into a lethal it
    * had a legal move to avoid", and how often that preceded losing the game.
    */
@@ -576,7 +576,7 @@ describe('runDecisions', () => {
   })
 
   /**
-   * #425 claims to subsume #397's direct pinning: "do not deploy into a board that kills it" is what
+   * #425 claims to subsume #397's direct pinning: "do not deploy into a board that defeats it" is what
    * a reply policy computes, so the hand-coded term should not be built. That claim rests on this
    * rate falling, and without the readout #397 would be closed on an argument rather than evidence.
    */
@@ -603,16 +603,16 @@ describe('runDecisions', () => {
 /**
  * The skip half of the breakout, which the shipped weights never exercise (#519).
  *
- * `skipped` is 0 by construction on the shipped bot, so every assertion above tests the bank path and
+ * `skipped` is 0 by construction on the shipped bot, so every assertion above tests the resourcing path and
  * takes the skip path on trust. That is exactly the gap #519 is about to fill, and an instrument first
  * read on the arm it was built for is an instrument nobody has checked.
  *
- * `card` above `resource` inverts the banking gate. As a way to PLAY that is the measured 1.8%
+ * `card` above `resource` inverts the resourcing gate. As a way to PLAY that is the measured 1.8%
  * catastrophe, and as a way to drive a diagnostic it is precisely right: it is the only bot available
  * today that takes the branch. A weight override needs beam-shaped limits to attach to, which is why
  * this names a shallow beam rather than `greedy`.
  */
-describe('the regroup breakout counts skips, not only banks', () => {
+describe('the regroup breakout counts skips, not only resourced cards', () => {
   const skipping = runDecisions({
     gamesPerDeck: 1,
     seed: 4242,
@@ -828,7 +828,7 @@ describe('optionalTriggerSplit', () => {
 })
 
 /**
- * Offensive pinning (#397): are we holding a unit that would kill their leader if it deployed?
+ * Offensive pinning (#397): are we holding a unit that would defeat their leader if it deployed?
  *
  * A leader deploys into the **ground** arena, ready and undamaged (CR 3.4.4), so the threat is any
  * ready ground unit of ours whose power covers the leader's deployed HP. This is the piece no search
@@ -923,7 +923,7 @@ describe('advantageSpend', () => {
   /**
    * A token that leaves play on a defeated unit was pure phantom value: never spent, never useful.
    *
-   * **Split by side**, because the two are opposite outcomes: killing their carrier denies them the
+   * **Split by side**, because the two are opposite outcomes: defeating their carrier denies them the
    * tokens, losing ours wastes them. `player` acts by default in the fixture, so a defeated
    * `opponent` carrier is a denial.
    */

@@ -149,7 +149,7 @@ export interface GateRow extends GateCheck {
  *
  * Every gate is a way of NOT finding a line, so each row's `skippedCostingAWin` is the one to read
  * and it must be zero before a variant can be considered. `powerBound` is expected to fail exactly
- * that test: it bounds damage by POWER, and a burn event deals damage with none, so a hand holding
+ * that test: it bounds damage by POWER, and an event can deal damage with no power at all, so a hand holding
  * the finisher reads as a zero ceiling. That is the measurement this table exists to make rather
  * than argue.
  */

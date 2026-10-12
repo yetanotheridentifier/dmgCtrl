@@ -116,7 +116,7 @@ leaks.** Since the beam maximises over leaves, it systematically prefers the bra
 the assumption holding.
 
 It models this format better than it sounds. There is no instant-speed interaction and a played unit
-arrives exhausted, so an opponent cannot answer mid-sequence with a card they have just cast. Their
+arrives exhausted, so an opponent cannot answer mid-sequence with a card they have just played. Their
 whole in-sequence toolkit is: attack with something already ready, play an event, play an Ambush
 unit, deploy their leader (which arrives ready, and is the largest of these), or claim.
 
@@ -340,10 +340,10 @@ scores must still turn the pruning off outright, which is what `beamReachesWin` 
 null-move assumption as the beam. `hasLethal` returns whether a line exists; `findLethal` returns the
 move that opens the **shortest** one.
 
-Under that assumption most of the question is closed form. Aggregate ready reach IS a kill, because
+Under that assumption most of the question is closed form. Aggregate ready reach IS lethal, because
 the attacks are taken consecutively while the opponent passes, so `attacksToFinish` settles it by
-counting rather than searching. Search only adds what the board cannot show: the **hand** (a burn
-event, a pump), the **leader** (which deploys ready and is not in `units` until it does), and
+counting rather than searching. Search only adds what the board cannot show: the **hand** (an event
+that deals damage, a pump), the **leader** (which deploys ready and is not in `units` until it does), and
 **Sentinel clearing**, where one attack removes a blocker so the rest can reach.
 
 Measured over 36,384 decisions: lethal exists in **6.6%**, of which 4.8 points are the closed form and
@@ -371,7 +371,7 @@ Three properties are worth keeping in mind if it is ever revisited:
 - **Headroom comes from depth, not from budget.** The beam searches three actions, so a solver at
   depth 2 or 3 is looking where the beam already looks and finds almost nothing it misses (1 and 11
   positions against depth 4's 25). Only lines longer than the beam's horizon are worth anything.
-- **It must return the fastest kill, not any kill.** Returning whichever line came first measured
+- **It must return the fastest lethal, not any lethal.** Returning whichever line came first measured
   **47.8%**, losing two points, because a five-action line hands the opponent five chances to answer
   while a two-action line hands them two. This is the same rule the beam's depth discount encodes.
 - **Existence and shortest-line are separate questions.** One full-depth pass answers the first; only
@@ -440,7 +440,7 @@ Public terms, in `ai/evaluate.ts`:
 | `readyUnit` | a light tempo term, flat per ready body |
 | `powerReady` | per point of power on a **ready** unit, **shipped equal to `power`**, see below |
 | `initiative`, `claimCost`, `initiativeExposure` | turn order, see below |
-| `lethalExposure` | handing the opponent a one-action kill, see below |
+| `lethalExposure` | handing the opponent a one-action lethal, see below |
 | `shield` | per Shield token, **shipped at 0**, see below |
 | `roleShift` | how far the role bends the weights, see below |
 
@@ -502,7 +502,7 @@ term ships at **0** and is kept only because it costs nothing measurable (112.18
 
 The likely reason is that a flat per-token weight prices every Shield the same and so buys
 **indiscriminate** strips, when the real value is entirely contextual: large when the strip enables a
-kill this action, nil otherwise. That is the latent-value shape, and a contextual version is the only
+defeat this action, nil otherwise. That is the latent-value shape, and a contextual version is the only
 route worth revisiting. Note also that stripping less often than random is not by itself an error:
 random strips by accident, not because it is right, and an action spent stripping is an action not
 spent elsewhere.
@@ -538,7 +538,7 @@ Two results are worth holding onto because they contradict the obvious reading:
   13.8% of decisions overall and **75.9% of regroups**. It cannot be tuned and must not be deleted.
 - **`card` is the mirror image**: sensitive to a nudge (13.3%) but barely load-bearing (2.9%). What
   matters is its difference from `resource`, and zeroing it leaves that difference the right sign.
-  Its apparent sensitivity is the banking cliff below, not headroom.
+  Its apparent sensitivity is the resourcing cliff below, not headroom.
 
 `claimCost` varies in 43.0% of decisions and changes the pick in 1.0%, which is the "live but not
 worth tuning" quadrant and independent support for the note under Initiative that at
@@ -553,23 +553,23 @@ reading the Bearing column rather than Varies: `resourceSurplus` is alive and on
 8.6% there, 0.0% elsewhere), and `hand.canAct` is inert (bearing 0.0%).
 
 **Inert is not the same as removable.** `hand.canAct` changes no decision the bench reaches, and
-deleting it inverts the lower bound asserted in `handValue.test.ts`, which keeps the model from banking
-its last castable card. A scripted position decides it: at a weight of 0 the shipped bot banks its only
-castable card, at 3 it keeps it, and no `reach` curve removes the need. See
+deleting it inverts the lower bound asserted in `handValue.test.ts`, which keeps the model from resourcing
+its last playable card. A scripted position decides it: at a weight of 0 the shipped bot resources its only
+playable card, at 3 it keeps it, and no `reach` curve removes the need. See
 [experiments.md](experiments.md).
 
-### Banking: `resource` must exceed `card`
+### Resourcing: `resource` must exceed `card`
 
-The sharpest constraint in the weight set, and the only cliff rather than a curve. Banking at regroup
+The sharpest constraint in the weight set, and the only cliff rather than a curve. Resourcing at regroup
 swaps a card for a resource, so the sign of that decision is `resource - card` and nothing else. A
 5x5 grid over both weights, 840 games a cell, depends on the **difference alone** and never on either
 magnitude:
 
 | `resource - card` | Win rate | Behaviour |
 | --- | --- | --- |
-| ≥ 1 | ~50% | banks; `resource=6, card=0` is no better than `resource=3, card=2` |
-| 0 | **15.8%** | banking is an exact tie, so the seeded coin flip decides it |
-| ≤ −1 | **1.8%** | never banks, so never builds a pool |
+| ≥ 1 | ~50% | resources a card; `resource=6, card=0` is no better than `resource=3, card=2` |
+| 0 | **15.8%** | resourcing is an exact tie, so the seeded coin flip decides it |
+| ≤ −1 | **1.8%** | never resources a card, so never builds a pool |
 
 Two dimensions collapse to one binary condition. Either weight can be re-tuned freely while the gap
 holds, and `resourceValue.test.ts` asserts it, because losing 98% of games is not a tuning
@@ -600,7 +600,7 @@ problem.
 A `resourceSurplus` × `saturation` grid re-measured this after quiescent scoring landed and it still
 does not pay. Concavity costs in proportion to how hard the knee bites (49.7% at surplus 1 with the
 knee at 4, converging to flat as the knee rises out of reach), while **convexity does nothing at
-all**: valuing surplus above the full rate changes no decision, because banking is already always
+all**: valuing surplus above the full rate changes no decision, because resourcing is already always
 chosen.
 
 `resourceSurplus` ships equal to `resource`, so the split is arithmetically a no-op and the weight is
@@ -609,7 +609,7 @@ concavity question stays cheap to re-ask.
 
 ### Declining a resource
 
-The pool alone does not decide whether to bank at regroup. `cardsValue` charges `cardScarcity` on the
+The pool alone does not decide whether to resource a card at regroup. `cardsValue` charges `cardScarcity` on the
 cards at or below `handKnee`, **and only once the pool has reached the knee**. Both halves are
 required, and the conjunction is the whole rule:
 
@@ -619,21 +619,21 @@ required, and the conjunction is the whole rule:
 
 The quantity is an order statistic rather than a curve. The regroup pick is the **minimum of the whole
 hand**, and the expected minimum of six sits well below the expected minimum of two, so the real cost
-of banking falls as the hand grows. Hand SIZE is public, so this sits in the zero-sum half; which card
+of resourcing falls as the hand grows. Hand SIZE is public, so this sits in the zero-sum half; which card
 is worth least is private and stays with `hand.hold`.
 
 **The leader-deploy gate falls out of the same threshold.** The knee already rises to an undeployed
 leader's printed cost, so below it the pool is not saturated, the bonus cannot fire, and the bot keeps
-banking until it can deploy. No separate weight expresses this.
+resourcing until it can deploy. No separate weight expresses this.
 
 Measured at `cardScarcity: 3`, `handKnee: 3`: **+0.77 points** over 4032 games an arm against a matched
 control, 95% interval [+0.20, +1.34], pooled over two independent seed blocks reading +0.94 and +0.59.
-The bot skips 6.7% of regroups, none before round six, at a mean pool of 7.9 against 4.5 when banking.
+The bot skips 6.7% of regroups, none before round six, at a mean pool of 7.9 against 4.5 when resourcing.
 Per-decision cost is unchanged.
 
 ### The hand
 
-`ai/cardValue.ts` scores a card as if it were cast: effective cost, stat total, keywords, **registered
+`ai/cardValue.ts` scores a card as if it were played: effective cost, stat total, keywords, **registered
 abilities**, rarity, aspect icons, uniqueness. Counting implemented abilities rather than parsing
 printed text is deliberate and more accurate, because a card whose ability is not built genuinely
 does nothing in this engine.
@@ -642,14 +642,14 @@ Statless cards take a cost-scaled stat equivalent, so an event is not ranked bel
 is a placeholder: an event's worth is its effect magnitude, which needs the same machinery as
 optional-ability scoring.
 
-`ai/handValue.ts` combines a **flat** bonus for holding at least one castable card with a discounted
-sum over the whole hand, where the discount reflects how soon each card can be cast and never reaches
+`ai/handValue.ts` combines a **flat** bonus for holding at least one playable card with a discounted
+sum over the whole hand, where the discount reflects how soon each card can be played and never reaches
 zero.
 
-The bonus is flat because scaling it by the castable card's value makes a bomb's hand value and board
+The bonus is flat because scaling it by the playable card's value makes a bomb's hand value and board
 value the same size, so the bot refuses to play its own bombs: **40.5%**. It is bounded on both
 sides, and both bounds are tests: below what the board pays for the cheapest body, above the
-discounted value of the best uncastable card in the pool.
+discounted value of the best unplayable card in the pool.
 
 Two properties of the private half fall out of its design rather than its tuning, and a
 `canAct` × `hold` grid confirmed both exactly, to four decimal places:
@@ -659,17 +659,17 @@ Two properties of the private half fall out of its design rather than its tuning
   0.12 and 0.4 measure identically; **0 measures 46.6%**, because the ordering collapses and the coin
   flip returns.
 - **`canAct` is inert in self-play, and still required.** It is flat over the whole hand, so it cancels
-  between candidate moves unless one of them spends the last castable card. Values 0, 3 and 6 change no
+  between candidate moves unless one of them spends the last playable card. Values 0, 3 and 6 change no
   decision at any `hold` setting. It is a guard against a position self-play does not reach rather than
   a working term, and a scripted position is what decides it.
 
-  **Bounded below at 2.07**, the largest margin by which a stranded card outscores a castable one over
+  **Bounded below at 2.07**, the largest margin by which a stranded card outscores a playable one over
   the real pool. The binding case is a card **one** resource out of reach, so no change to `reach`'s
   floor relaxes it. **Unbounded above**: the upper bound predates the squash, and a term confined to
   `[0, 1)` cannot override an integer-valued public preference, so at a weight of 100000 the bot still
   develops. The shipped 3 sits just above the only edge that binds.
 
-  Exactly one card is castable in **6.7%** of banking decisions, 21.6% of them in round 1 and almost
+  Exactly one card is playable in **6.7%** of resourcing decisions, 21.6% of them in round 1 and almost
   none from round 4, so this guards the opening.
 
 ### What the hand model cannot express
@@ -679,8 +679,8 @@ end of its useful improvements, and the next real gain in play strength comes fr
 rather than from another hand-tuned term, so these are recorded as understood rather than queued.
 Anyone reaching for the hand model should know they are here, and that none of them is an oversight.
 
-**The castable test is a single bit, where the real question is curve coverage.** `canAct` asks whether
-*anything* is castable now. It cannot express that holding a card three turns out is fine when there
+**The playable test is a single bit, where the real question is curve coverage.** `canAct` asks whether
+*anything* is playable now. It cannot express that holding a card three turns out is fine when there
 are plays to make on each turn until it lands. `setupAi` computes exactly that shape for the opening
 hand, scoring a hand on whether it fills turn-1, turn-2 and turn-3 slots, and nothing computes it at
 regroup. Related: the hand is priced as if it were final, and two cards arrive every regroup, so the
@@ -763,7 +763,7 @@ The bot is measurably blind to it. Claim rate by what the next round actually he
 | **neither (the control)** | **12.3%** | **1,677** |
 
 A chi-square across the four is ~5.9 on 3 df against a 7.8 critical value: **flat**. The bot claims at
-about the same rate whether or not it is about to be killed. The denial case is four times commoner
+about the same rate whether or not it is about to be defeated. The denial case is four times commoner
 than the conversion case, which is the opposite of the intuition that initiative matters most in a
 race.
 
@@ -828,7 +828,7 @@ Three properties keep it from disturbing anything else:
 
 - **It cancels where every move is exposed.** An identical penalty on all candidates leaves the
   ordering untouched, which is why the unavoidable 86% costs nothing and no special case is needed.
-- **It cannot outvote a win.** `WIN` is 1,000,000, so avoiding exposure never declines a kill.
+- **It cannot outvote a win.** `WIN` is 1,000,000, so avoiding exposure never declines a lethal.
 - **The cost is immaterial**: 0.071 ms on a 4.4 ms decision, 1.6%, measured over an identical corpus
   of 2932 real decision states. The predicate is called twice per `publicScore` and quiescence scores
   many candidates per decision, so this was worth checking rather than assuming.
@@ -851,7 +851,7 @@ The same board is good news for the aggressor and bad news for the defender, so 
 which the AI currently is, from **who gets to lethal first**.
 
 The signal is reach, not presence: **board power is not damage that can reach a base**. A control
-player who plays a Sentinel adds one point of power and kills nothing, yet stops the opponent's clock
+player who plays a Sentinel adds one point of power and defeats nothing, yet stops the opponent's clock
 dead. At round 3 the faster clock predicts the winner **68.0%** of the time against 62.0% for the
 board leader, rising to 80.5% by round 5.
 
@@ -902,7 +902,7 @@ effect is **51.4% ± 0.9%** over ~11,340 games. Setting it to 0 disables role aw
 
 `ai/setupAi.ts` handles the mulligan and the two opening resources, because random setup decisions
 are catastrophically bad even for the weakest opponent. It keeps a hand only if it holds a turn-1
-play, and banks the pair that best preserves the early curve.
+play, and resources the pair that best preserves the early curve.
 
 ## Adding a model
 

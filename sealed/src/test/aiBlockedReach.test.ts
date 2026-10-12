@@ -95,7 +95,7 @@ describe('blockedReach', () => {
    * An unshielded Sentinel is answerable, so the material terms already cover it. Only the shielded
    * one is invisible, and only it is priced.
    */
-  it('prices a shielded blocker and ignores one that can be killed', () => {
+  it('prices a shielded blocker and ignores one that can be defeated', () => {
     const plain = board([unit('u1', 'GRUNT')], [unit('w', 'WALL')])
     const withShield = board([unit('u1', 'GRUNT')], [shielded('w', 'WALL')])
     expect(blockedReach(plain, 'player')).toBe(0)

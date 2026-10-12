@@ -34,7 +34,7 @@ const CARDS: SwuCard[] = [
   { Set: 'TST', Number: '100', Name: 'Upgrade Host', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '1', HP: '20' },
   { Set: 'TST', Number: '200', Name: 'Test Upgrade', Type: 'Upgrade', Cost: '0' },
   { Set: 'TST', Number: '300', Name: 'Filler', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
-  // Kills Clan Vizsla Soldier back (3 HP) while easily surviving its 2 power.
+  // Defeats Clan Vizsla Soldier back (3 HP) while easily surviving its 2 power.
   { Set: 'TST', Number: '400', Name: 'Defender', Type: 'Unit', Arenas: ['Ground'], Cost: '2', Power: '5', HP: '20' },
 ]
 

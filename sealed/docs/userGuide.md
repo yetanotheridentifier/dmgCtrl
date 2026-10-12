@@ -49,7 +49,7 @@ The current AI opponent plays **random legal moves**. It exists to exercise the 
 
 ## Playing a game
 
-Press **Play** next to your deck. Cards hydrate, both players draw 6, and the board appears in the **setup step**: choose **Keep hand** or **Mulligan** (shuffle your hand back and draw a fresh 6, once only; whoever holds the initiative decides first). Then **resource 2 cards, one pick at a time**: **click a hand card to resource it**, and you can also just avoid banking your early plays. Aim to keep a curve: something to play on turn 1 (cost ≤ 2), turn 2 (≤ 3), turn 3 (≤ 4). Once both players have resourced 2, round 1 begins. Resourcing is private: the log shows only that your opponent resourced, never which card.
+Press **Play** next to your deck. Cards hydrate, both players draw 6, and the board appears in the **setup step**: choose **Keep hand** or **Mulligan** (shuffle your hand back and draw a fresh 6, once only; whoever holds the initiative decides first). Then **resource 2 cards, one pick at a time**: **click a hand card to resource it**, and you can also just avoid resourcing your early plays. Aim to keep a curve: something to play on turn 1 (cost ≤ 2), turn 2 (≤ 3), turn 3 (≤ 4). Once both players have resourced 2, round 1 begins. Resourcing is private: the log shows only that your opponent resourced, never which card.
 
 The AI opponent mulligans any hand without a turn-1 play and resources the pair of cards that best preserves its early curve.
 
@@ -83,9 +83,9 @@ The **cog** in the header opens **Settings**, from the deck screen and from insi
 
 ### Turn structure
 
-Players alternate single actions. When both players pass consecutively, the round moves to the **regroup phase**: anything that happens "when the regroup phase starts" resolves first, then each player draws 2, may put 1 card from hand into resources, then everything readies and a new round begins. In regroup, **click any hand card to resource it** (or Skip resourcing to bank nothing). Whoever holds the **initiative** acts first each round: take it during a round to act first in the next one (but you'll pass for the rest of the current one).
+Players alternate single actions. When both players pass consecutively, the round moves to the **regroup phase**: anything that happens "when the regroup phase starts" resolves first, then each player draws 2, may put 1 card from hand into resources, then everything readies and a new round begins. In regroup, **click any hand card to resource it** (or Skip resourcing to resource nothing). Whoever holds the **initiative** acts first each round: take it during a round to act first in the next one (but you'll pass for the rest of the current one).
 
-A card put into your resource zone **by a card ability** (Long Live the Empire, The Armorer) arrives **exhausted**, exactly as one you bank yourself does. It pays for something from the next round, not the action that created it, so ramp buys you a bigger future turn rather than a bigger current one. Only a card that says otherwise in its own text gives you a ready resource.
+A card put into your resource zone **by a card ability** (Long Live the Empire, The Armorer) arrives **exhausted**, exactly as one you resource yourself does. It pays for something from the next round, not the action that created it, so ramp buys you a bigger future turn rather than a bigger current one. Only a card that says otherwise in its own text gives you a ready resource.
 
 Some cards **play a card back out of a resource zone** (The Armorer, Osha), or out of the top of your deck or an opponent's resources. When one does, you get a picker showing that whole zone, with the cards you can play highlighted and the rest dimmed. **A resource you play helps pay for itself**: it is still a resource while you pay, so a 5-cost card is playable out of a zone holding exactly 5 ready resources, one of which is that card. It leaves the zone as it enters play, and a card that says so replaces it with the top card of your deck.
 

@@ -1240,11 +1240,11 @@ so it scored the same as every other attack that suspended.
 Two behaviours are reported separately, because they are strict public preferences rather than ties
 and so read as behaviour rather than as a gap:
 
-- **regroup banking**: banks versus skips, the mean pool at each, and the same split broken out **by
+- **regroup resourcing**: cards resourced versus skips, the mean pool at each, and the same split broken out **by
   round and by hand size**. The pooled skip rate is 0% by construction, since the pool is valued flat.
 
   The breakouts exist because a pooled rate cannot tell "skips late holding two cards" from "skips at
-  random", and those are opposite readings. They also police the named failure mode, which is banking
+  random", and those are opposite readings. They also police the named failure mode, which is resourcing
   that stops early: a bot that declines a resource in round 2 loses 98% of its games, and a pooled
   rate of a dozen percent hides that completely. Two one-dimensional tables rather than a grid, since
   round and hand size are correlated without being the same question and a 2D table over this corpus
@@ -1252,7 +1252,7 @@ and so read as behaviour rather than as a gap:
 
   Both count only chosen decisions. An empty hand leaves `skipResource` as the sole legal move, and a
   forced move is not a decision, so hand size in that breakout is never zero. It is read before the
-  banked card leaves the hand, and the regroup draw has already landed by then, so it is the hand the
+  resourced card leaves the hand, and the regroup draw has already landed by then, so it is the hand the
   choice was actually made from.
 - **unspent hand**: at each **chosen** pass, which cards in hand could legally have been played and
   were not, as a ranked table of card, occasions declined, games declined in, times played and games
@@ -1264,7 +1264,7 @@ and so read as behaviour rather than as a gap:
 
   **It is evidence, not a verdict**, which is why it names cards rather than reporting a rate. Legality
   is not desirability: an upgrade is legal on an enemy unit and usually wrong there, an event is legal
-  with no target and simply burns itself, and a unit can be right to hold for the board or for a bluff.
+  with no target and is simply wasted, and a unit can be right to hold for the board or for a bluff.
   A second copy of a unique forces a mandatory defeat, so the copy-out column separates declines the
   rules decided from declines the bot judged, without hiding the case where replacing a spent copy is
   right. The plays columns are the denominator: declined often and played often is situational holding,
@@ -1337,12 +1337,12 @@ The same run reports how often either seat could finish the enemy base with what
 ready, via `canFinishNow` (a clock of 1, so Sentinel, Saboteur, arena and Hidden resolve through the
 rules' own targeting rather than a second damage sum).
 
-It is the ceiling on every rule built over a lethal solver: an initiative-lethal rule or a tap-out
+It is the ceiling on every rule built over a lethal solver: an initiative-lethal rule or an exposure
 risk gate can only fire as often as lethal exists.
 
 **Read the one-action figure, not the aggregate.** `canFinishNow` sums every ready unit, but players
 alternate actions, so three units totalling lethal is three of your actions with three of theirs in
-between: a threat, not a kill. `canFinishThisAction` asks whether a single unit can do it alone,
+between: a threat, not lethal. `canFinishThisAction` asks whether a single unit can do it alone,
 which is the only thing one ply can guarantee, and it is three times rarer.
 
 Current rates over 1260 games:
@@ -1376,7 +1376,7 @@ judging one. A rule about deploying into a punish needs a measure of the punish,
 
 The same run asks the sharper question: not how often the opponent *could* finish, but how often the
 AI **chose** to let them when a legal move existed that would not have. That is the headroom a
-tap-out risk gate could recover, and it needs no opponent model to measure.
+exposure risk gate could recover, and it needs no opponent model to measure.
 
 Measured with the **one-action** predicate, since that is what the opponent can take before we act
 again. Every decision is classified `safe`, `avoidable` or `unavoidable`.
@@ -1401,7 +1401,7 @@ and the term's actual worth is the +3.8 points its own A/B measured, not the cei
 suggested.
 
 Worth knowing that measuring this with the aggregate predicate gave 7.4% exposure and a 10.5 point
-gap: a threefold higher rate with less than half the effect. Slow threats counted as kills dilute
+gap: a threefold higher rate with less than half the effect. Slow threats counted as defeats dilute
 exactly the signal the measure exists to find.
 
 Both halves are measured from **public** information, so this headroom belongs to a deeper public
@@ -1411,23 +1411,23 @@ Two things to hold onto when reading it:
 
 - **It under-counts.** Only damage that can already connect is seen, so a line needing a card played
   first, an event finisher or a when-played trigger is invisible. Early-game lethal is the figure to
-  trust least, since it would most likely come from a burn event rather than from board damage.
+  trust least, since it would most likely come from an event that deals damage rather than from board damage.
 - **"They could finish" is not "the bot blundered".** Many such positions are already lost. The rate
   bounds how often a risk gate is *live*, not how often it would *help*.
 
 ### Decided positions
 
 The same run reports when each seat's game was **decided**: the first action-phase decision where
-every legal move hands the opponent a one-action kill on **their turn** (`lossIsCertain`, tallied by
+every legal move hands the opponent a one-action lethal on **their turn** (`lossIsCertain`, tallied by
 `tallyDecided`). It reports how many seat-games reach one, how many of those the seat then lost,
 whether the opponent acted next and finished, and the share of all actions played after the loser
 was decided. This readout plays every game out, so it can see what follows the decided point.
 
 **Every mode that plays through `playGame` concedes there instead**: the decided seat offers and the
-other accepts, which changes no winner and saves the few actions spent finishing the kill (about
+other accepts, which changes no winner and saves the few actions spent finishing the lethal (about
 0.5% under greedy, none measured under beam: see [experiments.md](experiments.md)). A record of
 such a game ends `offerConcession`, `acceptConcession`. The coverage sweep plays games out
-(`concede: false`), since the kill is play it exercises.
+(`concede: false`), since the lethal is play it exercises.
 
 It is deliberately stricter than an `unavoidable` exposure, which asks only whether the opponent could
 finish and so also counts a move after which the phase ends or we act again. That reading is right for
@@ -1512,7 +1512,7 @@ Over 126 games and 8503 decisions:
 | `saturation` | n/a | 0.0% | **0.0%** | n/a |
 
 Read Pivotal as "the decision is sensitive to this weight", not "there is improvement available
-here". `card` scores 13.3% largely by creating ties: at `card: 3` the banking gate `resource - card`
+here". `card` scores 13.3% largely by creating ties: at `card: 3` the resourcing gate `resource - card`
 reaches exactly 0, which is the measured 15.8% catastrophe rather than an opportunity.
 
 **The two perturbation columns overlap for any weight shipped at 1.** The step is a quarter of the

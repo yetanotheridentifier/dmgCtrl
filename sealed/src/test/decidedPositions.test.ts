@@ -5,7 +5,7 @@ import { tallyDecided } from '../bench/decisions'
  * How much of a game is played after it is decided (#537).
  *
  * "Decided" is a seat's first action-phase decision where every legal move hands the opponent a
- * one-action kill on their turn. Two questions hang on it. How many actions follow, which is what stopping
+ * one-action lethal on their turn. Two questions hang on it. How many actions follow, which is what stopping
  * a decided bench game early could save. And whether the seat then actually lost, which is whether
  * conceding at that point would ever throw away a game.
  */

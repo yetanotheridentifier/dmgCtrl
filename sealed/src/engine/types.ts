@@ -580,7 +580,7 @@ export interface GameState {
    *    size is modelled; the identities are not. Consumers already skip a hand entry with no
    *    definition, so the placeholders are unplayable and unpriced.
    * 3. **The resourcing choice is not made here at all.** The engine models the mechanical half and
-   *    predicts nothing: whether a seat banks depends on evaluation weights, which are not the
+   *    predicts nothing: whether a seat resources a card depends on evaluation weights, which are not the
    *    engine's to know. `search.ts: settleCrossing` applies the choice for both seats afterwards,
    *    from public quantities alone, which is what keeps the opponent's choice out of their hand.
    */
@@ -1961,7 +1961,7 @@ type ChoiceVariant =
       // Once the picks are over, however they end, attack with this unit (Hotshot Maneuver).
       thenAttackWith?: string
       // `defeat` is a plain count ("defeat up to 2 enemy units", The Desolation of Hoth), where
-      // `defeatForToken` spends an HP budget and pays a token per kill (Pre Vizsla).
+      // `defeatForToken` spends an HP budget and pays a token per defeat (Pre Vizsla).
       spec: { mode: 'giveAdvantage'; remaining: number } | { mode: 'defeatForToken'; budget: number; token: string } | { mode: 'dealEach'; amount: number; remaining: number } | { mode: 'exhaust'; remaining: number } | { mode: 'defeat'; remaining: number }
     }
 

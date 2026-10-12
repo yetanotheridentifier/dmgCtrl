@@ -921,7 +921,7 @@ describe('Grogu (ASH_018) — triggered deploy + combat-conditional aura', () =>
     players: { player: player({ leader: undeployed('ASH_018'), hand: [hand], resources: ready(5) }), opponent: player() },
   })
 
-  it('offers to deploy Grogu when you play a Unique unit costing 4+, without burning the epic action', () => {
+  it('offers to deploy Grogu when you play a Unique unit costing 4+, without using up the epic action', () => {
     const played = resolve(playing('BIG'), { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
     const deployed = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id })

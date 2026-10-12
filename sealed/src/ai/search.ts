@@ -172,7 +172,7 @@ export function asSimulation(state: GameState): GameState {
 /**
  * Apply the resourcing choice on both sides of a modelled regroup (#519).
  *
- * The engine crosses the boundary and predicts nothing: it draws the two cards face down and banks
+ * The engine crosses the boundary and predicts nothing: it draws the two cards face down and resources
  * neither. This decides, for each seat, whether that seat takes a resource, and is the AI's half of a
  * split the engine cannot make on its own, since the answer depends on evaluation weights.
  *
@@ -181,12 +181,12 @@ export function asSimulation(state: GameState): GameState {
  * what each seat prefers without reading a card. A hand-reading rule could not: predicting their
  * choice would mean knowing their hand, which is the whole thing the redaction exists to prevent.
  *
- * A public tie banks, which is what the shipped weights do at every regroup. The private half is
+ * A public tie resources a card, which is what the shipped weights do at every regroup. The private half is
  * deliberately not consulted, even for our own seat: this is a prediction about a future decision
  * rather than the decision itself, and `hand.hold` picks WHICH card, which the model does not model.
  *
- * The card banked is one of the face-down placeholders. The search is predicting THAT a card is
- * banked, not choosing which, and which is private.
+ * The card resourced is one of the face-down placeholders. The search is predicting THAT a card is
+ * resourced, not choosing which, and which is private.
  */
 export function settleCrossing(state: GameState, w: EvalWeights): GameState {
   if (state.simulatedRegroup !== true) return state
@@ -234,7 +234,7 @@ export function settleWith(w: EvalWeights): void {
  * `resolve`, plus the resourcing choice on any regroup it crossed.
  *
  * **The AI must never call `resolve` directly.** The engine crosses the boundary without deciding
- * whether either side banks, so a site that skipped this would model a bot that never takes a resource
+ * whether either side resources a card, so a site that skipped this would model a bot that never takes a resource
  * at all. `aiRoundBoundary.test.ts` pins that no such site exists, by permuting the deck and by
  * checking the settlement reaches the search rather than only the helper.
  *
@@ -535,7 +535,7 @@ export interface BeamLimits {
    * At 1 a line runs on into the opening of the next round. Beyond that is a different bot: every
    * crossing hands both sides a resource and readies everything, and `ourTurnAgain` passes for the
    * opponent to get our turn back, so under `reply: 'null'` a line can run "they pass, we claim, the
-   * round ends" repeatedly and bank a resource a round from an opponent who does nothing. Left
+   * round ends" repeatedly and resource a card a round from an opponent who does nothing. Left
    * unbounded, a depth-3 search reached **two** rounds ahead unprompted on the first position tried.
    *
    * The null-move assumption was always the beam's soft spot, and across a boundary it compounds:
@@ -610,7 +610,7 @@ export interface BeamLimits {
    *
    * **Bounded from both sides, and the sweep is finding where in between.** Too small and nothing
    * changes. Too large and the bot plays a card for no benefit rather than pass, which is a worse
-   * behaviour than the one being fixed: the floor is that passing must still beat burning a card for
+   * behaviour than the one being fixed: the floor is that passing must still beat playing a card for
    * nothing.
    *
    * Applied at the root only, which is the only place `pass` is ever a candidate: the frontier skips it
@@ -649,7 +649,7 @@ export const DEFAULT_BEAM_LIMITS: BeamLimits = {
  *
  * It is a better model of THIS format than it sounds. There is no instant-speed interaction, and a
  * played unit arrives exhausted, so an opponent cannot answer mid-sequence with a card they have just
- * cast. Their whole in-sequence toolkit is: attack with something already ready, play an event, play
+ * played. Their whole in-sequence toolkit is: attack with something already ready, play an event, play
  * an Ambush unit, deploy their leader (which arrives READY and is the largest of these), or claim.
  * Sealed pools are thin on all of them. The assumption should still be expected to degrade against a
  * stronger opponent, which is what the #425 matrix is for.

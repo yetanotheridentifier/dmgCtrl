@@ -457,8 +457,8 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
   ]
   lines.push(
     '',
-    '  regroup banking (a strict public preference, so not a tie: this is behaviour, not a gap)',
-    row('banked', `${r.banked}  (avg pool ${r.avgPoolWhenBanked.toFixed(1)})`),
+    '  regroup resourcing (a strict public preference, so not a tie: this is behaviour, not a gap)',
+    row('resourced', `${r.banked}  (avg pool ${r.avgPoolWhenBanked.toFixed(1)})`),
     row('skipped', total === 0 ? '0' : `${r.skipped} = ${pct(r.skipped / total)}  (avg pool ${r.avgPoolWhenSkipped.toFixed(1)})`),
     '',
     ...breakout('round', r.byRound),
@@ -470,7 +470,7 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     '',
     '  unspent hand at a chosen pass: cards it could legally have PLAYED and did not. Legality is',
     '  not desirability, so this is evidence rather than a verdict. An upgrade is legal on an ENEMY',
-    '  unit, an event is legal with no target and burns itself, and a unit can be right to hold. The',
+    '  unit, an event is legal with no target and is wasted, and a unit can be right to hold. The',
     '  card names are what separate those; the counts alone cannot. "copy out" is a decline taken',
     '  while already controlling a copy: for a unique that forces a defeat, so the rules may have',
     '  decided it, though replacing a spent copy can still be the right play.',
@@ -714,7 +714,7 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
   const pn = report.pin
   lines.push(
     '',
-    '  offensive pinning: holding a ready unit that would kill their leader on arrival. This is a',
+    '  offensive pinning: holding a ready unit that would defeat their leader on arrival. This is a',
     '  NON-action, so no depth reaches it: the search chooses between actions and this is the value of',
     '  not taking one. "deployed into a pin" decides whether self-play can measure it at all, since a',
     '  bench where the threat is never respected cannot reward holding it.',
@@ -741,7 +741,7 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('spent otherwise', rate(ad.spentOther, Math.max(1, spent))),
     row('died unspent', `${ad.diedUnspent}  (never worth anything, but scored the whole time)`),
     row('  ours, wasted', `${ad.diedUnspentOurs}`),
-    row('  theirs, denied', `${ad.diedUnspentTheirs}  (killed the carrier; with "spent defending",`
+    row('  theirs, denied', `${ad.diedUnspentTheirs}  (defeated the carrier; with "spent defending",`
       + ' this is the whole of trading to strip their Advantage)'),
     row('token grants answered', `${ad.grantChoices}`),
     row('  no preferred recipient', rate(ad.grantChoicesAllEqual, ad.grantChoices)),
@@ -787,7 +787,7 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
   lines.push(
     '',
     '  lethal availability: the ceiling on every rule built over a lethal solver. "theirs" is what a',
-    '  tap-out risk gate would be protecting against.',
+    '  exposure risk gate would be protecting against.',
     row('we could finish now', rate(le.ours, le.decisions)),
     row('  in ONE action', rate(le.oursOneAction, le.decisions)),
     row('they could finish now', rate(le.theirs, le.decisions)),
@@ -804,7 +804,7 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('leaders deployed', `${report.leader.deploys}`),
     row('  died within a round', rate(report.leader.diedSoon, report.leader.deploys)),
     '',
-    '  avoidable exposure: the headroom a tap-out risk gate could actually recover. "Unavoidable"',
+    '  avoidable exposure: the headroom an exposure risk gate could actually recover. "Unavoidable"',
     '  means every legal move led there, so the position was already lost and a gate saves nothing.',
     row('handed them lethal', rate(ex.exposed, ex.decisions)),
     row('  of which avoidable', rate(ex.avoidable, ex.exposed)),
@@ -815,7 +815,7 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('loss rate, made none', rate(ex.lostWithoutAvoidable, ex.gamesWithoutAvoidable)),
     '',
     '  decided positions: a seat is decided when, in the action phase, every legal move hands the',
-    '  opponent a one-action kill on their turn. Whether it then lost says whether conceding there',
+    '  opponent a one-action lethal on their turn. Whether it then lost says whether conceding there',
     '  could throw a game away; the actions after it are what stopping a decided game would save.',
     row('seat-games decided', rate(ex.decidedSeats, ex.games * 2)),
     row('  of which lost', rate(ex.lostAfterDecided, ex.decidedSeats)),

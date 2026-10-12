@@ -18,13 +18,13 @@ import { unitReach, remainingBase, reachThisRound, canFinishThisAction } from '.
  *
  * ## Most of the question was already answered
  *
- * Under that assumption, aggregate ready reach IS a kill: we take the attacks consecutively while
+ * Under that assumption, aggregate ready reach IS lethal: we take the attacks consecutively while
  * they pass. So `canFinishNow` already settles attacks-only lethal, and `attacksToFinish` below is
  * the same reading made exact enough to respect an action budget.
  *
  * What a search adds is what neither can see:
  *
- * - **The hand**: a burn event, a pump lifting a unit over the line, a when-played base hit.
+ * - **The hand**: an event that deals damage, a pump lifting a unit over the line, a when-played base hit.
  * - **The leader**, which deploys READY (CR 3.4.4) and is not in `units` until it does, so
  *   `reachThisRound` reads a board with a deployable leader as though nothing were coming.
  * - **Sentinel clearing**, where one attack removes a blocker so the rest can reach. `unitReach`
@@ -82,13 +82,13 @@ export function attacksToFinish(state: GameState, seat: PlayerId): number {
  * Is this action worth continuing from, for a question that is only about ending the game?
  *
  * **Attacks are always kept.** They are few (units x targets) and inherently damage-relevant, and a
- * chip that does not yet kill a Sentinel can still be the first half of clearing it. Pruning those
+ * chip that does not yet defeat a Sentinel can still be the first half of clearing it. Pruning those
  * would lose real lines, which is the failure this whole ticket has to avoid.
  *
  * Everything else has to show progress: the base is closer to dead, a blocker is gone, or our ready
  * reach went up. That last one is what admits the two lines a board-only reading misses, a pump and a
  * leader deploy, while dropping the large majority of plays. A unit that arrives exhausted with no
- * when-played effect cannot contribute to a kill in this sequence, and it is most of the branching.
+ * when-played effect cannot contribute to a lethal in this sequence, and it is most of the branching.
  */
 function progresses(before: GameState, after: GameState, seat: PlayerId): boolean {
   if (after.winner !== null) return true
@@ -130,12 +130,12 @@ export interface LethalGate {
    * Skip when the total POWER available cannot reach the base.
    *
    * **Off by default**, though the data it once asked for now exists. It bounds damage by power,
-   * while a burn event deals damage with none, and a burn event is one of the three things this
+   * while an event can deal damage with no power at all, and such an event is one of the three things this
    * solver exists to find.
    *
    * Measured over 3,119 decisions it skips 655 decisions beyond the shipped gate and **not one of
    * them held a line**, leaving 64.0% of the solver's work for zero winnable positions lost. That is
-   * a null result on this card pool rather than a proof of soundness: a set with stronger burn would
+   * a null result on this card pool rather than a proof of soundness: a set with stronger damage events would
    * need it re-run, and the failure would be silent.
    */
   powerBound: boolean
@@ -146,7 +146,7 @@ export interface LethalGate {
    * admissible by construction: it sums every unit ready or not, the leader and the whole hand's
    * printed power, so it fires only where the position is nowhere near. That safety is also why it
    * saves so little. This one starts from what can actually attack now and allows a fixed number of
-   * points for what might materialise: a pump, an upgrade, a burn event.
+   * points for what might materialise: a pump, an upgrade, an event that deals damage.
    *
    * The allowance is doing two jobs with one number, standing in for bounded pumps and for events
    * that deal damage with no power at all, so the right value is a measurement rather than a
@@ -273,7 +273,7 @@ export function hasLethal(state: GameState, seat: PlayerId, limits: LethalLimits
  *
  * Under the null move a 2-action win and a 5-action win are indistinguishable: the opponent does
  * nothing in either. In a real game the longer line hands them five chances to gain a Shield, drop a
- * Sentinel or kill the attacker.
+ * Sentinel or defeat the attacker.
  *
  * Returning whichever line `legalMoves` order reached first measured **47.8%** against the plain
  * beam, LOSING about two points, because it replaced the beam's fastest-win choice with an arbitrary
@@ -311,7 +311,7 @@ export function findLethal(
   return deepest.move
 }
 
-/** The attack that opens an attacks-only kill, when the ready board covers the base in budget. */
+/** The attack that opens an attacks-only lethal, when the ready board covers the base in budget. */
 function openingAttack(state: GameState, seat: PlayerId, actionsLeft: number): Action | null {
   if (state.activePlayer !== seat || hasPendingChoices(state)) return null
   if (attacksToFinish(state, seat) > actionsLeft) return null

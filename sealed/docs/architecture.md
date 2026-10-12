@@ -312,12 +312,12 @@ replay, undo and reach the saved record like any other:
   may not offer again that game, which `resolve` enforces).
 - None of them is listed as an ordinary move, so no search weighs giving up. Whether to offer is a
   driver's policy, `concessionOffer`: on the bot's own action-phase turn, once a game, when
-  `lossIsCertain` holds (every legal move hands the opponent a one-action kill on their turn).
+  `lossIsCertain` holds (every legal move hands the opponent a one-action lethal on their turn).
 - A game ended this way records `concededBy`, which the game-over banner reads.
 
 In the bench, `playGame` offers on the same rule and accepts on the other bot's behalf, which ends a
 game the moment it is decided without changing who wins it. The coverage sweep turns it off
-(`concede: false`), since playing the kill out is play it exists to exercise.
+(`concede: false`), since playing the lethal out is play it exists to exercise.
 
 ## User settings
 

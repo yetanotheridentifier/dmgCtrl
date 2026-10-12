@@ -10,32 +10,32 @@ import { cardValue } from './cardValue'
  * zero-sum invariant now covers the public terms only.
  *
  * Three requirements have to fall out of one model, and the first and third pull against each other:
- *   1. early, banking a card you cannot cast for 3+ turns is right;
+ *   1. early, resourcing a card you cannot play for 3+ turns is right;
  *   2. late, expensive cards are the ones worth keeping and cheap ones are nearly dead;
- *   3. a Sealed bomb is worth holding until castable, PROVIDED that does not cost you a turn.
- * Card quality resolves 1 against 3: bank the expensive filler, hold the expensive bomb.
+ *   3. a Sealed bomb is worth holding until playable, PROVIDED that does not cost you a turn.
+ * Card quality resolves 1 against 3: resource the expensive filler, hold the expensive bomb.
  */
 
 export interface HandWeights {
   /**
-   * Flat bonus for holding at least one card you can actually cast: the "don't sacrifice a turn"
+   * Flat bonus for holding at least one card you can actually play: the "don't sacrifice a turn"
    * guard behind requirement 3.
    *
-   * FLAT is the whole point, and it was measured, not assumed. Scaling this by the castable card's
+   * FLAT is the whole point, and it was measured, not assumed. Scaling this by the playable card's
    * own value (the obvious first attempt) cost 9.5 points of win rate in a 1720-game A/B, because a
    * big card's hand value and its board value are the same order of magnitude: giving up ~28 of
-   * "best castable" to gain ~28 of board made the bot refuse to play its own bombs. A flat bonus
+   * "best playable" to gain ~28 of board made the bot refuse to play its own bombs. A flat bonus
    * costs the same whether the card is a 1/1 or a 9/9, so converting a card into a body is always
    * clearly positive, while giving one away for a resource still trips the guard.
    *
    * Bounded on both sides by arithmetic, not taste (see `handValue.test.ts`):
    *   upper: must stay below what the board pays for the CHEAPEST body, or developing the last
-   *          castable card looks worse than sitting on it;
+   *          playable card looks worse than sitting on it;
    *   lower: must exceed the discounted hold value of the biggest bomb in the pool, or the model
-   *          banks its last play to keep something it cannot cast.
+   *          resources its last play to keep something it cannot play.
    */
   canAct: number
-  /** Per point of held value across the whole hand, discounted by how soon it can be cast. */
+  /** Per point of held value across the whole hand, discounted by how soon it can be played. */
   hold: number
 }
 
@@ -45,11 +45,11 @@ export const DEFAULT_HAND_WEIGHTS: HandWeights = {
 }
 
 /**
- * How much of a card's value survives the wait to cast it, given a pool of `pool` resources.
+ * How much of a card's value survives the wait to play it, given a pool of `pool` resources.
  *
- * Never reaches zero: a bomb you cannot cast for three turns is still the reason you keep it, which
+ * Never reaches zero: a bomb you cannot play for three turns is still the reason you keep it, which
  * is the whole of requirement 3. The floor is what lets a high-quality card outrank cheap filler
- * while still being outranked by anything castable now.
+ * while still being outranked by anything playable now.
  */
 export function reach(cost: number, pool: number): number {
   if (cost <= pool) return 1
@@ -74,13 +74,13 @@ function pool(state: GameState, me: PlayerId): number {
  *
  * Separated so the term-sensitivity diagnostic can ask whether they VARY across the candidate moves.
  * `canAct` is expected to be flat: it is a property of the whole hand, so every candidate reads the
- * same unless one spends the last castable card. That is why sweeping it over 0, 3 and 6 changed no
+ * same unless one spends the last playable card. That is why sweeping it over 0, 3 and 6 changed no
  * decision at all, and the diagnostic has to be able to show it rather than assume it.
  */
 export interface HandQuantities {
-  /** 1 if any card in hand is castable now, else 0. */
+  /** 1 if any card in hand is playable now, else 0. */
   canAct: number
-  /** Total held value, each card discounted by how soon it can be cast. */
+  /** Total held value, each card discounted by how soon it can be played. */
   hold: number
 }
 

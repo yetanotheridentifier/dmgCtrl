@@ -64,7 +64,7 @@ const board = (): GameState => state({
   phase: 'action',
   activePlayer: 'player',
   players: {
-    // `bystander` is a 1/9 that nothing here can kill. Without a survivor, every unit is dead by the
+    // `bystander` is a 1/9 that nothing here can defeat. Without a survivor, every unit is dead by the
     // time Motti's trigger fires, so a "damage a unit" ability has no legal target and raises no
     // choice at all: the queue would look correct for the wrong reason.
     player: player({ units: [unit('greedo', GREEDO), unit('bystander', 'TST_U4')] }),

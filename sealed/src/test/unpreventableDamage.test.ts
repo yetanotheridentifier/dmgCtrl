@@ -38,7 +38,7 @@ describe("Gorian Shard's Corsair (196) — friendly Underworld damage is unpreve
     },
   })
 
-  it('combat damage from a friendly Underworld unit burns through a Shield', () => {
+  it('combat damage from a friendly Underworld unit goes through a Shield', () => {
     const done = resolve(board('UW'), { type: 'attack', attackerId: 'a', target: { kind: 'unit', instanceId: 'd' } })
     expect(U(done, 'd').damage).toBe(3) // shield ignored
     expect(U(done, 'd').upgrades.filter(u => u.cardId === TOKEN_SHIELD)).toHaveLength(1) // and not even spent

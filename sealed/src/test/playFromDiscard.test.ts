@@ -280,7 +280,7 @@ describe('discardPlayGrants: "for this phase, you may play that card from a disc
     expect(after.players.player.units[0].upgrades.filter(u => u.cardId === 'TOKEN_WEAKNESS')).toHaveLength(2)
   })
 
-  it('a unit the grant\'s tokens would kill is defeated on arrival, not kept alive by the grant', () => {
+  it('a unit the grant\'s tokens would defeat is defeated on arrival, not kept alive by the grant', () => {
     // 2/2 with two −1/−1 tokens is 0/0, and the state-based check defeats it like any other.
     const s = board([{ player: 'player', owner: 'player', cardId: 'DU', free: true, tokens: ['TOKEN_WEAKNESS', 'TOKEN_WEAKNESS'] }])
     const after = resolve(s, { type: 'playFromDiscard', grantIndex: 0 } as never)

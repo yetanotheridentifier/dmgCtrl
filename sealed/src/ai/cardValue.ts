@@ -3,7 +3,7 @@ import { effectiveCost } from '../engine/legalMoves'
 import { getCardDefinition } from '../engine/abilities'
 
 /**
- * How good a card is IF you get to cast it (#393).
+ * How good a card is IF you get to play it (#393).
  *
  * The board evaluation reads only `hand.length`, so it cannot prefer one card in hand over another:
  * all 1417 regroup resource picks in a 132-game sweep were decided by a coin flip. This is the
@@ -90,7 +90,7 @@ function abilityRichness(cardId: string): number {
 export function makeCardValue(w: CardValueWeights): (state: GameState, owner: PlayerId, card: EngineCard) => number {
   return (state, owner, card) => {
     // Effective, not printed: an off-aspect card really is the more expensive card, and the pool
-    // has to reach that number before it can be cast.
+    // has to reach that number before it can be played.
     const cost = effectiveCost(state, owner, card)
     const statTotal = (card.power ?? 0) + (card.hp ?? 0)
     const stats = statTotal > 0 ? statTotal : w.statlessPerCost * cost
@@ -105,5 +105,5 @@ export function makeCardValue(w: CardValueWeights): (state: GameState, owner: Pl
   }
 }
 
-/** How good `card` is for `owner` to cast, under the default weights. */
+/** How good `card` is for `owner` to play, under the default weights. */
 export const cardValue = makeCardValue(DEFAULT_CARD_VALUE)

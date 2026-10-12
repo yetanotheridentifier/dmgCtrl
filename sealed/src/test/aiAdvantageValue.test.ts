@@ -123,7 +123,7 @@ describe('the Advantage weight', () => {
    *
    * A ready carrier can spend its Advantage this round, so it counts toward finishing now. An
    * exhausted one cannot: it readies at regroup, which is a round away and past the search's horizon,
-   * and the opponent gets a turn in between to kill it first. Under a pessimistic reply that is
+   * and the opponent gets a turn in between to defeat it first. Under a pessimistic reply that is
    * exactly what the search assumes.
    *
    * Both rates ship equal to `power`, so the split is a no-op until swept. Note the lethal side is

@@ -21,11 +21,11 @@ import '../engine/cardDefinitions'
  *
  * ## Most of it already existed
  *
- * Under that assumption, aggregate ready reach IS a kill: we simply take the attacks consecutively
+ * Under that assumption, aggregate ready reach IS lethal: we simply take the attacks consecutively
  * while they pass. So `canFinishNow` already answers attacks-only lethal, and what a solver adds is
  * the parts it cannot see:
  *
- *   - the HAND: a burn event, a pump lifting a unit over the line, a when-played base hit;
+ *   - the HAND: an event that deals damage, a pump lifting a unit over the line, a when-played base hit;
  *   - the LEADER, which deploys READY and is not in `units` until it does;
  *   - SENTINEL clearing, where one attack removes a blocker so the rest can reach. `unitReach` reads
  *     a Sentinel-locked unit as 0, so `canFinishNow` under-reads exactly these lines.
@@ -43,7 +43,7 @@ const cards = {
   FINISHER: card({ id: 'FINISHER', type: 'unit', arena: 'ground', cost: 2, power: 9, hp: 9 }),
   HALF: card({ id: 'HALF', type: 'unit', arena: 'ground', cost: 2, power: 5, hp: 5 }),
   SMALL: card({ id: 'SMALL', type: 'unit', arena: 'ground', cost: 1, power: 3, hp: 5 }),
-  // Low power so it does not kill our attackers: this is about reach, not trades.
+  // Low power so it does not defeat our attackers: this is about reach, not trades.
   WALL: card({ id: 'WALL', type: 'unit', arena: 'ground', cost: 2, power: 1, hp: 3, keywords: [{ name: 'Sentinel' }] }),
   TOUGH_WALL: card({ id: 'TOUGH_WALL', type: 'unit', arena: 'ground', cost: 2, power: 1, hp: 30, keywords: [{ name: 'Sentinel' }] }),
   TINY_BASE: card({ id: 'TINY_BASE', type: 'base', hp: 9 }),
@@ -150,7 +150,7 @@ describe('probeLethal reports what the search spent', () => {
   })
 
   /**
-   * The closed form answers an attacks-only kill without searching at all, so the cheap case has to
+   * The closed form answers an attacks-only lethal without searching at all, so the cheap case has to
    * BE cheap. If this ever costs real nodes, the shortcut has stopped firing and every cost figure
    * taken from the solver is measuring something else.
    */
@@ -260,11 +260,11 @@ describe('the ready-damage slack gate', () => {
 })
 
 describe('hasLethal on the board alone', () => {
-  it('finds a one-attack kill', () => {
+  it('finds a one-attack lethal', () => {
     expect(hasLethal(position(['FINISHER']), 'player')).toBe(true)
   })
 
-  it('finds a kill needing several attacks, because the opponent does nothing in between', () => {
+  it('finds a lethal needing several attacks, because the opponent does nothing in between', () => {
     const s = position(['HALF', 'HALF'])
     expect(canFinishThisAction(s, 'player'), 'no single unit gets there').toBe(false)
     expect(canFinishNow(s, 'player'), 'but the aggregate does').toBe(true)
@@ -277,7 +277,7 @@ describe('hasLethal on the board alone', () => {
   })
 
   /** The budget is real: a line needing more actions than allowed is not a line we can play. */
-  it('will not claim a kill that needs more attacks than the budget allows', () => {
+  it('will not claim a lethal that needs more attacks than the budget allows', () => {
     const s = position(['SMALL', 'SMALL', 'SMALL']) // 3 + 3 + 3 = 9, exactly lethal in three
     expect(hasLethal(s, 'player', { ...DEFAULT_LETHAL_LIMITS, depth: 3 })).toBe(true)
     expect(hasLethal(s, 'player', { ...DEFAULT_LETHAL_LIMITS, depth: 2 })).toBe(false)
@@ -298,9 +298,9 @@ describe('hasLethal finds what the board-only predicates cannot', () => {
 
   /**
    * Clearing a blocker is the other. `unitReach` reads a Sentinel-locked unit as zero, so aggregate
-   * reach says no, while killing the wall first opens the whole board.
+   * reach says no, while defeating the wall first opens the whole board.
    */
-  it('kills the Sentinel first, then swings for lethal', () => {
+  it('defeats the Sentinel first, then swings for lethal', () => {
     const s = position(['SMALL', 'FINISHER'], ['WALL'])
     expect(canFinishNow(s, 'player'), 'everything is locked onto the wall').toBe(false)
     expect(hasLethal(s, 'player')).toBe(true)
@@ -390,15 +390,15 @@ describe('findLethal returns the move, not just the verdict', () => {
    *
    * Under the null move a 2-action win and a 5-action win look identical, because the opponent does
    * nothing in either. In a real game the longer line hands them five chances to gain a Shield, drop
-   * a Sentinel or kill the attacker. Returning whichever line `legalMoves` order happened to reach
+   * a Sentinel or defeat the attacker. Returning whichever line `legalMoves` order happened to reach
    * first measured **47.8%** against the plain beam, losing about two points, because it replaced the
    * beam's fastest-win choice with an arbitrary one.
    *
    * The beam has preferred the fastest win since #410, via a depth discount on decisive scores. This
    * is the same rule, arrived at the same way: by measuring the cost of not having it.
    *
-   * Here a 6 HP Sentinel blocks a base on 3. FINISHER kills the wall alone, so the win is two actions;
-   * the two SMALLs together also kill it, which wins in three. The units are ordered so the slow line
+   * Here a 6 HP Sentinel blocks a base on 3. FINISHER defeats the wall alone, so the win is two actions;
+   * the two SMALLs together also defeat it, which wins in three. The units are ordered so the slow line
    * comes first in move order.
    */
   it('prefers the shortest line when several reach a win', () => {
@@ -478,11 +478,11 @@ describe('the gate', () => {
   })
 
   /**
-   * The power bound is OFF by default and that is deliberate. It bounds damage by POWER, while a burn
-   * event deals damage with none, and a burn event is one of the three things this solver exists to
+   * The power bound is OFF by default and that is deliberate. It bounds damage by POWER, while an
+   * event can deal damage with no power at all, and such an event is one of the three things this solver exists to
    * find. Available as an option so its false-skip rate can be measured rather than assumed.
    */
-  it('leaves the power bound off by default, because a burn event has no power', () => {
+  it('leaves the power bound off by default, because an event that deals damage has no power', () => {
     expect(DEFAULT_LETHAL_GATE.powerBound).toBe(false)
     const hopeless = { ...position(['SMALL']), round: 6 }
     expect(shouldSearchLethal(hopeless, 'player', DEFAULT_LETHAL_GATE)).toBe(true)
@@ -510,7 +510,7 @@ describe('hasLethal behaves like the rest of the search', () => {
    * ready board, so it costs nothing and is still answered at zero nodes. Worth pinning, because
    * making the budget gate it would quietly turn the cheapest and most common lethal into a miss.
    */
-  it('still answers an attacks-only kill with no budget at all', () => {
+  it('still answers an attacks-only lethal with no budget at all', () => {
     expect(hasLethal(position(['HALF', 'HALF']), 'player', { depth: 4, nodes: 0 })).toBe(true)
   })
 

@@ -85,7 +85,7 @@ describe('deck-out as the game clock', () => {
   })
 
   /** And it does end games, which is what makes it the backstop. */
-  it('kills a player whose base is already low', () => {
+  it('defeats a player whose base is already low', () => {
     const s = state({
       players: {
         player: player({ deck: [], base: { cardId: 'TST_B', damage: 25 } }),
@@ -108,7 +108,7 @@ describe('deck-out as the game clock', () => {
     expect(after.players.opponent.base.damage, 'and their base is untouched').toBe(12)
   })
 
-  /** Clamped at zero, so a healthy base banks no credit against later deck-out damage. */
+  /** Clamped at zero, so a healthy base stores no credit against later deck-out damage. */
   it('does not accumulate healing past zero', () => {
     const s = stalemate(1)
     const after = resolve(s, {
@@ -125,7 +125,7 @@ describe('deck-out as the game clock', () => {
    * zero, every round, forever.
    *
    * Six rounds is chosen against the clock this defeats: from 12 damage, an uncancelled deck-out
-   * kills at 30 in three rounds, so a game still running at six has demonstrably broken the backstop.
+   * defeats the base at 30 in three rounds, so a game still running at six has demonstrably broken the backstop.
    */
   it('never ends when both sides cancel the deck-out damage', () => {
     let s = stalemate(12)
@@ -136,7 +136,7 @@ describe('deck-out as the game clock', () => {
     for (let i = 0; i < 200 && s.winner === null; i++) s = step(s)
 
     expect(s.round, 'six rounds must actually have elapsed').toBeGreaterThan(startRound + 5)
-    // Uncancelled, 6 a round from 12 kills this base during the third round. It is still untouched.
+    // Uncancelled, 6 a round from 12 defeats this base during the third round. It is still untouched.
     expect(s.players.player.base.damage).toBeLessThanOrEqual(12)
     expect(s.players.opponent.base.damage).toBeLessThanOrEqual(12)
     expect(s.winner, 'the game has no terminating condition left').toBeNull()

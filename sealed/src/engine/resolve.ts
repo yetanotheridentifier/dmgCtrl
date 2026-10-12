@@ -2590,7 +2590,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     case 'mayDeployLeader':
-      // Grogu: deploy via the triggered epic action — not once-per-game, so it doesn't burn
+      // Grogu: deploy via the triggered epic action, not once-per-game, so it doesn't use up
       // the epic action (`epicUsed: false`), letting Grogu redeploy after being defeated + readying.
       next = deployLeader(next, false)
       break

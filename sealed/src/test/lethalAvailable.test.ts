@@ -72,7 +72,7 @@ describe('canFinishNow', () => {
 /**
  * The stricter reading, and the one that matches what the AI can actually do.
  *
- * Players alternate actions, so an aggregate reach of 8 spread over two units is not a kill: it is
+ * Players alternate actions, so an aggregate reach of 8 spread over two units is not lethal: it is
  * two attacks with an opponent action in between, and they get to answer. `canFinishNow` sums ready
  * units and therefore **over-counts** exactly this case; `canFinishThisAction` asks whether one unit
  * can do it alone, which is the only thing one ply can guarantee.
@@ -109,7 +109,7 @@ describe('canFinishThisAction', () => {
 })
 
 /**
- * The counterfactual that sizes a tap-out risk gate (#432 measurement 2, option D).
+ * The counterfactual that sizes an exposure risk gate (#432 measurement 2, option D).
  *
  * "The opponent could finish" is not the same as "the bot blundered": many such positions are
  * already lost, and a gate cannot save a game that is over. What a gate could actually recover is

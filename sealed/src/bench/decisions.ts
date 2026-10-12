@@ -87,11 +87,11 @@ export interface DecisionStat {
 }
 
 /**
- * Whether the AI banks a card at regroup, and at what pool size. Separate from the tie counts
+ * Whether the AI resources a card at regroup, and at what pool size. Separate from the tie counts
  * because this is not a blind spot: it is a strict public preference, so it reads as a behaviour
  * rather than an absence of one.
  *
- * Counts only regroups where there was actually a card to bank. An empty hand leaves `skipResource`
+ * Counts only regroups where there was actually a card to resource. An empty hand leaves `skipResource`
  * as the sole legal move (`legalMoves.ts: regroupPhaseMoves`), and a forced move is not a decision:
  * including those put a few percent of phantom "skips" in the numbers at absurd pool sizes.
  */
@@ -105,7 +105,7 @@ export interface ResourcingStat {
    *
    * A pooled skip rate cannot tell "skips late holding two cards" from "skips at random", and those
    * are opposite readings: the first is the behaviour a threshold term is built to produce, the second
-   * is noise. It is also the guard against the named failure mode, which is banking that stops EARLY
+   * is noise. It is also the guard against the named failure mode, which is resourcing that stops EARLY
    * and which a pooled rate of a dozen percent hides completely.
    *
    * Two one-dimensional breakouts rather than a grid. Round and hand size are correlated but are not
@@ -120,9 +120,9 @@ export interface ResourcingStat {
  *
  * **The question this ticket may be downstream of.** Every gate here prices keeping a card against
  * taking a resource, and that trade only pays if the card is eventually played. If the bot routinely
- * reaches the regroup still holding cards it could have cast, then its hand is worth less than
+ * reaches the regroup still holding cards it could have played, then its hand is worth less than
  * `hand.hold` claims, and swapping a card it will not play for a resource it will not spend is the
- * better half whatever the position looks like. That would make always-banking correct **for this
+ * better half whatever the position looks like. That would make always-resourcing correct **for this
  * bot** and make the whole ticket a play-quality problem wearing a resourcing costume.
  *
  * Sampled at the moment the bot **chooses to pass**, which is the sharpest available form of the
@@ -154,7 +154,7 @@ export interface UnspentHandStat {
    *
    * Identity rather than a rate, because legality is not desirability and no counter can bridge the
    * gap. An upgrade is legal on an ENEMY unit and is usually wrong there unless it is a debuff; an
-   * event is legal with no target and simply burns itself; a unit can be right to hold for the board,
+   * event is legal with no target and is simply wasted; a unit can be right to hold for the board,
    * for a bluff, or for what the pool is known to hold. Each of those reads as "declined a play", and
    * only the card's name tells them apart. So the count is deliberately not a verdict: it is the
    * evidence a reader uses to reach one.
@@ -183,7 +183,7 @@ export interface UnspentHandStat {
      *
      * **Flagged, not excluded.** Playing a second copy of a unique forces a mandatory defeat, so some
      * of these are the rules leaving no real choice rather than the bot judging anything. But
-     * replacing a copy can be right: a Sentinel that has already attacked has banked its value, and a
+     * replacing a copy can be right: a Sentinel that has already attacked has delivered its value, and a
      * When Played or When Defeated ability needs bodies to work on. Excluding them would hide a
      * legitimate play, so the reader gets the split and decides.
      */
@@ -316,7 +316,7 @@ export interface SuspendedStat {
  * How often a lethal line is available at all (#432).
  *
  * The ceiling on every rule built over a lethal solver: "claim the initiative when it converts to
- * lethal", "claim when it denies theirs", and the tap-out risk gate can each only fire as often as
+ * lethal", "claim when it denies theirs", and the exposure risk gate can each only fire as often as
  * lethal exists. Measuring it with `canFinishNow` costs a comparison, where learning it after
  * building a solver and a sampled belief model on top would cost several tickets.
  *
@@ -330,7 +330,7 @@ export interface LethalStat {
   theirs: number
   /**
    * The strict readings: a **single action** finishes it. Players alternate, so an aggregate spread
-   * over three units is three attacks with three opponent replies in between, not a kill. One ply
+   * over three units is three attacks with three opponent replies in between, not lethal. One ply
    * can only guarantee the single-action version, so this is the honest denominator.
    */
   oursOneAction: number
@@ -353,7 +353,7 @@ export function classifyExposure(chosenExposed: boolean, anyCandidateSafe: boole
 
 /**
  * One game's share of play after it was decided (#537). A seat is **decided** at the first action-phase
- * decision where every legal move hands the opponent a one-action kill on their turn, the action index
+ * decision where every legal move hands the opponent a one-action lethal on their turn, the action index
  * given per seat (null when it never was).
  *
  * Stricter than an `unavoidable` exposure on purpose. That one asks only whether they *could* finish,
@@ -388,7 +388,7 @@ export function tallyDecided(
 }
 
 /**
- * Headroom for a tap-out risk gate (#432): not how often the opponent *could* finish, but how often
+ * Headroom for an exposure risk gate (#432): not how often the opponent *could* finish, but how often
  * the AI **chose** to let them when it had a legal alternative, and what that cost.
  *
  * Needs no oracle, which is the point of measuring it this way. It also splits the question the
@@ -436,7 +436,7 @@ export interface ExposureStat {
 /**
  * Deploying the leader into a board that answers it (#397, re-homed to #425).
  *
- * #425 claims to **subsume** #397's direct-pinning half: "do not deploy into a board that kills it"
+ * #425 claims to **subsume** #397's direct-pinning half: "do not deploy into a board that defeats it"
  * is exactly what a reply policy computes, so a hand-coded power-versus-HP term would duplicate the
  * search and then need keeping consistent with it. That claim rests on this rate falling, so without
  * the readout #397 would be closed on an argument rather than evidence.
@@ -625,7 +625,7 @@ export interface AdvantageStat {
   /** Of those, tokens the acting seat lost with its own carrier. */
   diedUnspentOurs: number
   /**
-   * Of those, tokens removed by killing the other seat's carrier.
+   * Of those, tokens removed by defeating the other seat's carrier.
    *
    * With `spentDefending`, this is the whole of "did we trade to strip their Advantage". Pooling the
    * two sides would hide the difference between wasting our own tokens and denying theirs, which are
@@ -757,8 +757,8 @@ export interface DenialOutcomeStat {
   /**
    * They could finish THIS round, with what is already ready, before any regroup.
    *
-   * The bucket is built on `reachSteady`, which readies everything first, so it cannot tell "they kill
-   * us next round if we do nothing" from "they kill us before the round is out". The second is not a
+   * The bucket is built on `reachSteady`, which readies everything first, so it cannot tell "they defeat
+   * us next round if we do nothing" from "they defeat us before the round is out". The second is not a
    * denial opportunity at all: turn order next round is irrelevant to a game that ends before the round
    * does. Judging the bot's claim rate without excluding these charges it for declining an option that
    * was never on offer.
@@ -1200,7 +1200,7 @@ export interface AdvantageSpend {
   died: number
   /** Of `died`, those on the ACTING seat's own units: tokens we lost. */
   diedMine: number
-  /** Of `died`, those on the other seat's units: tokens we removed by killing the carrier.
+  /** Of `died`, those on the other seat's units: tokens we removed by defeating the carrier.
    *  With `defending`, this is the whole of "did we trade to strip their Advantage". */
   diedTheirs: number
 }
@@ -1226,7 +1226,7 @@ export function advantageSpend(before: GameState, after: GameState, action: Acti
   for (const [id, before_] of was) {
     if (!alive.has(id)) {
       out.died += before_
-      // Whose token it was, read from the seat that acted: killing THEIR carrier strips it, losing
+      // Whose token it was, read from the seat that acted: defeating THEIR carrier strips it, losing
       // OUR carrier wastes it. The two are opposite outcomes and must not pool.
       if (mine.has(id)) out.diedMine += before_
       else out.diedTheirs += before_
@@ -1589,9 +1589,9 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           // Scored with quiescence, as the greedy driver does, so a tie counted here is a tie there.
           // The half-resolution counts alongside are taken from the RAW state, since they measure how
           // often quiescence has anything to do rather than what it concluded.
-          // Exposure uses the STRICT reading: handing them a kill they can take with one action,
+          // Exposure uses the STRICT reading: handing them a lethal they can take with one action,
           // before we act again. The aggregate reading counts lines needing several of their actions
-          // with several of ours in between, which is a threat rather than a kill, and it inflated
+          // with several of ours in between, which is a threat rather than lethal, and it inflated
           // this measurement threefold.
           return { m, v: score(next, me, asRole), r: classifyResolution(next, me), exposed: canFinishThisAction(next, foe) }
         })
@@ -1787,7 +1787,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
                 // this says whether it mattered.
                 //
                 // `hopeless` uses `canFinishNow` rather than the bucket's `reachSteady`: the bucket
-                // readies everything first, so it cannot tell "they kill us next round" from "they kill
+                // readies everything first, so it cannot tell "they defeat us next round" from "they defeat
                 // us before this round is out", and only the first is a denial opportunity at all.
                 denialWatches.push(openDenialWatch(me, claimed, s.round, {
                   hopeless: canFinishNow(s, foe),
@@ -1976,7 +1976,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
               unspentHeld += s.players[me].hand.length
               unspentPlayable += playable.size
               // Which cards, by name. Legality is not desirability, and no aggregate can separate a
-              // burnt event from a held bluff: the identity is what a reader needs to tell them apart.
+              // wasted event from a held bluff: the identity is what a reader needs to tell them apart.
               for (const idx of playable) {
                 const cardId = s.players[me].hand[idx]
                 const c = s.cards[cardId]

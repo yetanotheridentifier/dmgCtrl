@@ -6,11 +6,11 @@ import type { GameState } from '../engine/types'
 import '../engine/cardDefinitions'
 
 /**
- * Lethal exposure (#443): prefer a move that does not leave the opponent able to kill us with a
+ * Lethal exposure (#443): prefer a move that does not leave the opponent able to defeat us with a
  * single attack.
  *
  * Measured over 1260 games before building it: 2.5% of decisions handed the opponent a one-action
- * kill, and **82% of those were unavoidable** (every legal move led there). The 408 avoidable ones
+ * lethal, and **82% of those were unavoidable** (every legal move led there). The 408 avoidable ones
  * carried a 22.1 point loss-rate penalty, 68.9% against a 46.8% baseline.
  *
  * The term is symmetric, integer and public, which is what keeps it from disturbing anything: the
@@ -72,14 +72,14 @@ describe('the exposure term itself', () => {
 
 describe('what the AI does with it', () => {
   /**
-   * "Rewards the answer": playing the Sentinel makes their kill impossible, and the term makes that
+   * "Rewards the answer": playing the Sentinel makes their lethal impossible, and the term makes that
    * worth more than the fatter body.
    *
    * The material gap is deliberate. WALL is a 0/1 (worth about 5 on the board terms) against
    * BIGUNIT's 5/5 (about 19), so before this term the bot always took the big one. Exposure has to
    * be worth more than that 14 point gap to change the pick.
    */
-  it('plays the blocker over the bigger body when that is what stops the kill', () => {
+  it('plays the blocker over the bigger body when that is what stops the lethal', () => {
     const s: GameState = state({
       cards,
       players: {
@@ -98,7 +98,7 @@ describe('what the AI does with it', () => {
    * The same instinct on the attack side: removing the threat beats hitting a healthy base, even
    * though the base damage scores higher on its own.
    */
-  it('kills the unit that has lethal rather than swinging at a healthy base', () => {
+  it('defeats the unit that has lethal rather than swinging at a healthy base', () => {
     const s: GameState = state({
       cards,
       players: {

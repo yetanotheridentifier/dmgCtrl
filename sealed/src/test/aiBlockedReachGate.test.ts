@@ -13,7 +13,7 @@ import '../engine/cardDefinitions'
  * bias against Sentinels rather than the narrow case it was designed for. At a mean quantity of 6.6
  * and weight 12 that is ~79 points on a board where a whole unit is worth 4.
  *
- * The gate follows from *why* the term was needed. A plain Sentinel can simply be killed, and damaging
+ * The gate follows from *why* the term was needed. A plain Sentinel can simply be defeated, and damaging
  * it lowers its HP, which the material terms already price: the bot needs no help there. A **shielded**
  * Sentinel is the blind spot, because a Shield absorbs a whole instance of damage through a prevention
  * hook, so a strip leaves a board scoring identically and the lane stays shut for the rest of the game.
@@ -52,7 +52,7 @@ describe('denied reach counts only blockers the evaluation cannot see', () => {
    * and the material terms see that, so the bot needs no extra encouragement. Pricing it anyway is
    * what put the term on a quarter of all decisions.
    */
-  it('prices nothing for a Sentinel that can simply be killed', () => {
+  it('prices nothing for a Sentinel that can simply be defeated', () => {
     expect(blockedReach(board(false), 'player')).toBe(0)
   })
 

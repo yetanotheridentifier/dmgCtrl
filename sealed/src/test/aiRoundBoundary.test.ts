@@ -135,9 +135,9 @@ describe('the simulated regroup', () => {
   /**
    * The engine models the MECHANICAL half of the regroup and predicts nothing (#519).
    *
-   * It used to bank one of the two drawn cards on each side's behalf and leave the hand untouched.
-   * That was faithful while `resource - card` was +2 and banking was the only thing the bot ever did.
-   * It is not a rule the engine can state any more: whether a seat banks now depends on evaluation
+   * It used to resource one of the two drawn cards on each side's behalf and leave the hand untouched.
+   * That was faithful while `resource - card` was +2 and resourcing was the only thing the bot ever did.
+   * It is not a rule the engine can state any more: whether a seat resources a card now depends on evaluation
    * weights, which the engine has no business knowing.
    *
    * So the cards enter the hand **unidentified**. Hand SIZE is public and the draw is deterministic,
@@ -145,7 +145,7 @@ describe('the simulated regroup', () => {
    * boundary exercise exists to keep. The resourcing choice is applied afterwards by the search, in
    * `settleCrossing`, from public quantities alone.
    */
-  it('draws the two cards face down and banks nothing', () => {
+  it('draws the two cards face down and resources nothing', () => {
     const before = atBoundary(BOMBS_FIRST)
     const after = crossed(before)
     for (const id of ['player', 'opponent'] as const) {
@@ -153,7 +153,7 @@ describe('the simulated regroup', () => {
       const now = after.players[id]
       expect(now.hand.length, `${id} draws two`).toBe(was.hand.length + 2)
       expect(now.deck.length, `${id} spends both cards`).toBe(was.deck.length - 2)
-      expect(now.resources.length, `${id} banks nothing here`).toBe(was.resources.length)
+      expect(now.resources.length, `${id} resources nothing here`).toBe(was.resources.length)
     }
   })
 
@@ -195,8 +195,8 @@ describe('the simulated regroup', () => {
    * pool, leader cost and deploy state. That it can be done for the opponent at all is a consequence
    * of the gates being public terms; a hand-reading rule could not model their choice without cheating.
    *
-   * Banking a placeholder rather than a known card keeps the model honest in the other direction too:
-   * the search is predicting THAT a card is banked, not choosing which, and which is private.
+   * Resourcing a placeholder rather than a known card keeps the model honest in the other direction too:
+   * the search is predicting THAT a card is resourced, not choosing which, and which is private.
    */
   it('applies the resourcing choice for both seats, under the shipped weights', () => {
     const before = atBoundary(BOMBS_FIRST)
@@ -204,8 +204,8 @@ describe('the simulated regroup', () => {
     for (const id of ['player', 'opponent'] as const) {
       const was = before.players[id]
       const now = after.players[id]
-      // Shipped weights bank every regroup: two drawn, one banked, so the hand is up one net.
-      expect(now.resources.length, `${id} banks`).toBe(was.resources.length + 1)
+      // Shipped weights resource a card every regroup: two drawn, one resourced, so the hand is up one net.
+      expect(now.resources.length, `${id} resources a card`).toBe(was.resources.length + 1)
       expect(now.hand.length, `${id} keeps the other`).toBe(was.hand.length + 1)
     }
   })
@@ -247,7 +247,7 @@ describe('the simulated regroup', () => {
     // the term-off arm would compare the term with itself and prove nothing.
     const banking = boardAfterPass({ ...DEFAULT_WEIGHTS, cardScarcity: 0 })
     const scarce = boardAfterPass(DEFAULT_WEIGHTS)
-    expect(banking.players.player.resources.length, 'without the bonus the bot banks at the crossing')
+    expect(banking.players.player.resources.length, 'without the bonus the bot resources a card at the crossing')
       .toBe(s.players.player.resources.length + 1)
     expect(scarce.players.player.resources.length, 'the shipped weights decline')
       .toBe(s.players.player.resources.length)

@@ -15,10 +15,10 @@ import type { EngineCard, GameState, PlayerId } from '../engine/types'
  * all 1417 regroup resource picks in a 132-game sweep were decided by a coin flip.
  *
  * Three things have to come out of one model, and the first and third pull against each other:
- *   1. early, banking a card you cannot cast for 3+ turns is right;
+ *   1. early, resourcing a card you cannot play for 3+ turns is right;
  *   2. late, expensive cards are the ones worth keeping and cheap ones are nearly dead;
- *   3. a Sealed bomb is worth holding until castable, PROVIDED that does not cost you a turn.
- * Card quality is what resolves 1 against 3: bank the expensive filler, hold the expensive bomb.
+ *   3. a Sealed bomb is worth holding until playable, PROVIDED that does not cost you a turn.
+ * Card quality is what resolves 1 against 3: resource the expensive filler, hold the expensive bomb.
  */
 const C = {
   ...CARDS,
@@ -65,24 +65,24 @@ describe('reach', () => {
     for (let i = 1; i < values.length; i++) expect(values[i]).toBeLessThanOrEqual(values[i - 1])
   })
 
-  it('is full value for anything already castable, and never zero for anything', () => {
+  it('is full value for anything already playable, and never zero for anything', () => {
     expect(reach(1, 5)).toBe(1)
     expect(reach(5, 5)).toBe(1)
     expect(reach(12, 1)).toBeGreaterThan(0) // a bomb keeps a real fraction of its worth
   })
 })
 
-describe('which card to bank', () => {
-  it('early: banks the expensive filler rather than a cheap playable', () => {
+describe('which card to resource', () => {
+  it('early: resources the expensive filler rather than a cheap playable', () => {
     expect(bestBank(board(['CHEAP_2', 'MID_4', 'FILLER_7'], 2), 'player')).toBe('FILLER_7')
   })
 
-  it('late: banks the cheap card, because everything is castable and cheap is nearly dead', () => {
+  it('late: resources the cheap card, because everything is playable and cheap is nearly dead', () => {
     expect(bestBank(board(['CHEAP_2', 'MID_4', 'FILLER_7'], 8), 'player')).toBe('CHEAP_2')
   })
 
   /** The bomb rule: same cost, same stats, different quality, opposite decisions. */
-  it('holds a bomb it cannot yet cast, but banks same-cost filler', () => {
+  it('holds a bomb it cannot yet play, but resources same-cost filler', () => {
     expect(bestBank(board(['CHEAP_2', 'BOMB_7', 'FILLER_7'], 2), 'player')).toBe('FILLER_7')
   })
 
@@ -90,7 +90,7 @@ describe('which card to bank', () => {
    * "Provided this doesn't mean sacrificing turns." With only a playable and a bomb, the bomb goes:
    * keeping it would leave nothing to do next round.
    */
-  it('banks even a bomb rather than leaving itself no play', () => {
+  it('resources even a bomb rather than leaving itself no play', () => {
     expect(bestBank(board(['CHEAP_2', 'BOMB_7'], 2), 'player')).toBe('BOMB_7')
   })
 })
@@ -105,11 +105,11 @@ describe('weight orderings that are correctness constraints, not tuning knobs', 
   const poorest = Math.min(...values.filter(v => v > 0))
 
   /**
-   * LOWER bound. Keeping a castable card must beat holding the biggest bomb in the pool that you
-   * cannot cast, or the model banks its last play. Measured against the REAL pool so it cannot rot
+   * LOWER bound. Keeping a playable card must beat holding the biggest bomb in the pool that you
+   * cannot play, or the model resources its last play. Measured against the REAL pool so it cannot rot
    * as cards are added.
    */
-  it('canAct outweighs the discounted hold value of the best uncastable card', () => {
+  it('canAct outweighs the discounted hold value of the best unplayable card', () => {
     const keepPlay = DEFAULT_HAND_WEIGHTS.canAct + DEFAULT_HAND_WEIGHTS.hold * poorest
     const keepBomb = DEFAULT_HAND_WEIGHTS.hold * reach(99, 0) * richest
     expect(keepPlay).toBeGreaterThan(keepBomb)
@@ -118,13 +118,13 @@ describe('weight orderings that are correctness constraints, not tuning knobs', 
   /**
    * UPPER bound, and the one that actually bit. Playing a card converts hand value into board
    * value, and that must stay a net gain or the bot sits on its hand: an earlier version scaled
-   * this bonus by the castable card's value and lost 9.5 points of win rate, because a bomb's hand
+   * this bonus by the playable card's value and lost 9.5 points of win rate, because a bomb's hand
    * value and board value are the same size so it refused to play its own bombs.
    *
    * The binding case is the CHEAPEST body, which pays the least board value for the same flat
    * bonus: a 1-cost 1/1 is worth unit(4) + power(2) + hp(1) = 7, less the public `card` weight of 2.
    */
-  it('developing the last castable card still beats holding it, even for the cheapest body', () => {
+  it('developing the last playable card still beats holding it, even for the cheapest body', () => {
     const pool1 = state({ cards: C, players: { player: player(), opponent: player() } })
     const runt = card({ id: 'RUNT', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 1, aspects: ['Command'], rarity: 'Common' })
     const lost = DEFAULT_HAND_WEIGHTS.canAct + DEFAULT_HAND_WEIGHTS.hold * cardValue(pool1, 'player', runt)
@@ -175,7 +175,7 @@ describe('handValue is private to the seat being scored', () => {
 
 /** Resourcing is the whole point, so prove it survives a real regroup rather than a hand-built state. */
 describe('end to end through resolve', () => {
-  it('banks the filler and keeps the bomb across a real regroup', () => {
+  it('resources the filler and keeps the bomb across a real regroup', () => {
     const s = board(['CHEAP_2', 'BOMB_7', 'FILLER_7'], 2)
     const move = greedyAi(s)!
     const after = resolve(s, move)

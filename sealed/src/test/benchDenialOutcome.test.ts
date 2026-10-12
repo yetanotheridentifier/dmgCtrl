@@ -54,7 +54,7 @@ describe('the denial outcome funnel', () => {
     expect(w.lostNextRound).toBe(false)
   })
 
-  /** We reached the round we bought, acted first, and they killed us anyway on their first action. */
+  /** We reached the round we bought, acted first, and they defeated us anyway on their first action. */
   it('separates their first action of the next round', () => {
     const w = run([
       { after: board(4), by: 'opponent' },        // the round turns over

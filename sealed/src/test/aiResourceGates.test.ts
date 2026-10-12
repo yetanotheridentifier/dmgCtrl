@@ -39,7 +39,7 @@ import '../engine/cardDefinitions'
 const L = {
   ...CARDS,
   LEADER: card({ id: 'LEADER', type: 'leader', cost: 5, power: 4, hp: 7, aspects: ['Command', 'Heroism'] }),
-  // Three bodies a full pool can deploy in one round. Cheap on purpose: the point is that the hand is
+  // Three bodies a full pool can play in one round. Cheap on purpose: the point is that the hand is
   // entirely affordable, so an extra resource is dead weight while every card is still live.
   SMALL: card({ id: 'SMALL', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2, aspects: ['Command'], rarity: 'Common' }),
   MID: card({ id: 'MID', type: 'unit', arena: 'ground', cost: 3, power: 3, hp: 3, aspects: ['Command'], rarity: 'Common' }),
@@ -88,7 +88,7 @@ const handCost = (s: GameState): number =>
 const banks = (ai: typeof shipped, s: GameState): boolean => ai(s)?.type === 'resourceCard'
 
 describe('the position where a resource buys nothing', () => {
-  // Pool 8 against a hand costing 8: everything held is castable next round with nothing left over,
+  // Pool 8 against a hand costing 8: everything held is playable next round with nothing left over,
   // so the ninth resource is unspendable and the card it costs is not.
   const saturated = regroup(8, ['SMALL', 'MID', 'MID'])
 
@@ -104,7 +104,7 @@ describe('the position where a resource buys nothing', () => {
    * identically to a round-one position with two resources and a full hand. It is not a judgement; it
    * is the same answer everywhere, and that constancy is what the bonus exists to break.
    */
-  it('a bot without the bonus banks anyway, because its answer never depends on the board', () => {
+  it('a bot without the bonus resources a card anyway, because its answer never depends on the board', () => {
     expect(banks(ungated, saturated)).toBe(true)
   })
 
@@ -122,12 +122,12 @@ describe('the position where a resource buys nothing', () => {
  *
  * Declining early is what the ungated driver did and what cost it 3.52 points: it skipped 0.4% of
  * round-one regroups and 8.3% of round-four ones, starving itself of the pool it needed. Both bots
- * must bank in every position where the resource still buys something.
+ * must resource a card in every position where the resource still buys something.
  */
 describe('the positions where a resource still buys something', () => {
-  it('banks from a full hand it cannot yet afford', () => {
+  it('resources a card from a full hand it cannot yet afford', () => {
     const early = regroup(2, ['SMALL', 'MID', 'MID', 'MID', 'SMALL'])
-    expect(handCost(early), 'the pool cannot cast the hand, so reach is still worth buying')
+    expect(handCost(early), 'the pool cannot play the hand, so reach is still worth buying')
       .toBeGreaterThan(early.players.player.resources.length)
     expect(banks(shipped, early)).toBe(true)
     expect(banks(gated, early)).toBe(true)
@@ -137,7 +137,7 @@ describe('the positions where a resource still buys something', () => {
    * A small hand does NOT mean decline. With the pool short of the hand's cost the extra resource
    * still buys reach, and the gate must not fire on hand size alone.
    */
-  it('banks from a small but unaffordable hand', () => {
+  it('resources a card from a small but unaffordable hand', () => {
     const short = regroup(2, ['MID', 'MID', 'MID'])
     expect(handCost(short)).toBeGreaterThan(short.players.player.resources.length)
     expect(banks(gated, short)).toBe(true)
@@ -148,7 +148,7 @@ describe('the positions where a resource still buys something', () => {
    * except that the leader is still in the base zone, and "keep resourcing until you can deploy your
    * leader" is a resource COUNT (CR 2.6.1), so it wins.
    */
-  it('banks while the leader is still undeployed, saturated pool or not', () => {
+  it('resources a card while the leader is still undeployed, saturated pool or not', () => {
     const undeployed = regroup(4, ['SMALL', 'MID', 'MID'], false)
     expect(banks(gated, undeployed)).toBe(true)
   })

@@ -8,28 +8,28 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import '../engine/cardDefinitions'
 
 /**
- * Does the bot deploy an expensive body, or pass holding it?
+ * Does the bot play an expensive body, or pass holding it?
  *
  * ## Why this exists
  *
  * The unspent-hand diagnostic samples only at CHOSEN PASSES, so every card it lists is one the bot
  * held while doing nothing at all. Two of the most-declined were Pre Vizsla and Chimaera, an 8-cost
- * 6/6 and a 7-cost 6/6, declined 15 and 9 times. Neither ability gates deployment: Chimaera's is
+ * 6/6 and a 7-cost 6/6, declined 15 and 9 times. Neither ability gates playing it: Chimaera's is
  * optional ("you MAY choose"), and Pre Vizsla's defeats "any number", which includes none.
  *
  * Under the shipped weights a 6/6 is worth about 44 points of board (`unit` 8, power 6x4, hp 6x2)
- * and the root pass charge is 8. So passing instead of deploying one should not be close, and the
+ * and the root pass charge is 8. So passing instead of playing one should not be close, and the
  * corpus says it happened repeatedly.
  *
  * ## Reproduce before diagnosing
  *
  * This is the cheap half of the triage. A scripted position cannot prove the corpus behaviour is
- * fine, but it can show whether the bot fails to deploy a big body in the SIMPLEST case. If it
- * deploys here, the corpus declines have a positional cause and the next step is replaying one of
+ * fine, but it can show whether the bot fails to play a big body in the SIMPLEST case. If it
+ * plays one here, the corpus declines have a positional cause and the next step is replaying one of
  * the real boards rather than guessing at one. If it passes here, the defect is reproduced in a
  * position small enough to read.
  *
- * The cards are deliberately vanilla. A real Pre Vizsla would test the deployment decision and its
+ * The cards are deliberately vanilla. A real Pre Vizsla would test the decision to play it and its
  * When Played implementation at once, and a failure would not say which.
  */
 
@@ -63,7 +63,7 @@ function withBoard(theirUnits: ReturnType<typeof unit>[], pool = 8): GameState {
   })
 }
 
-describe('deploying an expensive body', () => {
+describe('playing an expensive body', () => {
   it('is affordable and legal, or the test proves nothing', () => {
     const s = withBoard([])
     expect(legalMoves(s).some(m => m.type === 'playUnit'), 'the bomb must be playable').toBe(true)
@@ -79,8 +79,8 @@ describe('deploying an expensive body', () => {
   })
 
   /**
-   * The interesting case. Three 2/2s can gang up for 6 and kill a 6/6, so a pessimistic reply may
-   * value the deployment at a loss. Whether declining here is right is a judgement; whether the bot
+   * The interesting case. Three 2/2s can gang up for 6 and defeat a 6/6, so a pessimistic reply may
+   * value the play at a loss. Whether declining here is right is a judgement; whether the bot
    * can see the trade at all is what this pins.
    */
   it('plays it into a board that could trade with it', () => {
@@ -96,7 +96,7 @@ describe('deploying an expensive body', () => {
    * rather than printed, and that four consecutive wrong explanations for one defect came from
    * inferring the line from two numbers instead.
    */
-  it('values deploying above passing, and by a margin the pass charge cannot explain', () => {
+  it('values playing it above passing, and by a margin the pass charge cannot explain', () => {
     const s = withBoard([unit('e1', 'CHAFF')])
     const moves = legalMoves(s)
     const playIndex = moves.findIndex(m => m.type === 'playUnit')

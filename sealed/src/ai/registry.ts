@@ -202,7 +202,7 @@ const HORIZON_FIELDS = { cross: 'maxCrossings', tail: 'tailActions' } as const
  *
  * A suffix rather than a registry entry per value, because this is swept rather than chosen: the
  * measured rate is ~2.7 discretionary mid-round passes a game against a competent player's ~0.15, and
- * finding the penalty that closes that gap without making the bot burn cards to avoid passing is a
+ * finding the penalty that closes that gap without making the bot throw cards away to avoid passing is a
  * curve, not a candidate.
  *
  * Fractional and negative are both allowed. Negative has no proposed use but costs nothing to permit,
