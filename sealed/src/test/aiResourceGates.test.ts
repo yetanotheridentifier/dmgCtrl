@@ -104,7 +104,7 @@ describe('the position where a resource buys nothing', () => {
    * identically to a round-one position with two resources and a full hand. It is not a judgement; it
    * is the same answer everywhere, and that constancy is what the bonus exists to break.
    */
-  it('a bot without the bonus banks anyway, because its answer never depends on the board', () => {
+  it('a bot without the bonus resources a card anyway, because its answer never depends on the board', () => {
     expect(banks(ungated, saturated)).toBe(true)
   })
 
@@ -122,10 +122,10 @@ describe('the position where a resource buys nothing', () => {
  *
  * Declining early is what the ungated driver did and what cost it 3.52 points: it skipped 0.4% of
  * round-one regroups and 8.3% of round-four ones, starving itself of the pool it needed. Both bots
- * must bank in every position where the resource still buys something.
+ * must resource a card in every position where the resource still buys something.
  */
 describe('the positions where a resource still buys something', () => {
-  it('banks from a full hand it cannot yet afford', () => {
+  it('resources a card from a full hand it cannot yet afford', () => {
     const early = regroup(2, ['SMALL', 'MID', 'MID', 'MID', 'SMALL'])
     expect(handCost(early), 'the pool cannot cast the hand, so reach is still worth buying')
       .toBeGreaterThan(early.players.player.resources.length)
@@ -137,7 +137,7 @@ describe('the positions where a resource still buys something', () => {
    * A small hand does NOT mean decline. With the pool short of the hand's cost the extra resource
    * still buys reach, and the gate must not fire on hand size alone.
    */
-  it('banks from a small but unaffordable hand', () => {
+  it('resources a card from a small but unaffordable hand', () => {
     const short = regroup(2, ['MID', 'MID', 'MID'])
     expect(handCost(short)).toBeGreaterThan(short.players.player.resources.length)
     expect(banks(gated, short)).toBe(true)
@@ -148,7 +148,7 @@ describe('the positions where a resource still buys something', () => {
    * except that the leader is still in the base zone, and "keep resourcing until you can deploy your
    * leader" is a resource COUNT (CR 2.6.1), so it wins.
    */
-  it('banks while the leader is still undeployed, saturated pool or not', () => {
+  it('resources a card while the leader is still undeployed, saturated pool or not', () => {
     const undeployed = regroup(4, ['SMALL', 'MID', 'MID'], false)
     expect(banks(gated, undeployed)).toBe(true)
   })

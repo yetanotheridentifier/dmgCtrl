@@ -118,7 +118,7 @@ export interface EvalWeights {
    * concave (#519).
    *
    * The regroup pick is not a choice between two cards: it is the MINIMUM of the whole hand, and the
-   * expected minimum of six sits well below the expected minimum of two. So the real cost of banking
+   * expected minimum of six sits well below the expected minimum of two. So the real cost of resourcing
    * falls as the hand grows, which is an order statistic rather than a taste curve. Hand SIZE is
    * public, so this belongs in the zero-sum half; which card is worth least is private and stays with
    * `hand.hold`, where it already decides 75.9% of regroups.
@@ -139,15 +139,15 @@ export interface EvalWeights {
    *
    * Grounded in the pool the bot actually plays rather than in taste: over 1630 regroup decisions on
    * the shipped bot, hand size runs 2 to 8 with 72% at 4 or 5, and 15% at 3 or below. That is the
-   * tail a gate should be firing on, and the distribution is itself conditional on a bot that banks
+   * tail a gate should be firing on, and the distribution is itself conditional on a bot that resources a card
    * every regroup, so it is a lower bound on where the term would fire once it does anything.
    */
   handKnee: number
   resource: number // per resource in the pool up to the knee (total, not ready: all ready each round)
   /**
    * Per resource ABOVE the knee. Lower than `resource`, which is what makes the pool's value
-   * concave: once you can already cast what you hold, banking another card buys nothing and the card
-   * is worth more. Below `card` means the bot stops banking; at or above it, it never does.
+   * concave: once you can already cast what you hold, resourcing another card buys nothing and the card
+   * is worth more. Below `card` means the bot stops resourcing; at or above it, it never does.
    */
   resourceSurplus: number
   /**
@@ -169,7 +169,7 @@ export interface EvalWeights {
    * SURPLUS pricing begins, which cannot matter while the two pool rates are equal; this charges an
    * explicit bonus on the resources below the gate, so it is live whatever the pool weights are.
    *
-   * It means nothing until something else introduces skipping: on a bot that banks every regroup it is
+   * It means nothing until something else introduces skipping: on a bot that resources a card every regroup it is
    * a guard rail with nothing to guard. OFF until swept.
    */
   deployUrgency: number
@@ -346,7 +346,7 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   hp: 2,
   card: 4,
   // At 3 the marginal card below the knee reaches 7 against a resource's 6, which is the smallest
-  // step that reverses the banking decision at all: the gap it has to overcome is `resource - card`
+  // step that reverses the resourcing decision at all: the gap it has to overcome is `resource - card`
   // = 2. Swept and shipped: +0.77 points over 4032 games against a matched control, 95% interval
   // [+0.20, +1.34], replicating across two seed blocks at +0.94 and +0.59. Only ever charged once
   // the pool is saturated (`scarceCards`), which is the half that made it a gain: charged on hand
@@ -681,9 +681,9 @@ function horizonValue(state: GameState, me: PlayerId, w: EvalWeights): number {
  *
  * ## Shipped FLAT, and that is a measured result (#393 iteration 2)
  *
- * The theory was sound and the behaviour worked: a flat rate makes banking a card worth a fixed
- * public +1 at every regroup, so the bot banks one EVERY round of every game, which is wrong late on
- * (you draw 2 at regroup either way, so banking is "+1 resource against +1 card retained"). Setting
+ * The theory was sound and the behaviour worked: a flat rate makes resourcing a card worth a fixed
+ * public +1 at every regroup, so the bot resources one EVERY round of every game, which is wrong late on
+ * (you draw 2 at regroup either way, so resourcing is "+1 resource against +1 card retained"). Setting
  * `resourceSurplus` below `card` made it skip 12.5% of regroups, all at a pool of exactly the knee.
  *
  * It did not win. Against the identical AI with a flat pool, across the coverage decks:
@@ -723,7 +723,7 @@ export function resourceValue(state: GameState, id: PlayerId, w: EvalWeights): n
  * cost, and zero once the leader is deployed. The quantity `deployUrgency` prices.
  *
  * Capped rather than a bare "am I short" flag so it is a quantity like every other public term, and so
- * that banking below the gate is worth the bonus while banking above it is not. Each side reads its
+ * that resourcing below the gate is worth the bonus while resourcing above it is not. Each side reads its
  * OWN leader, which is what keeps the term antisymmetric.
  */
 function deployShortfall(state: GameState, id: PlayerId): number {
@@ -791,7 +791,7 @@ function kneeFor(state: GameState, id: PlayerId, w: EvalWeights): number {
  *
  * It also subsumes the leader-deploy gate for free, since the knee already rises to an undeployed
  * leader's cost: below that the pool is not saturated, so the bonus cannot fire and the bot keeps
- * banking.
+ * resourcing.
  */
 function poolSaturated(state: GameState, id: PlayerId, w: EvalWeights): boolean {
   return state.players[id].resources.length >= kneeFor(state, id, w)

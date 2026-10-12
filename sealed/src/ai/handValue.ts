@@ -10,10 +10,10 @@ import { cardValue } from './cardValue'
  * zero-sum invariant now covers the public terms only.
  *
  * Three requirements have to fall out of one model, and the first and third pull against each other:
- *   1. early, banking a card you cannot cast for 3+ turns is right;
+ *   1. early, resourcing a card you cannot cast for 3+ turns is right;
  *   2. late, expensive cards are the ones worth keeping and cheap ones are nearly dead;
  *   3. a Sealed bomb is worth holding until castable, PROVIDED that does not cost you a turn.
- * Card quality resolves 1 against 3: bank the expensive filler, hold the expensive bomb.
+ * Card quality resolves 1 against 3: resource the expensive filler, hold the expensive bomb.
  */
 
 export interface HandWeights {
@@ -32,7 +32,7 @@ export interface HandWeights {
    *   upper: must stay below what the board pays for the CHEAPEST body, or developing the last
    *          castable card looks worse than sitting on it;
    *   lower: must exceed the discounted hold value of the biggest bomb in the pool, or the model
-   *          banks its last play to keep something it cannot cast.
+   *          resources its last play to keep something it cannot cast.
    */
   canAct: number
   /** Per point of held value across the whole hand, discounted by how soon it can be cast. */

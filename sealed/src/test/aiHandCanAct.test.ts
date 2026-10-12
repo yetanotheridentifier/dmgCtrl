@@ -34,7 +34,7 @@ import '../engine/cardDefinitions'
  *
  * ## The mechanism, which is what makes the position decidable at all
  *
- * Which card you bank is a **public tie**: hand size falls by one and the pool rises by one whichever
+ * Which card you resource is a **public tie**: hand size falls by one and the pool rises by one whichever
  * card goes, so every public term scores both options identically. The hand value is squashed into
  * `[0, 1)` precisely so it can break ties it cannot override, and this is one of the ties. That is
  * why `canAct` can decide here and nowhere the bench looks.
@@ -44,7 +44,7 @@ import '../engine/cardDefinitions'
 const db: Record<string, EngineCard> = { ...buildCardDb(ashSet as unknown as SwuCard[]), ...CARDS }
 
 /**
- * One resource in the pool, so banking leaves two.
+ * One resource in the pool, so resourcing leaves two.
  *
  * Small on purpose: it is what makes "the only card you can cast" a real category rather than a
  * contrivance, and it puts the bomb three or more beyond reach, where `reach` bottoms out at 0.3 and
@@ -65,7 +65,7 @@ const board = (hand: string[] = []): GameState => state({
 
 /**
  * Real cards only, and playable types only: the fixture cards are here to be a leader and a base, and
- * a leader or a base is never in hand and never banked.
+ * a leader or a base is never in hand and never resourced.
  */
 const playable = Object.values(db).filter(c =>
   c.id.startsWith('ASH_') && (c.type === 'unit' || c.type === 'event' || c.type === 'upgrade'))
@@ -80,7 +80,7 @@ const stranded = playable.filter(c => cost(c) > AFTER_BANKING)
 /**
  * The two cards, DERIVED from the pool rather than named, so the position cannot rot as cards land.
  *
- * `keep` is the poorest thing castable once the banking is done: the weakest possible reason to keep
+ * `keep` is the poorest thing castable once the resourcing is done: the weakest possible reason to keep
  * a play, which is the hardest case for the bound and the same quantity it calls `poorest`. `bank` is
  * the richest thing that is not castable and will not be for three turns, which is the hardest case
  * in the other direction and the bound's `richest`.
@@ -94,7 +94,7 @@ const bankMove = (handIndex: number) => ({ type: 'resourceCard', handIndex }) as
 /**
  * The same trap at the size the bot actually meets it.
  *
- * Measured over the 44 coverage decks, a banking decision holds **five** cards 44.4% of the time and
+ * Measured over the 44 coverage decks, a resourcing decision holds **five** cards 44.4% of the time and
  * two cards 3.5%, and of the 36 decisions where exactly one card was castable, 22 were at five cards.
  * So the two-card fixture above is the bound's worst case and a 3.5% tail; this is the population.
  */
@@ -106,7 +106,7 @@ function banked(w: number, limits: BeamLimits = BEAM_REPLY_LIMITS, from = positi
   const ai = makeBeamGreedy({ ...DEFAULT_WEIGHTS, hand: { ...DEFAULT_HAND_WEIGHTS, canAct: w } }, limits)
   const s = from()
   const move = ai(s)
-  expect(move?.type, 'the regroup decision must be a banking decision').toBe('resourceCard')
+  expect(move?.type, 'the regroup decision must be a resourcing decision').toBe('resourceCard')
   return s.players.player.hand[move?.type === 'resourceCard' ? move.handIndex : -1]
 }
 
@@ -118,10 +118,10 @@ describe('the position the lower bound describes', () => {
     expect(cost(keep)).toBeLessThanOrEqual(AFTER_BANKING)
     expect(cost(bank)).toBeGreaterThan(AFTER_BANKING + 2)
     expect(reach(cost(bank), AFTER_BANKING), 'the bomb must be at the floor of reach').toBe(0.3)
-    expect(value(bank), 'the card we want banked must be the better card').toBeGreaterThan(value(keep))
+    expect(value(bank), 'the card we want resourced must be the better card').toBeGreaterThan(value(keep))
   })
 
-  it('leaves the kept card castable next round, and the banked one still out of reach', () => {
+  it('leaves the kept card castable next round, and the resourced one still out of reach', () => {
     const after = resolve(position(), bankMove(1))
     expect(after.players.player.resources.length).toBe(AFTER_BANKING)
     expect(after.players.player.hand).toContain(keep.id)
@@ -131,7 +131,7 @@ describe('the position the lower bound describes', () => {
 
   /**
    * The public half cannot see the difference, which is the whole reason the private half decides it.
-   * With both hand weights at zero the two banking options score EXACTLY alike and a seeded coin flip
+   * With both hand weights at zero the two resourcing options score EXACTLY alike and a seeded coin flip
    * picks, which is the state the hand model was built to end.
    */
   it('is a public tie: without the hand term the two options are indistinguishable', () => {
@@ -143,15 +143,15 @@ describe('the position the lower bound describes', () => {
 })
 
 describe('hand.canAct decides it', () => {
-  it('at the shipped weight, banks the bomb and keeps the play', () => {
+  it('at the shipped weight, resources the bomb and keeps the play', () => {
     expect(banked(DEFAULT_HAND_WEIGHTS.canAct)).toBe(bank.id)
   })
 
   /**
-   * The answer to the ticket. At zero the bot banks the only card it can play and keeps one it cannot
+   * The answer to the ticket. At zero the bot resources the only card it can play and keeps one it cannot
    * cast for at least three turns, holding a hand it has no way to use.
    */
-  it('at zero, banks its last castable card and keeps a card it cannot play', () => {
+  it('at zero, resources its last castable card and keeps a card it cannot play', () => {
     expect(banked(0)).toBe(keep.id)
   })
 

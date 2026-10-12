@@ -231,7 +231,7 @@ export const beamReplyUnredactedAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_
  *
  * One difference from `beam-reply` and it is not an evaluation term: a line may continue into the
  * opening of the next round rather than stopping when the action phase ends. Everything readies and
- * both sides bank a resource, so a value that only arrives next round is finally reachable.
+ * both sides resource a card, so a value that only arrives next round is finally reachable.
  *
  * **Unmeasured.** It is registered so it can be A/B-ed against `beam-reply` on the same seeds, which is
  * the only reason it exists yet. Four separate findings say the boundary is where the model goes blind,

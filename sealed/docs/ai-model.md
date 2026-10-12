@@ -538,7 +538,7 @@ Two results are worth holding onto because they contradict the obvious reading:
   13.8% of decisions overall and **75.9% of regroups**. It cannot be tuned and must not be deleted.
 - **`card` is the mirror image**: sensitive to a nudge (13.3%) but barely load-bearing (2.9%). What
   matters is its difference from `resource`, and zeroing it leaves that difference the right sign.
-  Its apparent sensitivity is the banking cliff below, not headroom.
+  Its apparent sensitivity is the resourcing cliff below, not headroom.
 
 `claimCost` varies in 43.0% of decisions and changes the pick in 1.0%, which is the "live but not
 worth tuning" quadrant and independent support for the note under Initiative that at
@@ -553,23 +553,23 @@ reading the Bearing column rather than Varies: `resourceSurplus` is alive and on
 8.6% there, 0.0% elsewhere), and `hand.canAct` is inert (bearing 0.0%).
 
 **Inert is not the same as removable.** `hand.canAct` changes no decision the bench reaches, and
-deleting it inverts the lower bound asserted in `handValue.test.ts`, which keeps the model from banking
-its last castable card. A scripted position decides it: at a weight of 0 the shipped bot banks its only
+deleting it inverts the lower bound asserted in `handValue.test.ts`, which keeps the model from resourcing
+its last castable card. A scripted position decides it: at a weight of 0 the shipped bot resources its only
 castable card, at 3 it keeps it, and no `reach` curve removes the need. See
 [experiments.md](experiments.md).
 
-### Banking: `resource` must exceed `card`
+### Resourcing: `resource` must exceed `card`
 
-The sharpest constraint in the weight set, and the only cliff rather than a curve. Banking at regroup
+The sharpest constraint in the weight set, and the only cliff rather than a curve. Resourcing at regroup
 swaps a card for a resource, so the sign of that decision is `resource - card` and nothing else. A
 5x5 grid over both weights, 840 games a cell, depends on the **difference alone** and never on either
 magnitude:
 
 | `resource - card` | Win rate | Behaviour |
 | --- | --- | --- |
-| ≥ 1 | ~50% | banks; `resource=6, card=0` is no better than `resource=3, card=2` |
-| 0 | **15.8%** | banking is an exact tie, so the seeded coin flip decides it |
-| ≤ −1 | **1.8%** | never banks, so never builds a pool |
+| ≥ 1 | ~50% | resources a card; `resource=6, card=0` is no better than `resource=3, card=2` |
+| 0 | **15.8%** | resourcing is an exact tie, so the seeded coin flip decides it |
+| ≤ −1 | **1.8%** | never resources a card, so never builds a pool |
 
 Two dimensions collapse to one binary condition. Either weight can be re-tuned freely while the gap
 holds, and `resourceValue.test.ts` asserts it, because losing 98% of games is not a tuning
@@ -600,7 +600,7 @@ problem.
 A `resourceSurplus` × `saturation` grid re-measured this after quiescent scoring landed and it still
 does not pay. Concavity costs in proportion to how hard the knee bites (49.7% at surplus 1 with the
 knee at 4, converging to flat as the knee rises out of reach), while **convexity does nothing at
-all**: valuing surplus above the full rate changes no decision, because banking is already always
+all**: valuing surplus above the full rate changes no decision, because resourcing is already always
 chosen.
 
 `resourceSurplus` ships equal to `resource`, so the split is arithmetically a no-op and the weight is
@@ -609,7 +609,7 @@ concavity question stays cheap to re-ask.
 
 ### Declining a resource
 
-The pool alone does not decide whether to bank at regroup. `cardsValue` charges `cardScarcity` on the
+The pool alone does not decide whether to resource a card at regroup. `cardsValue` charges `cardScarcity` on the
 cards at or below `handKnee`, **and only once the pool has reached the knee**. Both halves are
 required, and the conjunction is the whole rule:
 
@@ -619,16 +619,16 @@ required, and the conjunction is the whole rule:
 
 The quantity is an order statistic rather than a curve. The regroup pick is the **minimum of the whole
 hand**, and the expected minimum of six sits well below the expected minimum of two, so the real cost
-of banking falls as the hand grows. Hand SIZE is public, so this sits in the zero-sum half; which card
+of resourcing falls as the hand grows. Hand SIZE is public, so this sits in the zero-sum half; which card
 is worth least is private and stays with `hand.hold`.
 
 **The leader-deploy gate falls out of the same threshold.** The knee already rises to an undeployed
 leader's printed cost, so below it the pool is not saturated, the bonus cannot fire, and the bot keeps
-banking until it can deploy. No separate weight expresses this.
+resourcing until it can deploy. No separate weight expresses this.
 
 Measured at `cardScarcity: 3`, `handKnee: 3`: **+0.77 points** over 4032 games an arm against a matched
 control, 95% interval [+0.20, +1.34], pooled over two independent seed blocks reading +0.94 and +0.59.
-The bot skips 6.7% of regroups, none before round six, at a mean pool of 7.9 against 4.5 when banking.
+The bot skips 6.7% of regroups, none before round six, at a mean pool of 7.9 against 4.5 when resourcing.
 Per-decision cost is unchanged.
 
 ### The hand
@@ -669,7 +669,7 @@ Two properties of the private half fall out of its design rather than its tuning
   `[0, 1)` cannot override an integer-valued public preference, so at a weight of 100000 the bot still
   develops. The shipped 3 sits just above the only edge that binds.
 
-  Exactly one card is castable in **6.7%** of banking decisions, 21.6% of them in round 1 and almost
+  Exactly one card is castable in **6.7%** of resourcing decisions, 21.6% of them in round 1 and almost
   none from round 4, so this guards the opening.
 
 ### What the hand model cannot express
@@ -902,7 +902,7 @@ effect is **51.4% ± 0.9%** over ~11,340 games. Setting it to 0 disables role aw
 
 `ai/setupAi.ts` handles the mulligan and the two opening resources, because random setup decisions
 are catastrophically bad even for the weakest opponent. It keeps a hand only if it holds a turn-1
-play, and banks the pair that best preserves the early curve.
+play, and resources the pair that best preserves the early curve.
 
 ## Adding a model
 

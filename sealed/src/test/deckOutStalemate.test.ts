@@ -108,7 +108,7 @@ describe('deck-out as the game clock', () => {
     expect(after.players.opponent.base.damage, 'and their base is untouched').toBe(12)
   })
 
-  /** Clamped at zero, so a healthy base banks no credit against later deck-out damage. */
+  /** Clamped at zero, so a healthy base stores no credit against later deck-out damage. */
   it('does not accumulate healing past zero', () => {
     const s = stalemate(1)
     const after = resolve(s, {

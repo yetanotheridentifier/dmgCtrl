@@ -15,10 +15,10 @@ import type { EngineCard, GameState, PlayerId } from '../engine/types'
  * all 1417 regroup resource picks in a 132-game sweep were decided by a coin flip.
  *
  * Three things have to come out of one model, and the first and third pull against each other:
- *   1. early, banking a card you cannot cast for 3+ turns is right;
+ *   1. early, resourcing a card you cannot cast for 3+ turns is right;
  *   2. late, expensive cards are the ones worth keeping and cheap ones are nearly dead;
  *   3. a Sealed bomb is worth holding until castable, PROVIDED that does not cost you a turn.
- * Card quality is what resolves 1 against 3: bank the expensive filler, hold the expensive bomb.
+ * Card quality is what resolves 1 against 3: resource the expensive filler, hold the expensive bomb.
  */
 const C = {
   ...CARDS,
@@ -72,17 +72,17 @@ describe('reach', () => {
   })
 })
 
-describe('which card to bank', () => {
-  it('early: banks the expensive filler rather than a cheap playable', () => {
+describe('which card to resource', () => {
+  it('early: resources the expensive filler rather than a cheap playable', () => {
     expect(bestBank(board(['CHEAP_2', 'MID_4', 'FILLER_7'], 2), 'player')).toBe('FILLER_7')
   })
 
-  it('late: banks the cheap card, because everything is castable and cheap is nearly dead', () => {
+  it('late: resources the cheap card, because everything is castable and cheap is nearly dead', () => {
     expect(bestBank(board(['CHEAP_2', 'MID_4', 'FILLER_7'], 8), 'player')).toBe('CHEAP_2')
   })
 
   /** The bomb rule: same cost, same stats, different quality, opposite decisions. */
-  it('holds a bomb it cannot yet cast, but banks same-cost filler', () => {
+  it('holds a bomb it cannot yet cast, but resources same-cost filler', () => {
     expect(bestBank(board(['CHEAP_2', 'BOMB_7', 'FILLER_7'], 2), 'player')).toBe('FILLER_7')
   })
 
@@ -90,7 +90,7 @@ describe('which card to bank', () => {
    * "Provided this doesn't mean sacrificing turns." With only a playable and a bomb, the bomb goes:
    * keeping it would leave nothing to do next round.
    */
-  it('banks even a bomb rather than leaving itself no play', () => {
+  it('resources even a bomb rather than leaving itself no play', () => {
     expect(bestBank(board(['CHEAP_2', 'BOMB_7'], 2), 'player')).toBe('BOMB_7')
   })
 })
@@ -106,7 +106,7 @@ describe('weight orderings that are correctness constraints, not tuning knobs', 
 
   /**
    * LOWER bound. Keeping a castable card must beat holding the biggest bomb in the pool that you
-   * cannot cast, or the model banks its last play. Measured against the REAL pool so it cannot rot
+   * cannot cast, or the model resources its last play. Measured against the REAL pool so it cannot rot
    * as cards are added.
    */
   it('canAct outweighs the discounted hold value of the best uncastable card', () => {
@@ -175,7 +175,7 @@ describe('handValue is private to the seat being scored', () => {
 
 /** Resourcing is the whole point, so prove it survives a real regroup rather than a hand-built state. */
 describe('end to end through resolve', () => {
-  it('banks the filler and keeps the bomb across a real regroup', () => {
+  it('resources the filler and keeps the bomb across a real regroup', () => {
     const s = board(['CHEAP_2', 'BOMB_7', 'FILLER_7'], 2)
     const move = greedyAi(s)!
     const after = resolve(s, move)

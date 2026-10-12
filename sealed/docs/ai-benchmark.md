@@ -1240,11 +1240,11 @@ so it scored the same as every other attack that suspended.
 Two behaviours are reported separately, because they are strict public preferences rather than ties
 and so read as behaviour rather than as a gap:
 
-- **regroup banking**: banks versus skips, the mean pool at each, and the same split broken out **by
+- **regroup resourcing**: cards resourced versus skips, the mean pool at each, and the same split broken out **by
   round and by hand size**. The pooled skip rate is 0% by construction, since the pool is valued flat.
 
   The breakouts exist because a pooled rate cannot tell "skips late holding two cards" from "skips at
-  random", and those are opposite readings. They also police the named failure mode, which is banking
+  random", and those are opposite readings. They also police the named failure mode, which is resourcing
   that stops early: a bot that declines a resource in round 2 loses 98% of its games, and a pooled
   rate of a dozen percent hides that completely. Two one-dimensional tables rather than a grid, since
   round and hand size are correlated without being the same question and a 2D table over this corpus
@@ -1252,7 +1252,7 @@ and so read as behaviour rather than as a gap:
 
   Both count only chosen decisions. An empty hand leaves `skipResource` as the sole legal move, and a
   forced move is not a decision, so hand size in that breakout is never zero. It is read before the
-  banked card leaves the hand, and the regroup draw has already landed by then, so it is the hand the
+  resourced card leaves the hand, and the regroup draw has already landed by then, so it is the hand the
   choice was actually made from.
 - **unspent hand**: at each **chosen** pass, which cards in hand could legally have been played and
   were not, as a ranked table of card, occasions declined, games declined in, times played and games
@@ -1512,7 +1512,7 @@ Over 126 games and 8503 decisions:
 | `saturation` | n/a | 0.0% | **0.0%** | n/a |
 
 Read Pivotal as "the decision is sensitive to this weight", not "there is improvement available
-here". `card` scores 13.3% largely by creating ties: at `card: 3` the banking gate `resource - card`
+here". `card` scores 13.3% largely by creating ties: at `card: 3` the resourcing gate `resource - card`
 reaches exactly 0, which is the measured 15.8% catastrophe rather than an opportunity.
 
 **The two perturbation columns overlap for any weight shipped at 1.** The step is a quarter of the

@@ -12,7 +12,7 @@ import { effectiveCost } from '../engine/legalMoves'
  *   starting resources. Otherwise redraw.
  * - Resourcing: keep the 4 cards that best fill the early curve — ideally
  *   distinct units playable on turns 1/2/3 (costs ≤2, ≤3, ≤4) — and resource
- *   the pair contributing least, preferring to bank expensive cards.
+ *   the pair contributing least, preferring to resource expensive cards.
  */
 export function setupAi(state: GameState): Action | null {
   if (state.phase !== 'setup') return null
@@ -56,7 +56,7 @@ function curveScore(state: GameState, playerId: PlayerId, kept: string[]): numbe
 
 /**
  * Picks happen one card at a time. To stay pair-optimal, evaluate the full
- * set of cards still to be banked: with 2 picks left, score every pair and
+ * set of cards still to be resourced: with 2 picks left, score every pair and
  * take that pair's first card; with 1 left, score every single.
  */
 function bestResourcePick(state: GameState, playerId: PlayerId): Action | null {
@@ -78,7 +78,7 @@ function bestResourcePick(state: GameState, playerId: PlayerId): Action | null {
   for (const subset of subsets) {
     const kept = hand.filter((_, i) => !subset.includes(i))
     const resourced = subset.map(i => hand[i])
-    // Tiebreak: bank the most expensive cards (keeps cheap playables in hand).
+    // Tiebreak: resource the most expensive cards (keeps cheap playables in hand).
     const resourcedCost = unitCosts(state, playerId, resourced).reduce((n, c) => n + c, 0)
     const score = curveScore(state, playerId, kept) * 1000 + resourcedCost
     if (score > bestScore) {

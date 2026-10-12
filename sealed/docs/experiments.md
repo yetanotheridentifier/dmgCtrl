@@ -696,7 +696,7 @@ discriminating weakly across the horizon buckets to discriminating strongly, Ï‡Â
 Two candidate explanations were open: the modelled opponent tail may be dead weight (it is most of the
 cost, and the free run changes nothing measurable in 79% of claims), or crossing may make **passing**
 more attractive, since a line that ends the phase now lands on a regroup where both sides ready
-everything and bank a resource.
+everything and resource a card.
 
 **It is the second, and the tail is not required for it.** A crossing-only arm
 (`beam-reply/horizon=cross:1,tail:0`) against the shipped bot, `--decisions`, 44 games on the same
@@ -804,7 +804,7 @@ not a check at each crossing site: there were three, and the property has to hol
 is reached.
 
 The rest of the model is settled and not up for rediscovery: the two drawn cards are not read, one is
-assumed banked (the shipped weights put `resource - card` at +2, so banking is always chosen), the cards
+assumed resourced (the shipped weights put `resource - card` at +2, so resourcing is always chosen), the cards
 still leave the deck so the deck-out clock is honest, and the resourcing choice is settled rather than
 offered, since deciding the opponent's would mean reading their hand.
 
@@ -843,7 +843,7 @@ form of that answer available.
 
 **That does not make it deletable, and the reason generalises.** `handValue.test.ts` asserts a lower
 bound: keeping a castable card must beat holding the biggest uncastable bomb in the pool, or the model
-banks its last play. At `canAct` of 0 that bound reduces to `poorest > 0.3 x richest` over the real
+resources its last play. At `canAct` of 0 that bound reduces to `poorest > 0.3 x richest` over the real
 pool, which it does not satisfy, so removing the weight inverts a preference.
 
 Both are true at once: **it changes no decision the bench reaches, and removing it would invert a
@@ -857,16 +857,16 @@ The inert reading and the arithmetic bound describe different populations, so a 
 decides between them rather than more games. `aiHandCanAct.test.ts` builds it from the real pool: the
 poorest castable card beside the richest card three or more resources out of reach.
 
-**At `canAct` of 0 the shipped bot banks its only castable card** and keeps one it cannot play, at a
-two-card hand and again at a five-card hand. At 3 it banks the bomb and keeps the play. The candidate
+**At `canAct` of 0 the shipped bot resources its only castable card** and keeps one it cannot play, at a
+two-card hand and again at a five-card hand. At 3 it resources the bomb and keeps the play. The candidate
 scores are 18.115 against 18.035 at zero and 18.115 against 18.252 at three, so this is a decision and
 not a tie broken by a seed.
 
-**The decision is a public tie**, which is why the term can reach it at all: banking any card leaves
+**The decision is a public tie**, which is why the term can reach it at all: resourcing any card leaves
 hand size and pool identical, so every public term scores both options alike and the squashed hand
 value is the only thing left to order them.
 
-**The position is not rare, and it is not about small hands.** Over the 44 coverage decks, 540 banking
+**The position is not rare, and it is not about small hands.** Over the 44 coverage decks, 540 resourcing
 decisions: exactly one card is castable in **6.7%** of them (7.0% on a `greedy` screen), and 22 of
 those 36 decisions were at a **five-card** hand against 1 at two cards. It is an opening phenomenon:
 **21.6% in round 1**, 11.4% in round 2, and 4 cases in 276 decisions from round 4 on, because
@@ -884,7 +884,7 @@ bound is correct and inert; the lower bound is the one that governs the weight.
 ### Reshaping `reach` does not retire `hand.canAct`
 
 Eleven decay curves over the real pool, at six pool sizes, scoring the share of castable-against-
-stranded card pairs that bank the last play at `canAct` of 0, and the smallest weight that fixes every
+stranded card pairs that resource the last play at `canAct` of 0, and the smallest weight that fixes every
 pair.
 
 | curve | needs the guard | guard must exceed | stranded pairs scoring alike |

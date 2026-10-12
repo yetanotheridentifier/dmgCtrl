@@ -9,9 +9,9 @@ import type { GameState } from '../engine/types'
 /**
  * The resource pool's value, and the concavity experiment that did not pay off (#393 iteration 2).
  *
- * The bot banks a card at EVERY regroup, because banking is a flat public +1 (`resource` 3 minus
+ * The bot resources a card at EVERY regroup, because resourcing is a flat public +1 (`resource` 3 minus
  * `card` 2) however many resources it already holds. Late on that looks wrong: you draw 2 at regroup
- * either way, so banking is "+1 resource against +1 card retained", and once the pool casts what you
+ * either way, so resourcing is "+1 resource against +1 card retained", and once the pool casts what you
  * hold the card should be the better half.
  *
  * The mechanism below implements exactly that and works. It also **lost**, monotonically in how much
@@ -30,7 +30,7 @@ const L = {
 const CONCAVE = { ...DEFAULT_WEIGHTS, resourceSurplus: 1, saturation: 7 }
 const concaveAi = makeGreedyAi(makeEvaluate(CONCAVE))
 
-/** A regroup with `resourceCount` banked already and one card in hand to bank or keep. */
+/** A regroup with `resourceCount` resourced already and one card in hand to resource or keep. */
 function regroup(resourceCount: number, leaderCardId = 'CHEAP_LEADER', deployed = false): GameState {
   return state({
     phase: 'regroup',
@@ -89,19 +89,19 @@ describe('resourceValue', () => {
   })
 })
 
-describe('whether to bank at all, under concave weights', () => {
+describe('whether to resource a card at all, under concave weights', () => {
   const banks = (s: GameState): boolean => concaveAi(s)?.type === 'resourceCard'
 
-  it('banks while below the knee', () => {
+  it('resources a card while below the knee', () => {
     expect(banks(regroup(2))).toBe(true)
     expect(banks(regroup(CONCAVE.saturation - 1))).toBe(true)
   })
 
-  it('stops banking once the pool is saturated', () => {
+  it('stops resourcing once the pool is saturated', () => {
     expect(banks(regroup(CONCAVE.saturation + 2))).toBe(false)
   })
 
-  it('keeps banking past saturation while an expensive leader is still undeployed', () => {
+  it('keeps resourcing past saturation while an expensive leader is still undeployed', () => {
     const pool = CONCAVE.saturation + 2
     expect(banks(regroup(pool, 'BIG_LEADER')), '10-cost leader not yet deployable').toBe(true)
     expect(banks(regroup(pool, 'CHEAP_LEADER')), '5-cost leader, gate long since met').toBe(false)
@@ -139,29 +139,29 @@ describe('the shipped weights keep the pool flat', () => {
  * The sharpest constraint in the whole weight set, and the only one that is a cliff rather than a
  * curve.
  *
- * Banking at regroup swaps a card for a resource, so the sign of that decision is `resource - card`
+ * Resourcing at regroup swaps a card for a resource, so the sign of that decision is `resource - card`
  * and nothing else. A 5x5 grid over both weights (840 games a cell) depends on the DIFFERENCE alone,
  * never on either magnitude:
  *
  * | difference | win rate | behaviour |
  * | --- | --- | --- |
- * | >= 1 | ~50% | banks, and `resource=6,card=0` is no better than `resource=3,card=2` |
- * | 0 | 15.8% | banking is an exact tie, so a coin flip decides it (three cells: 15.7, 16.0, 15.8) |
- * | <= -1 | 1.8% | never banks, never builds a pool (two cells: 1.9, 1.7) |
+ * | >= 1 | ~50% | resources a card, and `resource=6,card=0` is no better than `resource=3,card=2` |
+ * | 0 | 15.8% | resourcing is an exact tie, so a coin flip decides it (three cells: 15.7, 16.0, 15.8) |
+ * | <= -1 | 1.8% | never resources a card, never builds a pool (two cells: 1.9, 1.7) |
  *
  * Losing 98% of games is not a tuning regression, so this is asserted rather than left to a comment.
  * Either weight may be re-tuned freely as long as the gap holds.
  */
-describe('the banking decision: resource must outvalue a card', () => {
+describe('the resourcing decision: resource must outvalue a card', () => {
   it('keeps a strictly positive gap between a resource and a card', () => {
     expect(DEFAULT_WEIGHTS.resource).toBeGreaterThan(DEFAULT_WEIGHTS.card)
   })
 
-  it('and the AI banks, which is what that gap buys', () => {
+  it('and the AI resources a card, which is what that gap buys', () => {
     expect(greedyAi(regroup(4))?.type).toBe('resourceCard')
   })
 
-  it('closing the gap stops it banking, which is the 15.8% failure', () => {
+  it('closing the gap stops it resourcing, which is the 15.8% failure', () => {
     const tied = { ...DEFAULT_WEIGHTS, card: DEFAULT_WEIGHTS.resource }
     expect(makeGreedyAi(makeQuiescent(makeEvaluate(tied)))(regroup(4))?.type).not.toBe('resourceCard')
   })
@@ -175,7 +175,7 @@ describe('the banking decision: resource must outvalue a card', () => {
  * unspent per round late on. The quantity was.
  *
  * The regroup pick is not a choice between two cards. It is the **minimum of the whole hand**, and the
- * expected minimum of six sits well below the expected minimum of two, so the real cost of banking
+ * expected minimum of six sits well below the expected minimum of two, so the real cost of resourcing
  * falls as the hand grows. That is an order statistic rather than a taste curve, which is what the
  * pool knee never had behind it. Measured over 1630 regroup decisions on the shipped bot, hand size
  * runs 2 to 8 with 72% of decisions at 4 or 5.
@@ -226,14 +226,14 @@ describe('the hand is priced concavely: the marginal card is dearer when you hol
 /**
  * The behaviour the term exists to produce, and the failure mode it must not reach.
  *
- * Losing 98% of games is what "never banks" measures, so the early-game guard is asserted as hard as
+ * Losing 98% of games is what "never resources a card" measures, so the early-game guard is asserted as hard as
  * the new behaviour is. A bot that declines a resource in round 2 is the catastrophe whatever its skip
  * rate averages to.
  */
-describe('banking, once the marginal card is priced by scarcity', () => {
+describe('resourcing, once the marginal card is priced by scarcity', () => {
   const banks = (s: GameState, w = SCARCE): boolean => makeGreedyAi(makeEvaluate(w))(s)?.type === 'resourceCard'
 
-  it('still banks from a full hand, which is the early game', () => {
+  it('still resources a card from a full hand, which is the early game', () => {
     expect(banks(handOf(regroup(2), 5)), 'five cards, two resources').toBe(true)
     expect(banks(handOf(regroup(4), 4)), 'four cards, one above the knee').toBe(true)
   })
@@ -250,14 +250,14 @@ describe('banking, once the marginal card is priced by scarcity', () => {
    * precisely when a resource is worth most: below the knee it still buys reach. A small hand is not a
    * reason to decline; a small hand over a pool that has run out of things to buy is.
    */
-  it('banks from a small hand while the pool is still short of the knee', () => {
+  it('resources a card from a small hand while the pool is still short of the knee', () => {
     expect(banks(handOf(regroup(2), 3)), 'three cards, pool of two').toBe(true)
     expect(banks(handOf(regroup(DEFAULT_WEIGHTS.saturation - 1), 2)), 'one short of the knee').toBe(true)
   })
 
   /**
    * The public half decides this, so the squashed hand term cannot reach it either way: the gap is
-   * +2 banking and -1 declining, and the private half spans strictly less than 1.
+   * +2 resourcing and -1 declining, and the private half spans strictly less than 1.
    */
   it('is decided publicly, whatever the hand is worth', () => {
     const s = handOf(regroup(8), 2)
@@ -271,7 +271,7 @@ describe('banking, once the marginal card is priced by scarcity', () => {
  * The threshold `cardScarcity` fires behind is the SAME one that splits the pool, and that one already
  * rises to an undeployed leader's printed cost (CR 2.6.1: the gate is a resource COUNT, controlled
  * rather than spent). So below it the pool is not saturated, the bonus cannot fire, and the bot keeps
- * banking. No second weight is needed to say it.
+ * resourcing. No second weight is needed to say it.
  *
  * That is a finding rather than a design: `deployUrgency` was built as a separate guard rail and
  * measured worth +3.2 points against the ungated driver. Under the conjunction the knee does the same
@@ -281,9 +281,9 @@ describe('banking, once the marginal card is priced by scarcity', () => {
 describe('the leader-deploy gate falls out of the knee', () => {
   const banks = (s: GameState, w = SCARCE): boolean => makeGreedyAi(makeEvaluate(w))(s)?.type === 'resourceCard'
 
-  it('keeps banking below the leader’s cost, from a hand the scarcity bonus would otherwise protect', () => {
+  it('keeps resourcing below the leader’s cost, from a hand the scarcity bonus would otherwise protect', () => {
     // Pool 8 is past the shipped knee of 7, so a DEPLOYED leader here would decline. The 10-cost
-    // leader raises the threshold above the pool, and that alone restores banking.
+    // leader raises the threshold above the pool, and that alone restores resourcing.
     expect(banks(handOf(regroup(8, 'BIG_LEADER'), 2)), '10-cost leader, pool of 8').toBe(true)
     expect(banks(handOf(regroup(8, 'BIG_LEADER', true), 2)), 'same board, leader deployed').toBe(false)
   })

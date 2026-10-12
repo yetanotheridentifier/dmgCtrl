@@ -580,7 +580,7 @@ export interface GameState {
    *    size is modelled; the identities are not. Consumers already skip a hand entry with no
    *    definition, so the placeholders are unplayable and unpriced.
    * 3. **The resourcing choice is not made here at all.** The engine models the mechanical half and
-   *    predicts nothing: whether a seat banks depends on evaluation weights, which are not the
+   *    predicts nothing: whether a seat resources a card depends on evaluation weights, which are not the
    *    engine's to know. `search.ts: settleCrossing` applies the choice for both seats afterwards,
    *    from public quantities alone, which is what keeps the opponent's choice out of their hand.
    */

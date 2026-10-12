@@ -87,11 +87,11 @@ export interface DecisionStat {
 }
 
 /**
- * Whether the AI banks a card at regroup, and at what pool size. Separate from the tie counts
+ * Whether the AI resources a card at regroup, and at what pool size. Separate from the tie counts
  * because this is not a blind spot: it is a strict public preference, so it reads as a behaviour
  * rather than an absence of one.
  *
- * Counts only regroups where there was actually a card to bank. An empty hand leaves `skipResource`
+ * Counts only regroups where there was actually a card to resource. An empty hand leaves `skipResource`
  * as the sole legal move (`legalMoves.ts: regroupPhaseMoves`), and a forced move is not a decision:
  * including those put a few percent of phantom "skips" in the numbers at absurd pool sizes.
  */
@@ -105,7 +105,7 @@ export interface ResourcingStat {
    *
    * A pooled skip rate cannot tell "skips late holding two cards" from "skips at random", and those
    * are opposite readings: the first is the behaviour a threshold term is built to produce, the second
-   * is noise. It is also the guard against the named failure mode, which is banking that stops EARLY
+   * is noise. It is also the guard against the named failure mode, which is resourcing that stops EARLY
    * and which a pooled rate of a dozen percent hides completely.
    *
    * Two one-dimensional breakouts rather than a grid. Round and hand size are correlated but are not
@@ -122,7 +122,7 @@ export interface ResourcingStat {
  * taking a resource, and that trade only pays if the card is eventually played. If the bot routinely
  * reaches the regroup still holding cards it could have cast, then its hand is worth less than
  * `hand.hold` claims, and swapping a card it will not play for a resource it will not spend is the
- * better half whatever the position looks like. That would make always-banking correct **for this
+ * better half whatever the position looks like. That would make always-resourcing correct **for this
  * bot** and make the whole ticket a play-quality problem wearing a resourcing costume.
  *
  * Sampled at the moment the bot **chooses to pass**, which is the sharpest available form of the
@@ -183,7 +183,7 @@ export interface UnspentHandStat {
      *
      * **Flagged, not excluded.** Playing a second copy of a unique forces a mandatory defeat, so some
      * of these are the rules leaving no real choice rather than the bot judging anything. But
-     * replacing a copy can be right: a Sentinel that has already attacked has banked its value, and a
+     * replacing a copy can be right: a Sentinel that has already attacked has delivered its value, and a
      * When Played or When Defeated ability needs bodies to work on. Excluding them would hide a
      * legitimate play, so the reader gets the split and decides.
      */
