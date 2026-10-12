@@ -340,7 +340,7 @@ scores must still turn the pruning off outright, which is what `beamReachesWin` 
 null-move assumption as the beam. `hasLethal` returns whether a line exists; `findLethal` returns the
 move that opens the **shortest** one.
 
-Under that assumption most of the question is closed form. Aggregate ready reach IS a kill, because
+Under that assumption most of the question is closed form. Aggregate ready reach IS lethal, because
 the attacks are taken consecutively while the opponent passes, so `attacksToFinish` settles it by
 counting rather than searching. Search only adds what the board cannot show: the **hand** (a burn
 event, a pump), the **leader** (which deploys ready and is not in `units` until it does), and
@@ -371,7 +371,7 @@ Three properties are worth keeping in mind if it is ever revisited:
 - **Headroom comes from depth, not from budget.** The beam searches three actions, so a solver at
   depth 2 or 3 is looking where the beam already looks and finds almost nothing it misses (1 and 11
   positions against depth 4's 25). Only lines longer than the beam's horizon are worth anything.
-- **It must return the fastest kill, not any kill.** Returning whichever line came first measured
+- **It must return the fastest lethal, not any lethal.** Returning whichever line came first measured
   **47.8%**, losing two points, because a five-action line hands the opponent five chances to answer
   while a two-action line hands them two. This is the same rule the beam's depth discount encodes.
 - **Existence and shortest-line are separate questions.** One full-depth pass answers the first; only
@@ -440,7 +440,7 @@ Public terms, in `ai/evaluate.ts`:
 | `readyUnit` | a light tempo term, flat per ready body |
 | `powerReady` | per point of power on a **ready** unit, **shipped equal to `power`**, see below |
 | `initiative`, `claimCost`, `initiativeExposure` | turn order, see below |
-| `lethalExposure` | handing the opponent a one-action kill, see below |
+| `lethalExposure` | handing the opponent a one-action lethal, see below |
 | `shield` | per Shield token, **shipped at 0**, see below |
 | `roleShift` | how far the role bends the weights, see below |
 
@@ -502,7 +502,7 @@ term ships at **0** and is kept only because it costs nothing measurable (112.18
 
 The likely reason is that a flat per-token weight prices every Shield the same and so buys
 **indiscriminate** strips, when the real value is entirely contextual: large when the strip enables a
-kill this action, nil otherwise. That is the latent-value shape, and a contextual version is the only
+defeat this action, nil otherwise. That is the latent-value shape, and a contextual version is the only
 route worth revisiting. Note also that stripping less often than random is not by itself an error:
 random strips by accident, not because it is right, and an action spent stripping is an action not
 spent elsewhere.
@@ -763,7 +763,7 @@ The bot is measurably blind to it. Claim rate by what the next round actually he
 | **neither (the control)** | **12.3%** | **1,677** |
 
 A chi-square across the four is ~5.9 on 3 df against a 7.8 critical value: **flat**. The bot claims at
-about the same rate whether or not it is about to be killed. The denial case is four times commoner
+about the same rate whether or not it is about to be defeated. The denial case is four times commoner
 than the conversion case, which is the opposite of the intuition that initiative matters most in a
 race.
 
@@ -828,7 +828,7 @@ Three properties keep it from disturbing anything else:
 
 - **It cancels where every move is exposed.** An identical penalty on all candidates leaves the
   ordering untouched, which is why the unavoidable 86% costs nothing and no special case is needed.
-- **It cannot outvote a win.** `WIN` is 1,000,000, so avoiding exposure never declines a kill.
+- **It cannot outvote a win.** `WIN` is 1,000,000, so avoiding exposure never declines a lethal.
 - **The cost is immaterial**: 0.071 ms on a 4.4 ms decision, 1.6%, measured over an identical corpus
   of 2932 real decision states. The predicate is called twice per `publicScore` and quiescence scores
   many candidates per decision, so this was worth checking rather than assuming.
@@ -851,7 +851,7 @@ The same board is good news for the aggressor and bad news for the defender, so 
 which the AI currently is, from **who gets to lethal first**.
 
 The signal is reach, not presence: **board power is not damage that can reach a base**. A control
-player who plays a Sentinel adds one point of power and kills nothing, yet stops the opponent's clock
+player who plays a Sentinel adds one point of power and defeats nothing, yet stops the opponent's clock
 dead. At round 3 the faster clock predicts the winner **68.0%** of the time against 62.0% for the
 board leader, rising to 80.5% by round 5.
 

@@ -138,8 +138,8 @@ describe('playGame', () => {
 
 /**
  * Conceding a certain loss (#537) ends a game early, and must not change who won it: a decided seat
- * has never won, so a concession only removes the actions spent finishing the kill. Played with the
- * greedy AI, since a certain loss assumes an opponent that takes the kill, which a random one does not.
+ * has never won, so a concession only removes the actions spent finishing the lethal. Played with the
+ * greedy AI, since a certain loss assumes an opponent that takes the lethal, which a random one does not.
  */
 describe('playGame with concession', () => {
   const greedy = { ...base, aiPlayer: greedyAi, aiOpponent: greedyAi }

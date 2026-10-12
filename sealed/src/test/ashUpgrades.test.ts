@@ -232,7 +232,7 @@ describe('ASH upgrades — Blade of Talzin (ASH_055)', () => {
       cards: CARDS55,
       players: {
         player: player({ units: [unit('u1', 'NIGHT_U', { upgrades: [{ cardId: 'ASH_055', owner: 'player' }] })] }),
-        opponent: player({ units: [unit('e1', 'BIG')] }), // power 5 → kills the Night unit
+        opponent: player({ units: [unit('e1', 'BIG')] }), // power 5 → defeats the Night unit
       },
     })
     const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } })
@@ -260,7 +260,7 @@ describe('ASH upgrades — token-unit creation', () => {
       cards: { ...CARDS, ASH_134: card({ id: 'ASH_134', type: 'upgrade', power: 0, hp: 0 }) },
       players: {
         player: player({ units: [unit('u1', 'TST_U3', { upgrades: [{ cardId: 'ASH_134', owner: 'player' }] })] }), // hp 1
-        opponent: player({ units: [unit('e1', 'TST_U3')] }), // power 5 → kills u1
+        opponent: player({ units: [unit('e1', 'TST_U3')] }), // power 5 → defeats u1
       },
     })
     const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } })
@@ -276,7 +276,7 @@ describe('ASH upgrades — token-unit creation', () => {
     const s = state({
       players: {
         player: player({ discard: [], units: [unit('t1', 'TOKEN_MANDALORIAN')] }), // 2/2, no shield here
-        opponent: player({ units: [unit('e1', 'TST_U3')] }), // power 5 → kills token (2 hp)
+        opponent: player({ units: [unit('e1', 'TST_U3')] }), // power 5 → defeats token (2 hp)
       },
     })
     const next = resolve(s, { type: 'attack', attackerId: 't1', target: { kind: 'unit', instanceId: 'e1' } })

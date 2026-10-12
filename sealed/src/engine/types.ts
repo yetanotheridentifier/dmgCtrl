@@ -1961,7 +1961,7 @@ type ChoiceVariant =
       // Once the picks are over, however they end, attack with this unit (Hotshot Maneuver).
       thenAttackWith?: string
       // `defeat` is a plain count ("defeat up to 2 enemy units", The Desolation of Hoth), where
-      // `defeatForToken` spends an HP budget and pays a token per kill (Pre Vizsla).
+      // `defeatForToken` spends an HP budget and pays a token per defeat (Pre Vizsla).
       spec: { mode: 'giveAdvantage'; remaining: number } | { mode: 'defeatForToken'; budget: number; token: string } | { mode: 'dealEach'; amount: number; remaining: number } | { mode: 'exhaust'; remaining: number } | { mode: 'defeat'; remaining: number }
     }
 

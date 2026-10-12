@@ -9,7 +9,7 @@ import '../engine/cardDefinitions'
 
 /**
  * Conceding (#537). A seat's loss is **certain** when, in the action phase, every legal move hands the
- * opponent a one-action kill on their turn. Measured before building it: no seat in that position
+ * opponent a one-action lethal on their turn. Measured before building it: no seat in that position
  * has ever won (101 of 101 under greedy, 21 of 21 under beam), where the looser "they could finish"
  * reading let 23% of seats survive.
  *
@@ -33,12 +33,12 @@ const doomed = (): GameState => state({
 })
 
 describe('lossIsCertain', () => {
-  it('is true when every legal move hands them a one-action kill on their turn', () => {
+  it('is true when every legal move hands them a one-action lethal on their turn', () => {
     expect(lossIsCertain(doomed(), 'player')).toBe(true)
   })
 
-  /** One move that removes the threat is enough: BIGUNIT kills the 4 HP KILLER. */
-  it('is false when one move stops the kill', () => {
+  /** One move that removes the threat is enough: BIGUNIT defeats the 4 HP KILLER. */
+  it('is false when one move stops the lethal', () => {
     const s = state({
       cards,
       players: {

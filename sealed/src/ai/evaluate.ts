@@ -101,7 +101,7 @@ export interface EvalWeights {
    * Per Advantage token on an **exhausted** carrier, replacing `advantage` for those.
    *
    * A ready carrier can spend the token this round; an exhausted one readies at regroup, which is a
-   * round away and past the search's horizon, and the opponent gets a turn in between to kill it
+   * round away and past the search's horizon, and the opponent gets a turn in between to defeat it
    * first. Under a pessimistic reply that is what the search assumes will happen.
    *
    * The lethal side needs no help here: `canFinishThisAction` already filters exhausted units out, so
@@ -198,7 +198,7 @@ export interface EvalWeights {
    * the game has left.
    *
    * `reachSteady` already returns zero for a locked attacker, but zero cannot distinguish a lane shut
-   * for the rest of the game from a lane that is simply empty. Without this, killing a blocker is
+   * for the rest of the game from a lane that is simply empty. Without this, defeating a blocker is
    * worth its body and nothing more, and the bot sits behind a shielded Sentinel indefinitely rather
    * than spend two actions clearing it.
    *
@@ -215,7 +215,7 @@ export interface EvalWeights {
    * no weight repairs it.
    *
    * **What the bot is actually being paid to overcome.** Refusing is materially correct: the Shield
-   * absorbs the whole attack so the blocker takes nothing, the counter kills the attacker, and the
+   * absorbs the whole attack so the blocker takes nothing, the counter defeats the attacker, and the
    * board is a body down for a token. Measured at a steady 11 to 12 points across a filed game. The
    * bot is not blind to the Shield, it strips the moment the strip is cheap; what it cannot see is
    * that the lane pays out in later rounds, which is exactly what this quantity supplies.
@@ -289,7 +289,7 @@ export interface EvalWeights {
    *   move, and an identical penalty on every candidate changes no ranking. It discriminates only in
    *   the 18% where a real choice exists, with no special-casing.
    * - **It rewards the answer, not just the retreat.** Playing a Sentinel, exhausting the attacker or
-   *   killing it all make the check false, so those moves score better for free.
+   *   defeating it all make the check false, so those moves score better for free.
    *
    * A weight rather than a prohibition: sometimes every move is exposed, and sometimes accepting it
    * is right. A winning move still scores WIN, so the bot never refuses a win to stay safe.
@@ -834,7 +834,7 @@ export function makePublicScore(w0: EvalWeights): Evaluator {
       ? 0
       : w.blockedReach * (blockedFor(state, foe, w) - blockedFor(state, me, w))
     const initiative = initiativeValue(state, me, w)
-    // Symmetric, so this stays zero-sum: being one action from killing them is worth exactly what
+    // Symmetric, so this stays zero-sum: being one action from defeating them is worth exactly what
     // being one action from death costs.
     const exposure = w.lethalExposure
       * ((canFinishThisAction(state, me) ? 1 : 0) - (canFinishThisAction(state, foe) ? 1 : 0))

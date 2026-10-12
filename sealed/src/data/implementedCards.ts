@@ -365,7 +365,7 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'LAW_018', name: 'Lando Calrissian', front: true, back: true },
   // A leader that flips between two faces instead of deploying: "back" is the Darth Sidious face.
   { id: 'TWI_017', name: 'Chancellor Palpatine', front: true, back: true },
-  // A reward for a kill, tokens spent as damage, and a reveal or a discard from hand.
+  // A reward for a defeat, tokens spent as damage, and a reveal or a discard from hand.
   { id: 'LAW_007', name: 'Boba Fett', front: true, back: true },
   { id: 'LAW_017', name: 'Han Solo', front: true, back: true },
   { id: 'SEC_016', name: 'Padmé Amidala', front: true, back: true },

@@ -221,7 +221,7 @@ describe('token upgrades', () => {
     expect(e1).toBeDefined() // damage prevented → survives
     expect(e1!.damage).toBe(0)
     expect(hasUpgrade(e1!, TOKEN_SHIELD)).toBe(false) // shield consumed
-    expect(next.players.player.units).toHaveLength(0) // counter still kills the 5/1 attacker
+    expect(next.players.player.units).toHaveLength(0) // counter still defeats the 5/1 attacker
   })
 
   it('Advantage boosts the unit’s next attack and is then removed', () => {

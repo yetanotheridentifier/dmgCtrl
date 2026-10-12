@@ -330,7 +330,7 @@ export interface LethalStat {
   theirs: number
   /**
    * The strict readings: a **single action** finishes it. Players alternate, so an aggregate spread
-   * over three units is three attacks with three opponent replies in between, not a kill. One ply
+   * over three units is three attacks with three opponent replies in between, not lethal. One ply
    * can only guarantee the single-action version, so this is the honest denominator.
    */
   oursOneAction: number
@@ -353,7 +353,7 @@ export function classifyExposure(chosenExposed: boolean, anyCandidateSafe: boole
 
 /**
  * One game's share of play after it was decided (#537). A seat is **decided** at the first action-phase
- * decision where every legal move hands the opponent a one-action kill on their turn, the action index
+ * decision where every legal move hands the opponent a one-action lethal on their turn, the action index
  * given per seat (null when it never was).
  *
  * Stricter than an `unavoidable` exposure on purpose. That one asks only whether they *could* finish,
@@ -436,7 +436,7 @@ export interface ExposureStat {
 /**
  * Deploying the leader into a board that answers it (#397, re-homed to #425).
  *
- * #425 claims to **subsume** #397's direct-pinning half: "do not deploy into a board that kills it"
+ * #425 claims to **subsume** #397's direct-pinning half: "do not deploy into a board that defeats it"
  * is exactly what a reply policy computes, so a hand-coded power-versus-HP term would duplicate the
  * search and then need keeping consistent with it. That claim rests on this rate falling, so without
  * the readout #397 would be closed on an argument rather than evidence.
@@ -625,7 +625,7 @@ export interface AdvantageStat {
   /** Of those, tokens the acting seat lost with its own carrier. */
   diedUnspentOurs: number
   /**
-   * Of those, tokens removed by killing the other seat's carrier.
+   * Of those, tokens removed by defeating the other seat's carrier.
    *
    * With `spentDefending`, this is the whole of "did we trade to strip their Advantage". Pooling the
    * two sides would hide the difference between wasting our own tokens and denying theirs, which are
@@ -757,8 +757,8 @@ export interface DenialOutcomeStat {
   /**
    * They could finish THIS round, with what is already ready, before any regroup.
    *
-   * The bucket is built on `reachSteady`, which readies everything first, so it cannot tell "they kill
-   * us next round if we do nothing" from "they kill us before the round is out". The second is not a
+   * The bucket is built on `reachSteady`, which readies everything first, so it cannot tell "they defeat
+   * us next round if we do nothing" from "they defeat us before the round is out". The second is not a
    * denial opportunity at all: turn order next round is irrelevant to a game that ends before the round
    * does. Judging the bot's claim rate without excluding these charges it for declining an option that
    * was never on offer.
@@ -1200,7 +1200,7 @@ export interface AdvantageSpend {
   died: number
   /** Of `died`, those on the ACTING seat's own units: tokens we lost. */
   diedMine: number
-  /** Of `died`, those on the other seat's units: tokens we removed by killing the carrier.
+  /** Of `died`, those on the other seat's units: tokens we removed by defeating the carrier.
    *  With `defending`, this is the whole of "did we trade to strip their Advantage". */
   diedTheirs: number
 }
@@ -1226,7 +1226,7 @@ export function advantageSpend(before: GameState, after: GameState, action: Acti
   for (const [id, before_] of was) {
     if (!alive.has(id)) {
       out.died += before_
-      // Whose token it was, read from the seat that acted: killing THEIR carrier strips it, losing
+      // Whose token it was, read from the seat that acted: defeating THEIR carrier strips it, losing
       // OUR carrier wastes it. The two are opposite outcomes and must not pool.
       if (mine.has(id)) out.diedMine += before_
       else out.diedTheirs += before_
@@ -1589,9 +1589,9 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           // Scored with quiescence, as the greedy driver does, so a tie counted here is a tie there.
           // The half-resolution counts alongside are taken from the RAW state, since they measure how
           // often quiescence has anything to do rather than what it concluded.
-          // Exposure uses the STRICT reading: handing them a kill they can take with one action,
+          // Exposure uses the STRICT reading: handing them a lethal they can take with one action,
           // before we act again. The aggregate reading counts lines needing several of their actions
-          // with several of ours in between, which is a threat rather than a kill, and it inflated
+          // with several of ours in between, which is a threat rather than lethal, and it inflated
           // this measurement threefold.
           return { m, v: score(next, me, asRole), r: classifyResolution(next, me), exposed: canFinishThisAction(next, foe) }
         })
@@ -1787,7 +1787,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
                 // this says whether it mattered.
                 //
                 // `hopeless` uses `canFinishNow` rather than the bucket's `reachSteady`: the bucket
-                // readies everything first, so it cannot tell "they kill us next round" from "they kill
+                // readies everything first, so it cannot tell "they defeat us next round" from "they defeat
                 // us before this round is out", and only the first is a denial opportunity at all.
                 denialWatches.push(openDenialWatch(me, claimed, s.round, {
                   hopeless: canFinishNow(s, foe),

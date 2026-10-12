@@ -714,7 +714,7 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
   const pn = report.pin
   lines.push(
     '',
-    '  offensive pinning: holding a ready unit that would kill their leader on arrival. This is a',
+    '  offensive pinning: holding a ready unit that would defeat their leader on arrival. This is a',
     '  NON-action, so no depth reaches it: the search chooses between actions and this is the value of',
     '  not taking one. "deployed into a pin" decides whether self-play can measure it at all, since a',
     '  bench where the threat is never respected cannot reward holding it.',
@@ -741,7 +741,7 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('spent otherwise', rate(ad.spentOther, Math.max(1, spent))),
     row('died unspent', `${ad.diedUnspent}  (never worth anything, but scored the whole time)`),
     row('  ours, wasted', `${ad.diedUnspentOurs}`),
-    row('  theirs, denied', `${ad.diedUnspentTheirs}  (killed the carrier; with "spent defending",`
+    row('  theirs, denied', `${ad.diedUnspentTheirs}  (defeated the carrier; with "spent defending",`
       + ' this is the whole of trading to strip their Advantage)'),
     row('token grants answered', `${ad.grantChoices}`),
     row('  no preferred recipient', rate(ad.grantChoicesAllEqual, ad.grantChoices)),
@@ -815,7 +815,7 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('loss rate, made none', rate(ex.lostWithoutAvoidable, ex.gamesWithoutAvoidable)),
     '',
     '  decided positions: a seat is decided when, in the action phase, every legal move hands the',
-    '  opponent a one-action kill on their turn. Whether it then lost says whether conceding there',
+    '  opponent a one-action lethal on their turn. Whether it then lost says whether conceding there',
     '  could throw a game away; the actions after it are what stopping a decided game would save.',
     row('seat-games decided', rate(ex.decidedSeats, ex.games * 2)),
     row('  of which lost', rate(ex.lostAfterDecided, ex.decidedSeats)),

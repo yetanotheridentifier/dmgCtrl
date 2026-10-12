@@ -53,7 +53,7 @@ function locked(blocker: string, ourDamage: number): GameState {
 
 describe('the lockout swing', () => {
   /** The gate survives: an answerable blocker is still priced at nothing. */
-  it('is zero when the blocker can simply be killed', () => {
+  it('is zero when the blocker can simply be defeated', () => {
     const open = state({
       cards,
       players: {

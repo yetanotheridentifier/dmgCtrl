@@ -85,7 +85,7 @@ export interface PlayGameOptions {
    * result. It saves little: most decided points fall while the loser is answering a choice of its
    * own, where no offer is made, so greedy self-play concedes about 0.5% of its actions and 48 beam
    * games conceded none, at no measurable cost either way. The coverage sweep turns it off, since
-   * playing the kill out is play it exercises.
+   * playing the lethal out is play it exercises.
    */
   concede?: boolean
 }

@@ -1342,7 +1342,7 @@ risk gate can only fire as often as lethal exists.
 
 **Read the one-action figure, not the aggregate.** `canFinishNow` sums every ready unit, but players
 alternate actions, so three units totalling lethal is three of your actions with three of theirs in
-between: a threat, not a kill. `canFinishThisAction` asks whether a single unit can do it alone,
+between: a threat, not lethal. `canFinishThisAction` asks whether a single unit can do it alone,
 which is the only thing one ply can guarantee, and it is three times rarer.
 
 Current rates over 1260 games:
@@ -1401,7 +1401,7 @@ and the term's actual worth is the +3.8 points its own A/B measured, not the cei
 suggested.
 
 Worth knowing that measuring this with the aggregate predicate gave 7.4% exposure and a 10.5 point
-gap: a threefold higher rate with less than half the effect. Slow threats counted as kills dilute
+gap: a threefold higher rate with less than half the effect. Slow threats counted as defeats dilute
 exactly the signal the measure exists to find.
 
 Both halves are measured from **public** information, so this headroom belongs to a deeper public
@@ -1418,16 +1418,16 @@ Two things to hold onto when reading it:
 ### Decided positions
 
 The same run reports when each seat's game was **decided**: the first action-phase decision where
-every legal move hands the opponent a one-action kill on **their turn** (`lossIsCertain`, tallied by
+every legal move hands the opponent a one-action lethal on **their turn** (`lossIsCertain`, tallied by
 `tallyDecided`). It reports how many seat-games reach one, how many of those the seat then lost,
 whether the opponent acted next and finished, and the share of all actions played after the loser
 was decided. This readout plays every game out, so it can see what follows the decided point.
 
 **Every mode that plays through `playGame` concedes there instead**: the decided seat offers and the
-other accepts, which changes no winner and saves the few actions spent finishing the kill (about
+other accepts, which changes no winner and saves the few actions spent finishing the lethal (about
 0.5% under greedy, none measured under beam: see [experiments.md](experiments.md)). A record of
 such a game ends `offerConcession`, `acceptConcession`. The coverage sweep plays games out
-(`concede: false`), since the kill is play it exercises.
+(`concede: false`), since the lethal is play it exercises.
 
 It is deliberately stricter than an `unavoidable` exposure, which asks only whether the opponent could
 finish and so also counts a move after which the phase ends or we act again. That reading is right for

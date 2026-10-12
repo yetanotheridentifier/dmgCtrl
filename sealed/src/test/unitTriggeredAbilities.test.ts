@@ -92,7 +92,7 @@ function defeat(cardId: string, extra: { playerUnits?: UnitState[]; oppUnits?: U
   return dealDamageToUnit(s, 't', 1)
 }
 
-/** Defeat the player's own `cardId` unit *in combat* (attacking a bruiser that kills it on the counter). */
+/** Defeat the player's own `cardId` unit *in combat* (attacking a bruiser that defeats it on the counter). */
 function defeatInCombat(cardId: string): GameState {
   const c = E[cardId as keyof typeof E]
   const bruiser = c.arena === 'space' ? 'BRUISERSPACE' : 'BRUISERBIG'
@@ -583,7 +583,7 @@ describe('When Attack Ends', () => {
 })
 
 describe('multi-trigger + action abilities', () => {
-  it('Justifier (146): On Attack may deal 1; a kill lets you give Advantage to a unit', () => {
+  it('Justifier (146): On Attack may deal 1; a defeat lets you give Advantage to a unit', () => {
     const s = onAtk('ASH_146', { oppUnits: [unit('weak', 'WEAK', { arena: 'space' }), unit('other', 'FILLERSPACE', { arena: 'space' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamage', amount: 1, optional: true })
     const killed = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId: 'weak' })

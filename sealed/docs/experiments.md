@@ -28,7 +28,7 @@ Rules learned the hard way, each of them from getting it wrong first.
 - **Screen at ~80 games before booking a long run**, with a matched control. It is a disaster filter,
   never evidence of parity.
 - **Measure a lethal or a threat as a single action.** Players alternate actions, so aggregate reach
-  across ready units is an intention the opponent gets several chances to answer, not a kill. Reading
+  across ready units is an intention the opponent gets several chances to answer, not lethal. Reading
   it as aggregate overstated lethal threefold.
 - **A corpus is filled game by game, so a short one is all openings.** A search costing 142.6 ms
   measured 5.8 ms at 30 states; a width whose real effect is 2.7% of decisions measured 0.5% at 200.
@@ -301,7 +301,7 @@ rather than to a belief model.
 
 ### A decided game is lost every time, and stopping it early saves almost nothing
 
-A seat is **decided** when, in the action phase, every legal move hands the opponent a one-action kill
+A seat is **decided** when, in the action phase, every legal move hands the opponent a one-action lethal
 on their turn. Measured over the coverage decks with that reading, pending choices included (the
 `--decisions` readout now reports the narrower `lossIsCertain`, which leaves them out, so it reads
 lower: 14 of 144 seat-games over the same 72 greedy games, all lost):
@@ -446,7 +446,7 @@ the shipped gate and **not one of them held a line**: `had lethal` is 51 either 
 from 59.2% of decisions to 38.2%.
 
 That is a measurement on this card pool rather than a proof. The bound sums printed power, so an
-event that deals damage with none is invisible to it, and the reason it measures safe is that a kill
+event that deals damage with none is invisible to it, and the reason it measures safe is that a lethal
 carried entirely by events does not occur in this corpus. A set with stronger burn would need this
 re-run before the gate could be trusted, and the failure would be silent.
 
@@ -956,7 +956,7 @@ it charges for what it already sees.
   weight 8. Flat then harmful, so no peak exists above zero.
 
   Two lessons worth more than the result. A flat per-token weight buys **indiscriminate strips** when
-  the value is entirely contextual: large when the strip enables a kill this action, nil otherwise.
+  the value is entirely contextual: large when the strip enables a defeat this action, nil otherwise.
   Only a contextual version is worth revisiting. And "worse than random" was an overstatement: random
   strips by accident rather than correctly, so stripping less often than chance is not by itself
   evidence of an error.
@@ -1047,7 +1047,7 @@ it charges for what it already sees.
 
 ### Too rare to measure
 
-- **Offensive pinning.** Holding a ready unit that would kill an enemy leader on deployment is the one
+- **Offensive pinning.** Holding a ready unit that would defeat an enemy leader on deployment is the one
   behaviour no depth reaches, since the value is in *not* acting. It is also far too rare: **17
   decisions in 44 games (0.8%)**, of which the bot spent the pin on 3. Leaders deploy around 7-8 HP and
   most units are power 2-5, so single-unit pins barely exist in this pool. The opponent deploys into a

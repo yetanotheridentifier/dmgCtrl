@@ -31,7 +31,7 @@ import '../engine/cardDefinitions'
 
 const cards = {
   ...CARDS,
-  // 3 power kills the chump on the counter-attack and survives one hit from BIG, so clearing it
+  // 3 power defeats the chump on the counter-attack and survives one hit from BIG, so clearing it
   // genuinely takes two actions and the order of them matters.
   WALL: card({ id: 'WALL', type: 'unit', arena: 'ground', cost: 3, power: 3, hp: 5, keywords: [{ name: 'Sentinel' }] }),
   CHUMP: card({ id: 'CHUMP', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 1 }),
@@ -48,7 +48,7 @@ const cards = {
  * The correct line is **CHUMP first**:
  *
  *   CHUMP -> WALL   the Shield absorbs it, CHUMP dies to the counter, the Shield is gone
- *   BIG   -> WALL   5 damage kills it, BIG takes 3 and survives, the lane is open
+ *   BIG   -> WALL   5 damage defeats it, BIG takes 3 and survives, the lane is open
  *
  * Leading with BIG instead spends the Shield on our best attacker: it takes 3 for nothing, then needs
  * a second attack to finish WALL and dies doing it. Same two actions, and we lose the 5/6 instead of
@@ -148,14 +148,14 @@ describe('the shielded-Sentinel lockout', () => {
    * **Why the bot passes, recorded because every obvious explanation is wrong.**
    *
    * The search values a move by the **max over every board it can reach**. Measured at depth 3 under
-   * `pessimistic`: attack-chump **43.0**, pass **52.0**. Both lines can kill the Sentinel inside
+   * `pessimistic`: attack-chump **43.0**, pass **52.0**. Both lines can defeat the Sentinel inside
    * three actions; the pass line simply does it one action later.
    *
-   *   pass          52 -> they hit our base (-12) -> chump strips, BIG kills WALL (+12) -> 52
+   *   pass          52 -> they hit our base (-12) -> chump strips, BIG defeats WALL (+12) -> 52
    *   attack chump  52 -> lose the chump (-9) -> punished each level -> peaks at 43
    *
    * Acting costs the chump now, and **opening the lane is worth nothing inside the horizon**: BIG
-   * exhausts killing the Sentinel, so no base damage lands before the search ends. Within three
+   * exhausts defeating the Sentinel, so no base damage lands before the search ends. Within three
    * actions the bot is right that hurrying gains nothing. It cannot see that the lane stays shut for
    * the rest of the game.
    *
@@ -316,7 +316,7 @@ describe('the shielded-Sentinel lockout', () => {
   })
 
   /** And having stripped it, it finishes the job rather than wandering off. */
-  it('kills the Sentinel once the Shield is down', () => {
+  it('defeats the Sentinel once the Shield is down', () => {
     const stripped = resolve(lockout(), attackWith('chump') as never)
     // Hand the turn back to us; the opponent passing is the null move the search already assumes.
     const ours = stripped.activePlayer === 'player' ? stripped : resolve(stripped, { type: 'pass' })

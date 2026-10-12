@@ -10,7 +10,7 @@ import type { GameState, UnitState } from '../engine/types'
  * The obvious role signal is board advantage, and it does not work. Measured over 132 games, the
  * side ahead on units/power/HP at round 3 went on to win **49.2%** of the time, which is no signal
  * at all. The reason is the point of this model: **board power is not damage that can reach a
- * base**. A control player who puts up a Sentinel adds no power and kills nothing, but lengthens the
+ * base**. A control player who puts up a Sentinel adds no power and defeats nothing, but lengthens the
  * opponent's clock immediately.
  *
  * So reach is computed through `enemyAttackTargets`, the same function the rules use to decide what
@@ -167,7 +167,7 @@ describe('role: who is the beatdown', () => {
 
   /**
    * THE case board advantage gets wrong, and the reason this model exists. Adding a Sentinel adds
-   * almost no board power and kills nothing, but it stops the opponent's clock dead.
+   * almost no board power and defeats nothing, but it stops the opponent's clock dead.
    */
   it('flips on a Sentinel that changes no board power worth speaking of', () => {
     const racing = board([unit('a', 'GRUNT'), unit('b', 'GRUNT')], [unit('c', 'GRUNT')])

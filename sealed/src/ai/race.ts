@@ -16,7 +16,7 @@ import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
  * time. That is not a weak signal, it is no signal.
  *
  * The reason is the whole point of this module: **board power is not damage that can reach a base.**
- * A control player who plays a Sentinel adds one point of power and kills nothing, yet stops the
+ * A control player who plays a Sentinel adds one point of power and defeats nothing, yet stops the
  * opponent's clock dead. Board advantage cannot see that. The race can, and that is the shape
  * "Who's the Beatdown" is actually about.
  *
@@ -260,7 +260,7 @@ export function remainingBase(state: GameState, seat: PlayerId): number {
  *
  * Strictly stronger than `canFinishNow`, and the difference is not a detail. Players alternate
  * actions, so attacking with three units costs three of your actions with three of theirs in
- * between: an aggregate reach of 12 against a 12 HP base is not a kill, it is an intention the
+ * between: an aggregate reach of 12 against a 12 HP base is not lethal, it is an intention the
  * opponent gets three chances to answer.
  *
  * One ply can only ever guarantee this version (see `takesLethal.test.ts`), so it is the honest
@@ -290,14 +290,14 @@ export function canFinishThisAction(state: GameState, seat: PlayerId): boolean {
 
 /**
  * Whether `seat`'s loss is certain: it is the one to act in the action phase, nothing is pending, and
- * every legal move hands the opponent a one-action kill on **their** turn.
+ * every legal move hands the opponent a one-action lethal on **their** turn.
  *
  * Measured before it was used: no seat in this position has gone on to win (101 of 101 under
  * greedy, 21 of 21 under beam). The looser reading, that they *could* finish after our move, also
  * counts moves after which the phase ends or we act again, and 23% of seats it flags survive.
  *
- * Gated on the opponent already holding a one-action kill. The gate is exact rather than a shortcut:
- * passing is always among our moves and leaves the board as it is, so without a kill now there is a
+ * Gated on the opponent already holding a one-action lethal. The gate is exact rather than a shortcut:
+ * passing is always among our moves and leaves the board as it is, so without a lethal now there is a
  * move that does not hand them one. It saves resolving every move in the ~98% of positions without.
  */
 export function lossIsCertain(state: GameState, seat: PlayerId): boolean {

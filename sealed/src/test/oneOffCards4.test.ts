@@ -22,7 +22,7 @@ import type { Action } from '../engine/actions'
 import type { EngineCard, GameState, LeaderState, PendingChoice, PhaseEvents, PlayerId, UnitState } from '../engine/types'
 
 /**
- * The cards no other group owned: two leaders that reward a kill or spend tokens (Boba Fett, Han
+ * The cards no other group owned: two leaders that reward a defeat or spend tokens (Boba Fett, Han
  * Solo), a leader that hears a reveal as well as a discard (Padmé Amidala), the highest-cost enemy
  * defeated (Dengar), a capture by every friendly unit (Let's Talk), damage dealt to a unit that may
  * not survive it (The Elite Squad), a trait lost for the phase (Nameless Terror), a Bounty beside a

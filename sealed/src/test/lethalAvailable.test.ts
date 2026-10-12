@@ -72,7 +72,7 @@ describe('canFinishNow', () => {
 /**
  * The stricter reading, and the one that matches what the AI can actually do.
  *
- * Players alternate actions, so an aggregate reach of 8 spread over two units is not a kill: it is
+ * Players alternate actions, so an aggregate reach of 8 spread over two units is not lethal: it is
  * two attacks with an opponent action in between, and they get to answer. `canFinishNow` sums ready
  * units and therefore **over-counts** exactly this case; `canFinishThisAction` asks whether one unit
  * can do it alone, which is the only thing one ply can guarantee.

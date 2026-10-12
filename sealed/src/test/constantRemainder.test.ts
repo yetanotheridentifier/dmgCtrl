@@ -216,7 +216,7 @@ describe('combat-conditional keywords and attack variants', () => {
     expect(unitDealsDamageFirst(s, U(s, 'a'), { defender: U(s, 'd') })).toBe(true)
     const after = attack(s, 'mate', 'd')
     expect(unitDealsDamageFirst(after, U(after, 'a'), { defender: U(after, 'd') })).toBe(false)
-    // Its own attack does not disqualify it: "no OTHER units". 3 power kills the 1/2 before it
+    // Its own attack does not disqualify it: "no OTHER units". 3 power defeats the 1/2 before it
     // strikes back, which is what dealing damage first buys.
     const solo = attack(s, 'a', 'small')
     expect(solo.players.opponent.units.some(u => u.instanceId === 'small')).toBe(false)
@@ -393,7 +393,7 @@ describe('damage prevention', () => {
   })
 
   it('Cassian Andor (SEC_042) prevents 2 damage from an enemy card ability, but not combat damage', () => {
-    // He is printed 2/2, so the unprevented instances are 1 damage: enough to land, not to kill him.
+    // He is printed 2/2, so the unprevented instances are 1 damage: enough to land, not to defeat him.
     const s = board([unit('c', 'SEC_042')])
     expect(U(damage(s, 'c', 2, { source: { cardId: 'GRD', controller: 'opponent' } }), 'c').damage).toBe(0)
     expect(U(damage(s, 'c', 1, { source: { cardId: 'GRD', controller: 'player' } }), 'c').damage).toBe(1)

@@ -79,7 +79,7 @@ describe('deploying an expensive body', () => {
   })
 
   /**
-   * The interesting case. Three 2/2s can gang up for 6 and kill a 6/6, so a pessimistic reply may
+   * The interesting case. Three 2/2s can gang up for 6 and defeat a 6/6, so a pessimistic reply may
    * value the deployment at a loss. Whether declining here is right is a judgement; whether the bot
    * can see the trade at all is what this pins.
    */

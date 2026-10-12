@@ -13,7 +13,7 @@ import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState } from '
  * The events #453 left out, in the two groups this batch takes whole:
  *
  * - **Defeating several units as one event**: five cards whose wipe has to be ONE event, so the
- *   whenDefeated abilities of everything it kills form a single batch (CR 1.9.10). Looping
+ *   whenDefeated abilities of everything it defeats form a single batch (CR 1.9.10). Looping
  *   `defeatUnit` gives each defeat its own batch instead, which is the defect these guard.
  * - **TS26 and IBH**: the two sets under the 200-card sealed minimum. `--sweep` refuses them, so
  *   these tests are the ONLY coverage those 28 cards have — there is no play-coverage evidence to

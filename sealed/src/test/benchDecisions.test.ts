@@ -576,7 +576,7 @@ describe('runDecisions', () => {
   })
 
   /**
-   * #425 claims to subsume #397's direct pinning: "do not deploy into a board that kills it" is what
+   * #425 claims to subsume #397's direct pinning: "do not deploy into a board that defeats it" is what
    * a reply policy computes, so the hand-coded term should not be built. That claim rests on this
    * rate falling, and without the readout #397 would be closed on an argument rather than evidence.
    */
@@ -828,7 +828,7 @@ describe('optionalTriggerSplit', () => {
 })
 
 /**
- * Offensive pinning (#397): are we holding a unit that would kill their leader if it deployed?
+ * Offensive pinning (#397): are we holding a unit that would defeat their leader if it deployed?
  *
  * A leader deploys into the **ground** arena, ready and undamaged (CR 3.4.4), so the threat is any
  * ready ground unit of ours whose power covers the leader's deployed HP. This is the piece no search
@@ -923,7 +923,7 @@ describe('advantageSpend', () => {
   /**
    * A token that leaves play on a defeated unit was pure phantom value: never spent, never useful.
    *
-   * **Split by side**, because the two are opposite outcomes: killing their carrier denies them the
+   * **Split by side**, because the two are opposite outcomes: defeating their carrier denies them the
    * tokens, losing ours wastes them. `player` acts by default in the fixture, so a defeated
    * `opponent` carrier is a denial.
    */
