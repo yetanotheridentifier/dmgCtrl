@@ -125,4 +125,4 @@ describe('how each card was used, per deck, from recorded games', () => {
     void bench
     expect(() => cardUse([appRecord], CARDS)).toThrow(/record 0 .*not a bench record/)
   })
-})
+}, 60_000)

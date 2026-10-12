@@ -246,6 +246,8 @@ Everything is optional:
 
 - `--games N` how many games to play (default 100).
 - `--seed N` the run's seed (default 1). The same seed reproduces the run exactly.
+- `--record` keep every completed game as a replayable record. Off by default. See "Recording games"
+  below.
 - `aiA aiB` the two AIs by name (default `random random`). `aiA` plays the "player" seat, `aiB` the
   "opponent" seat. Registered AIs:
   - `random` rung 0, uniform.
@@ -1675,6 +1677,118 @@ FROM matchups a JOIN matchups b ON a.deck_a = b.deck_a AND a.deck_b = b.deck_b
 WHERE a.run_id = ? AND b.run_id = ? GROUP BY a.deck_a ORDER BY delta;
 ```
 
+## Recording games: `--record`
+
+```bash
+npm run bench --prefix sealed -- --record --shard 12 --games 800 --seed 4880 --decks coverage beam-reply beam-reply
+```
+
+With `--record`, the head-to-head run writes **every completed game as a record**: the starting
+position without its card database, plus every move. That is the replayable minimum, in the shape the
+app exports its saved games in, so everything else about the game is derived by replaying it and
+`--rows` reads a records file as it stands (next section). Off by default, and a run without it does
+and writes exactly what it always did.
+
+It is a choice on the head-to-head run, alone or with `--shard` and `--control`. Every other mode
+refuses the flag at parse time: they play their games through their own loops and hand them to no
+recorder.
+
+**Where records go.** One file per seed, under `bench-results/records/`:
+
+```
+bench-results/records/<commit>/<aiA>__vs__<aiB>__g<games>__s<seed>[__d<decks>].json
+```
+
+- **A shard is a seed, so each shard writes its own file** and a dozen can record at once. The
+  control of an A/B is the baseline against itself, which is a different pair of bots, so it has its
+  own files too. `--games` is per shard, so it is per file.
+- **The build leads the path** because it is part of what the games are: another build's bots play
+  the same seed differently, and its games are different data, not a newer copy to write over.
+- **A file appears only when its run finishes.** It is written beside itself as `.partial`, a game at
+  a time, and renamed at the end, so a run holds one game in memory however long it is and a run that
+  died leaves nothing that reads as finished. A shard that dies is played again from its first game,
+  so its half-written file is worth nothing.
+- **A banked shard records nothing.** Resuming a sharded run skips the shards already on disk, so
+  adding `--record` to a run that was played without it writes no files for them. The run names the
+  seeds with no records and says how to play them again.
+- A dropped game is not recorded. It has its own fixture under `bench-results/failures/` (see "When a
+  game is dropped"), and no result for a row to carry.
+
+Each file is one export: `{ formatVersion, build, records }`. A record holds:
+
+| Field | Meaning |
+| --- | --- |
+| `playerDeckName`, `opponentDeckName` | the deck on each seat, by the name the bench built it under. Generated decks share names, so the list itself is read from `initialState` |
+| `winner` | `player`, `opponent` or `draw` |
+| `startedAt`, `endedAt` | both 0. A bench game has no clock in it, which is what makes the same seed, decks and bots give the same bytes twice |
+| `moves` | every move, each with the seat that made it |
+| `build` | the release and commit that played the game |
+| `bench.ais` | the bot on each seat, `{ player, opponent }`, exactly as the run was given it, suffixes included. Seats swap from game to game, so this is the game's and not the run's |
+| `bench.seed` | the seed this game was dealt and played from |
+| `bench.runSeed`, `bench.game`, `bench.decks` | the run's `--seed`, which of its games this was from zero, and its `--decks` |
+| `initialState` | the starting position without its card database |
+
+A bench record has no `opponentAi`, `humanSeat` or `undoCount`: those describe a game one person
+played. The `bench` field is never part of what the app sends for a player's game, which is a list of
+named fields that does not include it.
+
+**Records are kept and rows are derived.** Measured over 120 recorded coverage-deck games (40 of
+`beam-reply` against `greedy`, and 80 of `beam-reply` against itself as four shards of 20): **7.5 KB
+a record** (904,848 bytes in all, and gzip takes a file to about 5% of that), against 268 KB for the
+same game's rows, some 36 times as much. So a thousand games is about 7.5 MB of records, and their
+rows are made when wanted, in about a second per hundred games. All 120 replayed to their recorded
+winner.
+
+One file per seed keeps a file to its shard's games: 800 games is about 6 MB. `--rows` reads a file
+whole, so a single file is the unit to keep moderate, and a long run is sharded anyway. A JSON Lines
+file of records was the alternative and was not chosen: the export shape is the one the row tool and
+the replay harness already read, and a shard that dies is replayed whole, so being able to append to
+a file across attempts would buy nothing.
+
+**Recording does not change a run.** The same 40 games with and without `--record` gave the same
+report line for line (win rate, turn-order split, margin, 3,327 moves), in 708s against 705s run side
+by side: 0.4% apart on one run each, which is not a measured cost. The recorder's work is one file
+append per game.
+
+**Know which bot you are reading.** `ai` on a row and `bench.ais` on a record name the seat's bot, and
+two things follow for anything that learns from them:
+
+- **`beam-reply` chooses its move with the opponent's real hand in view.** Its reply model lists the
+  opponent's replies from the real state, so it plays around cards it could not have seen: over 158
+  positions its move changed in 12 when the opponent's hand was swapped for other cards, and in none
+  when only their deck order changed. `greedy` searches no reply and changed in none. A model that
+  imitates `beam-reply` from mover's-view rows is copying decisions partly made with hidden
+  information, and each record names its bots so a reader can filter on that.
+- **A bot does not choose every move made from its seat.** The setup phase (the mulligan and the
+  opening resources) and an offer to concede come from the driver every bot plays under, and the
+  bench accepts an offer on the other seat's behalf. Those rows carry the seat's bot name all the same.
+
+### Asking a question of the records
+
+Because a record replays to every position of its game, a question about how the bots played needs no
+counter written into the run for it. `cardUse` (`bench/cardUse.ts`) is one such question, and the
+pattern for the next: **for each bot, each deck it sat and each card, how many times the card was
+played, and in how many games it was legally playable when its holder chose to pass instead.**
+
+| Field | Meaning |
+| --- | --- |
+| `ai` | the bot that held the card |
+| `deck` | its name, leader, base and a short hash of the list, which is what tells two generated decks of one name apart |
+| `cardId`, `name` | the card |
+| `games` | games this bot sat this deck |
+| `played` | times the card was played from hand |
+| `declined` | occasions it was playable at a chosen pass. A card held through three such passes is three |
+| `gamesDeclined` | games with at least one such occasion |
+
+A card held back in many games and played in none is one that bot cannot use under that deck; held
+back and also played, it is being kept for its moment. Playability is read off the engine's legal
+moves and never off cost, and a forced pass counts for nothing, exactly as in the decision
+diagnostic's table of declined plays ("Decision quality"), which shares the predicate. That table is
+one aggregate over a run; this one has the deck in it.
+
+It is a function over parsed records and a card database (`trainingCardDb()`), with no bench mode in
+front of it: a caller reads the files and calls it.
+
 ## Training rows: exported games as model input
 
 ```bash
@@ -1682,7 +1796,8 @@ npm run bench --prefix sealed -- --rows EXPORT.json [EXPORT.json ...] --out ROWS
 ```
 
 Takes the files `__sealedExportGames()` downloads (see "Exporting game records" in
-[operations.md](operations.md)), replays every record through the resolver, and writes **one row per
+[operations.md](operations.md)), or the files a `--record` run writes, replays every record through
+the resolver, and writes **one row per
 recorded move** to `--out` as JSON Lines: a JSON object to a line, in game order and then move order.
 `--out` is required and is written afresh on each run, so the file holds exactly its inputs' rows. As
 with `npm run tune`, prefer absolute paths: `npm run --prefix sealed` runs with `sealed/` as the
@@ -1697,16 +1812,19 @@ One row shape serves both uses. Imitation reads `state` and `action`; value lear
 | `gameKey` | groups a game's rows: a hash of the record's starting position and moves |
 | `moveIndex`, `moveCount` | which of the game's moves this is, from zero, and how many there were |
 | `mover` | the seat that made the move, `player` or `opponent` |
-| `decidedBy` | `human` when the mover is the record's `humanSeat`, `ai` when it is the other seat, `unknown` when the record has no `humanSeat` |
+| `decidedBy` | `human` when the mover is the record's `humanSeat`, `ai` when it is the other seat, `unknown` when the record has no `humanSeat`. Always `ai` on a game the bench recorded, where a bot sat at both seats |
 | `outcome` | `win`, `loss` or `draw`, **from the mover's side** |
 | `information` | which view `state` is: `full`, or `mover` with `--view mover`. See below |
 | `build`, `opponentAi`, `humanSeat`, `undoCount` | the record's provenance as exported, each left out when the record never had it |
+| `ai`, `deck`, `bench` | only on a game the bench recorded: the bot that sat where the move was made, the name of the deck it played, and the record's `bench` field whole. See "Recording games" |
 | `action` | the move that was made |
 | `chosenIndex`, `legalMoves` | only with `--legal`: every move the engine offered in the position, and where `action` is in that list |
 | `state` | the position the move was made in, in the row's view: the engine's game state without its card database |
 
-So a corpus splits by who decided (`decidedBy`), by which bot (`opponentAi`) and by which build played
-the game, and a game played with take-backs can be told from one played straight through (`undoCount`).
+So a corpus splits by who decided (`decidedBy`), by which bot (`opponentAi` in a person's game, `ai`
+in a bench game) and by which build played the game, and a game played with take-backs can be told
+from one played straight through (`undoCount`). The rows of a person's game are the same whether or
+not bench games exist: the three bench fields are absent from them, not empty.
 
 ### The two views of a state
 
@@ -1766,7 +1884,9 @@ reader's job, as is not reading `outcome` as something the mover knew.
 bundled set, so joining it back on says nothing about either deck.
 
 The bot does not use this view. Its evaluation reads only its own hand and no deck (see "The two
-halves of `evaluate`" in [ai-model.md](ai-model.md)).
+halves of `evaluate`" in [ai-model.md](ai-model.md)), but `beam-reply`'s reply model lists the
+opponent's replies from the real state, their hand included (see "Know which bot you are reading"
+under "Recording games").
 
 **No features are derived.** No model is chosen, so the row keeps the engine's own state and whatever a
 model needs is computed from it later. A reader that needs card data joins it back on with
@@ -1958,6 +2078,13 @@ eight of eighteen modules were missing.
   own bands plus the gap between them, banded by Newcombe's square-and-add.
 - `bench/store.ts` the SQLite persistence: runs, games, matrix cells, experiments and term runs.
 - `bench/reports.ts` writing a dropped game out as a replayable fixture.
+- `bench/records.ts` completed games as records, behind `--record`: the record of one game
+  (`benchRecord`), where a run's file goes (`recordsPath`), the writer that appends a game at a time
+  and renames the file when the run ends, and which shards of a resumed run have no file. A recorder
+  is a callback `runBench` hands each completed game, and this is the one there is.
+- `bench/cardUse.ts` a question asked of recorded games by replaying them: per bot, deck and card,
+  plays and declined plays. Also owns the two predicates it shares with `decisions.ts` (a move that
+  plays a card, and the hand positions the legal moves let a seat play from).
 
 ### Everything else
 

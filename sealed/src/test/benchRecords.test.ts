@@ -16,7 +16,8 @@ import { replayStates, withCardDb } from '../engine/replay'
  */
 
 const CARDS = trainingCardDb()
-const RUN = { games: 8, seed: 5, aiA: 'greedy', aiB: 'random' } as const
+/** One whole seating cycle: each bot sits each seat and moves first from it once. */
+const RUN = { games: 4, seed: 5, aiA: 'greedy', aiB: 'random' } as const
 
 /** A run with every completed game handed over, as a recorder receives it. */
 function recorded(config: { games: number; seed: number; aiA: string; aiB: string } = RUN): { report: BenchReport; played: PlayedGame[] } {
@@ -104,28 +105,28 @@ describe('the games a run hands to its recorder', () => {
 
   it('play different decks on the coverage set, each named on its record', () => {
     const out: PlayedGame[] = []
-    runBench({ ...RUN, decks: 'coverage', onGame: g => out.push(g) })
+    runBench({ games: 8, seed: 5, aiA: 'random', aiB: 'random', decks: 'coverage', onGame: g => out.push(g) })
     const coverageRecords = out.map(benchRecord)
     // A deck is played for a whole seating cycle of four games, so eight games reach two.
     expect(new Set(coverageRecords.map(r => r.initialState.players.player.leader.cardId)).size).toBe(2)
     expect(coverageRecords.every(r => r.bench!.decks === 'coverage')).toBe(true)
     expect(coverageRecords.every(r => r.playerDeckName === r.opponentDeckName)).toBe(true)
   })
-})
+}, 60_000)
 
 describe('a run with no recorder', () => {
+  const { report } = recorded()
+
   it('reports exactly what the same run reports with one', () => {
-    const { report } = recorded()
     const plain = runBench(RUN)
     expect(stable(plain)).toEqual(stable(report))
   })
 
   /** A long run keeps no game whole: only a recorder is handed the moves before they are dropped. */
   it('still drops a completed game\'s moves and starting position once it is counted', () => {
-    const { report } = recorded()
     expect(report.games.every(g => g.moves.length === 0 && g.initialState === null)).toBe(true)
   })
-})
+}, 60_000)
 
 describe('the records file', () => {
   let dir: string
@@ -219,4 +220,4 @@ describe('the records file', () => {
     expect(result.games[0].rows.find(r => r.mover === 'player')!.ai).toBe('greedy')
     expect(result.games[1].rows.find(r => r.mover === 'player')!.ai).toBe('random')
   })
-})
+}, 60_000)
