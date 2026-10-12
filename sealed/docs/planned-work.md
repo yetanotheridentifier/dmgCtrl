@@ -114,9 +114,15 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
   sent game cannot be found and deleted). #821 chooses where records live for the long term, with
   the schema, retention and deduplication; rows carry a key made from the game itself, which is what
   it can deduplicate on.
-  **Before a model imitates from the rows, it needs the mover's view of a state**: a row holds both
-  hands and both decks, and nothing yet projects a state down to what one seat could see. Not
-  ticketed; it belongs with the first model that reads the rows.
+  Rows come in the whole state or the mover's view of it (`--view mover`), which is the one to
+  imitate from.
+  **Deferred: what a seat learned during the game.** The mover's view is made from one state, which
+  records where cards are and not who has been shown them, so it hides a card the mover looked at,
+  searched past or put on the bottom of a deck, a unit it watched return to a hand, and a hand it is
+  looking at through a choice of its own. Giving those back means following knowledge through the
+  replay: an identity for each hidden card (hands and decks hold bare card ids, so two copies cannot
+  be told apart), and a rule for every effect that shows, moves or shuffles one. Not ticketed; worth
+  sizing against how often it happens in real games before building it.
 
 ## The card programme (second stream)
 

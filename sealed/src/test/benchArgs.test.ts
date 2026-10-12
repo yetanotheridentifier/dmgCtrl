@@ -203,6 +203,17 @@ describe('bench argument parsing', () => {
       expect(parseArgs(['--rows', 'one.json', '--out', 'rows.jsonl', '--legal']).legal).toBe(true)
     })
 
+    it('writes the whole state unless asked for the mover\'s view of it', () => {
+      expect(parseArgs(['--rows', 'one.json', '--out', 'rows.jsonl']).view).toBe('full')
+      expect(parseArgs(['--rows', 'one.json', '--out', 'rows.jsonl', '--view', 'full']).view).toBe('full')
+      expect(parseArgs(['--rows', 'one.json', '--out', 'rows.jsonl', '--view', 'mover']).view).toBe('mover')
+    })
+
+    it('refuses a view it does not have', () => {
+      expect(() => parseArgs(['--rows', 'one.json', '--out', 'rows.jsonl', '--view', 'opponent'])).toThrow('--view must be full or mover, got "opponent"')
+      expect(() => parseArgs(['--rows', 'one.json', '--out', 'rows.jsonl', '--view'])).toThrow('--view must be full or mover')
+    })
+
     it('needs at least one export file', () => {
       expect(() => parseArgs(['--rows', '--out', 'rows.jsonl'])).toThrow('--rows needs at least one export file')
     })
