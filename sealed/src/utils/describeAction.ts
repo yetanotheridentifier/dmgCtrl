@@ -1,5 +1,5 @@
 import type { Action } from '../engine/actions'
-import type { GameState, PlayerId } from '../engine/types'
+import type { GameState, PendingChoice, PlayerId } from '../engine/types'
 import { opponentOf, activeChoice, findChoice } from '../engine/types'
 import { effectiveCost, playFromCost, smuggleTerms } from '../engine/legalMoves'
 import { getCardDefinition } from '../engine/abilities'
@@ -100,15 +100,71 @@ export function describeActionParts(state: GameState, by: PlayerId, action: Acti
       const ref = handCardRef(state, by, action.handIndex)
       return ref ? ['Resource ', ref] : plain()
     }
+    case 'acceptChoice': {
+      // The plain line already names the card; this only turns that name into a reference.
+      const shown = shownCard(state, by, action)
+      const [text] = plain()
+      const at = shown ? text.indexOf(shown.text) : -1
+      if (!shown || at === -1) return [text]
+      return [text.slice(0, at), shown, text.slice(at + shown.text.length)].filter(p => p !== '')
+    }
     default:
       return plain()
   }
 }
 
+type SearchDraw = Extract<PendingChoice, { kind: 'searchDraw' }>
+
+/**
+ * Whether the card a search takes is shown to both players. A search for a kind of card reveals
+ * what it finds ("search for a unit, reveal it, and draw it") and a search for any card does not
+ * ("search for a card and draw it"), and the choice records only which of the cards looked at were
+ * eligible. So a pick counts as revealed when some card looked at was NOT eligible, which only a
+ * search for a kind of card can produce. This errs towards hiding: a search for a kind that every
+ * card looked at happened to match reads as private. A card resourced out of a search is face
+ * down, and one discarded out of it is in a discard pile for all to see.
+ */
+function searchRevealsPick(choice: SearchDraw): boolean {
+  if (choice.discardIt) return true
+  return !choice.resourceIt && choice.eligibleIndices.length < choice.revealed.length
+}
+
+/**
+ * The card an answer to a choice makes public by revealing or discarding it, for the log to link.
+ * Nothing in the state records a reveal, so the choice and its answer are the only place it can be
+ * read. Only answers that put the card in front of both players belong here: a reference shows the
+ * card on hover, whatever the text around it says.
+ */
+function shownCard(state: GameState, by: PlayerId, action: Extract<Action, { type: 'acceptChoice' }>): Exclude<DescribePart, string> | undefined {
+  const choice = findChoice(state, action.choiceId)
+  if (!choice) return undefined
+  const ref = (cardId: string | undefined, controller: PlayerId) =>
+    (cardId ? { cardId, controller, text: state.cards[cardId]?.name ?? cardId } : undefined)
+  const fromHand = (owner: PlayerId) => (action.handIndex === undefined ? undefined : ref(state.players[owner].hand[action.handIndex], owner))
+  const fromSearch = (revealed: string[]) => (action.deckIndex === undefined ? undefined : ref(revealed[action.deckIndex], choice.controller))
+  switch (choice.kind) {
+    case 'revealUnitFromHand':
+    case 'selectDiscard':
+    case 'discardOrDamage':
+      return fromHand(by)
+    case 'lookAtHand':
+      return fromHand(choice.target)
+    case 'mayDiscardTop':
+      return ref(choice.cardId, choice.deck)
+    case 'search':
+      return fromSearch(choice.revealed)
+    case 'searchDraw':
+      return searchRevealsPick(choice) ? fromSearch(choice.revealed) : undefined
+    default:
+      return undefined
+  }
+}
+
 export interface DescribeOptions {
   /**
-   * Hide hidden information (CR 1.17): which card an opponent resources is
-   * private, so log entries for the other player's resource picks are redacted.
+   * Hide hidden information (CR 1.17) in a line the other player will read. A card that goes from
+   * one hidden zone to another is not named: a resource pick, a card resourced or put on a deck out
+   * of a hand, and a card a search takes without revealing it (`searchRevealsPick`).
    */
   redact?: boolean
 }
@@ -270,6 +326,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return `Discard ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
       }
       if (choice.kind === 'searchDraw' && action.deckIndex !== undefined) {
+        if (opts.redact && !searchRevealsPick(choice)) return choice.resourceIt ? 'Resource a card' : 'Draw a card'
         const cardId = choice.revealed[action.deckIndex]
         return `${choice.resourceIt ? 'Resource' : 'Draw'} ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
       }
@@ -379,6 +436,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return `Attach ${state.cards[choice.cardId]?.name ?? choice.cardId} to ${target ?? 'unit'}`
       }
       if (choice.kind === 'mayResourceFromHand') {
+        if (opts.redact) return 'Resource a card'
         const cardId = action.handIndex !== undefined ? state.players[by].hand[action.handIndex] : undefined
         return `Resource ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
       }
@@ -451,6 +509,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'choosePlayerThen') return (action.optionIndex ?? 0) === 1 ? 'Choose yourself' : 'Choose your opponent'
       if (choice.kind === 'chooseArenaThen') return (action.optionIndex ?? 0) === 1 ? 'Space arena' : 'Ground arena'
       if (choice.kind === 'selectHandCardThen') {
+        // Where the card goes is the card's own business (a discard, a play, the top of a deck, a
+        // resource), so the pick is not named to the other player. A discard or a play is public
+        // and shows in what the action changed.
+        if (opts.redact) return 'Choose a card'
         const cardId = action.handIndex !== undefined ? state.players[by].hand[action.handIndex] : undefined
         return `Choose ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
       }
