@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import DeckSelectScreen from './components/deckSelectScreen'
 import GameScreen from './components/gameScreen'
 import { HelpOverlay } from './components/helpOverlay'
@@ -7,6 +7,7 @@ import { ShareGamesNotice, ShareGamesPill } from './components/shareGamesNotice'
 import { GearIcon, HelpIcon } from './components/icons'
 import { SettingsProvider, useSettings } from './hooks/useSettings'
 import type { SavedDeck } from './data/deckStore'
+import { retryPendingCollection } from './data/collectionSend'
 import { RELEASE } from './buildIdentity'
 import { isDev } from './env'
 
@@ -17,6 +18,12 @@ type Screen = 'decks' | 'game'
  * and testable on its own.
  */
 export default function App() {
+  // Games that could not be delivered for collection when they finished are offered again, once,
+  // as the app opens. Nothing waits on it and it is silent whatever happens.
+  useEffect(() => {
+    void retryPendingCollection()
+  }, [])
+
   return (
     <SettingsProvider>
       <AppShell />

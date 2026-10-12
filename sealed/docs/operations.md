@@ -248,8 +248,10 @@ push to `main`. The workflow:
 4. copies `sealed/dist/*` into `dist/sealed/` and publishes `dist` to Pages
 
 So **pushing to main is all that's needed**: dmgctrl.app/sealed deploys with
-the PWA. There is no server-side component; the app only makes read-only calls
-to the existing Cloudflare worker and swuapi.com.
+the PWA. The app's only server is the existing Cloudflare worker: it makes read-only
+calls to it and to swuapi.com for cards, and, for a player who opted in, posts each
+finished game to it (see "Game collection" below). **The worker is not deployed by
+this workflow**: it goes out by hand with `npm run deploy:proxy`.
 
 **PWA interaction**: the main app's service worker controls the whole origin.
 Its workbox config carries `navigateFallbackDenylist: [/^\/sealed/]` (see root
@@ -287,7 +289,7 @@ easy to confuse:
 
 Running bare `wrangler deploy` (or `npm run deploy`) **from the repo root deploys
 the main-app worker, NOT the proxy**: it picks up the root `wrangler.jsonc`.
-Changes to `proxy/worker.js` (the `/art/`, `/cards/`, `/analytics` routes) only
+Changes to `proxy/worker.js` (the `/art/`, `/cards/`, `/analytics`, `/records` routes) only
 go live via **`npm run deploy:proxy`**.
 
 **The redirect trap (why `deploy:proxy` needs `--config`):** the
@@ -306,6 +308,71 @@ Quick check that the proxy is current: art must return an image, not JSON.
 curl -sI "https://worker.dmgctrl.app/art/images/cards/SOR/086.png" | grep -i content-type
 # expect: content-type: image/png   (JSON => old worker, redeploy the proxy)
 ```
+
+### Game collection (`POST /records`)
+
+The proxy stages finished games from players who opted in (`proxy/records.js`; what it keeps and
+what it refuses to keep is in [architecture.md](architecture.md#network)). Three bindings in
+`proxy/wrangler.toml` belong to it:
+
+| Binding | What it is | Needs creating |
+|---|---|---|
+| `GAME_RECORDS` | the Workers KV namespace games are staged in | **yes, once, by hand** |
+| `RECORDS_RATE_LIMITER` | a Workers rate limiter, 30 requests a minute per sender | no: it exists once deployed |
+| `RECORD_COLLECTION` | the switch, a plain variable: `on`, or anything else for off | no |
+
+**Setting it up, in this order.** The store comes first because the config holds a placeholder
+where its id goes, and a deploy is refused until the placeholder is replaced.
+
+1. Create the namespace: `npx wrangler kv namespace create GAME_RECORDS --config proxy/wrangler.toml`.
+   It prints an id.
+2. Put that id in `proxy/wrangler.toml`, in place of `REPLACE_WITH_GAME_RECORDS_KV_NAMESPACE_ID`.
+3. Deploy the proxy: `npm run deploy:proxy`.
+4. Check it answers. A preflight from the app's origin should come back 204 naming that origin:
+
+```bash
+curl -si -X OPTIONS https://worker.dmgctrl.app/records -H "Origin: https://dmgctrl.app" | head -n 12
+# expect: HTTP/2 204 and access-control-allow-origin: https://dmgctrl.app
+```
+
+While the endpoint is unreachable or off, no game is lost outright: each undelivered game waits on
+its device (up to 50) and is offered again on a later start.
+
+**Reading what is staged.** Each game is one key, `records/<gameKey>`, whose value is the payload as
+JSON. `<gameKey>` is the key the training rows give the same game.
+
+```bash
+npx wrangler kv key list --binding GAME_RECORDS --prefix records/ --remote --config proxy/wrangler.toml
+npx wrangler kv key get "records/<gameKey>" --binding GAME_RECORDS --remote --config proxy/wrangler.toml
+```
+
+A list returns up to 1,000 keys a page. A staged payload is replay data in the exported shape less
+its deck names and timestamps, so wrapped as `{ "games": [ ... ] }` it is close to what `--rows`
+reads (see "Turning an export into training rows" below); there is no command that pulls the
+namespace into such a file.
+
+**Switching collection off.** Fastest first:
+
+- **In the Cloudflare dashboard**, set the Worker's `RECORD_COLLECTION` variable to `off` and deploy
+  from there. It takes effect in seconds and needs no checkout. The next `npm run deploy:proxy`
+  puts back whatever `proxy/wrangler.toml` says, so change the file too.
+- **From the repo**, set `RECORD_COLLECTION = "off"` in `proxy/wrangler.toml` and run
+  `npm run deploy:proxy`.
+
+Off, the endpoint answers 503 and stages nothing, and the card routes carry on. Each app keeps its
+undelivered games on the device and offers them again later, so switching back on loses nothing
+that is still within a device's list of 50. Players are not told: nothing in the app changes.
+
+**Do not turn on Workers Logs, Logpush or a tail for this Worker** while collection is on.
+`proxy/wrangler.toml` has no `[observability]` block on purpose. The route itself logs nothing, but
+Cloudflare's own invocation logs record each request with its address and the second it arrived,
+which is exactly the link between a person and a game that the players' notice says does not exist.
+Cloudflare's aggregate analytics for the zone (request counts, countries) are outside the Worker's
+control and are not tied to a stored game.
+
+**What KV limits mean here.** On the free plan KV takes 1,000 writes a day, so that is the most
+games a day that can be staged: past it writes fail, the endpoint answers 503, and the games wait
+on their devices. A value can be 25 MiB; the endpoint's own cap is 512 KiB.
 
 ## Client-side state (support playbook)
 

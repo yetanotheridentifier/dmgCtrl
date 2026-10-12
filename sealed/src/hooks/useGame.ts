@@ -19,6 +19,7 @@ import type { DescribePart } from '../utils/describeAction'
 import { logEntries } from '../utils/boardDiff'
 import { saveGameRecord } from '../data/gameRecords'
 import { consentStamp } from '../data/collection'
+import { sendForCollection } from '../data/collectionSend'
 import { logger } from '../data/log'
 
 export type GameStatus = 'loading' | 'error' | 'playing'
@@ -404,6 +405,9 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       // Marked only if the player is opted in to sharing games at this moment.
       ...consentStamp(),
     })
+      // Once saved, the game is offered for collection. The sender answers for consent itself,
+      // never throws, and nothing here waits on it.
+      .then(sendForCollection)
   }, [gameState, playerDeck.name, opponentDeck.name, options.ai])
 
   const act = useCallback(

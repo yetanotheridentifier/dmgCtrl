@@ -8,6 +8,7 @@ import { db } from '../data/db'
 import { defaultSettings, loadSettings, STORAGE_KEY as SETTINGS_KEY } from '../data/settingsStore'
 import type { Settings } from '../data/settingsStore'
 import type { SwuCard } from '../data/cards'
+import { retryPendingCollection } from '../data/collectionSend'
 
 /**
  * The deck screen caches the set its generators are pointed at as soon as it opens, which would put
@@ -18,6 +19,12 @@ vi.mock('../data/setImport', () => ({
   importSet: vi.fn().mockResolvedValue({ cached: 0, total: 0 }),
   cachedSetCount: vi.fn().mockResolvedValue(0),
   cachedSetCards: vi.fn().mockResolvedValue([]),
+}))
+
+// The sender has its own tests (`collectionSend.test.ts`). Here it is a spy: the shell only starts it.
+vi.mock('../data/collectionSend', () => ({
+  retryPendingCollection: vi.fn().mockResolvedValue(undefined),
+  sendForCollection: vi.fn().mockResolvedValue(undefined),
 }))
 
 const SWU_CARDS: SwuCard[] = [
@@ -67,6 +74,14 @@ describe('App shell', () => {
     expect(tag).toHaveStyle({ position: 'fixed', right: '8px', bottom: '8px' })
     // In dev the tag is a corner badge, no longer inside the header.
     expect(within(screen.getByRole('banner')).queryByTestId('build-tag')).toBeNull()
+  })
+
+  /** Games that could not be delivered when they finished are offered again as the app opens. */
+  it('offers undelivered games for collection once, when it opens', () => {
+    vi.mocked(retryPendingCollection).mockClear()
+    const { rerender } = render(<App />)
+    rerender(<App />)
+    expect(retryPendingCollection).toHaveBeenCalledTimes(1)
   })
 
   it('exits the game via the dmgCtrl icon, returning to decks', async () => {

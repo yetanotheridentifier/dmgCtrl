@@ -7,3 +7,28 @@ preview_urls = false
 routes = [
   { pattern = "worker.dmgctrl.app", custom_domain = true }
 ]
+
+# Game record collection (POST /records, records.js). See sealed/docs/operations.md.
+#
+# The switch: anything but "on" and the endpoint answers 503 and stages nothing. The card routes
+# are unaffected either way.
+[vars]
+RECORD_COLLECTION = "on"
+
+# Where records are staged. The namespace is created by hand, once
+# (`npx wrangler kv namespace create GAME_RECORDS`), and its id goes here. Until it does, a deploy
+# is refused, which is deliberate: the Worker should not go out with a store that does not exist.
+[[kv_namespaces]]
+binding = "GAME_RECORDS"
+id = "REPLACE_WITH_GAME_RECORDS_KV_NAMESPACE_ID"
+
+# Per-sender limit on POST /records. Nothing to create: `namespace_id` is any number unique to this
+# account's limiters. The counter is keyed on the sender's address, lives at the Cloudflare
+# location that served the request for `period` seconds, and is never written beside a record.
+[[ratelimits]]
+name = "RECORDS_RATE_LIMITER"
+namespace_id = "4051"
+simple = { limit = 30, period = 60 }
+
+# No [observability] block, on purpose: Workers Logs stay off, so no request to this Worker is
+# logged with its address. Turning them on would break what the players' notice says.

@@ -293,9 +293,32 @@ stays on the device until it is named there on purpose.
 holds card ids and counters and must never hold anything the player typed. A payload is replay
 data, so the replay harness reads it as it stands.
 
-**Nothing is sent.** There is no collection endpoint, `collection.ts` makes no network call, and
-nothing in the app calls `recordForCollection`. The local export is separate: the player starts it
-by hand, it keeps the deck names, and it does not carry `consentedAtFinish`.
+**One sender posts it** (`data/collectionSend.ts`), and it is the only code that puts a game on the
+network. `useGame` hands it each record once the record is saved, and it posts what the gate returns
+as it stands to `POST /records` on the card Worker, with no cookies and no referrer. When the gate
+returns nothing there is no request at all. Sending never touches play: nothing waits on it and
+every failure is silent, with no message, no log line and no second attempt on the spot.
+
+- **A game that could not be delivered is offered again when the app next opens.** Its record id is
+  kept in a short list in localStorage (`sealed_collection_pending`, at most 50, oldest dropped
+  first), which never leaves the device. On opening, the list is walked oldest first, one request at
+  a time, and stops at the first failure, so an unreachable endpoint costs one request per start.
+  The gate is asked again on every attempt: a game is dropped from the list when the player has
+  opted out since, when the record is gone, or when the endpoint refused the payload itself (a 4xx
+  other than 408 and 429), since it would refuse it again.
+- **Offline, no request is made** (`navigator.onLine`), and the game waits in the list.
+- **A dev build sends nothing** (`isDev`), on finishing a game or on opening.
+
+The local export is separate: the player starts it by hand, it keeps the deck names, and it does not
+carry `consentedAtFinish`.
+
+**The Worker stages the payload and keeps nothing else** (`proxy/records.js`, see
+[Network](#network)). What it accepts is data, `proxy/recordContract.json`: the field list (a copy
+of `CollectedRecord`, so a field added there is refused until it is added here too), the size cap,
+and the rule that every string in a payload, keys included, is short and written in the characters
+ids use. That last rule is what keeps text a person typed out of storage wherever a later client
+might put it. A Sealed test reads the file and holds a real game's payload to it, because a payload
+the Worker stopped accepting would otherwise be lost without a sound.
 
 `useGame` reads live state from a ref inside `act` (not a setState updater) so that
 under React `StrictMode`, which double-invokes updaters in dev, each action logs
@@ -678,6 +701,7 @@ The board is drawn with art-dominant cards, not text rows:
 | localStorage `sealed_decks` | Imported decks | Tiny, synchronous |
 | localStorage `sealed_settings` | User settings | Tiny, synchronous; per device and browser |
 | localStorage `sealed_setup` ← `setupStore.ts` | The deck screen's last choices: sets, the set link, the opponent and its leader and base aspect | Validated per field on load, written only on a change; a deck or leader that no longer exists is resolved by the screen |
+| localStorage `sealed_collection_pending` ← `collectionSend.ts` | The ids of finished games still owed an attempt at collection, oldest first, at most 50 | Lets an undelivered game be offered again on the next start without reading every saved record |
 | Bundled sets ← `bundledSets.ts` | Every set the setup panel lists, as shipped with the app: Normal printings, one row per card, no tokens. The files are the bench fixtures (`src/test/fixtures/<set>Set.json`), each loaded with `import()` so it is a file of its own, fetched when its set is first asked for | A first visit plays with the card API unreachable; the game plays the card data the bench and tests run against |
 | IndexedDB `cards` ← `setImport.ts` | Whole sets via one SWUDB search call (`?q=set:XXX`), each row passed through `fromSearchRow` first because the search wraps aspects and traits as `{ S: value }` | A set with no bundled snapshot; includes bases the detail endpoint 502s on |
 | IndexedDB `cards` (Dexie v1) | Card JSON + thumbnail bytes | ~KBs per card; queryable; offline |
@@ -724,6 +748,37 @@ adds `Access-Control-Allow-Origin: *` (see `proxy/worker.js`). Card art on
 streams those images through with CORS and a long cache lifetime; the client-side
 `artUrl()` helper (`data/thumbnails.ts`) rewrites cdn.swu-db.com URLs onto it and
 leaves CORS-friendly hosts (cdn.starwarsunlimited.com) untouched.
+
+**The same Worker collects games** at `POST /records` (`proxy/records.js`), the one request the app
+makes that carries anything about play, and only for a player who opted in. The players' notice says
+nothing identifies them, that their IP address is not linked to games, and that a sent game cannot
+be found and deleted later. The endpoint is built to make each of those true:
+
+| The Worker | So that |
+|---|---|
+| writes the validated payload and nothing else: no address, header, `cf` field or arrival time, no metadata and no expiry on the write | a staged game holds only what the notice lists |
+| never calls `console` in this route, on success or on any failure | there is no second copy with a timestamp and an address beside it |
+| keys a game by a hash of its starting position and moves, the same definition as `gameKey` in `bench/trainingRows.ts` | the same game sent twice is staged once, a staged game and its training rows share a key, and no id is minted that a sender could be told |
+| serves POST and its preflight only | a staged game cannot be read back or removed through the Worker |
+| uses the sender's address once, as the key of a rate limiter counter (30 a minute) that Cloudflare holds for the minute at the location that served the request and that cannot be read back | the limit exists without a stored link between an address and a game |
+
+It refuses anything else: another origin than `dmgctrl.app` or `dev.dmgctrl.app`, a body that is not
+JSON, one over the size cap (declared or actual), a field not on the list, a missing field, and any
+string that is not id-like. Refusals say what went wrong in a fixed word and repeat nothing they
+were sent.
+
+Records are staged in a Workers KV namespace (binding `GAME_RECORDS`), as `records/<gameKey>` with
+the payload as JSON. KV keeps no write time that its API returns, which is why it holds the staging
+copy: an object store stamps each object with the second it arrived, and a game's arrival time is
+when it finished, which the payload leaves out on purpose. The staging copy is short-term, and where
+records live for good is a separate decision.
+
+The endpoint answers 503 and stages nothing when its switch (`RECORD_COLLECTION` in
+`proxy/wrangler.toml`) is anything but `on`, or when the store is not bound. The card routes do not
+depend on either. Workers Logs are off for this Worker (`proxy/wrangler.toml` has no
+`[observability]` block), and must stay off: with them on, Cloudflare would record each request with
+its address and time. See [operations.md](operations.md) for creating the store, reading it and
+switching collection off.
 
 ## Testing
 

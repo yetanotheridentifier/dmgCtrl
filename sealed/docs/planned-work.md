@@ -106,14 +106,14 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
 
 ## After the baseline
 
-- **Epic 7 data pipeline** (#405 collection Worker, #821 durable store). Saved games already export
-  to a local JSON file and the bench turns an export into training rows, so a corpus can be pulled off
-  a device by hand and made into rows in the meantime. The consent notice, the setting and the gated
-  outbound function are in place and nothing calls the function: #405 adds the endpoint and the
-  sender, and has to make two claims in the notice true (the IP address is not linked to games, and a
-  sent game cannot be found and deleted). #821 chooses where records live for the long term, with
-  the schema, retention and deduplication; rows carry a key made from the game itself, which is what
-  it can deduplicate on.
+- **Epic 7 data pipeline** (#821 durable store). Saved games export to a local JSON file and the
+  bench turns an export into training rows. Games from players who opted in are posted to the card
+  Worker and staged in a KV namespace under the key the training rows give the same game. Staging is
+  short-term and has no reader yet: #821 chooses where records live for the long term, with the
+  schema, retention and deduplication, and owns the pull that empties the staging namespace into it
+  (KV lists 1,000 keys a page and takes 1,000 writes a day on the free plan, which bounds both).
+  A staged game carries no arrival time by design, so anything #821 wants to know about when a game
+  was played has to be decided there against the players' notice, not read off the store.
   Rows come in the whole state or the mover's view of it (`--view mover`), which is the one to
   imitate from.
   Bench self-play is the second source of records, and needs no consent: `--record` on the
