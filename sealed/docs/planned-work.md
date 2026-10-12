@@ -47,11 +47,6 @@ engine or the horizon invalidates a calibration done before it.
    and `runBench` read 50.4% and 48.70% for the same AI on the same decks, which is why every harness
    needs its own baseline established before a number from it can be trusted. The benefit is mostly
    for repeated A/B runs.
-4. **#585 use the game's own terms for game actions.** Units are played and only leaders are
-   deployed; cards are resourced rather than banked; things are defeated rather than killed.
-   [glossary.md](glossary.md) records the correct terms and the ones this project invented. Not
-   urgent and not blocking anything, but it is prose-level debt that makes comments carrying measured
-   facts harder to check, and it grows with every new comment written in the wrong vocabulary.
 
 ## Deferred
 

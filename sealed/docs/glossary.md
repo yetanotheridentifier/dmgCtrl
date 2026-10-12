@@ -100,6 +100,21 @@ The ones the AI reasons about most: **Sentinel** (must be attacked before others
 **Saboteur** (ignores Sentinel), **Ambush** (can attack on arrival despite being exhausted),
 **Shielded** (arrives with a Shield token, which absorbs one instance of damage).
 
+### Player shorthand
+
+Not rules terms and not invented here: words players use at the table, which the comments and tests
+use too. None of them names a game action, so none stands in for a rules term.
+
+| Term | Meaning |
+| --- | --- |
+| **Body** | A unit considered only as power and HP on the board. |
+| **Bomb** | A card strong enough to decide a Sealed game on its own, usually an expensive unit. |
+| **Vanilla** | A unit with no abilities. |
+| **Chump** | A cheap unit spent on an attack it will not survive, usually to strip a Shield or clear the way for a bigger unit. |
+| **Trade** | An attack in which both units are defeated, or more loosely any exchange of one unit for another. |
+| **Pump** | An effect that raises a unit's power, usually for the phase. |
+| **Ramp** | Gaining resources beyond the one card a regroup allows. |
+
 ---
 
 ## Project terms
@@ -135,9 +150,9 @@ defined.
 | **Tempo** | Actions available now. **Forfeited tempo** is what taking the initiative gives up, currently counted as ready units only. |
 | **Denial claim** | Claiming the initiative when you **already hold it**, purely to stop the opponent taking it. The evaluation cannot represent it: the term for holding reads who has the counter, which such a claim does not change. |
 | **Reach at risk** | Reach locked up in exhausted units, `reachSteady - reachThisRound`. It is what acting first next round protects, and what acting first pre-empts. |
-| **Lethal** | A sequence of a seat's own actions that finishes the enemy base, under the null move. |
+| **Lethal** | A sequence of a seat's own actions that finishes the enemy base, under the null move. Also the noun for that finish: a **one-action lethal** is one the seat completes with a single action. A unit is defeated; a lethal is always the base. |
 | **Attacks to finish** | The fewest ready attackers whose reach covers the base. Closed form, no search needed. |
-| **Exposure** | Handing the opponent a position they can win from immediately. |
+| **Exposure** | Handing the opponent a position they can win from immediately. An **exposure risk gate** is a check that would stop a move doing so. |
 | **Headroom** | What a proposed change could gain that the current bot does not already get. Usually much smaller than the raw rate suggests. |
 | **Gate** | A cheap test deciding whether an expensive computation is worth running. Every gate is a way of *not* finding something, so each is measured rather than trusted. |
 
@@ -151,6 +166,7 @@ defined.
 | **Arm** / **control** | The changed bot and the unchanged one it is measured against, on the same seeds. |
 | **Paired difference** | Arm minus control, seed by seed. The result. Identical bots do not measure 50%, so a raw rate read against a fixed baseline can invert. |
 | **Shard** | One parallel slice of a run, pooled with the others. |
+| **Banked** | Said of a shard result saved to disk, which a resumed run reads back instead of replaying. Harness vocabulary only: a card is resourced, never banked. |
 | **Screen** | A short run (~80 games) used as a disaster filter before a long one. **Never evidence of parity.** |
 | **Prevalence** | How often a situation arises at all. It justifies an attempt but does not predict the outcome, and a low enough prevalence retires an idea without building it. |
 | **Oracle** | An exhaustive, obviously correct, slow reference used to check a fast pruned search against. |
@@ -171,3 +187,16 @@ defined.
 | creature, minion | **unit** |
 | spell | **event** |
 | mana | **resources** |
+
+Some of these words keep a second sense that is correct, which is why each use needs reading:
+
+- **Deploy** is right for a leader, and for shipping the app: the **deployed model** is the AI the
+  build ships with.
+- **Banked** is right for a benchmark result saved to disk (see the benchmark terms above).
+- **Kill** is right for a process: a shard can be killed for memory.
+- **Creature** is a trait printed on cards, and **spells out** is ordinary English.
+
+`docsAvoidedTerms.test.ts` reads the first column of this table and fails when **cast**, **burn**,
+**tapped**, **untapped**, **minion** or **mana** appears in `src` or in these docs. The words with a
+second sense are named in that test with the reason they are not checked, and a row added here fails
+the test until it is either checked or given a reason.
