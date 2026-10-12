@@ -1,6 +1,10 @@
 import { useEffect } from 'react'
 import { useSettings } from '../hooks/useSettings'
+import { OPPONENT_DELAYS_MS } from '../data/settingsStore'
 import type { BaseHealthDisplay } from '../data/settingsStore'
+
+const opponentDelayLabel = (ms: number) =>
+  ms === 0 ? 'Instant' : `${ms / 1000} ${ms === 1000 ? 'second' : 'seconds'} between actions`
 
 /**
  * The settings form, over a dark backdrop.
@@ -72,6 +76,25 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
             <option value="damage">Damage taken, counting up</option>
             <option value="remaining">Health remaining, counting down</option>
           </select>
+        </div>
+
+        <div className="mt-4">
+          <label className="block text-sm text-ink" htmlFor="setting-opponent-delay">Opponent pace</label>
+          <select
+            id="setting-opponent-delay"
+            data-testid="setting-opponent-delay"
+            value={settings.opponentDelayMs}
+            onChange={e => update({ opponentDelayMs: Number(e.target.value) })}
+            className="mt-1 w-full rounded-lg border-2 border-line/60 bg-bg-dark px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
+          >
+            {OPPONENT_DELAYS_MS.map(ms => (
+              <option key={ms} value={ms}>{opponentDelayLabel(ms)}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-ink-faint">
+            The opponent's actions appear one at a time, at least this far apart, so you can see what
+            each one did. Instant shows its whole reply at once.
+          </p>
         </div>
 
         <div className="mt-4 flex justify-end">

@@ -84,12 +84,24 @@ export interface UseGameOptions {
   rngSeed?: number
   /** Swap the opponent (tests inject a passive one; a smarter rung slots in here later). */
   ai?: (state: GameState) => Action | null
+  /**
+   * The least time, in milliseconds, between one opponent action being shown and the next. Absent or
+   * zero, the opponent's whole reply lands synchronously with the action that prompted it. Unlike the
+   * other options it is read at every step, so a change applies to the turn in progress.
+   */
+  opponentDelayMs?: number
 }
 
 const HUMAN: PlayerId = 'player'
 const AI: PlayerId = 'opponent'
 /** Hard stop for the AI drive loop — engine bugs must not hang the UI. */
 const MAX_AI_STEPS = 500
+/**
+ * How long a paced opponent waits after a state is shown before choosing its next action. Choosing
+ * blocks the main thread, sometimes for seconds, so it must not start until the browser has painted
+ * the state the player is meant to be looking at.
+ */
+const PAINT_GAP_MS = 50
 
 interface MoveRecord {
   by: PlayerId
@@ -191,37 +203,98 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
   // read once at save time and must not re-render the board on every undo.
   const undoCountRef = useRef(0)
 
-  /** Advance the AI while it is the active player; returns the resulting state. */
-  const driveAi = useCallback(
-    (state: GameState, entries: LogEntry[]): GameState => {
-      let current = state
-      let steps = 0
-      while (current.winner === null && current.activePlayer === AI && steps < MAX_AI_STEPS) {
-        // The step the bench takes too: offer to concede a certain loss, else the setup heuristic, else
-        // the AI. An offer hands the turn to the player, which is what ends this loop to ask them.
-        const action = driverAction(current, ai)
-        if (!action) break
-        historyRef.current.push({
-          by: AI,
-          state: current,
-          logLength: logRef.current.length + entries.length,
-          movesLength: movesRef.current.length,
-        })
-        movesRef.current.push({ by: AI, action })
-        const next = resolve(current, action)
-        entries.push(...logEntries(current, next, AI, action))
-        current = next
-        steps++
+  // The opponent's pace, read by timers that outlive the render that set them.
+  const delayRef = useRef(0)
+  useEffect(() => {
+    delayRef.current = options.opponentDelayMs ?? 0
+  })
+  // The timer for the paced opponent's next step. Non-null for as long as the opponent has actions
+  // still to show, which is what refuses an undo in the middle of them.
+  const pendingStepRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  /** Stop a paced opponent where it stands: nothing it had not yet shown is ever applied. */
+  const cancelOpponent = useCallback(() => {
+    if (pendingStepRef.current !== null) clearTimeout(pendingStepRef.current)
+    pendingStepRef.current = null
+  }, [])
+
+  /**
+   * Apply one action to the live game, in the refs: the snapshot undo rewinds to, the move record,
+   * the new state, and its log lines. The player's actions and the opponent's both come through here.
+   */
+  const apply = useCallback((by: PlayerId, action: Action) => {
+    const prev = gameStateRef.current
+    if (!prev) return
+    historyRef.current.push({ by, state: prev, logLength: logRef.current.length, movesLength: movesRef.current.length })
+    movesRef.current.push({ by, action })
+    const next = resolve(prev, action)
+    logRef.current = [...logRef.current, ...logEntries(prev, next, by, action)]
+    gameStateRef.current = next
+  }, [])
+
+  /** Render what the refs hold. */
+  const publish = useCallback(() => {
+    setGameState(gameStateRef.current)
+    setLog(logRef.current)
+    setCanUndo(pendingStepRef.current === null && historyRef.current.some(s => s.by === HUMAN))
+  }, [])
+
+  /**
+   * Publish the live state, with the opponent's reply to it: its actions for as long as it is the
+   * active player.
+   *
+   * With no delay they are all applied first, so the reply lands in the same render as whatever
+   * prompted it. With a delay the state is shown as it stands and the actions follow on timers, one
+   * at a time, each applied by the same `apply` and shown no sooner than the delay after the state
+   * before it. The delay is a floor on that gap, not a wait added to it: the time the AI spends
+   * choosing counts towards it, so a choice slower than the delay is shown the moment it is made.
+   */
+  const driveAi = useCallback(() => {
+    let steps = 0
+    let shownAt = 0
+    // The step the bench takes too: offer to concede a certain loss, else the setup heuristic, else
+    // the AI. An offer hands the turn to the player, which is what ends the reply to ask them.
+    function choose(): Action | null {
+      const state = gameStateRef.current
+      if (!state || state.winner !== null || state.activePlayer !== AI || steps >= MAX_AI_STEPS) return null
+      return driverAction(state, ai)
+    }
+    function step(action: Action) {
+      apply(AI, action)
+      steps++
+    }
+    function show() {
+      if (delayRef.current <= 0) {
+        for (let action = choose(); action; action = choose()) step(action)
+      } else if (gameStateRef.current?.winner === null && gameStateRef.current.activePlayer === AI) {
+        pendingStepRef.current = setTimeout(think, Math.min(delayRef.current, PAINT_GAP_MS))
       }
-      return current
-    },
-    [ai],
-  )
+      shownAt = Date.now()
+      publish()
+    }
+    function think() {
+      pendingStepRef.current = null
+      const action = choose()
+      // Nothing to play: publish anyway, since the reply being over is what allows an undo again.
+      if (!action) return publish()
+      const reveal = () => {
+        pendingStepRef.current = null
+        step(action)
+        show()
+      }
+      // Never longer than the delay itself, whatever the clock has done since.
+      const remaining = Math.min(delayRef.current, delayRef.current - (Date.now() - shownAt))
+      if (remaining > 0) pendingStepRef.current = setTimeout(reveal, remaining)
+      else reveal()
+    }
+    show()
+  }, [ai, apply, publish])
 
   useEffect(() => {
     let cancelled = false
 
     async function load() {
+      cancelOpponent()
       setStatus('loading')
       setErrorDetail(null)
       setGameState(null)
@@ -270,21 +343,17 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
         })
 
         const toCanonical = (id: string) => canonical.get(servedAs.get(id) ?? id)
-        let state = initGame(canonicalDeck(playerDeck, toCanonical), canonicalDeck(opponentDeck, toCanonical), buildCardDb(canonicalCards), {
+        const state = initGame(canonicalDeck(playerDeck, toCanonical), canonicalDeck(opponentDeck, toCanonical), buildCardDb(canonicalCards), {
           firstPlayer: options.firstPlayer ?? (rng() < 0.5 ? 'player' : 'opponent'),
           shuffle,
           rngSeed: options.rngSeed,
         })
         initialStateRef.current = state
 
-        // If the AI won the initiative roll it moves before the human sees the board.
-        const entries: LogEntry[] = []
-        state = driveAi(state, entries)
-
+        // If the AI won the initiative roll it moves first: before the human sees the board when it
+        // is instant, and onto the opening board when it is paced.
         gameStateRef.current = state
-        setGameState(state)
-        logRef.current = entries
-        setLog(entries)
+        driveAi()
         setStatus('playing')
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err)
@@ -299,6 +368,8 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
     void load()
     return () => {
       cancelled = true
+      // A rematch, a change of deck or leaving the game: the opponent's pending actions go with it.
+      cancelOpponent()
     }
     // Re-run on rematch (generation) or deck change; options are init-only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -328,25 +399,14 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       // Read the live state from the ref, not a setState updater — this handler
       // must run its side effects (logging, AI drive, move recording) exactly
       // once even though StrictMode double-invokes updaters.
+      // While a paced opponent is acting it is the active player in this state, so the same check
+      // refuses the player's input until its last action has been shown.
       const prev = gameStateRef.current
       if (!prev || prev.winner !== null || prev.activePlayer !== HUMAN) return
-      historyRef.current.push({
-        by: HUMAN,
-        state: prev,
-        logLength: logRef.current.length,
-        movesLength: movesRef.current.length,
-      })
-      movesRef.current.push({ by: HUMAN, action })
-      let next = resolve(prev, action)
-      const entries: LogEntry[] = logEntries(prev, next, HUMAN, action)
-      next = driveAi(next, entries)
-      gameStateRef.current = next
-      setGameState(next)
-      logRef.current = [...logRef.current, ...entries]
-      setLog(logRef.current)
-      setCanUndo(true)
+      apply(HUMAN, action)
+      driveAi()
     },
-    [driveAi],
+    [apply, driveAi],
   )
 
   /**
@@ -355,26 +415,30 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
    * record never contains a move that was taken back.
    */
   const rewind = useCallback((index: number) => {
+    cancelOpponent()
     undoCountRef.current++
     const snapshot = historyRef.current[index]
     historyRef.current = historyRef.current.slice(0, index)
     movesRef.current = movesRef.current.slice(0, snapshot.movesLength)
     logRef.current = logRef.current.slice(0, snapshot.logLength)
     gameStateRef.current = snapshot.state
-    setGameState(snapshot.state)
-    setLog(logRef.current)
-    setCanUndo(historyRef.current.some(s => s.by === HUMAN))
-  }, [])
+    publish()
+  }, [cancelOpponent, publish])
 
+  // Not while a paced opponent is part-way through its reply: the rewind takes the whole reply, so
+  // it waits until the whole reply has been seen.
   const undo = useCallback(() => {
+    if (pendingStepRef.current !== null) return
     const index = historyRef.current.map(s => s.by).lastIndexOf(HUMAN)
     if (index >= 0) rewind(index)
   }, [rewind])
 
   // Read from the ref during render: the history only changes alongside `gameState`, which is what
   // re-renders, so the answer is current whenever it is read.
-  // eslint-disable-next-line react-hooks/refs
-  const cancelAt = gameState && gameState.winner === null ? cancelPoint(historyRef.current, gameState) : undefined
+  const cancelAt = gameState && gameState.winner === null && gameState.activePlayer === HUMAN
+    // eslint-disable-next-line react-hooks/refs
+    ? cancelPoint(historyRef.current, gameState)
+    : undefined
   const cancelChoice = cancelAt === undefined ? undefined : () => rewind(cancelAt)
 
   const rematch = useCallback(() => setGeneration(g => g + 1), [])

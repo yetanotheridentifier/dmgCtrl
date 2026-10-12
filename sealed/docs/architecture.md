@@ -217,7 +217,7 @@ per-phase event log (`phaseEvents`) all live on the state, JSON-serialisable. Ab
 2. `buildCardDb` → `initGame` → store state; snapshot the initial state for the record.
 3. Human acts by clicking cards/units, the action-menu buttons, or a pending-choice
    prompt (pay/play/discard, the "look at a card" / search overlays) → `resolve`.
-4. `driveAi` loop: while the AI is active and the game is live, `driverAction` picks the
+4. `driveAi`: while the AI is active and the game is live, `driverAction` picks the
    AI's move, resolves, and logs, through action *and* regroup phases (capped at 500 steps as
    a hang guard). `driverAction` is the step the bench's `playGame` takes too: offer to concede
    a certain loss, else the setup heuristic, else the AI.
@@ -226,6 +226,41 @@ per-phase event log (`phaseEvents`) all live on the state, JSON-serialisable. Ab
 `useGame` reads live state from a ref inside `act` (not a setState updater) so that
 under React `StrictMode`, which double-invokes updaters in dev, each action logs
 and drives the AI exactly once.
+
+**Every action goes through one `apply`**, the player's and the opponent's alike: it takes the
+undo snapshot, appends the move record, resolves, and appends the log lines, all in refs.
+`publish` then renders what the refs hold. What varies is only when the opponent's actions are
+applied, which `UseGameOptions.opponentDelayMs` decides:
+
+- **Zero or absent: instant.** The opponent's whole reply is applied in a loop before the one
+  `publish`, so it lands in the same render as the action that prompted it. This is the hook's
+  own default, and what its tests drive.
+- **Positive: paced.** The state is published as it stands, with the opponent to act, and its
+  actions follow on timers, one at a time, each applied and published with its own log lines.
+  `GameScreen` passes the `opponentDelayMs` setting, so this is what a player sees.
+
+The delay is a **floor on the gap between two shown states, not a wait added to it**. Each
+step is timed from when the state before it was published; the AI chooses its action a short
+moment later (`PAINT_GAP_MS`, so the browser has painted that state before a slow choice
+blocks the main thread), and the action is then held only for what is left of the delay. A
+choice that took longer than the delay is shown the moment it is made. The AI's own thinking
+is neither slowed nor moved: it is the same synchronous call either way.
+
+While paced actions are pending:
+
+- **The player has no input.** The published state has the opponent active, so `legal` is
+  empty and `act` refuses, exactly as it would mid-loop. `undo` refuses and `canUndo` is false
+  until the last action is shown, since a rewind takes the whole reply; `cancelChoice` is
+  offered only on the player's own turn.
+- **Nothing pending outlives its game.** A rematch, a change of deck, an unmount and any rewind
+  cancel the timer, and an action is only ever chosen from and applied to the live state.
+- **The delay is read at every step**, so changing the setting applies to the turn in
+  progress: switched to instant, the rest of the reply arrives with the step already waited on.
+
+Paced and instant play record the same game: the same moves in the same order, the same log
+and the same states, since both are the same `apply` over the same deterministic choices. The
+benchmark does not use the hook at all (`playGame` calls `driverAction` and `resolve` itself),
+so it never waits.
 
 **Undo** keeps a snapshot of the state, log length and move-list length taken before
 **each individual action**, the AI's included. `undo()` rewinds to the last snapshot the human
@@ -303,8 +338,14 @@ Four properties are load-bearing:
   partial or wrongly typed, and none of those may stop the app starting: an unusable value
   falls back to its default and the rest survives. A blob written before a setting existed
   omits it, which reads as that setting's default.
-- **Settings are live.** They reach the UI through context, not through `UseGameOptions`, so a
-  change applies to the game in progress rather than at the next game.
+- **Settings are live.** They reach the UI through context, so a change applies to the game in
+  progress rather than at the next game. The one setting the game hook itself needs,
+  `opponentDelayMs`, is passed by `GameScreen` as a `UseGameOptions` field that `useGame`
+  reads at every opponent step, unlike its init-only options.
+
+`opponentDelayMs` is one of `OPPONENT_DELAYS_MS` (zero is instant) and defaults to 500 in every
+build. The form's options are that list, so a stored value outside it, which the form could
+not show, reads as the default.
 
 The surface is an **overlay** (`SettingsOverlay`), opened from the cog in the app header and
 from the cog in the game header. Not a screen: routing away unmounts `GameScreen` and the game

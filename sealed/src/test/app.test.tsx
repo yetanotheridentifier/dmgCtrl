@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { saveDeck } from '../data/deckStore'
 import { db } from '../data/db'
+import { defaultSettings, STORAGE_KEY as SETTINGS_KEY } from '../data/settingsStore'
 import type { SwuCard } from '../data/cards'
 
 /**
@@ -34,6 +35,8 @@ async function startGame(user: ReturnType<typeof userEvent.setup>) {
     await db.cards.put({ id: `TST_${card.Number}`, json: card, fetchedAt: 1 })
   }
   saveDeck({ name: 'Playable', leader: 'TST_001', base: 'TST_002', cards: [{ id: 'TST_900', count: 30 }] })
+  // The opponent replies at once: either side may open, and a paced reply would land mid-assertion.
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), opponentDelayMs: 0 }))
   render(<App />)
 
   await user.selectOptions(screen.getByTestId('opponent-deck-select'), 'random')
