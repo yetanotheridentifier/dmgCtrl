@@ -12,7 +12,7 @@ The **?** in the header opens this help, showing the part that covers the screen
 
 Your decks are saved on this device and appear in the deck list. Every card a deck in that list names is fetched and cached locally as soon as it is there, leader and base first, so a deck you import now, or one saved from an earlier visit, can be viewed and played without you fetching anything yourself.
 
-Alongside the deck selection, an **Implemented cards** panel lists which card abilities are currently built into the engine. A **progress bar** at the top shows how much of the whole set (tokens included) has its rules fully implemented. A token counts for every set that prints it once the engine creates it, so Shield and Experience count in each set of the cycle. **Leaders** (by side: **front** = undeployed, **back** = deployed leader-unit) and **upgrades** are complete, so they roll up into collapsible sections (collapsed by default; click to expand). **Units** are shown as collapsible **work groups** (each listing its cards) with a development status; the next group to be built is expanded, completed and later groups are collapsed with a status note. Cards not yet implemented still play: they just use their printed stats and keywords (and make fine resources) rather than their special ability text.
+At the top of the right-hand column, above the card catalogue note, an **Implemented cards** panel shows how many card abilities are currently built into the engine. It starts **collapsed**: the heading, the count across every set (tokens included) and a **progress bar**. Click the **Implemented cards** heading to open the breakdown, and again to close it; it is closed again the next time you open the app. The breakdown lists each set, newest first, under its legality (current sets, then **Rotated out**, then **Other sets**), and each set is one line with its count and percentage. Every set starts closed; click a set's line to open its row per card type: leaders, bases, units, upgrades, events and tokens. A token counts for every set that prints it once the engine creates it, so Shield and Experience count in each set of the cycle. Cards not yet implemented still play: they just use their printed stats and keywords (and make fine resources) rather than their special ability text.
 
 ## Caching a full set
 
@@ -46,6 +46,18 @@ How a generated deck is built, for yours and the opponent's alike:
 The screen remembers your choices on this device: both sets, **Same set as my deck**, the opponent, and the generated opponent's leader and base aspect come back as you left them, after a game or a reload. A remembered deck you have since removed falls back to **Random generated deck**. Generated decks themselves are never kept.
 
 The current AI opponent plays **random legal moves**. It exists to exercise the full rules engine; smarter opponents are on the roadmap.
+
+## Improving the bot
+
+The AI bot gets better by learning from real games. If you opt in, each game you finish is sent to train it.
+
+**What is sent:** both decks as loaded, every decision made in the game by you and the bot, who won, how long it took, and the app version.
+
+**What is not sent:** your name, your deck names, or anything else that identifies you. There is no account, and your IP address is not linked to games. Because of that, a game cannot be traced back to you, and it also cannot be found and deleted later.
+
+This data export is disabled unless you turn it on, and you can change it at any time in Settings.
+
+Turning it off stops future games being sent and does not recall games already sent.
 
 ## Playing a game
 

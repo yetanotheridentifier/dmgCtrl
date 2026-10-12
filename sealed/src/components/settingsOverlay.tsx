@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useSettings } from '../hooks/useSettings'
 import { OPPONENT_DELAYS_MS } from '../data/settingsStore'
 import type { BaseHealthDisplay } from '../data/settingsStore'
+import { SHARING_HELP_SECTION } from '../utils/helpSections'
 
 const opponentDelayLabel = (ms: number) =>
   ms === 0 ? 'Instant' : `${ms / 1000} ${ms === 1000 ? 'second' : 'seconds'} between actions`
@@ -14,7 +15,11 @@ const opponentDelayLabel = (ms: number) =>
  * unlike the presentational overlays around it, since a settings form has no caller-held state
  * to be handed.
  */
-export function SettingsOverlay({ onClose }: { onClose: () => void }) {
+export function SettingsOverlay({ onClose, onHelp }: {
+  onClose: () => void
+  /** Open Help on one section of the guide, by its heading. Help opens over this form. */
+  onHelp: (section: string) => void
+}) {
   const { settings, update } = useSettings()
 
   useEffect(() => {
@@ -62,6 +67,33 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
           <p className="mt-1 text-xs text-ink-faint">
             Filing a report opens GitHub with the game so far on the clipboard. Off by default.
           </p>
+        </div>
+
+        {/* On means yes and off means no. A player who was never asked sees it off, and touching
+            it is an answer either way, so the setup screen's notice does not ask afterwards. */}
+        <div className="mt-4">
+          <label className="flex items-center gap-2 text-sm text-ink" htmlFor="setting-share-games">
+            <input
+              id="setting-share-games"
+              data-testid="setting-share-games"
+              type="checkbox"
+              checked={settings.shareGames === 'yes'}
+              onChange={e => update({ shareGames: e.target.checked ? 'yes' : 'no' })}
+              className="h-4 w-4 accent-[var(--color-accent)]"
+            />
+            Share games to improve the bot
+          </label>
+          <p data-testid="setting-share-games-help" className="mt-1 text-xs text-ink-faint">
+            Sends finished games (both decks and every decision) to train the bot. Nothing identifies
+            you. Off by default.
+          </p>
+          <button
+            type="button"
+            onClick={() => onHelp(SHARING_HELP_SECTION)}
+            className="mt-1 text-xs text-ink-dim underline hover:text-ink"
+          >
+            What is sent?
+          </button>
         </div>
 
         <div className="mt-4">

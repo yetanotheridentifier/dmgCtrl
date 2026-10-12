@@ -106,8 +106,11 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
 
 ## After the baseline
 
-- **Epic 7 data pipeline** (#404 consent, #405 collection Worker, #406 training store). Saved games
-  already export to a local JSON file, so a corpus can be pulled off a device by hand in the meantime.
+- **Epic 7 data pipeline** (#405 collection Worker, #406 training store). Saved games already export
+  to a local JSON file, so a corpus can be pulled off a device by hand in the meantime. The consent
+  notice, the setting and the gated outbound function are in place and nothing calls the function:
+  #405 adds the endpoint and the sender, and has to make two claims in the notice true (the IP
+  address is not linked to games, and a sent game cannot be found and deleted).
 
 ## The card programme (second stream)
 

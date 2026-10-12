@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import userGuideHtml from '../../docs/userGuide.md'
-import { splitSections, helpContentFor, HELP_SECTIONS } from '../utils/helpSections'
+import { splitSections, helpContentFor, helpSectionContent, HELP_SECTIONS, SHARING_HELP_SECTION } from '../utils/helpSections'
 import type { HelpContext } from '../utils/helpSections'
 
 const CONTEXTS: HelpContext[] = ['decks', 'game']
@@ -14,6 +14,7 @@ describe('help sections', () => {
         'Importing a deck',
         'Caching a full set',
         'Choosing an opponent',
+        'Improving the bot',
         'Playing a game',
         'After the game',
       ])
@@ -90,6 +91,35 @@ describe('help sections', () => {
       for (const context of CONTEXTS) {
         expect(helpContentFor(context)).not.toContain('<h1')
       }
+    })
+
+    /** The notice and the pill are on the deck screen, so that is where its help belongs. */
+    it('gives the deck screen the section on sharing games', () => {
+      expect(HELP_SECTIONS.decks).toContain(SHARING_HELP_SECTION)
+      expect(helpContentFor('decks')).toContain('Improving the bot')
+      expect(helpContentFor('game')).not.toContain('Improving the bot')
+    })
+  })
+
+  /**
+   * Settings links straight to one section, and Settings opens in a game as well, where the
+   * game's help does not carry it. So one section can be asked for by name, from either screen.
+   */
+  describe('helpSectionContent', () => {
+    it('gives that section alone, with the disclaimer', () => {
+      const html = helpSectionContent(SHARING_HELP_SECTION)
+
+      expect(html).toContain('Improving the bot')
+      expect(html).toContain('What is sent')
+      expect(html).toContain('does not recall games already sent')
+      expect(html).toContain('unofficial fan site')
+      expect(html).not.toContain('Importing a deck')
+      expect(html).not.toContain('Turn structure')
+      expect(html).not.toContain('<h1')
+    })
+
+    it('gives nothing for a section the guide does not have', () => {
+      expect(helpSectionContent('No such section')).toBe('')
     })
   })
 })

@@ -247,6 +247,35 @@ less `cards`. The reader rebuilds the database from the cards the position names
 record also leaves out `finalState`, which replaying the moves produces, and its `id`. See
 "Exporting game records" in [operations.md](operations.md) for the file.
 
+**Sending a game to train the bot goes through one gate.** `recordForCollection`
+(`data/collection.ts`) is the only function that turns a record into an outbound payload, and it
+returns `null` unless both of these hold:
+
+- the stored `shareGames` setting is `yes` now, which it reads itself, so a caller cannot be wrong
+  about consent;
+- the record carries `consentedAtFinish`, which `useGame` writes with the record (`consentStamp`)
+  only when the setting is `yes` as the winner appears. Opting in therefore covers games finished
+  from then on and never one already saved, and opting out stops everything at once.
+
+The payload (`CollectedRecord`) is built by naming each field, starting from the exported form so
+the card database and the final state are stripped in one place. A field added to `GameRecord`
+stays on the device until it is named there on purpose.
+
+| Sent | Not sent, and why |
+|---|---|
+| `initialState` without its card database, and `moves` | the deck names: free text the player typed, the one field that could hold a name. `playerLeader`, `playerBase`, `opponentLeader` and `opponentBase` name the decks instead |
+| `winner` | the record `id`: it identifies a game, not a person, but would let that game be found again, which the notice says cannot happen |
+| `durationMs` | `startedAt` and `endedAt`: the notice names how long a game took, not when it was played |
+| `undoCount`, `build`, `opponentAi`, `humanSeat`, each only when the record has it | `finalState`, `consentedAtFinish` |
+
+`initialState` is passed whole, so the list does not guard a field added to `GameState`: that type
+holds card ids and counters and must never hold anything the player typed. A payload is replay
+data, so the replay harness reads it as it stands.
+
+**Nothing is sent.** There is no collection endpoint, `collection.ts` makes no network call, and
+nothing in the app calls `recordForCollection`. The local export is separate: the player starts it
+by hand, it keeps the deck names, and it does not carry `consentedAtFinish`.
+
 `useGame` reads live state from a ref inside `act` (not a setState updater) so that
 under React `StrictMode`, which double-invokes updaters in dev, each action logs
 and drives the AI exactly once.
@@ -371,11 +400,44 @@ Four properties are load-bearing:
 build. The form's options are that list, so a stored value outside it, which the form could
 not show, reads as the default.
 
+`shareGames` is the player's answer about sending finished games to train the bot: `unasked`
+(the default in every build), `yes` or `no`. It is opt-in, so only `yes` permits anything, and a
+stored value that is none of the three reads as `unasked`: a damaged blob opts nobody in. Three
+surfaces write it, and one module reads it to act on it (`data/collection.ts`, see "What a game
+record holds" above):
+
+- **The notice** (`components/shareGamesNotice.tsx`), shown while the answer is `unasked`. `App`
+  passes it to `DeckSelectScreen` as `catalogueNotice`, a slot the screen renders at the head of
+  its card catalogue column. That column stacks three sections (the notice, the Implemented cards
+  panel, then the Card catalogue heading and its note) on the rhythm of the other two columns,
+  from the same two constants in `deckSelectScreen.tsx`: `BLOCK_GAP` under a heading and between
+  panels, `SECTION_GAP` above a section that follows another, which gives way on a column's first
+  child. Each is a top margin on the block it pushes down, so the notice carries none and leaves
+  no gap behind once it renders nothing. So the notice reads the
+  settings and the deck screen does not, and the deck and opponent columns start at the top of
+  the page. It is a card in the page, never a dialog: it covers nothing and the deck screen works
+  untouched. Its two buttons share one class, so neither answer is the highlighted one, and
+  nothing is chosen in advance.
+- **Starting a game.** `App` turns `unasked` into `no` as the first game starts, so ignoring the
+  notice is a refusal and the question is put once.
+- **The settings form**, where a checkbox maps on to `yes` and off to `no`.
+
+Once the answer is not `unasked`, the notice renders nothing, so the catalogue column starts at its
+first heading (Implemented cards), level with the other two. In its place `ShareGamesPill` (same file) shows in the app
+header, immediately left of the cog and help buttons, and opens the settings form: "Improve the
+bot" after a no, and a fainter "Your games are improving the bot" after a yes. It carries no badge,
+count or animation in either state, and is smaller and lighter than the two icon buttons. The app
+header belongs to the deck screen (the game screen is full-bleed with its own), so the pill is not
+shown during a game. The header row never wraps for it: the label stays on one line, and below
+Tailwind's `sm` width (640px) the pill is hidden, leaving the cog as the route to the setting.
+
 The surface is an **overlay** (`SettingsOverlay`), opened from the cog in the app header and
 from the cog in the game header. Not a screen: routing away unmounts `GameScreen` and the game
 with it, since the game lives entirely in `useGame`'s state and refs. `bugReportOverlay` and
 `cardGridOverlay` are the same pattern. It reads the context directly rather than taking props,
 unlike the presentational overlays, because a settings form has no caller-held state to be given.
+Its one callback besides closing is `onHelp(section)`, which the "What is sent?" link uses to open
+Help on a single section of the guide.
 
 The header chrome icons (bug, cog, question mark) live together in `components/icons.tsx` and
 share one `ICON_PROPS` spec, so a mismatch between neighbours is visible in one file. The cog
@@ -404,6 +466,13 @@ The cost of slicing one file is that the map is keyed on heading prose, so a ren
 added section would silently vanish from the help rather than fail anything. `helpSections.test.ts`
 closes that: the map must claim every section in the guide, and name no section the guide lacks.
 **Adding a section to the user guide without assigning it to a screen fails the suite.**
+
+**A link can ask for one section.** `HelpOverlay` takes an optional `section`, a heading, and then
+shows that section and the footer alone (`helpSectionContent`), whichever screen is underneath.
+The settings form's "What is sent?" link uses it for "Improving the bot", which belongs to the deck
+screen and so is absent from the game's own help, while the form itself opens in a game too. Help
+renders after the settings form, so it sits over it and closing help by a click outside returns to
+the form. Escape closes both, since each overlay listens for it.
 
 Layout note: the **overlay** is the scroll container, not the panel. A panel capped at a
 fraction of the viewport with the content scrolling inside it depends on a flex chain resolving

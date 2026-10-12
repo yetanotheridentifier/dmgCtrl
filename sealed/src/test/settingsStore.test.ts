@@ -49,6 +49,13 @@ describe('settingsStore', () => {
       expect(OPPONENT_DELAYS_MS).toContain(0)
       expect(OPPONENT_DELAYS_MS).toContain(defaultSettings().opponentDelayMs)
     })
+
+    /** Sharing games is opt-in: until the player answers, in any build, the answer is not yes. */
+    it('has not asked about sharing games', () => {
+      expect(defaultSettings().shareGames).toBe('unasked')
+      mockIsDev.mockReturnValue(true)
+      expect(defaultSettings().shareGames).toBe('unasked')
+    })
   })
 
   describe('loadSettings', () => {
@@ -67,8 +74,22 @@ describe('settingsStore', () => {
     })
 
     it('reads back what was saved', () => {
-      saveSettings({ allowUndo: true, baseHealthDisplay: 'remaining', showBugReport: true, opponentDelayMs: 0 })
-      expect(loadSettings()).toEqual({ allowUndo: true, baseHealthDisplay: 'remaining', showBugReport: true, opponentDelayMs: 0 })
+      saveSettings({ allowUndo: true, baseHealthDisplay: 'remaining', showBugReport: true, opponentDelayMs: 0, shareGames: 'yes' })
+      expect(loadSettings()).toEqual({ allowUndo: true, baseHealthDisplay: 'remaining', showBugReport: true, opponentDelayMs: 0, shareGames: 'yes' })
+    })
+
+    it.each(['unasked', 'yes', 'no'])('keeps a stored sharing answer of %s', stored => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ shareGames: stored }))
+      expect(loadSettings().shareGames).toBe(stored)
+    })
+
+    /**
+     * Anything that is not one of the three answers reads as not asked, never as yes: a blob
+     * edited by hand or written by another version must not opt anyone in.
+     */
+    it.each([true, 1, 'YES', 'on', null, {}])('reads a stored sharing answer of %j as not asked', stored => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ shareGames: stored }))
+      expect(loadSettings().shareGames).toBe('unasked')
     })
 
     /** A delay that is not one of the offered ones could not be shown in the settings form. */
@@ -94,7 +115,7 @@ describe('settingsStore', () => {
 
     it('replaces an unrecognised value with that field’s default, keeping the rest', () => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ allowUndo: true, baseHealthDisplay: 'sideways' }))
-      expect(loadSettings()).toEqual({ allowUndo: true, baseHealthDisplay: 'damage', showBugReport: false, opponentDelayMs: 500 })
+      expect(loadSettings()).toEqual({ allowUndo: true, baseHealthDisplay: 'damage', showBugReport: false, opponentDelayMs: 500, shareGames: 'unasked' })
     })
 
     it('replaces a wrongly typed value with that field’s default', () => {
@@ -108,7 +129,7 @@ describe('settingsStore', () => {
      */
     it('fills in fields the stored blob omits', () => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ baseHealthDisplay: 'remaining' }))
-      expect(loadSettings()).toEqual({ allowUndo: false, baseHealthDisplay: 'remaining', showBugReport: false, opponentDelayMs: 500 })
+      expect(loadSettings()).toEqual({ allowUndo: false, baseHealthDisplay: 'remaining', showBugReport: false, opponentDelayMs: 500, shareGames: 'unasked' })
     })
   })
 })

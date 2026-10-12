@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useId, useMemo, useRef, useCallback } from 'react'
+import type { ReactNode } from 'react'
 import { useDecks } from '../hooks/useDecks'
 import type { SavedDeck } from '../data/deckStore'
 import type { SwuCard } from '../data/cards'
@@ -20,6 +21,12 @@ import type { SetProgress, SetGroup, TypeCounts } from '../data/implementedCards
 
 interface Props {
   onPlay: (deck: SavedDeck, opponentDeck: SavedDeck) => void
+  /**
+   * Rendered at the head of the card catalogue column, above Implemented cards. The caller owns
+   * what it is and anything it needs. The column spaces it from what follows, so it brings no
+   * margin, and it must be one element or nothing.
+   */
+  catalogueNotice?: ReactNode
 }
 
 const ERROR_MESSAGES: Record<ParseDeckError, string> = {
@@ -202,12 +209,23 @@ function DeckSection({ title, entries, cardDb }: {
   )
 }
 
+/**
+ * The vertical rhythm of the screen's three columns, stated once. Each is the top margin of the
+ * block being pushed down, so a block that is not rendered leaves no gap behind it.
+ *
+ * `BLOCK_GAP` goes under a column or section heading and between one panel and the next.
+ * `SECTION_GAP` goes above a section that follows another, and gives way on a column's first
+ * child, so whatever heads a column starts level with the other two.
+ */
+const BLOCK_GAP = 'mt-4'
+const SECTION_GAP = 'mt-8 first:mt-0'
+
 /** Headline "% of every set implemented" bar. */
 function ProgressBar() {
   const { done, total } = TOTAL_PROGRESS
   const pct = pctOf(done, total)
   return (
-    <div data-testid="implementation-progress" className="mt-3">
+    <div data-testid="implementation-progress" className={BLOCK_GAP}>
       <div className="flex items-baseline justify-between text-xs">
         <span className="text-ink-dim">{done} / {total} cards</span>
         <span className="text-accent font-medium" aria-label={`${pct}% implemented`}>{pct}%</span>
@@ -242,14 +260,15 @@ const TYPE_LABEL: Record<keyof TypeCounts, string> = {
 
 /**
  * One set's breakdown: a summary line carrying its overall count, then a row per card type. Sets
- * with nothing built still appear (all zeroes), so the panel doubles as the roadmap.
+ * with nothing built still appear (all zeroes), so the panel doubles as the roadmap. Every set
+ * starts shut and opens on its own line, a native disclosure the browser keeps the state of.
  */
-function SetRow({ set, defaultOpen }: { set: SetProgress; defaultOpen: boolean }) {
+function SetRow({ set }: { set: SetProgress }) {
   const done = sumCounts(set.done)
   const total = sumCounts(set.total)
   const pct = pctOf(done, total)
   return (
-    <details data-testid={`set-progress-${set.code}`} open={defaultOpen} className="mt-2 border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
+    <details data-testid={`set-progress-${set.code}`} className="mt-2 border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
       <summary className="flex items-baseline justify-between gap-2 px-3 py-1.5 cursor-pointer select-none text-xs">
         <span className="text-accent uppercase tracking-[0.12em] font-light">{set.code}</span>
         <span className="ml-auto text-ink-dim tabular-nums">{done} / {total}</span>
@@ -270,39 +289,59 @@ function SetRow({ set, defaultOpen }: { set: SetProgress; defaultOpen: boolean }
 }
 
 /**
- * Reference panel (foot of the card catalogue column): how much of each set's card abilities are built into
+ * Reference panel (first section of the card catalogue column): how much of each set's card abilities are built into
  * the engine. One collapsible block per set, newest first, each broken down by card type. Sourced
  * from the manifest in `data/implementedCards`, which a test pins to the ability registry.
+ *
+ * It is reference material, so it opens as its heading and the overall total, and the heading is
+ * the button that shows the rest. Open or shut is not stored: every visit starts shut.
  */
 function ImplementationStatus() {
+  const [open, setOpen] = useState(false)
+  const breakdownId = useId()
   return (
-    <aside data-testid="implemented-cards" className="mt-8">
-      <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Implemented cards</h2>
-      <p className="mt-1 text-ink-faint text-xs">
-        Which card abilities are built in. Others still play as vanilla stats / resources.
-      </p>
+    <aside data-testid="implemented-cards" className={SECTION_GAP}>
+      <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={open ? breakdownId : undefined}
+          onClick={() => setOpen(o => !o)}
+          className="flex w-full items-center justify-between gap-2 text-left uppercase tracking-[0.12em] font-light hover:text-ink"
+        >
+          Implemented cards
+          <span aria-hidden="true" className={`text-xs transition-transform ${open ? 'rotate-90' : ''}`}>▸</span>
+        </button>
+      </h2>
+      {open && (
+        <p className={`${BLOCK_GAP} text-ink-faint text-xs`}>
+          Which card abilities are built in. Others still play as vanilla stats / resources.
+        </p>
+      )}
 
       <ProgressBar />
 
-      {/* Sets by legality block, newest first within each. Only the newest set starts expanded. */}
-      <div data-testid="set-progress">
-        {SET_GROUPS.map(({ group, heading }) => {
-          const sets = SET_PROGRESS.filter(s => s.group === group)
-          if (sets.length === 0) return null
-          return (
-            <section key={group} data-testid={`set-group-${group}`}>
-              {heading && <h3 className="mt-4 text-ink-faint text-[0.65rem] uppercase tracking-[0.12em] font-light">{heading}</h3>}
-              {sets.map(set => <SetRow key={set.code} set={set} defaultOpen={set.code === SET_PROGRESS[0].code} />)}
-            </section>
-          )
-        })}
-      </div>
+      {/* Sets by legality block, newest first within each, every one shut. */}
+      {open && (
+        <div id={breakdownId} data-testid="set-progress">
+          {SET_GROUPS.map(({ group, heading }) => {
+            const sets = SET_PROGRESS.filter(s => s.group === group)
+            if (sets.length === 0) return null
+            return (
+              <section key={group} data-testid={`set-group-${group}`}>
+                {heading && <h3 className="mt-4 text-ink-faint text-[0.65rem] uppercase tracking-[0.12em] font-light">{heading}</h3>}
+                {sets.map(set => <SetRow key={set.code} set={set} />)}
+              </section>
+            )
+          })}
+        </div>
+      )}
 
     </aside>
   )
 }
 
-export default function DeckSelectScreen({ onPlay }: Props) {
+export default function DeckSelectScreen({ onPlay, catalogueNotice }: Props) {
   const { decks, importDeck, removeDeck } = useDecks()
   const [importText, setImportText] = useState('')
   const [importError, setImportError] = useState<ParseDeckError | null>(null)
@@ -482,7 +521,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
 
       {/* Generated decks sit above the imported ones: this is the quickest way to see what the
           generator produces, and it works before any deck has been imported. */}
-      <div data-testid="generated-deck-panel" className="mt-4 border-2 border-line/60 rounded-xl bg-surface px-4 py-3">
+      <div data-testid="generated-deck-panel" className={`${BLOCK_GAP} border-2 border-line/60 rounded-xl bg-surface px-4 py-3`}>
         <div className="flex items-center gap-4">
           <div className="flex-1 min-w-0">
             <span className="block font-medium truncate">Random generated deck</span>
@@ -570,11 +609,11 @@ export default function DeckSelectScreen({ onPlay }: Props) {
       </div>
 
       {decks.length === 0 ? (
-        <p data-testid="deck-empty-state" className="mt-4 text-ink-faint text-sm">
+        <p data-testid="deck-empty-state" className={`${BLOCK_GAP} text-ink-faint text-sm`}>
           No decks yet. Paste a ProtectThePod export below to get started.
         </p>
       ) : (
-        <ul data-testid="deck-list" className="mt-4 divide-y divide-line/40 border-2 border-line/60 rounded-xl bg-surface">
+        <ul data-testid="deck-list" className={`${BLOCK_GAP} divide-y divide-line/40 border-2 border-line/60 rounded-xl bg-surface`}>
           {decks.map(deck => (
             <li key={deck.id} className="flex items-center gap-4 px-4 py-3">
               <div className="flex-1 min-w-0">
@@ -600,7 +639,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
         </ul>
       )}
 
-      <div className="mt-8">
+      <div className={SECTION_GAP}>
         <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Import deck</h3>
         <textarea
           data-testid="deck-import-textarea"
@@ -634,14 +673,14 @@ export default function DeckSelectScreen({ onPlay }: Props) {
           <label htmlFor="opponent-deck-select">Opponent</label>
         </h2>
         {decks.length === 0 && opponentPool === null ? (
-          <p className="mt-4 text-ink-faint text-sm">Import a deck, or wait for the opponent's set to finish caching.</p>
+          <p className={`${BLOCK_GAP} text-ink-faint text-sm`}>Import a deck, or wait for the opponent's set to finish caching.</p>
         ) : (
           <select
             id="opponent-deck-select"
             data-testid="opponent-deck-select"
             value={opponentChoice}
             onChange={e => update({ opponentChoice: e.target.value })}
-            className={`mt-4 ${SELECT_CLASS}`}
+            className={`${BLOCK_GAP} ${SELECT_CLASS}`}
           >
             {/* A freshly generated deck each game, so it is not the same opponent twice. The default,
                 because it is the opponent that exercises the bot on a leader you can choose below. */}
@@ -661,7 +700,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
         <fieldset
           data-testid="opponent-generation-panel"
           disabled={opponentChoice !== GENERATED_DECK_ID}
-          className="mt-4 border-2 border-line/60 rounded-xl bg-surface px-4 py-3"
+          className={`${BLOCK_GAP} border-2 border-line/60 rounded-xl bg-surface px-4 py-3`}
         >
           <legend className="px-1 text-accent text-xs uppercase tracking-[0.12em] font-light">Generated opponent</legend>
           {/* Unlinking starts the opponent on the set the player is on, so the different set is chosen
@@ -722,15 +761,22 @@ export default function DeckSelectScreen({ onPlay }: Props) {
         </fieldset>
       </div>
 
+      {/* Same rhythm as the other two columns, from the same two constants: each section after the
+          first is pushed down by its own SECTION_GAP, so what fills the slot needs no margin, and
+          with the slot empty Implemented cards is the first child and starts at the top. */}
       <div data-testid="catalogue-column" className="min-w-0">
-        <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Card catalogue</h2>
-        <p className="mt-1 text-ink-faint text-xs">
-          Cards are cached on this device as the decks here need them: the set each generator builds
-          from, and every card your own decks name, bases included. Games and deck views then work
-          offline. Each panel reports its own caching, so there is nothing to fetch by hand.
-        </p>
+        {catalogueNotice}
 
         <ImplementationStatus />
+
+        <section data-testid="card-catalogue" className={SECTION_GAP}>
+          <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Card catalogue</h2>
+          <p className={`${BLOCK_GAP} text-ink-faint text-xs`}>
+            Cards are cached on this device as the decks here need them: the set each generator builds
+            from, and every card your own decks name, bases included. Games and deck views then work
+            offline. Each panel reports its own caching, so there is nothing to fetch by hand.
+          </p>
+        </section>
       </div>
     </div>
   )
