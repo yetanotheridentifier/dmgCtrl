@@ -351,10 +351,9 @@ npx wrangler kv key list --binding GAME_RECORDS --prefix records/ --remote --con
 npx wrangler kv key get "records/<gameKey>" --binding GAME_RECORDS --remote --config proxy/wrangler.toml
 ```
 
-A list returns up to 1,000 keys a page. A staged payload is replay data in the exported shape less
-its deck names and timestamps, so wrapped as `{ "games": [ ... ] }` it is close to what `--rows`
-reads (see "Turning an export into training rows" below); there is no command that pulls the
-namespace into such a file.
+A staged payload is replay data in the exported shape less its deck names and timestamps. Staging is
+a waiting room: a staged game has no expiry and stays until it is pulled and deleted (see "Collected
+games" below).
 
 **Switching collection off.** Fastest first:
 
@@ -378,6 +377,106 @@ control and are not tied to a stored game.
 **What KV limits mean here.** On the free plan KV takes 1,000 writes a day, so that is the most
 games a day that can be staged: past it writes fail, the endpoint answers 503, and the games wait
 on their devices. A value can be 25 MiB; the endpoint's own cap is 512 KiB.
+
+### Collected games: pulling, deleting, backing up
+
+Staged games are pulled into **the archive**, a SQLite file on this machine
+(`sealed/bench-results/collected-games.db`, gitignored; `--archive FILE` on any command below keeps
+it somewhere else). One row a game: its key, the payload as it was staged, the build that played it
+and **the day it was pulled, in UTC, and nothing finer**. No time of day is recorded anywhere, since
+none exists upstream. Every command ends by saying what the archive holds, by build. Use absolute
+paths: the commands run with `sealed/` as the working directory.
+
+**The archive is not like the rest of `bench-results/`.** Everything else in that folder can be
+measured again. Once staging has been emptied, the archive is the only copy of the games in it, so
+do not clear the folder wholesale, and keep a backup.
+
+**Pull.** Read-only: nothing in staging changes.
+
+```bash
+npm run bench --prefix sealed -- --pull
+```
+
+It lists every staged key, fetches the games the archive does not hold, and archives each one that
+checks out. It reads the store through `wrangler`, so it needs `npx wrangler whoami` to show a
+signed-in account, and nothing else. A pull costs one wrangler process (a second or two) to list and
+one for every 100 games fetched, plus about 14 ms a game to verify: 300 games take about 10 seconds,
+and a pull with nothing new about 1.5.
+
+It prints `staged`, `pulled`, `already archived`, `refused`, `deleted from staging` and `removable`
+(staged games the archive holds, which is exactly what a delete would remove).
+
+**A refused game** is one that did not check out: its key is not the key of its own starting
+position and moves (the value was damaged or altered), or it does not replay on this build to the
+winner it names. It is named with the reason, is not archived, is never deleted, and makes the
+command exit 1. What to do depends on the reason:
+
+- *the game replays to ..., but the record says ...* or *the replay threw*: this build's rules differ
+  from those of the build that played the game (the payload's `build`, read with
+  `wrangler kv key get` as above). It is a real game that this build cannot turn into rows either.
+  It stays staged, and is refused again on each pull, until the rules agree again or it is removed
+  by hand.
+- *no card data for ...*: the game holds a card from a set this checkout does not bundle. Pull again
+  from a checkout that does.
+- *the key does not match the game*, *not JSON*, *not a game record*, *not a game key*: the value is
+  not something the Worker wrote. Read it by hand before deciding; nothing removes it but a
+  `wrangler kv key delete` you run yourself.
+
+**Back up.** Writes the whole archive as one dated, compressed file in a folder you name:
+
+```bash
+npm run bench --prefix sealed -- --backup /path/to/a/folder
+```
+
+The file is `collected-games-<YYYY-MM-DD>.jsonl.gz`: gzipped JSON Lines, a header line and then a
+game to a line with its key, its pulled day and its payload. A later backup the same day replaces
+it; another day's sits beside it, and each is the whole archive, so older ones can be deleted. It
+needs nothing but `gunzip` to read, and `--rows` reads it as it stands, so a snapshot is usable
+without the database. `--pull --backup DIR` does both in one run.
+
+**Restore.** Into a new archive, or into one that holds some of the games already (it adds the
+missing ones and keeps the day each was first pulled):
+
+```bash
+npm run bench --prefix sealed -- --restore /path/to/a/folder/collected-games-<YYYY-MM-DD>.jsonl.gz
+```
+
+Each game's key is worked out again from its payload, so a damaged line is refused and named, the
+rest are restored, and the command exits 1. Restoring a snapshot into an empty archive gives back
+the same rows it was made from.
+
+**Delete from staging.** Only as part of a pull, only with a backup folder, and only the staged
+games the archive holds:
+
+```bash
+npm run bench --prefix sealed -- --pull --delete --dry-run          # lists what would go, removes nothing
+npm run bench --prefix sealed -- --pull --delete --backup /path/to/a/folder
+```
+
+`--delete` is refused without `--backup`: after it the archive is the only copy, so the snapshot is
+part of the same run and not something to remember afterwards. The order is what makes it safe to
+interrupt: every game is committed to the archive as it is verified, then the snapshot is written
+and read back to confirm it holds every game about to go, and only then is the delete issued. A run
+cut off before that, or a delete that fails (`NOT DELETED`, exit 1), leaves the games both staged
+and archived; the next `--pull --delete` sees them as already archived and removes them then. A
+refused game is never deleted.
+
+**Where to keep the backups, for free.** Any of these, none of which the commands know about:
+
+- **A folder a cloud drive already syncs.** Point `--backup` at it and the drive's client uploads
+  the file. Nothing to set up, and each snapshot is one small file (about 0.6 to 1.4 KB a game).
+- **A private git repository of the snapshot files.** Commit each dated snapshot as it is written.
+  It gives history and an off-machine copy, and the files are already compressed. Keep the
+  repository private: the snapshots are players' games.
+- **Cloudflare D1's free tier, later.** The archive is one SQLite table, which D1 takes almost
+  unchanged, and one free database holds roughly 50,000 games. That moves the archive itself off
+  this machine, which a backup does not, and is a change to where the pull writes.
+
+**What the archive holds** at any time, without touching the network:
+
+```bash
+npm run bench --prefix sealed -- --collected
+```
 
 ## Client-side state (support playbook)
 
@@ -500,6 +599,17 @@ rows, and makes the command exit 1; the other games are still written. That usua
 was played by a build whose rules have since changed, so check the record's `build`. Exit 2 means a
 file was not an export at all, or is in a newer export format.
 
+**Collected games are read from the archive** with `--collected`, alone or after any files, and a
+backup snapshot is read as a file like any other:
+
+```bash
+npm run bench --prefix sealed -- --rows --collected --out /path/to/rows.jsonl
+npm run bench --prefix sealed -- --rows /path/to/collected-games-<YYYY-MM-DD>.jsonl.gz --out /path/to/rows.jsonl
+```
+
+The two write the same rows for the same games. `--archive FILE` names an archive other than the
+default. See "Collected games" above for how games get there.
+
 Each row holds the whole game state, both hands and both decks included, with the seat that moved
 named beside it. The row format, what each field means and the measured sizes are under "Training
 rows" in [ai-benchmark.md](ai-benchmark.md).
@@ -520,6 +630,7 @@ All under `sealed/bench-results/`, which is gitignored, so none of it appears in
 | `shards/<run-key>/seed-N.out` | the child's structured result, read by the parent |
 | `failures/` | each dropped game as a replayable fixture |
 | `records/<commit>/<run-key for one seed>.json` | only from a `--record` run: that seed's completed games as replayable records, in the shape the app exports. A `.partial` beside it is a run still in flight, or one that died |
+| `collected-games.db` | the archive of games pulled from collection staging. **Not regenerable** once staging is emptied: see "Collected games" |
 
 A run directory is keyed by the AI names, games per shard, base seed and deck source, but **not** by
 shard count, so an interrupted run can resume at a different one. Deleting a run directory forces a
