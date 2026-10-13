@@ -17,7 +17,25 @@ order is a decision about attention rather than a dependency.
 Ordered on one principle: **correctness, then structure, then calibration.** Anything that changes the
 engine or the horizon invalidates a calibration done before it.
 
-1. **#587 turn the leader ranking into a blind-spot queue.** The matrix has run on the corrected
+1. **#828 measure what the fair search costs.** The bot searches its seat's view of the game and no
+   longer reads the opponent's hand, which is a correctness change. What it costs in strength is
+   unmeasured: an 80-game screen read level with an interval of about ± 16 points, which rules out a
+   broken bot and nothing else (see [experiments.md](experiments.md)). The A/B against the control
+   that still reads everything, in two waves so results bank within about an hour and a quarter:
+
+   ```bash
+   npm run bench --prefix sealed -- --shard 12 --games 84 --seed 8300 --decks coverage \
+     beam-reply beam-reply-omniscient --control
+   npm run bench --prefix sealed -- --shard 24 --games 84 --seed 8300 --decks coverage \
+     beam-reply beam-reply-omniscient --control
+   ```
+
+   Each wave is 1,008 games an arm and its control, about two and a half hours at the screen's 47
+   seconds a game; both together give 2,016 and an interval of roughly ± 3 points. Every baseline
+   quoted for `beam-reply` was measured while it read the whole state, so an A/B of anything else is
+   read against a matched control as always, and not against those figures.
+
+2. **#587 turn the leader ranking into a blind-spot queue.** The matrix has run on the corrected
    generator (55,120 games over 52 decks, none dropped) and its findings are in
    [experiments.md](experiments.md).
 
@@ -34,7 +52,7 @@ engine or the horizon invalidates a calibration done before it.
    different decks is now refused. A real multi-suite run waits for the pool generator below: the copy
    caps alone moved leaders by up to 12 points, and a pool step will move them again.
 
-2. **Make the deck generator model a sealed pool.** Open six packs, then build from what came out,
+3. **Make the deck generator model a sealed pool.** Open six packs, then build from what came out,
    rather than from the full set under quotas. Duplicates are already rolled by rarity; the pool step
    is what remains, and example pools from real openings will calibrate it.
 
@@ -42,7 +60,7 @@ engine or the horizon invalidates a calibration done before it.
    pool varies which cards a leader can have at all, where a seed only varies the draw from the whole
    set. And per-card win
    rates need far more decks than 52 before a card-sized effect can clear the noise.
-3. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
+4. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
    a corpus run. The fragmentation already costs something measured, since the generalisation harness
    and `runBench` read 50.4% and 48.70% for the same AI on the same decks, which is why every harness
    needs its own baseline established before a number from it can be trusted. The benefit is mostly
@@ -55,6 +73,17 @@ payoff arrives later", and all were closed once the search tie-break turned out 
 than a new term. **One idea survived unbuilt** and is worth a ticket: resource count and hand SIZE are
 **public**, so "I am holding up three resources" may legitimately outrank the board score, where "I hold
 Vanquish" cannot.
+
+**A belief about the opponent's hand** is the step past a fair search that ignores it. The search
+models no card played from a hand it cannot see, so it cannot play around one at all; the alternative
+is replies sampled from what the opponent could hold, given their resources, their aspects and what is
+public. Not worth a ticket until the A/B above says what ignoring the hand costs: a loss inside the
+noise leaves nothing for a belief model to win back, and the screen cannot say either way.
+
+**#830: one-ply `greedy` follows the order of its own deck**, which no player knows: it scores a move on
+the engine's state, so the move changed with the deck's order on 2 of 174 positions. It is not the
+bot a person plays, and it plays the games every cost and budget corpus is read from, so moving it to
+its seat's view shifts those corpora and is its own change.
 
 The initiative tie policy is settled: always taking a tied initiative and never taking one measured
 **+0.00 apart** over 2016 games, so the seeded coin flip that ships is right. A **conditional** policy

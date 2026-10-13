@@ -282,7 +282,14 @@ Everything is optional:
     a cell that means to measure depth has to name its own `NODES`.
   - `beam-reply-unredacted` the deployed model still reading the two cards it deals itself at regroup.
     The control for the redaction, and the only way to ask whether that fix cost anything, since
-    redaction is otherwise unconditional and self-play would measure nothing.
+    redaction is otherwise unconditional and self-play would measure nothing. Reading the real cards
+    means searching the whole state, so it reads everything `beam-reply-omniscient` does, and that is
+    the arm it differs from in the redaction alone.
+  - `beam-reply-omniscient` the deployed model searching the whole state instead of its seat's view
+    of it: the opponent's real hand, their face-down resources and both decks in draw order. **A
+    control, for A/B only, and never an opponent to play against**: it is the only way to ask what
+    playing fair costs, since the deployed model is otherwise always fair and self-play would compare
+    it with itself. See "The search sees what its seat sees" in [ai-model.md](ai-model.md).
   - `beam-horizon` the deployed model allowed to play on past the round boundary, with the opponent's
     forfeited round modelled. Measured at **-3.72 points** over 2016 games at **1.84x** the cost, and
     **not shipped**; kept registered because the mechanism works even though the bot does not win with

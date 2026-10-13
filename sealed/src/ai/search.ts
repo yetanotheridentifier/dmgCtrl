@@ -6,6 +6,7 @@ import type { Role } from './race'
 import { hasPendingChoices, opponentOf } from '../engine/types'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve, UNSEEN_CARD } from '../engine/resolve'
+import { seatView } from '../engine/seatView'
 import { makePublicScore, DEFAULT_WEIGHTS } from './evaluate'
 import { seededUnit } from '../engine/rng'
 import { role } from './race'
@@ -560,6 +561,25 @@ export interface BeamLimits {
    */
   redactRegroup?: boolean
   /**
+   * Search the state as the engine holds it, the cards the mover cannot see included. Off by default;
+   * `true` is the search that read the opponent's hand.
+   *
+   * **Exists only so the fair search can be measured.** By default the search starts from
+   * `seatView(state, mover)`, so the opponent's hand, deck and face-down resources are placeholders,
+   * its own deck is a list without an order, and the replies it models for the opponent are the ones
+   * the board shows: attacks, leader actions, claiming and passing. With this set, `legalMoves` hands
+   * the reply model the plays of the cards actually in the opponent's hand, and the search plans around
+   * them: over quiet action positions that was 10.9% of the shipped bot's decisions.
+   *
+   * Fairness is a correctness change and not a strength claim, and a bot that stops reading a hand can
+   * measure weaker than one that reads it. That needs a control differing in exactly this, which is
+   * the same role `redactRegroup: false` plays for the regroup.
+   *
+   * Not a supported way to play. The only sanctioned reading of `true` is "the arm this is being
+   * compared against".
+   */
+  readHidden?: boolean
+  /**
    * How many actions the opponent may take **after we claim the initiative**, before the line assumes
    * they pass and the round ends (#516). Defaults to 0, which assumes they stop the moment we do.
    *
@@ -679,7 +699,13 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     // Everything below searches the SIMULATION, so any line that ends the action phase crosses a
     // modelled regroup rather than the real one and never reads a card off the deck. The action
     // returned is ordinary data and is applied by the caller to the real board.
-    const state = limits.redactRegroup === false ? real : asSimulation(real)
+    //
+    // And it searches what the MOVER can see. Every route from the search to a hidden card runs through
+    // the engine (`legalMoves` offering the opponent the cards in their hand, `resolve` drawing off a
+    // deck in its real order), so the one place to close them all is the board the search starts from.
+    // `aiHiddenInformation.test.ts` holds that by changing what is hidden and requiring the same move.
+    const seen = limits.readHidden === true ? real : seatView(real, real.activePlayer)
+    const state = limits.redactRegroup === false ? seen : asSimulation(seen)
     const budget = searchBudget(limits.nodes)
     const moves = legalMoves(state)
     if (moves.length === 0) {
@@ -741,7 +767,9 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     // Unconditional, because it restores the behaviour that existed before the ordering choice did
     // rather than introducing a new preference. See `settleTriggerOrderTie`.
     const decided = afterUpgrade.length > 1 ? settleTriggerOrderTie(state, afterUpgrade) : afterUpgrade
-    return decided[Math.floor(seededUnit(state.rngSeed) * decided.length)]
+    // The REAL seed: the view's is zeroed, and a constant here would send every tie to the same index.
+    // It is used as a coin and nothing else, so it tells the search nothing about a deck.
+    return decided[Math.floor(seededUnit(real.rngSeed) * decided.length)]
   }
 }
 
@@ -1208,7 +1236,9 @@ export function beamReachesWin(
   limits: BeamLimits = DEFAULT_BEAM_LIMITS,
 ): boolean {
   const budget = searchBudget(limits.nodes)
-  const ours = ourTurnAgain(asSimulation(state), me, budget)
+  // From what `me` can see, as the bot searches, so this reports on the search the bot runs.
+  const seen = limits.readHidden === true ? state : seatView(state, me)
+  const ours = ourTurnAgain(asSimulation(seen), me, budget)
   if (ours === null) return false
 
   // Asking whether a win EXISTS, so nothing may be pruned on value: alpha bounds the SCORE a branch

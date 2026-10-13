@@ -217,8 +217,9 @@ seat are dropped whole. Two states that differ only in what the seat cannot see 
 It reads one state, so it cannot give back what a seat learned earlier in the game (a card it was
 shown, or put on the bottom of a deck), and it hides those too. The training rows use it for the
 mover's view (see "The two views of a state" in [ai-benchmark.md](ai-benchmark.md), which lists every
-field); the app and the bot do not: the board draws the human's side from the full state, and the
-bot's own line on hidden information is drawn in its evaluation ([ai-model.md](ai-model.md)).
+field), and the bot's search starts from it, so the moves it models for the opponent are the ones the
+board shows ("The search sees what its seat sees" in [ai-model.md](ai-model.md)). The app does not:
+the board draws the human's side from the full state.
 
 ## Game flow at runtime
 

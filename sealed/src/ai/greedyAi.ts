@@ -209,7 +209,29 @@ export const beamHoldTiesAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_HOLD_TIES_LIM
  * Same role as `greedy-flat` and `beam-reply-shared`: it tracks every later change to the evaluation
  * and the search, so the comparison stays one difference instead of drifting into two.
  */
-export const BEAM_REPLY_UNREDACTED_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, redactRegroup: false }
+/**
+ * `readHidden` with it, because the cards it reads are the real ones: seen from the mover's seat a deck
+ * has no order to read, and an unredacted crossing would deal itself a fiction. So this control reads
+ * everything, and the arm that differs from it in the redaction alone is `beam-reply-omniscient`.
+ */
+export const BEAM_REPLY_UNREDACTED_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, redactRegroup: false, readHidden: true }
+
+/**
+ * The shipped model searching the whole state, the opponent's hand included: the control for the
+ * search from the mover's view, and nothing else.
+ *
+ * `beam-reply` models the replies the board shows (attacks, leader actions, claiming, passing) and
+ * scores a hand it cannot see by its size. This one is handed the plays of the cards actually in the
+ * opponent's hand, and draws off both decks in their real order. Against a person that is their hand,
+ * so it is **not a way to play**: it exists because "fair" and "no weaker" are different claims, and
+ * the second needs an arm that differs in exactly this.
+ *
+ * Same role as `greedy-flat` and `beam-reply-shared`: it tracks every later change to the evaluation
+ * and the search, so the comparison stays one difference.
+ */
+export const BEAM_REPLY_OMNISCIENT_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, readHidden: true }
+
+export const beamReplyOmniscientAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_OMNISCIENT_LIMITS)
 
 /**
  * The shipped model without the hostile-upgrade tie policy: the control for #509, and the only way to
