@@ -317,16 +317,21 @@ what it refuses to keep is in [architecture.md](architecture.md#network)). Three
 
 | Binding | What it is | Needs creating |
 |---|---|---|
-| `GAME_RECORDS` | the Workers KV namespace games are staged in | **yes, once, by hand** |
+| `GAME_RECORDS` | the Workers KV namespace games are staged in | by hand, once: it exists |
 | `RECORDS_RATE_LIMITER` | a Workers rate limiter, 30 requests a minute per sender | no: it exists once deployed |
 | `RECORD_COLLECTION` | the switch, a plain variable: `on`, or anything else for off | no |
 
-**Setting it up, in this order.** The store comes first because the config holds a placeholder
-where its id goes, and a deploy is refused until the placeholder is replaced.
+The namespace exists and its id is in `proxy/wrangler.toml`, so a normal `npm run deploy:proxy`
+needs none of the steps below.
+
+**Rebuilding it from scratch, in this order** (a new account, or a namespace that was deleted). The
+store comes first because the config names it by id, and a deploy is refused while that id names
+no namespace.
 
 1. Create the namespace: `npx wrangler kv namespace create GAME_RECORDS --config proxy/wrangler.toml`.
    It prints an id.
-2. Put that id in `proxy/wrangler.toml`, in place of `REPLACE_WITH_GAME_RECORDS_KV_NAMESPACE_ID`.
+2. Put that id in `proxy/wrangler.toml`, as the `id` of the `GAME_RECORDS` entry under
+   `[[kv_namespaces]]`.
 3. Deploy the proxy: `npm run deploy:proxy`.
 4. Check it answers. A preflight from the app's origin should come back 204 naming that origin:
 

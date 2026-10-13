@@ -16,11 +16,11 @@ routes = [
 RECORD_COLLECTION = "on"
 
 # Where records are staged. The namespace is created by hand, once
-# (`npx wrangler kv namespace create GAME_RECORDS`), and its id goes here. Until it does, a deploy
-# is refused, which is deliberate: the Worker should not go out with a store that does not exist.
+# (`npx wrangler kv namespace create GAME_RECORDS`), and this is its id. A deploy is refused while
+# the id names no namespace, which is deliberate: the Worker should not go out without its store.
 [[kv_namespaces]]
 binding = "GAME_RECORDS"
-id = "REPLACE_WITH_GAME_RECORDS_KV_NAMESPACE_ID"
+id = "b6f958778bec4a1790f705611db114e8"
 
 # Per-sender limit on POST /records. Nothing to create: `namespace_id` is any number unique to this
 # account's limiters. The counter is keyed on the sender's address, lives at the Cloudflare
