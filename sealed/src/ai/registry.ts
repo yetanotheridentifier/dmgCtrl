@@ -2,8 +2,9 @@ import type { Ai } from './types'
 import { randomAi } from './randomAi'
 import {
   greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, beamReplyUnredactedAi,
-  beamReplyUpgradeBlindAi, beamHorizonAi, beamClaimTiesAi, beamHoldTiesAi, lethalBeamAi,
+  beamReplyOmniscientAi, beamReplyUpgradeBlindAi, beamHorizonAi, beamClaimTiesAi, beamHoldTiesAi, lethalBeamAi,
   makeBeamGreedy, makeLethalBeam, BEAM_REPLY_LIMITS, BEAM_REPLY_SHARED_LIMITS, BEAM_HORIZON_LIMITS,
+  BEAM_REPLY_OMNISCIENT_LIMITS,
 } from './greedyAi'
 import { DEFAULT_BEAM_LIMITS, TIE_DECISION_KINDS, type BeamLimits } from './search'
 import { DEFAULT_LETHAL_LIMITS, type LethalLimits } from './lethal'
@@ -54,6 +55,15 @@ export const AIS: Record<string, Ai> = {
    * and self-play against the shipped bot would measure nothing.
    */
   'beam-reply-unredacted': beamReplyUnredactedAi,
+  /**
+   * `beam-reply` searching the whole state, the opponent's hand and both decks' order included: the
+   * control for the search from the mover's view. **For A/B only, and never the opponent a person
+   * plays**: against a person it reads their hand.
+   *
+   * Here so "what does playing fair cost" can be asked at all. The fair search is otherwise
+   * unconditional, and self-play against the shipped bot would compare it with itself.
+   */
+  'beam-reply-omniscient': beamReplyOmniscientAi,
   /**
    * `beam-reply` without the hostile-upgrade tie policy: the control for #509. The policy is a boolean
    * with no suffix grammar, so without this entry there is no way to name the pre-fix bot, and an A/B
@@ -313,6 +323,8 @@ export function namedLimitsFor(name: string): BeamLimits | null {
     beam: DEFAULT_BEAM_LIMITS,
     'beam-reply': BEAM_REPLY_LIMITS,
     'beam-reply-shared': BEAM_REPLY_SHARED_LIMITS,
+    // So a weight or a tie-break can be swept on the control as it can on the arm.
+    'beam-reply-omniscient': BEAM_REPLY_OMNISCIENT_LIMITS,
     // Without this, every suffix threw on the horizon arm: `beam-horizon+blockedReach=1` was
     // unnameable, which is exactly the A/B the lockout work needs.
     'beam-horizon': BEAM_HORIZON_LIMITS,

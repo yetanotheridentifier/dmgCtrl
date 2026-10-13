@@ -215,6 +215,68 @@ collapsing the three search tickets into one bought:
 The last two differ because role-adjusted weights are **not** zero-sum: an aggressor and a defender
 price the same board differently by design.
 
+### The search sees what its seat sees, and nothing else
+
+The engine's state holds everything: both hands, both decks in draw order, every face-down resource.
+Every search starts from `seatView(state, mover)` (`engine/seatView.ts`, the one definition of what a
+seat may read) and never from that state, so:
+
+| What the mover cannot see | What the search works with |
+| --- | --- |
+| the opponent's hand | its size. The cards are placeholders the engine offers no play for |
+| the opponent's face-down resources | how many, and which are exhausted |
+| the opponent's deck | its size |
+| its own deck | which cards are left, in a fixed order that is not the real one |
+| the shuffle seed | zero. The real seed is used once, as the coin for a tie, and for nothing else |
+
+**So the replies the search models are the ones the board shows**: attacks with units in play, leader
+actions, claiming the initiative and passing. It does not model the opponent playing a card, because
+doing that on the real state means being handed the cards they actually hold, and against a person
+that is their hand. Under `selfish` their side is scored with `evaluate(s, foe)` as before, and the
+private half of it prices a hand of placeholders at nothing, so their hand counts through its size
+alone.
+
+**This is where the boundary is held, because the evaluation was never the leak.** No term in `ai/`
+reads a hidden card other than the scored seat's own hand. The engine does: `legalMoves` enumerates
+the opponent's plays from their real hand, and `resolve` draws off a deck in its real order. A search
+over the whole state changed the shipped bot's move with the opponent's hand on **19 of 174** ordinary
+action-phase decisions on the bench deck (10.9%) and **26 of 161** on the coverage decks (16.1%), with
+the order of either deck on a few more, and plain `beam` followed the order of its own deck. From the
+mover's view all of those are **0**, for moves and for the value of
+every candidate.
+
+**It is asserted by changing what is hidden, not by reading the code.** `aiHiddenInformation.test.ts`
+puts positions to the bot again with the opponent's hand traded for other cards of theirs, their
+face-down resources traded likewise, and each deck reordered, and requires the same move and the same
+candidate values. Any leak, by any route, fails it, including one added later.
+`aiHiddenInformationCorpus.test.ts` does the same over a wider sample and for every registered bot.
+
+Three things the view costs, all on the side of knowing less:
+
+- **The search does not anticipate a card from hand at all.** An opponent holding seven cards and one
+  holding none differ only by the evaluation's hand-size term. The next step up is a belief about what
+  they could hold given their resources and what is public, which is a model and not a look.
+- **What the mover learned earlier is not in one state.** A card it was shown, searched past or
+  watched return to a hand is hidden again, because the state records where a card is and not who has
+  seen it.
+- **A draw inside the search is not the real one.** A move that draws is scored holding the first card
+  of the mover's remaining deck list, not the card on top, and a draw past the round boundary stays
+  face down (see `simulatedRegroup`).
+
+The view also drops the turn bookkeeping of a batch of abilities in progress. That is set on 23 of 753
+coverage-deck decisions (3.1%) and 2 of 699 on the bench deck, always while the mover is answering a
+choice, and putting it back changes none of those 25 moves. An ability the other seat is owed was
+present on none of the 1,452.
+
+`beam-reply-omniscient` is the search over the whole state under its own name. **It is a control for
+measuring what fairness costs and is never the opponent a person plays.** One-ply `greedy` and its
+variants are not held to their own deck's order: they score a move that draws with the real card. They
+read nothing of the opponent's.
+
+**Every win rate and cost quoted for a reply policy in this document was measured with the search over
+the whole state**, so each describes a bot that could see the replies it was guarding against. None
+has been re-measured from the mover's view; [experiments.md](experiments.md) holds what has.
+
 **Looking one move ahead at the opponent beats looking three moves ahead at yourself.** Two-ply at
 depth 1 measures **54.5%** against a reply-blind beam over three seeds and 2580 games, above 50 on
 every seed. `selfish` measures 53.2% on the same runs, so pure pessimism leads, though not separably

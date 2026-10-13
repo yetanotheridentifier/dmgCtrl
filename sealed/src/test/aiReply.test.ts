@@ -55,6 +55,9 @@ function crackBack(): GameState {
  *
  * Kept as small as still branches. The tests below run an EXHAUSTIVE control, which has to search
  * everything the cut skips, so this fixture sets the cost of the slowest tests in the file.
+ *
+ * The opponent's answers are all on the board. A card in their hand would add none: the search
+ * models the replies its seat can see, and a hand it cannot see offers no play.
  */
 function branching(): GameState {
   return state({
@@ -66,9 +69,8 @@ function branching(): GameState {
         units: [unit('a1', 'SPIKE'), unit('a2', 'PUNISHER')],
       }),
       opponent: player({
-        hand: ['WALL'],
         resources: ready(4),
-        units: [unit('d1', 'PUNISHER'), unit('d2', 'SPIKE')],
+        units: [unit('d1', 'PUNISHER'), unit('d2', 'SPIKE'), unit('d3', 'WALL')],
       }),
     },
   })

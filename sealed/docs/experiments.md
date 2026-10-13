@@ -811,6 +811,54 @@ offered, since deciding the opponent's would mean reading their hand.
 Test it by **permuting the deck and requiring the same move**. An assertion that the hand did not grow
 passes the moment someone crosses the boundary a different way.
 
+### A search over the whole state reads the opponent's hand, and what that is worth is not yet known
+
+The engine offers the opponent's legal moves from the cards actually in their hand, so a search that
+models a reply on the engine's own state plans around those cards. Measured by asking for the move
+again with something hidden changed (the opponent's hand traded for other cards of theirs, their
+face-down resources likewise, each deck reordered), where the mover's view of the position is
+identical before and after:
+
+| bot, searching the whole state | positions | their hand | their deck order | their resources | own deck order |
+| --- | --- | --- | --- | --- | --- |
+| `beam-reply`, bench deck, its own games | 174 | **19 (10.9%)** | 0 | 1 | 4 |
+| `beam-reply`, bench deck, `greedy`'s games | 146 | 15 (10.3%) | 3 | 0 | 3 |
+| `beam-reply`, coverage decks, `greedy`'s games | 161 | **26 (16.1%)** | 0 | 0 | 0 |
+| `reply:pessimistic`, coverage decks | 161 | 9 | 0 | 0 | 0 |
+| `reply:selfish`, coverage decks | 161 | 14 | 0 | 0 | 0 |
+| `beam`, bench deck | 146 | 0 | 0 | 0 | 2 |
+| `greedy`, bench deck | 174 | 0 | 0 | 0 | 2 |
+
+Positions are every third action-phase decision with no choice pending, from ten games. Searching
+from the mover's view, every cell of the reply and beam rows is **0**, as is a second sample of 291
+positions taken across every kind of decision, choice answers included. `greedy` is unchanged and
+still follows the order of its own deck.
+
+The coverage decks read higher than the bench deck, which is thirty units. The likely reason, not
+separately measured, is that a hand able to hold an event or an upgrade changes more decisions than
+one that holds bodies. The rate is how often the information changed a move, **not what it was
+worth**: that needs games.
+
+**Screened, not measured.** The fair search against the search over the whole state, 80 games over the
+coverage decks on ten seeds, each side against a control on the same seeds: **40 of 80 against the
+control's 40 of 80, a paired difference of +0.00 points with a 95% interval of about ± 15.8** (sd 22.05
+over ten shards of 8 games, t = 0.00 on 9 df). No game was dropped. That is a disaster filter and
+nothing more: it rules out the fair bot being broken, and it cannot tell a five-point loss from a
+five-point gain. The level result is not two arms playing the same games: 72 of the 80 paired games
+differ in length, margin or winner, and the winner differs in 26.
+
+**The fair search is cheaper, and reaches its node limit less often, which can flatter it.** Over one
+corpus of 200 decision states it costs **0.78x** the whole-state search per decision (434.5 ms against
+556.7 ms), spends 1,162 nodes a decision against 1,766, and exhausts the budget on **5.5%** of
+decisions against **9.0%**. Most of the saving is in choice chains (459 nodes against 952), which fits
+the modelled opponent no longer playing cards that raise them, though that cause is inferred. So where
+the limit binds, the fair search sees more of the tree than
+the control does, and a win-rate comparison between them measures the information and the budget
+together.
+
+Inferred from the screen's spread and not measured: at 2,016 games an arm the interval would be about
+± 3 points, so a loss smaller than that needs a longer run to see.
+
 ### Claiming the initiative to deny a lethal does not convert
 
 Followed to the end of the game, a claim made where the opponent finishes next round and we do not buys

@@ -15,7 +15,9 @@ import { marked } from 'marked'
  *
  * The trade is that a regression here is caught that night rather than on the pull request.
  * Most guard the bench harness, which is tooling. `choicePrompt` is the exception and is
- * user-facing: it plays the coverage decks to reach every kind of prompt.
+ * user-facing: it plays the coverage decks to reach every kind of prompt. So is
+ * `aiHiddenInformationCorpus`, which holds the bot to reading nothing its seat cannot see, and
+ * for that reason has a per-push counterpart (`aiHiddenInformation`) on a handful of positions.
  */
 const SIMULATION_TESTS = [
   'src/test/benchLethal.test.ts',
@@ -26,6 +28,7 @@ const SIMULATION_TESTS = [
   'src/test/aiShieldedSentinelReport.test.ts',
   'src/test/aiWeightScale.test.ts',
   'src/test/lockoutDecksPlay.test.ts',
+  'src/test/aiHiddenInformationCorpus.test.ts',
 ]
 
 // Served at https://dmgctrl.app/sealed — base must match so built asset URLs resolve.
