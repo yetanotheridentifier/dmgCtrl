@@ -1,0 +1,23 @@
+{
+  "path": "/records",
+  "maxBytes": 524288,
+  "required": [
+    "playerLeader",
+    "playerBase",
+    "opponentLeader",
+    "opponentBase",
+    "winner",
+    "durationMs",
+    "initialState",
+    "moves"
+  ],
+  "optional": [
+    "undoCount",
+    "build",
+    "opponentAi",
+    "humanSeat"
+  ],
+  "text": "^[A-Za-z0-9_.:#-]*$",
+  "maxTextLength": 64,
+  "maxDepth": 16
+}

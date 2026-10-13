@@ -11,9 +11,10 @@ import { loadSettings } from './settingsStore'
  * `recordForCollection` is the only way to turn a record into an outbound payload, and it answers
  * for consent itself, from the stored setting, so a caller cannot be mistaken about it.
  *
- * Nothing sends yet. There is no collection endpoint, this module makes no network call, and
- * nothing in the app calls `recordForCollection`: it exists so that the sender, when it is built,
- * has exactly one thing to call and no record shape of its own to invent.
+ * This module makes no network call. The sender (`collectionSend.ts`) is the one caller of
+ * `recordForCollection` and posts what it returns as it stands, so there is exactly one record
+ * shape that leaves the device. The endpoint holds a copy of the field list and refuses anything
+ * outside it (`proxy/recordContract.json`): a field added to `CollectedRecord` must be added there.
  */
 
 /**

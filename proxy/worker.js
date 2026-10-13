@@ -1,6 +1,14 @@
+import { handleRecords } from './records.js'
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
+
+    // Game records from players who opted in. Kept in its own module: it has rules about what
+    // must not be stored or logged that the routes below do not share.
+    if (url.pathname === '/records') {
+      return handleRecords(request, env)
+    }
 
     if (url.pathname === '/analytics/batch') {
       return handleAnalyticsBatch(request, env)

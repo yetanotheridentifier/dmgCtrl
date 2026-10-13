@@ -16,6 +16,11 @@ import { defaultSettings, saveSettings } from '../data/settingsStore'
 import { OPPONENT_AI } from '../config'
 import { COMMIT_ID, RELEASE } from '../buildIdentity'
 import { replay } from './helpers/replayReport'
+import { sendForCollection } from '../data/collectionSend'
+
+// The sender decides for itself whether a game goes anywhere (`collectionSend.test.ts`). Here it is
+// a spy, so these tests see what the hook hands it and never reach the network.
+vi.mock('../data/collectionSend', () => ({ sendForCollection: vi.fn().mockResolvedValue(undefined) }))
 
 // Seeded SWUDB-shaped cards. TST_900 is a 0-cost 30-power unit so a game can
 // be won in two rounds, keeping tests fast and deterministic.
@@ -553,6 +558,19 @@ describe('useGame', () => {
           expect('consentedAtFinish' in records[0]).toBe(false)
         })
       })
+    })
+
+    /** The sender is offered every finished game, after it is saved, and answers for consent itself. */
+    it('hands the saved record to the collection sender, once', async () => {
+      vi.mocked(sendForCollection).mockClear()
+      const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+      await waitFor(() => expect(result.current.status).toBe('playing'))
+      expect(sendForCollection).not.toHaveBeenCalled()
+      await winFromTheStart(result)
+
+      await waitFor(() => expect(sendForCollection).toHaveBeenCalledTimes(1))
+      const [saved] = await listGameRecords()
+      expect(vi.mocked(sendForCollection).mock.calls[0][0]).toEqual(saved)
     })
 
     /**
