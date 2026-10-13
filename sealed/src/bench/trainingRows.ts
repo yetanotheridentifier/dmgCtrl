@@ -70,6 +70,12 @@ export interface TrainingRow {
   humanSeat?: PlayerId
   undoCount?: number
   /**
+   * Only on the rows of a collected game (one read from the archive or a snapshot of it): how long
+   * the game took, which is all its payload says about time. A record exported by hand has no such
+   * field, and a bench game took no time that means anything.
+   */
+  durationMs?: number
+  /**
    * Only on the rows of a game the bench played (a record with `bench`): the bot that sat where this
    * move was made, the deck it played, and the record's own account of its run.
    *
@@ -126,6 +132,17 @@ export function gameKey(record: Pick<ExportedRecord, 'initialState' | 'moves'>):
   return createHash('sha256').update(JSON.stringify([record.initialState, record.moves])).digest('hex').slice(0, 16)
 }
 
+/**
+ * What a game has to hold to become rows: the replay data and its result, with whatever provenance
+ * it came with. An exported record is one (`ExportedRecord`), and so is a collected game's payload
+ * as it stands (`CollectedRecord` in `data/collection.ts`), which has no deck names and no
+ * timestamps and says how long the game took instead. Nothing is made up for what a game lacks.
+ */
+export type RowSource = Pick<ExportedRecord, 'initialState' | 'moves' | 'winner'> &
+  Partial<Pick<ExportedRecord, 'build' | 'opponentAi' | 'humanSeat' | 'undoCount' | 'bench' | 'playerDeckName' | 'opponentDeckName'>> & {
+    durationMs?: number
+  }
+
 /** The result from one seat's side. */
 export function outcomeFor(winner: PlayerId | 'draw', mover: PlayerId): Outcome {
   if (winner === 'draw') return 'draw'
@@ -141,7 +158,7 @@ const sameAction = (a: Action, b: Action): boolean => JSON.stringify(a) === JSON
  * this build still replays the game as it was played. A record that fails it would give every row
  * the wrong result, and the positions after the point of divergence would never have happened.
  */
-function replayedStates(record: ExportedRecord, cards: CardDb): GameState[] {
+export function replayedStates(record: RowSource, cards: CardDb): GameState[] {
   const start = withCardDb(record, cards, 'It is in none of the bundled set fixtures, so this build cannot replay the game.')
   let states: GameState[]
   try {
@@ -164,10 +181,10 @@ function replayedStates(record: ExportedRecord, cards: CardDb): GameState[] {
  * its stored result: a card no bundled set holds, a move the engine throws on, or an ending that
  * is not the recorded one.
  */
-export function rowsForRecord(record: ExportedRecord, cards: CardDb, options: RowOptions = {}): TrainingRow[] {
+export function rowsForRecord(record: RowSource, cards: CardDb, options: RowOptions = {}): TrainingRow[] {
   const states = replayedStates(record, cards)
   const key = gameKey(record)
-  const { build, opponentAi, humanSeat, undoCount, winner, bench } = record
+  const { build, opponentAi, humanSeat, undoCount, durationMs, winner, bench } = record
   const view = options.view ?? 'full'
   return record.moves.map((move, i): TrainingRow => {
     const state = states[i]
@@ -186,6 +203,7 @@ export function rowsForRecord(record: ExportedRecord, cards: CardDb, options: Ro
       ...(opponentAi !== undefined && { opponentAi }),
       ...(humanSeat !== undefined && { humanSeat }),
       ...(undoCount !== undefined && { undoCount }),
+      ...(durationMs !== undefined && { durationMs }),
       ...(bench !== undefined && {
         ai: bench.ais[move.by],
         deck: move.by === 'player' ? record.playerDeckName : record.opponentDeckName,
@@ -205,12 +223,8 @@ export interface ExportRows {
   rejected: { index: number; reason: string }[]
 }
 
-/**
- * Every record of one export file (what `__sealedExportGames()` downloads, parsed). A record that
- * cannot be replayed is set aside with its reason and the rest carry on; a file that is not an
- * export, or is in a format this build does not read, throws.
- */
-export function rowsForExport(file: unknown, cards: CardDb, options: RowOptions = {}): ExportRows {
+/** The records of a parsed export file. Throws for one that is not an export, or is in a format this build does not read. */
+export function recordsOfExport(file: unknown): ExportedRecord[] {
   const candidate = file as Partial<GameExport> | null
   if (!candidate || typeof candidate.formatVersion !== 'number' || !Array.isArray(candidate.records)) {
     throw new Error('not a game export: expected { formatVersion, build, records }')
@@ -218,8 +232,17 @@ export function rowsForExport(file: unknown, cards: CardDb, options: RowOptions 
   if (candidate.formatVersion !== EXPORT_FORMAT_VERSION) {
     throw new Error(`export format version ${candidate.formatVersion}, and this build reads ${EXPORT_FORMAT_VERSION}`)
   }
+  return candidate.records
+}
+
+/**
+ * Every record of one export file (what `__sealedExportGames()` downloads, parsed). A record that
+ * cannot be replayed is set aside with its reason and the rest carry on; a file that is not an
+ * export, or is in a format this build does not read, throws.
+ */
+export function rowsForExport(file: unknown, cards: CardDb, options: RowOptions = {}): ExportRows {
   const result: ExportRows = { games: [], rejected: [] }
-  candidate.records.forEach((record, index) => {
+  recordsOfExport(file).forEach((record, index) => {
     try {
       result.games.push({ index, rows: rowsForRecord(record, cards, options) })
     } catch (err) {

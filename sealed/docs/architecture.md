@@ -738,6 +738,27 @@ The **benchmark harness** does keep a SQLite database, at `bench-results/bench.d
 That is a developer tool on the dev machine, not app storage: nothing the app runs reads or writes it,
 and it ships with nothing. See [ai-benchmark.md](ai-benchmark.md).
 
+**Collected games end in a second SQLite file on the dev machine**, the archive
+(`bench-results/collected-games.db`, `bench/recordArchive.ts`), which is the long-term home of games
+sent by players who opted in. A game travels one way:
+
+| Stage | Where | Holds |
+|---|---|---|
+| the device | IndexedDB `games` | the full record, with deck names, timestamps and its id |
+| the request | `POST /records` | the named fields of `CollectedRecord` only: no deck names, no id, a duration and no times |
+| staging | Workers KV, `records/<gameKey>` | that payload and nothing else, until it is pulled and deleted |
+| the archive | SQLite, one row per `gameKey` | that payload whole, the build copied out of it, and the UTC day it was pulled |
+| training rows | a JSON Lines file | one row a move, made by replaying the payload (`--rows --collected`) |
+
+Nothing is added on the way that the players' notice does not allow: staging has no arrival time to
+read, the pull takes key names and values only, and the archive's one fact about time is the date of
+the pull. The archive is keyed by the game, so a game pulled twice is held once. A pull verifies each
+game before archiving it (its key is the hash of its own position and moves, and it replays to the
+winner it names) and removes a game from staging only when asked, only once the archive holds it and
+only after a snapshot of the archive has been written. The snapshot is the archive as one compressed
+file of JSON Lines, which restores into an empty archive and which the row tool reads directly. See
+"Collected games" in [operations.md](operations.md).
+
 ## Network
 
 `api.swu-db.com` serves no CORS headers, so the browser cannot fetch it directly.
@@ -770,8 +791,9 @@ were sent.
 Records are staged in a Workers KV namespace (binding `GAME_RECORDS`), as `records/<gameKey>` with
 the payload as JSON. KV keeps no write time that its API returns, which is why it holds the staging
 copy: an object store stamps each object with the second it arrived, and a game's arrival time is
-when it finished, which the payload leaves out on purpose. The staging copy is short-term, and where
-records live for good is a separate decision.
+when it finished, which the payload leaves out on purpose. The staging copy is short-term: games are
+pulled from it into a local archive and then deleted from it (see "Storage tiers" above). The Worker
+has no part in that, which is done from the dev machine with the account's own credentials.
 
 The endpoint answers 503 and stages nothing when its switch (`RECORD_COLLECTION` in
 `proxy/wrangler.toml`) is anything but `on`, or when the store is not bound. The card routes do not

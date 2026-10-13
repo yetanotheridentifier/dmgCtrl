@@ -1792,13 +1792,21 @@ front of it: a caller reads the files and calls it.
 ## Training rows: exported games as model input
 
 ```bash
-npm run bench --prefix sealed -- --rows EXPORT.json [EXPORT.json ...] --out ROWS.jsonl [--legal] [--view mover]
+npm run bench --prefix sealed -- --rows [FILE ...] [--collected] --out ROWS.jsonl [--legal] [--view mover]
 ```
 
-Takes the files `__sealedExportGames()` downloads (see "Exporting game records" in
-[operations.md](operations.md)), or the files a `--record` run writes, replays every record through
-the resolver, and writes **one row per
-recorded move** to `--out` as JSON Lines: a JSON object to a line, in game order and then move order.
+Takes games from three places (`bench/rowSources.ts`), replays every one through the resolver, and
+writes **one row per recorded move** to `--out` as JSON Lines: a JSON object to a line, in game order
+and then move order.
+
+- **An export file**: what `__sealedExportGames()` downloads (see "Exporting game records" in
+  [operations.md](operations.md)), or what a `--record` run writes.
+- **The archive of collected games**, with `--collected` (and `--archive FILE` for one that is not at
+  the default path). See "Collected games" below.
+- **A snapshot of that archive**, named as a file like an export (`collected-games-<day>.jsonl.gz`).
+  A file ending `.gz` is read as a snapshot.
+
+Sources are read in the order given, files first and then the archive, whose games come in key order.
 `--out` is required and is written afresh on each run, so the file holds exactly its inputs' rows. As
 with `npm run tune`, prefer absolute paths: `npm run --prefix sealed` runs with `sealed/` as the
 working directory.
@@ -1816,6 +1824,7 @@ One row shape serves both uses. Imitation reads `state` and `action`; value lear
 | `outcome` | `win`, `loss` or `draw`, **from the mover's side** |
 | `information` | which view `state` is: `full`, or `mover` with `--view mover`. See below |
 | `build`, `opponentAi`, `humanSeat`, `undoCount` | the record's provenance as exported, each left out when the record never had it |
+| `durationMs` | only on a collected game (from the archive or a snapshot of it): how long the game took, which is all its payload says about time |
 | `ai`, `deck`, `bench` | only on a game the bench recorded: the bot that sat where the move was made, the name of the deck it played, and the record's `bench` field whole. See "Recording games" |
 | `action` | the move that was made |
 | `chosenIndex`, `legalMoves` | only with `--legal`: every move the engine offered in the position, and where `action` is in that list |
@@ -1825,6 +1834,11 @@ So a corpus splits by who decided (`decidedBy`), by which bot (`opponentAi` in a
 in a bench game) and by which build played the game, and a game played with take-backs can be told
 from one played straight through (`undoCount`). The rows of a person's game are the same whether or
 not bench games exist: the three bench fields are absent from them, not empty.
+
+**Where a row came from can be read off it.** A bench game's rows carry `bench`; a collected game's
+carry `durationMs`; the rows of a file a player exported by hand carry neither. Nothing else differs:
+a collected game and the same game exported from the device give the same rows but for that field,
+under the same `gameKey`.
 
 ### The two views of a state
 
@@ -1934,6 +1948,58 @@ mover's row 2,946, 2.4% more: a row hides 26 cards on average, and the placehold
 longer than a card id. In those games the other seat had a choice waiting in none of the rows and an
 ability owed in one, so dropping them costs almost nothing there. Bot games on one deck are a narrow
 sample of that.
+
+## Collected games: the archive
+
+```bash
+npm run bench --prefix sealed -- --pull [--delete [--dry-run]] [--backup DIR] [--archive FILE]
+npm run bench --prefix sealed -- --backup DIR | --restore SNAPSHOT.jsonl.gz | --collected  [--archive FILE]
+```
+
+Games from players who opted in are staged by the collection Worker, and these commands move them
+into a local SQLite archive and keep it safe. How to run them, what a refusal means and where to keep
+backups is in "Collected games" in [operations.md](operations.md); this is what the pieces are.
+
+| Flag | Does |
+| --- | --- |
+| `--pull` | lists staging, fetches the games the archive does not hold, verifies each and archives it. Read-only |
+| `--delete` | with `--pull`: removes from staging the listed games the archive holds. Refused without `--backup` |
+| `--dry-run` | with `--pull --delete`: removes nothing and lists each key that would go |
+| `--backup DIR` | writes the whole archive to `DIR` as one dated, gzipped JSON Lines file. Alone, or after a pull |
+| `--restore FILE` | reads a snapshot into the archive, adding the games it does not hold |
+| `--collected` | alone: what the archive holds, by build. With `--rows`: the archive as a source |
+| `--archive FILE` | the archive to use, `bench-results/collected-games.db` unless given |
+
+**Staging is behind three calls** (`StagingStore` in `bench/staging.ts`): list a page of keys, get
+some values, delete some keys. The one implementation runs `wrangler kv key list`, `kv bulk get` and
+`kv bulk delete` against the namespace `proxy/wrangler.toml` binds, because wrangler is already
+signed in: no token is handled here and nothing is installed. A store that moves is another
+implementation of the three calls. Only key names are read from a listing, never the expiry or
+metadata a listing can carry.
+
+**A game is archived only when it checks out** (`verifyStaged` in `bench/pull.ts`): its key is the
+`gameKey` of its own starting position and moves, which catches a value that was damaged or altered,
+and it replays on this build to the winner it names, which is the check `--rows` makes. Anything else
+is reported and left where it is.
+
+**The archive** (`bench/recordArchive.ts`) is one table, `collected_games`:
+
+| Column | Holds |
+| --- | --- |
+| `game_key` | the primary key: the game's `gameKey`, so the same game pulled twice is held once |
+| `pulled_day` | the UTC date it was pulled, `YYYY-MM-DD`. The table refuses anything but a date |
+| `release`, `commit_id` | the build that played it, copied from the payload so the archive counts by build |
+| `payload` | the staged record as JSON, whole: replay data, result, duration and provenance |
+
+It is a file of its own, apart from `bench.db`, because a bench result can be measured again and a
+collected game cannot.
+
+Measured over 300 games staged in wrangler's local store (bot games on the bench deck, payloads of
+5.6 to 16.6 KB, 11.2 KB on average): a pull takes 10.3s, of which 1.3s is the listing, 4.9s the three
+bulk gets and 4.1s verifying and writing (13.6 ms a game); a second pull, with nothing new, takes
+1.4s; a delete with its backup takes 3.3s. The archive is 11.9 KB a game on disk and the snapshot
+0.6 KB a game, since games on one deck compress well together (1.3 KB each when compressed alone).
+Fetching a key at a time would cost a wrangler process, over a second, per game.
 
 ## Where results go: the SQLite database
 
@@ -2096,6 +2162,14 @@ eight of eighteen modules were missing.
   whole state or the mover's view of it (`engine/seatView.ts`, which is not a bench module). Also owns the
   card database a record is replayed against (`trainingCardDb`, every bundled set) and the key that
   groups a game's rows.
+- `bench/rowSources.ts` where `--rows` gets its games (an export file, the archive of collected
+  games, a snapshot of it) and the writing of their rows a game at a time.
+- `bench/staging.ts` the collection Worker's staging store as three calls (list, get, delete), and
+  the implementation that makes them through `wrangler`. Starts a process, so not pure.
+- `bench/pull.ts` pulling staged games into the archive behind `--pull`: the verification a game
+  must pass, and the order that makes `--delete` safe to interrupt.
+- `bench/recordArchive.ts` the SQLite archive of collected games, and its snapshot: writing one,
+  reading one and restoring from one.
 - `bench/main.ts` the command line: the only impure file (reads arguments, prints, saves).
 
 ## A note on trusting numbers while the engine still has bugs
