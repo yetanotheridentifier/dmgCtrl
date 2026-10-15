@@ -580,6 +580,23 @@ export interface BeamLimits {
    */
   readHidden?: boolean
   /**
+   * Score a board the line stops at as it stands, even where stopping means a pass that ends the
+   * action phase. Off by default; `true` is the behaviour before the closing pass was modelled.
+   *
+   * Once the opponent has claimed the initiative they pass for the rest of the round, so after each of
+   * our actions the turn comes straight back to us and the only way a line can stop is our own pass,
+   * which ends the phase. The root `pass` candidate has always been scored past that boundary, after
+   * the regroup and the opponent's opening reply of the next round. A line that stopped before it was
+   * scored on the mid-round board instead, so a move that did nothing, or worse, beat passing by
+   * whatever the next round's opening was worth to the opponent: a leader ability handing them two
+   * Advantage tokens with nothing left to play was chosen over a pass by 46 points.
+   *
+   * By default every such stop is scored after that closing pass, so a line and the root pass are
+   * compared at the same point. **Exists only so the change can be measured**; the sanctioned reading
+   * of `true` is "the arm this is being compared against".
+   */
+  stopUnpassed?: boolean
+  /**
    * How many actions the opponent may take **after we claim the initiative**, before the line assumes
    * they pass and the round ends (#516). Defaults to 0, which assumes they stop the moment we do.
    *
@@ -1089,6 +1106,42 @@ function ourTurnAgain(state: GameState, me: PlayerId, budget: SearchBudget): Gam
   return passed
 }
 
+/**
+ * The board a line that stops here is scored on: past our own closing pass, once the opponent has
+ * claimed.
+ *
+ * After they claim, every action of ours hands the turn straight back (`advanceTurn` passes for them),
+ * so the only way to stop is to pass, and that pass ends the phase. The root `pass` candidate is scored
+ * past it, after the modelled regroup and the opponent's reply; a line that stopped short of it was
+ * scored on the mid-round board instead, which made any move at all look better than passing by
+ * whatever the next round's opening was worth to the opponent. Played out here, the two are compared
+ * at the same point.
+ *
+ * The board is never continued from, so `alpha` is a valid bound on the reply, as on any leaf.
+ * Anywhere else (they have not claimed, the phase is over, a choice is owed) the board is returned
+ * as it stands, and that is exactly the behaviour before this existed.
+ */
+function closingPass(
+  board: GameState,
+  me: PlayerId,
+  asRole: Role | undefined,
+  inner: Evaluator,
+  limits: BeamLimits,
+  policy: ReplyPolicy,
+  budget: SearchBudget,
+  alpha: number,
+  margin: number,
+  chainCap: number,
+): GameState {
+  if (limits.stopUnpassed === true) return board
+  if (board.winner !== null || board.phase !== 'action' || board.activePlayer !== me) return board
+  if (board.initiativeTakenBy !== opponentOf(me) || (board.pendingChoices ?? []).length > 0) return board
+  if (budget.left <= 0) return board
+  spendBeam(budget)
+  const passed = resolveChain(step(board, { type: 'pass' }), me, asRole, inner, budget, chainCap)
+  return applyReply(passed, me, asRole, inner, policy, budget, alpha, margin, chainCap)
+}
+
 /** What a root move reaches: its best board, and whether any leaf below it was an outright win. */
 interface Reach {
   best: number
@@ -1140,14 +1193,19 @@ function reachableFrom(
     applyReply(settled, me, asRole, inner, replyAt(1), budget, rootAlpha, 1, chainCap),
     me, asRole, inner, limits, budget, chainCap,
   )
-  let best = valueAt(root, me, asRole, inner, 1, limits.timePreference)
-  let won = root.winner === me
+  // Stopping on a board is scored past the pass that stopping means, where there is one; the line
+  // itself carries on from the board as it stands.
+  const rootStop = closingPass(
+    root, me, asRole, inner, limits, replyAt(1), budget, cutting ? alpha : -Infinity, 1, chainCap,
+  )
+  let best = valueAt(rootStop, me, asRole, inner, 1, limits.timePreference)
+  let won = rootStop.winner === me
   // Path tracking only when explaining: it allocates per frontier node, and the shipped bot should
   // not pay for a diagnostic.
   const explaining = limits.explain === true
   let peakDepth = 1
   let peakPath: Action[] = explaining ? [move] : []
-  let peakBoard = root
+  let peakBoard = rootStop
   let frontier: Array<{ board: GameState; path: Action[] }> = [{ board: root, path: peakPath }]
 
   // Boundaries are counted from the board being decided from, so the allowance covers the whole line
@@ -1189,15 +1247,20 @@ function reachableFrom(
           me, asRole, inner, limits, budget, chainCap,
         )
         if (tooFar(board)) continue
-        const value = valueAt(board, me, asRole, inner, d + 1, limits.timePreference)
+        // A leaf, so the running best bounds it: a stop scoring below it cannot change this root's max.
+        const stop = closingPass(
+          board, me, asRole, inner, limits, policy, budget,
+          cutting && policy === 'pessimistic' ? Math.max(alpha, best) : -Infinity, d + 1, chainCap,
+        )
+        const value = valueAt(stop, me, asRole, inner, d + 1, limits.timePreference)
         const path = explaining ? [...entry.path, next] : entry.path
         if (value > best) {
           best = value
           peakDepth = d + 1
           peakPath = path
-          peakBoard = board
+          peakBoard = stop
         }
-        if (board.winner === me) won = true
+        if (stop.winner === me) won = true
         if (!last) children.push({ board, value, path })
       }
     }

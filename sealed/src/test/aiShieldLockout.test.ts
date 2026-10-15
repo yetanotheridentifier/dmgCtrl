@@ -111,7 +111,7 @@ describe('the shielded-Sentinel lockout', () => {
    * nothing at all, so the lane stayed shut for the rest of the game. It is now a plain assertion,
    * because `blockedReach` ships at 3 and the bot strips.
    *
-   * Two ingredients, and **neither works alone**. The term brings the two lines level (both score 86,
+   * Two ingredients, and **neither works alone**. The term brings the two lines level (both score 88,
    * asserted below), and the root pass charge then tips the tie toward acting. That is why a shield
    * weight never rescued this: swept against depth and reply policy, no shield weight up to 16 helped
    * under `pessimistic` or `selfish` at depth 3 or 5. The search always found the line; nothing gave

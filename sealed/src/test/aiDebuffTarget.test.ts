@@ -49,14 +49,14 @@ const board = (ourUnitExhausted: boolean): GameState => state({
 })
 
 /** What the search valued attaching the debuff to each unit at. */
-function values(s: GameState): { ours: number; theirs: number } {
+function values(s: GameState, stopUnpassed = false): { ours: number; theirs: number } {
   const moves = legalMoves(s)
   const ourIndex = moves.findIndex(m => m.type === 'playUpgrade' && m.targetInstanceId === 'a')
   const theirIndex = moves.findIndex(m => m.type === 'playUpgrade' && m.targetInstanceId === 'e')
   expect(ourIndex, 'attaching to our unit must be legal').toBeGreaterThanOrEqual(0)
   expect(theirIndex, 'attaching to their unit must be legal').toBeGreaterThanOrEqual(0)
   clearSearchTrace()
-  makeBeamAi(evaluate, { ...BEAM_REPLY_LIMITS, nodes: 200_000 })(s)
+  makeBeamAi(evaluate, { ...BEAM_REPLY_LIMITS, nodes: 200_000, stopUnpassed })(s)
   const c = lastSearchTrace()!.candidates
   return { ours: c[ourIndex], theirs: c[theirIndex] }
 }
@@ -92,31 +92,41 @@ describe('attaching a while-attacking debuff', () => {
     expect(v.theirs).toBeGreaterThan(v.ours)
   })
 
+  const stalled = (): GameState => {
+    const s = board(true)
+    return {
+      ...s,
+      players: {
+        ...s.players,
+        opponent: { ...s.players.opponent, units: s.players.opponent.units.map(u => ({ ...u, exhausted: true })) },
+      },
+    }
+  }
+
   /**
-   * **And ties when NOTHING can attack**, which is the reported position and the precise condition for
-   * the defect.
+   * **Ties when NOTHING can attack and the line stops mid-round**, which is the condition the report was
+   * filed under.
    *
-   * With every relevant unit exhausted the -3 cannot materialise on either side inside the horizon, so
+   * With every relevant unit exhausted the -3 cannot materialise on either side inside the round, so
    * the board term, which sums power with no context, sees two identical boards. The tie-break does not
    * rescue it either: the second opinion is an optimistic search where the opponent does nothing, so a
    * debuff on an enemy unit shows no effect there.
    *
-   * The narrowness matters for what to do about it. It is not "the model cannot see conditional
-   * modifiers" in general, it is "it cannot see them when the moment they apply is past the horizon",
-   * which is the same wall that cost 3.72 points to try to move.
+   * It is "the model cannot see a modifier when the moment it applies is past the horizon", not "the
+   * model cannot see conditional modifiers". Asserted on the search that stops on the mid-round board.
    */
-  it('cannot tell the difference when neither side can attack', () => {
-    const stalled = ((): GameState => {
-      const s = board(true)
-      return {
-        ...s,
-        players: {
-          ...s.players,
-          opponent: { ...s.players.opponent, units: s.players.opponent.units.map(u => ({ ...u, exhausted: true })) },
-        },
-      }
-    })()
-    const v = values(stalled)
+  it('cannot tell the difference when neither side can attack and the line stops mid-round', () => {
+    const v = values(stalled(), true)
     expect(v.ours).toBe(v.theirs)
+  })
+
+  /**
+   * **The shipped search does tell them apart**: the opponent's reply is to claim, after which our only
+   * way to stop is a pass that ends the round, so the line is scored past it. Their unit readies and
+   * attacks our base as the next round opens, and the debuff on it stops 3 damage.
+   */
+  it('prefers the enemy once the opponent claims and the round ends', () => {
+    const v = values(stalled())
+    expect(v.theirs).toBeGreaterThan(v.ours)
   })
 })

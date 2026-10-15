@@ -226,7 +226,9 @@ describe('candidate construction', () => {
     return out
   }
 
-  const positions = corpus(12)
+  // Into round 3: the first twelve end at the first regroup, and there the override changes no move
+  // once a line that ends the round is scored past its closing pass, so the test would stop seeing it.
+  const positions = corpus(24)
 
   it('builds a no-override candidate that plays exactly like the model it names', () => {
     const candidate = buildCandidate('beam-reply', {})
@@ -248,7 +250,7 @@ describe('candidate construction', () => {
    * reports a flat result with a confidence interval on it.
    *
    * Deliberately a drastic override. A realistic one (`base: 40` against a shipped 4) changed no move
-   * across these twelve early positions, which says the corpus is small and early rather than that
+   * across the first twelve of these early positions, which says the corpus is small and early rather than that
    * the override failed: these boards have few units and few base-damage trade-offs. Zeroing the whole
    * board term is coarse but unambiguous, and this test is asking "does the weight arrive", not "is
    * the bot sensitive to it" — that is what `--terms` measures.

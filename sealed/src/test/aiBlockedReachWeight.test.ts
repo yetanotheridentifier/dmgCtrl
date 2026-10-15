@@ -107,17 +107,18 @@ describe('the weight needed to escape the lockout', () => {
    * anything, so it need not be big at all, and a weight of 1 sits at the bottom of the model's scale
    * instead of triple a whole unit.
    *
-   * The scores below are **104 and 86 where the write-ups say 52 and 43**, because every price was
-   * later doubled as a pure reparameterisation. Same boards, same ordering, same conclusion, twice the
-   * units. Halve them to read them against the recorded numbers.
+   * The scores below are **106 and 88 where the write-ups say 52 and 43**, for two reasons that both
+   * leave the ordering alone. Every price was later doubled as a pure reparameterisation, giving 104
+   * and 86. And the opponent's reply in both lines is to claim, so each line is now scored past our
+   * closing pass into the next round, which adds the same 2 to both. Same ordering, same conclusion.
    */
   it('saturates immediately, so the values are identical at 1 and at 12', () => {
     const top = (blockedReach: number): number[] => {
       makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach }), shipped)(lockout())
       return [...lastSearchTrace()!.candidates].sort((a, b) => b - a).slice(0, 2)
     }
-    expect(top(0), 'passing wins outright before the term is priced').toEqual([104, 86])
-    expect(top(1), 'and is level with acting once it is').toEqual([86, 86])
+    expect(top(0), 'passing wins outright before the term is priced').toEqual([106, 88])
+    expect(top(1), 'and is level with acting once it is').toEqual([88, 88])
     expect(top(12), 'twelve times the weight lands in exactly the same place').toEqual(top(1))
   })
 

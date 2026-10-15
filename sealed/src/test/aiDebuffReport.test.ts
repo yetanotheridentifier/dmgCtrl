@@ -37,6 +37,7 @@ const AT_THE_DECISION = 49
  *  since then is a scale change, and a linear evaluation's argmax is invariant under it. */
 const AS_SHIPPED: BeamLimits = {
   width: 4, depth: 3, nodes: 10_000, reply: 'pessimistic', chainNodes: undefined, redactRegroup: false,
+  stopUnpassed: true,
 }
 
 function candidates(s: GameState, limits: BeamLimits): { ours: number; best: number; chosen: string } {
@@ -102,11 +103,15 @@ describe('the reported debuff-on-own-unit position (#509)', () => {
    *
    * That also explains why the tie-break does not save it: the second opinion is an OPTIMISTIC search
    * in which the opponent does nothing, so a debuff on an enemy unit has no visible effect there either.
+   *
+   * Asserted on the search that scores a stop on the mid-round board (`stopUnpassed`), which is the one
+   * the report was filed against. The player has claimed here, so every line ends in our own pass; the
+   * shipped search plays that pass out, and the next test shows what that changes.
    */
   it('scores attaching to our unit and to theirs identically', () => {
     const moves = legalMoves(board)
     clearSearchTrace()
-    makeBeamAi(evaluate, { ...BEAM_REPLY_LIMITS, nodes: 200_000, explain: true })(board)
+    makeBeamAi(evaluate, { ...BEAM_REPLY_LIMITS, nodes: 200_000, explain: true, stopUnpassed: true })(board)
     const lines = lastSearchTrace()!.lines!
     const valueFor = (target: string): number => {
       const i = moves.findIndex(m => m.type === 'playUpgrade' && m.targetInstanceId === target)
@@ -115,6 +120,22 @@ describe('the reported debuff-on-own-unit position (#509)', () => {
     }
     expect(valueFor('u9'), 'our own Scout against their Outland Protector').toBe(valueFor('u1'))
     expect(valueFor('u9'), 'and against their other unit').toBe(valueFor('u7'))
+  })
+
+  /**
+   * **Scoring the closing pass separates the targets without the tie policy.** The player has claimed,
+   * so stopping means our pass, which ends the round; played out, the next round opens with their
+   * attack, and the debuff on the unit that makes it shows. The tie was the horizon, not the board term.
+   */
+  it('separates them once the line is scored past its closing pass', () => {
+    const moves = legalMoves(board)
+    clearSearchTrace()
+    makeBeamAi(evaluate, { ...BEAM_REPLY_LIMITS, nodes: 200_000, explain: true })(board)
+    const lines = lastSearchTrace()!.lines!
+    const valueFor = (target: string): number =>
+      lines[moves.findIndex(m => m.type === 'playUpgrade' && m.targetInstanceId === target)].value
+    expect(valueFor('u7'), 'their unit that attacks next round').toBeGreaterThan(valueFor('u9'))
+    expect(candidates(board, { ...BEAM_REPLY_LIMITS, upgradeTie: false }).chosen).toBe('playUpgrade -> u7')
   })
 
   /**
@@ -142,7 +163,8 @@ describe('the reported debuff-on-own-unit position (#509)', () => {
     const then = candidates(board, AS_SHIPPED)
     // Today's bot with the tie policy switched off: the search tie-break, the pass charge, the
     // per-chain allowance and regroup redaction, all of which landed between the report and the fix.
-    const withoutTheFix = candidates(board, { ...BEAM_REPLY_LIMITS, upgradeTie: false })
+    // The closing pass, which landed after it and does change this decision, is held off as well.
+    const withoutTheFix = candidates(board, { ...BEAM_REPLY_LIMITS, upgradeTie: false, stopUnpassed: true })
     expect(withoutTheFix.ours).toBe(then.ours)
     expect(withoutTheFix.chosen).toBe(then.chosen)
     expect(withoutTheFix.chosen, 'still on our own unit without the fix').toBe('playUpgrade -> u9')
