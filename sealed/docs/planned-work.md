@@ -23,11 +23,12 @@ engine or the horizon invalidates a calibration done before it.
 
    Read against real-play reputation, most of the bottom of the ranking is **pool-dependent rather than
    misplayed**: Grogu, Bo-Katan Kryze, Moff Gideon, The Mandalorian and Vane each need specific cards an
-   algorithmic deck rarely supplies. **Sabine Wren is the candidate blind spot, filed as #589 with a
-   replay**: the bot used her ability with no ready resources and passed, so the opponent got 2
-   Advantage tokens and no unit collected the Shielded. It is intermittent: the log attached to #588
-   shows the same bot using it with 4 resources ready and following with a 4-cost unit. Next: a scripted
-   position built from the #589 replay, against a matched one where a unit can still be played.
+   algorithmic deck rarely supplies. **Sabine Wren's candidate blind spot (#589) was the search, not
+   the leader**: once the opponent has claimed, a line that stopped was scored before the pass that
+   ends the round while `pass` itself was scored after it, so her ability (2 Advantage tokens for the
+   opponent) beat passing with nothing left to play. The closing pass is now modelled; her rating, and
+   any leader whose ranking leaned on that asymmetry, was measured before it and wants re-reading on
+   the next matrix run.
 
    **Whether a different deck suite moves a leader's rating is still open.** The runs replayed one
    suite because the matrix children built the default seed; that is fixed, and a payload played on

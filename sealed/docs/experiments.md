@@ -237,13 +237,16 @@ supplies.
   less than that. In practice that means Shield and Advantage tokens, and when to spend one rather than
   keep it is a judgment the model has no term for.
 
-**Sabine Wren is the exception that looks like misplay, some of the time.** Her ability has the
-opponent give 2 Advantage tokens to one of their units, and in return the next unit she plays this
-phase gains Shielded. In one recorded game the bot uses it with no ready resources and then passes, so
-no unit collects the Shield and the tokens are a pure gift. In another it uses it with 4 resources
-ready and follows with a 4-cost unit, which is the card played correctly. The two are consistent with
-the bot not checking whether a unit can still be played this phase, rather than with a blanket
-misvaluation. That is a sequencing defect rather than a weak leader.
+**Sabine Wren's one misplay was the search's horizon, not her card.** Her ability has the opponent give
+2 Advantage tokens to one of their units, and in return the next unit she plays this phase gains
+Shielded. In one recorded game the bot used it with no ready resources, after the player had claimed,
+and then passed, so the tokens were a pure gift; in another it used it with 4 resources ready and
+followed with a 4-cost unit. Walked on the replays, the misplay was not a missing check on whether a
+unit could still be played: the evaluation does not read the grant at all. It was the search scoring
+the ability's line on the mid-round board while `pass` was scored past the round boundary (see "Once
+they have claimed, every line ends in our pass" in [ai-model.md](ai-model.md)). With the closing pass
+modelled the bot passes there and still plays the second game's line. Her rating was measured before
+that, and has not been re-measured.
 
 **Aggression is the weakest base aspect**, 45.9% against 50.4% to 52.1% for the other three, and it
 was also the weakest under the earlier generator. Why is not measured: the Aggression cards may be
@@ -881,6 +884,32 @@ It also bounds the next step: **a belief model of the opponent's hand has under 
 back**, at most, and the result does not suggest there is anything there.
 
 Each pass of 1,008 games took between 2 hours 7 minutes and 2 hours 31 minutes at twelve shards.
+
+### Scoring the closing pass after a claim: rare, and screened level
+
+Once the opponent has claimed, a line that stops is scored past our own closing pass (see "Once they
+have claimed, every line ends in our pass" in [ai-model.md](ai-model.md)). Against the control that
+scores the stop on the mid-round board, over every decision with a choice in greedy-driven games on ten
+coverage decks:
+
+| rule | decisions | move changed |
+| --- | --- | --- |
+| where the opponent had claimed on the board being decided from (ships) | 616 | 4 (0.6%) |
+| of those, decisions where they had claimed | 33 | 4 (12.1%) |
+| also where the modelled reply is a claim (not shipped) | 616 | 98 (15.9%) |
+
+**The wider rule is the wrong one, and the table says why**: 94 of its 98 changes were where the
+opponent had not claimed, and 38 went into claiming, one came out of it. It scored a line the opponent
+claims in past the boundary with their opening action, and a line where we claim before it, which is an
+asymmetry of its own. Its 80-game screen read **-5.00 points** (sd 15.81 over ten shards of 8, t = -1.00
+on 9 df, 2 of 10 shards favouring it).
+
+**Screened, not measured.** The shipped rule against the control, 80 games over the coverage decks on ten
+seeds, each against a control on the same seeds: **34 of 80 against the control's 34 of 80, a paired
+difference of +0.00 points with a 95% interval of about ± 4.2** (sd 5.89, t = 0.00 on 9 df), and eight of
+the ten seeds identical. No game was dropped. That is a disaster filter and nothing more: at 0.6% of
+decisions the bench cannot see the change, and this is not evidence of parity. The gate is the scripted
+positions, which the control fails.
 
 ### Claiming the initiative to deny a lethal does not convert
 

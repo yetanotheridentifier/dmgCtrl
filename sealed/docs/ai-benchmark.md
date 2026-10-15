@@ -297,6 +297,10 @@ Everything is optional:
   - `beam-reply-upgrade-blind` the deployed model without the hostile-upgrade tie policy. The control
     for that fix, and the only way to name the pre-fix bot: the policy is a boolean on the limits with
     no suffix grammar, so an A/B without this entry compares the arm with itself and reports `sd 0.00`.
+  - `beam-reply-stops-unpassed` the deployed model scoring a line that stops while the opponent has
+    claimed on the mid-round board, instead of past the pass that ends the phase. The control for that
+    change, for A/B only. See "Once they have claimed, every line ends in our pass" in
+    [ai-model.md](ai-model.md).
   - `beam-claim-ties` / `beam-hold-ties` the deployed model always taking a tied initiative, and never
     taking one. A pair, because one arm alone cannot tell "claiming is underpriced" from "the tie is
     genuinely balanced"; the gap between them sizes what turn order is worth at the margin. Both only

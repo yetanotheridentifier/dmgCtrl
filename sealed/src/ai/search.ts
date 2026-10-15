@@ -591,8 +591,8 @@ export interface BeamLimits {
    * whatever the next round's opening was worth to the opponent: a leader ability handing them two
    * Advantage tokens with nothing left to play was chosen over a pass by 46 points.
    *
-   * By default every such stop is scored after that closing pass, so a line and the root pass are
-   * compared at the same point. **Exists only so the change can be measured**; the sanctioned reading
+   * By default, where they had claimed on the board being decided from, every stop is scored after that
+   * closing pass, so a line and the root pass are compared at the same point (see `closingPass`). **Exists only so the change can be measured**; the sanctioned reading
    * of `true` is "the arm this is being compared against".
    */
   stopUnpassed?: boolean
