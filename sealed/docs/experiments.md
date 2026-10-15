@@ -811,7 +811,7 @@ offered, since deciding the opponent's would mean reading their hand.
 Test it by **permuting the deck and requiring the same move**. An assertion that the hand did not grow
 passes the moment someone crosses the boundary a different way.
 
-### A search over the whole state reads the opponent's hand, and what that is worth is not yet known
+### A search over the whole state reads the opponent's hand, and the hand is worth nothing measurable
 
 The engine offers the opponent's legal moves from the cards actually in their hand, so a search that
 models a reply on the engine's own state plans around those cards. Measured by asking for the move
@@ -856,8 +856,31 @@ the limit binds, the fair search sees more of the tree than
 the control does, and a win-rate comparison between them measures the information and the budget
 together.
 
-Inferred from the screen's spread and not measured: at 2,016 games an arm the interval would be about
-± 3 points, so a loss smaller than that needs a longer run to see.
+**Measured: reading the opponent's hand is worth nothing the bench can see.** The fair search against
+the search over the whole state, 24 seeds of 84 games over the coverage decks, against the whole-state
+search playing itself on the same seeds as the control:
+
+| | games | win rate |
+| --- | --- | --- |
+| fair search against whole-state search | 2,016 | 49.55% |
+| control: whole-state search against itself | 2,016 | 49.95% |
+| **paired difference** | | **-0.40 points**, 95% interval -2.82 to +2.02 (sd 5.73 over 24 shards, t = -0.34 on 23 df) |
+
+No game was dropped, and every shard ran on one build. The two halves of the run agree: the first
+twelve seeds read -0.99 and the second twelve +0.20. On the play, the fair search won 495 of 1,008 and
+the control 502 of 1,008.
+
+So a loss from searching fairly, if there is one, is under about three points, and the result is
+consistent with none. Two things are folded into that number and not separated: the information the
+fair search gives up, and the budget it gains by no longer modelling replies from cards it cannot see.
+The fair search reaches its node limit less often (above), so if the information is worth anything,
+the freed budget may be buying part of it back. Whatever the split, the bot a person plays loses
+nothing measurable by not seeing their hand.
+
+It also bounds the next step: **a belief model of the opponent's hand has under three points to win
+back**, at most, and the result does not suggest there is anything there.
+
+Each pass of 1,008 games took between 2 hours 7 minutes and 2 hours 31 minutes at twelve shards.
 
 ### Claiming the initiative to deny a lethal does not convert
 
