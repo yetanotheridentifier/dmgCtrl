@@ -269,13 +269,17 @@ choice, and putting it back changes none of those 25 moves. An ability the other
 present on none of the 1,452.
 
 `beam-reply-omniscient` is the search over the whole state under its own name. **It is a control for
-measuring what fairness costs and is never the opponent a person plays.** One-ply `greedy` and its
+measuring what fairness costs and is never the opponent a person plays.** Measured against it, the
+fair search loses **-0.40 points** over 2,016 games a side with a 95% interval of -2.82 to +2.02, so
+seeing the opponent's hand is worth nothing measurable ([experiments.md](experiments.md)). One-ply `greedy` and its
 variants are not held to their own deck's order: they score a move that draws with the real card. They
 read nothing of the opponent's.
 
 **Every win rate and cost quoted for a reply policy in this document was measured with the search over
 the whole state**, so each describes a bot that could see the replies it was guarding against. None
-has been re-measured from the mover's view; [experiments.md](experiments.md) holds what has.
+has been re-measured from the mover's view. The A/B above suggests they still hold within a few
+points, since the hand measured worth nothing at the level of the whole bot, but that is inferred and
+not measured for each policy; [experiments.md](experiments.md) holds what has been.
 
 **Looking one move ahead at the opponent beats looking three moves ahead at yourself.** Two-ply at
 depth 1 measures **54.5%** against a reply-blind beam over three seeds and 2580 games, above 50 on
