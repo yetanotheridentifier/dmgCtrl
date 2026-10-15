@@ -1117,12 +1117,20 @@ function ourTurnAgain(state: GameState, me: PlayerId, budget: SearchBudget): Gam
  * whatever the next round's opening was worth to the opponent. Played out here, the two are compared
  * at the same point.
  *
+ * **Only where they had claimed on the board being decided from**, so every candidate there, `pass`
+ * included, is scored past the same boundary. Applied also where the opponent's modelled REPLY is a
+ * claim, it made a fresh asymmetry the other way: a line they claim in was scored into the next round,
+ * with their opening action, while a line where WE claim still stopped before it, so claiming looked
+ * better than it is. Measured that way the move changed on 15.9% of decisions, 38 of the 98 changes
+ * into claiming, and an 80-game screen read -5.00 points.
+ *
  * The board is never continued from, so `alpha` is a valid bound on the reply, as on any leaf.
  * Anywhere else (they have not claimed, the phase is over, a choice is owed) the board is returned
  * as it stands, and that is exactly the behaviour before this existed.
  */
 function closingPass(
   board: GameState,
+  claimedAtRoot: boolean,
   me: PlayerId,
   asRole: Role | undefined,
   inner: Evaluator,
@@ -1133,7 +1141,7 @@ function closingPass(
   margin: number,
   chainCap: number,
 ): GameState {
-  if (limits.stopUnpassed === true) return board
+  if (limits.stopUnpassed === true || !claimedAtRoot) return board
   if (board.winner !== null || board.phase !== 'action' || board.activePlayer !== me) return board
   if (board.initiativeTakenBy !== opponentOf(me) || (board.pendingChoices ?? []).length > 0) return board
   if (budget.left <= 0) return board
@@ -1194,9 +1202,10 @@ function reachableFrom(
     me, asRole, inner, limits, budget, chainCap,
   )
   // Stopping on a board is scored past the pass that stopping means, where there is one; the line
-  // itself carries on from the board as it stands.
+  // itself carries on from the board as it stands. `state` is the board being decided from.
+  const claimedAtRoot = state.initiativeTakenBy === opponentOf(me)
   const rootStop = closingPass(
-    root, me, asRole, inner, limits, replyAt(1), budget, cutting ? alpha : -Infinity, 1, chainCap,
+    root, claimedAtRoot, me, asRole, inner, limits, replyAt(1), budget, cutting ? alpha : -Infinity, 1, chainCap,
   )
   let best = valueAt(rootStop, me, asRole, inner, 1, limits.timePreference)
   let won = rootStop.winner === me
@@ -1249,7 +1258,7 @@ function reachableFrom(
         if (tooFar(board)) continue
         // A leaf, so the running best bounds it: a stop scoring below it cannot change this root's max.
         const stop = closingPass(
-          board, me, asRole, inner, limits, policy, budget,
+          board, claimedAtRoot, me, asRole, inner, limits, policy, budget,
           cutting && policy === 'pessimistic' ? Math.max(alpha, best) : -Infinity, d + 1, chainCap,
         )
         const value = valueAt(stop, me, asRole, inner, d + 1, limits.timePreference)

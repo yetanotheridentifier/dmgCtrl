@@ -34,12 +34,12 @@ import {
  * two because each costs seconds: between them they move with every zone the reading search follows
  * on this deck.
  */
-const READING_BEAM = { theirHand: [27, 52], theirDeckOrder: [27], ownDeckOrder: [52] }
-const BEAM_POSITIONS = [27, 52]
+const READING_BEAM = { theirHand: [118], theirDeckOrder: [118], ownDeckOrder: [145] }
+const BEAM_POSITIONS = [118, 145]
 
 /** The same for two-ply, which is the reply model with nothing else around it. */
-const READING_TWO_PLY = { theirHand: [25, 27], theirDeckOrder: [27] }
-const TWO_PLY_POSITIONS = [25, 27]
+const READING_TWO_PLY = { theirHand: [25, 118], theirDeckOrder: [118] }
+const TWO_PLY_POSITIONS = [25, 118]
 
 /** `reply:pessimistic` as it was: two-ply over the whole state. There is no registered name for it. */
 const twoPlyReading = makeBeamGreedy(DEFAULT_WEIGHTS, { ...beamLimitsFor('reply:pessimistic')!, readHidden: true })
