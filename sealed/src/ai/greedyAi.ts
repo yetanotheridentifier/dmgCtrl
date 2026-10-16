@@ -249,6 +249,18 @@ export const beamReplyUpgradeBlindAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPL
 export const beamReplyUnredactedAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_UNREDACTED_LIMITS)
 
 /**
+ * The shipped model scoring a line that stops while the opponent has claimed on the mid-round board,
+ * before the pass that would end the phase: the control for modelling that closing pass, and nothing
+ * else. See `BeamLimits.stopUnpassed`.
+ *
+ * Same role as `greedy-flat` and `beam-reply-shared`: it tracks every later change to the evaluation
+ * and the search, so the comparison stays one difference.
+ */
+export const BEAM_REPLY_STOPS_UNPASSED_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, stopUnpassed: true }
+
+export const beamReplyStopsUnpassedAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_STOPS_UNPASSED_LIMITS)
+
+/**
  * The shipped model allowed to play on past the round boundary (#516).
  *
  * One difference from `beam-reply` and it is not an evaluation term: a line may continue into the

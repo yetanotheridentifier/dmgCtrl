@@ -2,9 +2,9 @@ import type { Ai } from './types'
 import { randomAi } from './randomAi'
 import {
   greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, beamReplyUnredactedAi,
-  beamReplyOmniscientAi, beamReplyUpgradeBlindAi, beamHorizonAi, beamClaimTiesAi, beamHoldTiesAi, lethalBeamAi,
-  makeBeamGreedy, makeLethalBeam, BEAM_REPLY_LIMITS, BEAM_REPLY_SHARED_LIMITS, BEAM_HORIZON_LIMITS,
-  BEAM_REPLY_OMNISCIENT_LIMITS,
+  beamReplyOmniscientAi, beamReplyUpgradeBlindAi, beamReplyStopsUnpassedAi, beamHorizonAi, beamClaimTiesAi,
+  beamHoldTiesAi, lethalBeamAi, makeBeamGreedy, makeLethalBeam, BEAM_REPLY_LIMITS, BEAM_REPLY_SHARED_LIMITS,
+  BEAM_HORIZON_LIMITS, BEAM_REPLY_OMNISCIENT_LIMITS, BEAM_REPLY_STOPS_UNPASSED_LIMITS,
 } from './greedyAi'
 import { DEFAULT_BEAM_LIMITS, TIE_DECISION_KINDS, type BeamLimits } from './search'
 import { DEFAULT_LETHAL_LIMITS, type LethalLimits } from './lethal'
@@ -70,6 +70,15 @@ export const AIS: Record<string, Ai> = {
    * silently compares the arm with itself.
    */
   'beam-reply-upgrade-blind': beamReplyUpgradeBlindAi,
+  /**
+   * `beam-reply` scoring a line that stops while the opponent has claimed on the mid-round board, before
+   * the pass that ends the phase: the control for modelling that closing pass. **For A/B only.**
+   *
+   * Without the closing pass, a move that does nothing beats passing whenever the next round's opening
+   * favours the opponent, since only the root `pass` was scored past the boundary. Reported from play
+   * as a leader ability handing over two Advantage tokens with nothing left to play.
+   */
+  'beam-reply-stops-unpassed': beamReplyStopsUnpassedAi,
   /**
    * `beam-reply` always taking a tied initiative, and never taking one. The pair brackets the seeded
    * coin flip that ships, which is the default by omission rather than by anyone's decision.
@@ -325,6 +334,7 @@ export function namedLimitsFor(name: string): BeamLimits | null {
     'beam-reply-shared': BEAM_REPLY_SHARED_LIMITS,
     // So a weight or a tie-break can be swept on the control as it can on the arm.
     'beam-reply-omniscient': BEAM_REPLY_OMNISCIENT_LIMITS,
+    'beam-reply-stops-unpassed': BEAM_REPLY_STOPS_UNPASSED_LIMITS,
     // Without this, every suffix threw on the horizon arm: `beam-horizon+blockedReach=1` was
     // unnameable, which is exactly the A/B the lockout work needs.
     'beam-horizon': BEAM_HORIZON_LIMITS,

@@ -122,7 +122,9 @@ unit, deploy their leader (which arrives ready, and is the largest of these), or
 
 The null move is the real `pass` action rather than a rewrite of `activePlayer`, which is safe because
 every real action resets the pass counter before handing the turn over, so alternating our-action and
-their-pass never reaches the two-pass phase end. The search never passes on our own behalf.
+their-pass never reaches the two-pass phase end. The search never passes on our own behalf to continue
+a line; the one pass of ours it plays is the closing pass a line is scored past once the opponent has
+claimed (see "Once they have claimed, every line ends in our pass").
 
 ### Three properties that are not obvious
 
@@ -359,7 +361,8 @@ charge brings it to 0.21 and is worth **+2.43 points** (t = 3.19 on 11 df, 10 of
 **It is not an evaluation weight and cannot be one.** Everything else here prices a board. Passing
 barely changes the board, which is precisely why the model could not see the defect, so the charge lives
 on the candidate in `search.ts` and applies at the root only: the frontier never passes on our own
-behalf, and the pass inside `ourTurnAgain` is the opponent's.
+behalf to continue a line, the pass inside `ourTurnAgain` is the opponent's, and the closing pass a
+line is scored past once they have claimed (below) is not charged.
 
 The value is the **margin by which passing must beat the best alternative**. Bounded on both sides:
 too small changes nothing, too large makes the bot play a card for no benefit rather than pass, which is
@@ -372,6 +375,40 @@ Two properties keep it honest:
   opponent's side is scored with `evaluate(s, foe)` directly. `-evaluate(s, me)` would read their hand.
 - **Their role is fixed once**, from the position they are deciding in, the same discipline that
   applies to ours. Deriving it per candidate compares scores computed with different weight sets.
+
+### Once they have claimed, every line ends in our pass
+
+After the opponent claims the initiative they pass for the rest of the round, so each of our actions
+hands the turn straight back to us, and the only way a line can stop is our own pass, which ends the
+action phase. **A board a line stops at is therefore scored past that pass**: the modelled regroup, then
+the opponent's reply as the next round opens. That is where the root `pass` candidate has always been
+scored, so the two are compared at the same point (`closingPass` in `search.ts`).
+
+Scored on the mid-round board instead, any move at all beat passing by whatever the next round's
+opening was worth to the opponent. Reported from play: Sabine Wren's leader ability ("an opponent gives
+2 Advantage tokens to a unit they control; the next unit you play this phase gains Shielded") used with
+no resources left, after the player had claimed. Walked on the replay, the ability read **8.34 against
+pass's -37.64**: its line stopped on the board where the tokens had just been handed over, while the pass
+line was scored after the regroup and the player's opening attack. The grant played no part, since the
+evaluation does not read a "next unit you play" grant at all. Scored past the closing pass the two are
+level at -37.64, because two Advantage tokens cost exactly the 8 points `pass` is charged, and the second
+opinion then passes.
+
+**Only where they had claimed on the board being decided from**, so every candidate there, `pass`
+included, ends at the same boundary. Applied also where the opponent's modelled reply is a claim, it
+made an asymmetry the other way: a line they claim in was scored into the next round, with their
+opening action, while a line where we claim still stopped before it, so claiming looked better than it
+is. That wider rule changed the move on 98 of 616 coverage-deck decisions, 38 of them into claiming,
+and read -5.00 points on an 80-game screen. As shipped it changes 4 of the same 616, all where the
+opponent had claimed (12.1% of those 33).
+
+Where it applies, an effect that lands as the round opens becomes visible: on a filed report where a
+while-attacking debuff tied across all five targets, the enemy unit that attacks first next round now
+scores 10 points above the rest. The charge is unchanged, so an action costing less than 8 points still
+beats passing once they have claimed, exactly as it does mid-round.
+
+`beam-reply-stops-unpassed` scores a stop on the mid-round board, as before, and exists only as the
+control for an A/B. See [experiments.md](experiments.md) for the screen.
 
 ### Bounded by alpha-beta, not by trimming
 

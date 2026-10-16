@@ -18,6 +18,8 @@ import palpatinesReturnTwoPlays from '../fixtures/reports/palpatinesReturnTwoPla
 import plotSpendsBeforePlayUnit from '../fixtures/reports/plotSpendsBeforePlayUnit.json'
 import rampResourceReady from '../fixtures/reports/rampResourceReady.json'
 import shieldedSentinelLockout from '../fixtures/reports/shieldedSentinelLockout.json'
+import sabineNothingToPlay from '../fixtures/reports/sabineNothingToPlay.json'
+import sabineThenUnit from '../fixtures/reports/sabineThenUnit.json'
 import sloaneSelfSentinel from '../fixtures/reports/sloaneSelfSentinel.json'
 import shieldedSentinelPing from '../fixtures/reports/shieldedSentinelPing.json'
 import triggerProbeOverflow from '../fixtures/reports/triggerProbeOverflow.json'
@@ -59,7 +61,7 @@ const REPORTS: Record<string, unknown> = {
   advantageToEnemy, attackBuffPersists, baylanExhaust, cassianBaseAttackerAttacked, debuffOnOwnUnit, deployedLeaderExhaust,
   exhaustedLeaderDraw, grassrootsHeal, haulcraftPrompt, hondoTopCard, kimogilaArena, maeShieldAmbush, minefieldArenaChoice,
   nestedDeployShieldTarget, palpatinesReturnTwoPlays, plotSpendsBeforePlayUnit, rampResourceReady,
-  shieldedSentinelLockout, shieldedSentinelPing, sloaneSelfSentinel, triggerOrderNotOffered,
+  sabineNothingToPlay, sabineThenUnit, shieldedSentinelLockout, shieldedSentinelPing, sloaneSelfSentinel, triggerOrderNotOffered,
   triggerProbeOverflow, vaneFriendlyUpgrade, warriorAmbushDecline,
 }
 
