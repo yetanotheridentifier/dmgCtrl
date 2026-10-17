@@ -43,11 +43,20 @@ engine or the horizon invalidates a calibration done before it.
    pool varies which cards a leader can have at all, where a seed only varies the draw from the whole
    set. And per-card win
    rates need far more decks than 52 before a card-sized effect can clear the noise.
-3. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
-   a corpus run. The fragmentation already costs something measured, since the generalisation harness
-   and `runBench` read 50.4% and 48.70% for the same AI on the same decks, which is why every harness
-   needs its own baseline established before a number from it can be trusted. The benefit is mostly
-   for repeated A/B runs.
+3. **The rest of #565, what a run plays split from what it records.** The game runner exists
+   (`gameRun.ts`): the head-to-head, matchups, generalisation, matrix and sweep play through it with
+   their own schedules and recorders. Still to do, none of it ticketed separately:
+   - **The decision, term and lethal corpora onto the runner.** They are game runs that record from
+     inside a decision; each still drives its own loop and seats by `firstPlayerFor`. Taking them up
+     means a recorder that can wrap the AI it observes, with the opt-in cost kept opt-in (`--terms` is
+     roughly 30x a plain pass).
+   - **Deck population as a parameter everywhere.** `mirror`, `coverage` and `lockout` are a
+     `--decks` value on the head-to-head only; the matchup deck set is reachable only by choosing
+     `--matchups` or `--matrix`, and the generalisation harness is fixed to the coverage decks.
+   - **Recorders chosen per run on the command line**, `--record` included, rather than fixed by the
+     mode.
+   - **One table**, so "which decks degraded between build X and build Y" is a query over stored
+     games rather than another run. The store must keep keying on deck source: populations never pool.
 
 ## Deferred
 
@@ -133,8 +142,8 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
   Bench self-play is the second source of records, and needs no consent: `--record` on the
   head-to-head run keeps its completed games in the exported shape, with the bot on each seat named.
   The per-card, per-deck question the epic set out to answer (#407) is a function over those records
-  with no command in front of it. Recording is on that one run only: #565 is where a recorder becomes
-  a choice on every game run, and the callback it is built on is meant to be taken up there unchanged.
+  with no command in front of it. Recording is on that one run only; making it a choice on every game
+  run is in the rest of #565 above, and the runner already takes the callback as one of its recorders.
   **Deferred: what a seat learned during the game.** The mover's view is made from one state, which
   records where cards are and not who has been shown them, so it hides a card the mover looked at,
   searched past or put on the bottom of a deck, a unit it watched return to a hand, and a hand it is

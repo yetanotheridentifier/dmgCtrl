@@ -12,9 +12,9 @@ import { resolveAi } from '../ai/registry'
 import { buildCoverageDecks } from './coverageDecks'
 import { compareCardIds } from './playCoverage'
 import { poolFor } from './setPools'
-import { playGame } from './selfPlay'
 import type { DropReason, GameResult } from './selfPlay'
 import { firstPlayerFor } from './seating'
+import { runGames, type ScheduledGame } from './gameRun'
 
 /**
  * A deck as the sweep plays it. Fixtures hold Normal printings only, so the one id left to collapse
@@ -115,9 +115,6 @@ export function runSweep(config: SweepConfig): SweepReport {
   const cardDb = sweepCardDb(pool)
   const ai = resolveAi(config.aiName ?? 'random')
 
-  let completed = 0
-  let dropped = 0
-  let gameIndex = 0
   const failures: SweepFailure[] = []
   const droppedGames: GameResult[] = []
   // Availability, by card type. Leaders and bases are separated here rather than at the end,
@@ -130,55 +127,63 @@ export function runSweep(config: SweepConfig): SweepReport {
   const played = new Set<string>()
   const deployed = new Set<string>()
 
-  // Each seed is an independent chain, so a run is reproducible from its seed list alone and adding
-  // a seed extends the evidence rather than reshuffling what the earlier ones did.
-  for (const baseSeed of config.seeds) {
-    let seed = baseSeed
-    for (const deck of decks) {
-      leaders.add(deck.leader)
-      bases.add(deck.base)
-      for (const entry of deck.cards) decked.add(entry.id)
-      // Games run in the engine's ids and coverage is reported in the printed ones. A deck draws on
-      // one set, so each engine id in it stands for exactly one printing.
-      const game = engineDeck(deck)
-      const printedIds = new Map<string, string>([
-        [game.leader, deck.leader],
-        [game.base, deck.base],
-        ...game.cards.map((entry, i): [string, string] => [entry.id, deck.cards[i].id]),
-      ])
-      const printed = (id: string) => printedIds.get(id) ?? id
+  for (const deck of decks) {
+    leaders.add(deck.leader)
+    bases.add(deck.base)
+    for (const entry of deck.cards) decked.add(entry.id)
+  }
+  // Games run in the engine's ids and coverage is reported in the printed ones. A deck draws on one
+  // set, so each engine id in it stands for exactly one printing.
+  const sweepDecks = decks.map(deck => {
+    const game = engineDeck(deck)
+    const printedIds = new Map<string, string>([
+      [game.leader, deck.leader],
+      [game.base, deck.base],
+      ...game.cards.map((entry, i): [string, string] => [entry.id, deck.cards[i].id]),
+    ])
+    return { deck, game, printed: (id: string) => printedIds.get(id) ?? id }
+  })
 
-      for (let g = 0; g < config.gamesPerDeck; g++) {
-        seed = nextSeed(seed)
-        const result = playGame({
-          deckPlayer: game,
-          deckOpponent: game,
-          cardDb,
-          aiPlayer: ai,
-          aiOpponent: ai,
-          seed,
+  // One AI on both seats, and no aiA to keep off a seat, so the seats never swap and only the first
+  // player varies (`firstPlayerFor`).
+  function* schedule(): Generator<ScheduledGame<(typeof sweepDecks)[number]>> {
+    let gameIndex = 0
+    // Each seed is an independent chain, so a run is reproducible from its seed list alone and adding
+    // a seed extends the evidence rather than reshuffling what the earlier ones did.
+    for (const baseSeed of config.seeds) {
+      let seed = baseSeed
+      for (const entry of sweepDecks) {
+        for (let g = 0; g < config.gamesPerDeck; g++) {
+          seed = nextSeed(seed)
           // Corpus-wide, not within the deck: a within-deck alternation leaves the odd default of
           // five games per deck running 3:2 on the same opening, and one game per deck running 5:0.
-          firstPlayer: firstPlayerFor(gameIndex),
-          stepCeiling: config.stepCeiling,
-          trackCoverage: true,
-          // The sweep exercises cards, and the lethal a concession would skip is play like any other.
-          concede: false,
-        })
-        for (const id of result.cardsDrawn) drawn.add(printed(id))
-        for (const id of result.cardsPlayed) played.add(printed(id))
-        for (const id of result.leadersDeployed) deployed.add(printed(id))
-        if (result.status === 'dropped') {
-          dropped++
-          failures.push({ deck: deck.name, gameIndex, seed: result.seed, reason: result.dropReason! })
-          droppedGames.push(result)
-        } else {
-          completed++
+          const seats = { swapped: false, firstPlayer: firstPlayerFor(gameIndex++) }
+          yield { seed, seats, deckA: entry.game, deckB: entry.game, key: entry }
         }
-        gameIndex++
       }
     }
   }
+
+  let completed = 0
+  let dropped = 0
+  let totalGames = 0
+  runGames(schedule(), {
+    aiA: ai, aiB: ai, cardDb, stepCeiling: config.stepCeiling, trackCoverage: true,
+    // The sweep exercises cards, and the lethal a concession would skip is play like any other.
+    concede: false,
+  }, ({ result, key, index }) => {
+    totalGames++
+    for (const id of result.cardsDrawn) drawn.add(key.printed(id))
+    for (const id of result.cardsPlayed) played.add(key.printed(id))
+    for (const id of result.leadersDeployed) deployed.add(key.printed(id))
+    if (result.status === 'dropped') {
+      dropped++
+      failures.push({ deck: key.deck.name, gameIndex: index, seed: result.seed, reason: result.dropReason! })
+      droppedGames.push(result)
+    } else {
+      completed++
+    }
+  })
 
   // Intersect with what was decked: play also surfaces tokens (Shield, Experience, Mandalorian),
   // which are created rather than decked and are not part of pool coverage.
@@ -191,7 +196,7 @@ export function runSweep(config: SweepConfig): SweepReport {
     decks: decks.length,
     gamesPerDeck: config.gamesPerDeck,
     seeds: [...config.seeds],
-    totalGames: gameIndex,
+    totalGames,
     completed,
     dropped,
     cardsDecked: decked.size,

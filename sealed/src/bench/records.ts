@@ -19,9 +19,10 @@ import { shardRunKey, type ShardConfig } from './shard'
  * size of its record.
  *
  * **A recorder is a function the run calls once per completed game** (`GameRecorder`), and this
- * module is one: `runBench` knows only that it was handed a callback. That is the whole seam, kept
- * that narrow so a runner that takes its recorders as a list can take this one unchanged. Only the
- * head-to-head game run offers it; the other modes play their games through their own loops.
+ * module is one: `runBench` knows only that it was handed a callback, which it calls from one of the
+ * recorders it hands the game runner (`gameRun.ts`). Only the head-to-head offers it; the other modes
+ * that play through the runner do not hand their games to it, and the instrumented corpora play
+ * through their own loops.
  *
  * A dropped game is not recorded here. It has its own file, as a fixture to replay and file
  * (`reports.ts`), and it has no result for a row to carry.
