@@ -34,12 +34,11 @@ const READS_EVERYTHING = ['beam-reply-omniscient', 'beam-reply-unredacted']
 /**
  * Bots whose move may still follow the order of THEIR OWN deck, which no player knows either.
  *
- * One ply resolves each candidate on the real state, so a move that draws is scored holding the card
- * actually on top. None of these searches a reply or is the bot a person plays, and `greedy` plays
- * the games every cost and budget corpus is read from, so changing what it sees is its own change.
- * The opponent's side they are held to like everything else.
+ * `greedy-baseline` is a frozen reference, frozen in what it reads as well as in how it scores: it
+ * resolves each candidate on the real state, so a move that draws is scored holding the card actually
+ * on top. The opponent's side it is held to like everything else.
  */
-const READS_OWN_DECK = ['greedy', 'greedy-flat', 'greedy-baseline']
+const READS_OWN_DECK = ['greedy-baseline']
 
 /**
  * Quiet positions of the mirror probe games where the reading search changes its move: with the

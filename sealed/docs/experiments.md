@@ -834,8 +834,13 @@ identical before and after:
 
 Positions are every third action-phase decision with no choice pending, from ten games. Searching
 from the mover's view, every cell of the reply and beam rows is **0**, as is a second sample of 291
-positions taken across every kind of decision, choice answers included. `greedy` is unchanged and
-still follows the order of its own deck.
+positions taken across every kind of decision, choice answers included.
+
+One-ply `greedy` scores from the mover's view too. Over all 437 action-phase decisions with no choice
+pending in the ten bench-deck games, one ply over the whole state changed its move with its own deck's
+order on 3 and with nothing of the opponent's; from the mover's view, on none. **Cost and budget
+figures quoted before that change were read off corpora that the whole-state `greedy` played**, so a
+re-run plays different games from the first decision where the two part. None has been re-measured.
 
 The coverage decks read higher than the bench deck, which is thirty units. The likely reason, not
 separately measured, is that a hand able to hold an event or an upgrade changes more decisions than

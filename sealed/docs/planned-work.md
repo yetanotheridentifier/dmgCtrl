@@ -64,11 +64,6 @@ public. Not worth a ticket: ignoring the hand measured -0.40 points against the 
 with an interval of -2.82 to +2.02 over 2,016 games a side, so a belief model has under three points
 to win back at most ([experiments.md](experiments.md)).
 
-**#830: one-ply `greedy` follows the order of its own deck**, which no player knows: it scores a move on
-the engine's state, so the move changed with the deck's order on 2 of 174 positions. It is not the
-bot a person plays, and it plays the games every cost and budget corpus is read from, so moving it to
-its seat's view shifts those corpora and is its own change.
-
 The initiative tie policy is settled: always taking a tied initiative and never taking one measured
 **+0.00 apart** over 2016 games, so the seeded coin flip that ships is right. A **conditional** policy
 is not strictly ruled out, since a zero gap between blanket arms is also what a half-right-half-wrong

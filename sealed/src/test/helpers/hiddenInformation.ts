@@ -5,7 +5,8 @@ import type { ParsedDeck } from '../../utils/parseProtectThePod'
 import { opponentOf } from '../../engine/types'
 import { resolve } from '../../engine/resolve'
 import { setupAi } from '../../ai/setupAi'
-import { greedyAi } from '../../ai/greedyAi'
+import { makeTunedGreedy } from '../../ai/greedyAi'
+import { DEFAULT_WEIGHTS } from '../../ai/evaluate'
 import { clearSearchTrace, lastSearchTrace } from '../../ai/search'
 import { playGame } from '../../bench/selfPlay'
 import { benchInputs, benchDeckSet } from '../../bench/decks'
@@ -131,8 +132,12 @@ export function choicePositions(positions: GameState[], every = 3): GameState[] 
 }
 
 /**
- * The two fixed sets of games the probe reads its positions from, played by `greedy` because that
+ * The two fixed sets of games the probe reads its positions from, played by one-ply greedy because that
  * takes seconds where the shipped bot takes minutes, and the positions only have to be real.
+ *
+ * It is the greedy that reads the whole state (`PROBE_GAMES_AI`), on purpose: that is the bot that
+ * played these games when their positions were indexed, so the indexes keep naming the same boards
+ * while the live `greedy` changes.
  *
  * - `mirror`: ten games on the bench deck, which is thirty units, so what is hidden is bodies.
  * - `coverage`: one game on each of the first ten coverage decks, which between them hold events,
@@ -143,12 +148,15 @@ export function choicePositions(positions: GameState[], every = 3): GameState[] 
  */
 export function probeGames(source: 'mirror' | 'coverage'): GameState[] {
   if (source === 'mirror') {
-    return positionsFromGames(greedyAi, Array.from({ length: 10 }, (_, i) => i + 1), benchInputs())
+    return positionsFromGames(PROBE_GAMES_AI, Array.from({ length: 10 }, (_, i) => i + 1), benchInputs())
   }
   const set = benchDeckSet('coverage', 1)
   return set.decks.slice(0, 10).flatMap((d, i) =>
-    positionsFromGames(greedyAi, [100 + i], { deck: d.player, cardDb: set.cardDb }))
+    positionsFromGames(PROBE_GAMES_AI, [100 + i], { deck: d.player, cardDb: set.cardDb }))
 }
+
+/** The bot that plays the probe games (see `probeGames`). */
+const PROBE_GAMES_AI = makeTunedGreedy(DEFAULT_WEIGHTS, { readHidden: true })
 
 export interface ProbeCount {
   /** Positions where the zone could be changed at all. */

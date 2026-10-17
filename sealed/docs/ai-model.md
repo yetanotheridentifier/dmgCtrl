@@ -273,9 +273,12 @@ present on none of the 1,452.
 `beam-reply-omniscient` is the search over the whole state under its own name. **It is a control for
 measuring what fairness costs and is never the opponent a person plays.** Measured against it, the
 fair search loses **-0.40 points** over 2,016 games a side with a 95% interval of -2.82 to +2.02, so
-seeing the opponent's hand is worth nothing measurable ([experiments.md](experiments.md)). One-ply `greedy` and its
-variants are not held to their own deck's order: they score a move that draws with the real card. They
-read nothing of the opponent's.
+seeing the opponent's hand is worth nothing measurable ([experiments.md](experiments.md)).
+
+One-ply `greedy` and `greedy-flat` score each candidate from the same view (`makeGreedyAi`), and are
+held to it by the same probe. `greedy-baseline` is frozen in what it reads as well as in how it scores:
+it scores on the whole state, so a move that draws is scored with the real card. It reads nothing of
+the opponent's.
 
 **Every win rate and cost quoted for a reply policy in this document was measured with the search over
 the whole state**, so each describes a bot that could see the replies it was guarding against. None
