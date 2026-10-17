@@ -38,11 +38,11 @@ The spread is the sharper evidence. A binomial at 8400 games has an expected sta
 0.55 points; the corrected readings measure 0.59, while the old ones measured **0.30, tighter than
 chance allows**. The seat was deciding more of the outcome than the games were.
 
-**The head-to-head A/B kept the defect for longer than the rest.** The seating fix reached
-`generalisation`, `aiMatchups` and `matrix` but not `runBench`, which is the path `--shard` and every
-head-to-head result go through: it went on pinning `aiA` to the `player` seat and alternating only who
-moved first. Self-play controls through it read 50.0%, 48.8% and 46.3% on three seed sets, pooling to
-**48.3%** where an unbiased harness gives 50. It uses `seating` now.
+**Every game run is seated by one runner** (`bench/gameRun.ts`), so a change to seating, or to how a
+result is read from side A, reaches every mode at once. While each harness seated its own games, one
+of them could keep a defect the rest had lost: a head-to-head still pinning `aiA` to the `player` seat
+read 50.0%, 48.8% and 46.3% for self-play controls on three seed sets, pooling to **48.3%** where an
+unbiased harness gives 50.
 
 ### The instrumented corpora balance the opening, not the seat
 
@@ -116,11 +116,15 @@ blocks agreeing within 0.1 points is suggestive, not conclusive, so treat the re
 than as an established bias. Draws do not explain it (one draw in 2,040 games) and no evaluation
 weight can, because a control is the same bot on both sides and any weight change cancels.
 
-**The baseline is a property of the harness, not a constant.** The generalisation harness that `tune`
-runs through reads **50.4% ± 6.1%** over 252 self-play games on the same decks, where `runBench` reads
-48.70%. So a number carried across from one harness to another is no safer than a theoretical 50:
-establish each harness's own baseline at the precision you intend to measure at, before trusting a
-result from it.
+**The baseline belongs to the schedule and the sample, not to a constant.** The generalisation harness
+that `tune` runs through reads **50.4% ± 6.1%** over 252 self-play games on the same decks, where
+`runBench` reads 48.70%. That interval contains the other reading, so at the precision measured the two
+do not disagree. Both play through the one game runner (`gameRun.ts`), which seats, plays and reads a
+game identically for every mode; what differs is the schedule. The generalisation harness plays every
+deck the same number of times from one seed chain, and `runBench` plays a seed-offset run of decks, a
+whole seating cycle each. A number carried from one schedule to another is still a different sample,
+so it is no safer than a theoretical 50: measure the control on the schedule and seeds the arm is
+measured on, which is what `--control` does.
 
 **Read an arm against its own control, never against a theoretical 50%.** The size of this matters
 more than it looks, because it inverts live results. The search tie-break over 2,040 games:
@@ -1147,7 +1151,10 @@ as the list of lines still to add when a set is brought in.
 
 `--generalise` plays one AI against another across the whole coverage deck set and reports the first
 AI's win rate broken down **by leader, by base aspect, and per deck** (each weakest-first), so you can
-see which leaders / mechanics it handles worst rather than hiding that in an aggregate:
+see which leaders / mechanics it handles worst rather than hiding that in an aggregate. The overall
+rate carries the same turn-order split as the head-to-head (on the play, on the draw, and the gap
+with its band); the seating cycle is four games, so a `--games` that is not a multiple of four leaves
+the two halves unequal:
 
 ```bash
 npm run bench --prefix sealed -- --generalise --games 40 --seed 42   # greedy vs random by default
@@ -1702,8 +1709,9 @@ app exports its saved games in, so everything else about the game is derived by 
 and writes exactly what it always did.
 
 It is a choice on the head-to-head run, alone or with `--shard` and `--control`. Every other mode
-refuses the flag at parse time: they play their games through their own loops and hand them to no
-recorder.
+refuses the flag at parse time. The matchups, the matrix, the generalisation harness and the sweep play
+through the same game runner, which takes recorders per run, but none of them hands its games to the
+records writer; the instrumented corpora play through their own loops.
 
 **Where records go.** One file per seed, under `bench-results/records/`:
 
@@ -1765,12 +1773,16 @@ append per game.
 **Know which bot you are reading.** `ai` on a row and `bench.ais` on a record name the seat's bot, and
 two things follow for anything that learns from them:
 
-- **`beam-reply` chooses its move with the opponent's real hand in view.** Its reply model lists the
-  opponent's replies from the real state, so it plays around cards it could not have seen: over 158
-  positions its move changed in 12 when the opponent's hand was swapped for other cards, and in none
-  when only their deck order changed. `greedy` searches no reply and changed in none. A model that
-  imitates `beam-reply` from mover's-view rows is copying decisions partly made with hidden
-  information, and each record names its bots so a reader can filter on that.
+- **Most bots choose from their seat's view, and three kept for comparison do not.** `beam-reply`, `beam`,
+  `greedy` and `greedy-flat` search and score from `seatView(state, mover)`, the view a row is made
+  from, so a row holds everything the bot decided with. `aiHiddenInformation.test.ts` and its corpus
+  counterpart hold every registered bot but those three to that, by swapping the opponent's hand and reordering both
+  decks and requiring the same move ([ai-model.md](ai-model.md)). The exceptions read more than the
+  row shows, deliberately: `beam-reply-omniscient` and `beam-reply-unredacted` search the whole state,
+  the opponent's real hand included, and `greedy-baseline` is frozen scoring on the whole state, which
+  reads nothing of the opponent's but scores a draw with the real card off its own deck. A model that
+  imitates one of those three from rows is copying decisions made with information the row lacks.
+  Each record names its bots and the build that played them, so a reader can filter on both.
 - **A bot does not choose every move made from its seat.** The setup phase (the mulligan and the
   opening resources) and an offer to concede come from the driver every bot plays under, and the
   bench accepts an offer on the other seat's behalf. Those rows carry the seat's bot name all the same.
@@ -2099,8 +2111,8 @@ eight of eighteen modules were missing.
   `cost.ts`'s corpus, so the two modes describe the same positions.
 - `bench/lethal.ts` the one-turn lethal solver. Measured as an override and not shipped: the beam
   already finds 5.8 of the 6.6 points of lethal that exists.
-- `bench/generalisation.ts` per-deck win rate across the coverage decks, weakest first, behind
-  `--generalise`. Also what `npm run tune` measures each candidate with.
+- `bench/generalisation.ts` per-deck win rate across the coverage decks, weakest first, with the
+  turn-order split, behind `--generalise`. Also what `npm run tune` measures each candidate with.
 
 ### Running games
 
@@ -2119,6 +2131,15 @@ eight of eighteen modules were missing.
   apart from the heartbeat file itself, so `shard.ts` depends on it and not the reverse.
 - `bench/selfPlay.ts` `playGame`: one full game, seeded, with the drop classification, conceded
   once a seat's loss is certain.
+- `bench/gameRun.ts` the one game runner, separating what a run plays from what it records. A run
+  hands `runGames` a schedule (each game's seed, seating and the deck each side plays, with a key of
+  the run's choosing) and a list of recorders; the runner seats each side with its own deck and AI,
+  plays the game, reads it from side A, and gives it to every recorder before releasing its moves.
+  `Tally` and `tallyBy` are the cheap recorder every run keeps: outcome, margin and the first-player
+  halves, grouped by any key, merged by `mergeTallies` and read from side B by `reverseTally`. The
+  head-to-head, the matchups, the generalisation harness, the matrix and the sweep all play through
+  it and differ only in their schedules. The decision, term, lethal, cost and budget corpora drive
+  their own loops, since they record from inside a decision rather than from a finished game.
 - `bench/runBench.ts` `runBench`: N games, alternating seat and first player, aggregated into a report.
 - `bench/seating.ts` seat and first-player alternation on independent axes, so four games cover all
   four combinations once and neither advantage settles on one side. `movedFirstForA` is the one place

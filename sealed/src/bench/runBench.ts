@@ -3,15 +3,14 @@ import { nextSeed } from '../engine/rng'
 import { resolveAi } from '../ai/registry'
 import { wilsonInterval } from './stats'
 import { benchDeckSet, type DeckSource, type DeckMatchup } from './decks'
-import { seating, resultForA, movedFirstForA } from './seating'
+import { seating } from './seating'
+import type { DropReason, GameResult } from './selfPlay'
+import type { GameRecorder } from './records'
+import { runGames, bySeat, newTally, addToTally, type ScheduledGame } from './gameRun'
 
-/** Games per full seat / first-player cycle. See `seating`. */
 /** Seat and first player cycle on independent axes, so four games cover all four combinations once.
  *  Exported so a pre-flight check can warn about a games-per-shard that leaves a partial cycle. */
 export const SEATING_CYCLE = 4
-import { playGame } from './selfPlay'
-import type { DropReason, GameResult } from './selfPlay'
-import type { GameRecorder } from './records'
 
 export interface BenchConfig {
   games: number
@@ -98,96 +97,76 @@ export interface BenchReport {
 
 const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length)
 
-/**
- * Play N games between two named AIs and aggregate the metrics the tickets ask for. First-player
- * advantage is cancelled by alternating who holds the initiative each game. Everything is seeded
- * from one base seed, so a whole run reproduces exactly. Any dropped game makes the run provisional
- * and its seed is recorded so the failure can be reproduced and filed.
- */
 /** A matchup's name: one deck when both seats share it, both when they do not. */
 const matchupName = (m: DeckMatchup): string =>
   m.player.name === m.opponent.name ? m.player.name : `${m.player.name} vs ${m.opponent.name}`
 
+/**
+ * Play N games between two named AIs and aggregate the metrics the tickets ask for. Seat and
+ * first-player advantage are cancelled by `seating`. Everything is seeded from one base seed, so a
+ * whole run reproduces exactly. Any dropped game makes the run provisional and its seed is recorded so
+ * the failure can be reproduced and filed.
+ */
 export function runBench(config: BenchConfig): BenchReport {
   const source = config.decks ?? 'mirror'
   const { decks, cardDb } = benchDeckSet(source, config.seed)
   const aiA = resolveAi(config.aiA)
   const aiB = resolveAi(config.aiB)
 
-  const games: GameResult[] = []
-  const failures: Failure[] = []
-  const wonByA: boolean[] = []
-  const marginsForA: number[] = []
-  let seed = config.seed
-  let seatsSwapped = 0
-  let gamesOnPlay = 0
-  let winsOnPlay = 0
   // Non-negative, and stable for a given seed so a run stays reproducible.
   const deckOffset = ((config.seed % decks.length) + decks.length) % decks.length
 
-  for (let i = 0; i < config.games; i++) {
-    seed = nextSeed(seed)
-    // Seat and first player vary on independent cycles, so neither advantage settles on one side.
-    // Before this, `aiA` sat in the `player` seat every game and only the first move alternated,
-    // which left a bias big enough to read 49.4% for an AI measured against itself.
-    const seats = seating(i)
-    if (seats.swapped) seatsSwapped++
-    // A whole seating cycle per deck. Cycling decks by `i % decks.length` instead would pin each deck
-    // to one seat whenever the counts share a factor, and 44 decks against a 4-game cycle does.
-    //
-    // Offset by the run's seed so shards do not all play the same decks. Without it a sharded screen
-    // covers only `games / 4` decks however many shards it runs, because the index depends on the
-    // game number alone: ten shards of eight games would play the same two decks ten times over.
-    const deck = decks[(deckOffset + Math.floor(i / SEATING_CYCLE)) % decks.length]
-    const result = playGame({
-      deckPlayer: deck.player,
-      deckOpponent: deck.opponent,
-      cardDb,
-      aiPlayer: seats.swapped ? aiB : aiA,
-      aiOpponent: seats.swapped ? aiA : aiB,
-      seed,
-      firstPlayer: seats.firstPlayer,
-      stepCeiling: config.stepCeiling,
-    })
-    if (result.status === 'completed') {
-      const forA = resultForA(result, seats)
-      wonByA.push(forA.won)
-      marginsForA.push(forA.margin)
-      if (movedFirstForA(seats)) {
-        gamesOnPlay++
-        if (forA.won) winsOnPlay++
-      }
+  function* schedule(): Generator<ScheduledGame<DeckMatchup>> {
+    let seed = config.seed
+    for (let i = 0; i < config.games; i++) {
+      seed = nextSeed(seed)
+      // Seat and first player vary on independent cycles, so neither advantage settles on one side.
+      // Before this, `aiA` sat in the `player` seat every game and only the first move alternated,
+      // which left a bias big enough to read 49.4% for an AI measured against itself.
+      const seats = seating(i)
+      // A whole seating cycle per deck. Cycling decks by `i % decks.length` instead would pin each deck
+      // to one seat whenever the counts share a factor, and 44 decks against a 4-game cycle does.
+      //
+      // Offset by the run's seed so shards do not all play the same decks. Without it a sharded screen
+      // covers only `games / 4` decks however many shards it runs, because the index depends on the
+      // game number alone: ten shards of eight games would play the same two decks ten times over.
+      const deck = decks[(deckOffset + Math.floor(i / SEATING_CYCLE)) % decks.length]
+      // The source names a list per seat, so each seat keeps its list when the AIs swap.
+      yield { seed, seats, ...bySeat(deck, seats), key: deck }
     }
+  }
 
-    if (result.status === 'dropped') {
-      failures.push({ gameIndex: i, seed: result.seed, reason: result.dropReason! })
-    } else {
-      // A copy, so what the recorder was handed keeps its moves when the run lets go of its own below.
+  const games: GameResult[] = []
+  const failures: Failure[] = []
+  let seatsSwapped = 0
+  // Read from aiA's seat, not from the `player` seat: half the games have them swapped.
+  const t = newTally()
+  runGames(schedule(), { aiA, aiB, cardDb, stepCeiling: config.stepCeiling, onProgress: config.onProgress },
+    g => addToTally(t, g),
+    g => {
+      const { result, seats } = g
+      if (seats.swapped) seatsSwapped++
+      // The runner releases a completed game's moves once its recorders have run, so this keeps the
+      // finished game rather than the whole one. Only dropped games stay whole, as replayable fixtures.
+      games.push(result)
+      if (result.status === 'dropped') {
+        failures.push({ gameIndex: g.index, seed: result.seed, reason: result.dropReason! })
+        return
+      }
+      // A copy, so what the recorder was handed keeps its moves when the runner lets go of its own.
       config.onGame?.({
-        index: i,
+        index: g.index,
         runSeed: config.seed,
         decks: source,
-        deck,
+        deck: g.key,
         ais: { player: seats.swapped ? config.aiB : config.aiA, opponent: seats.swapped ? config.aiA : config.aiB },
         result: { ...result },
       })
-      // Bound memory over a long run: a completed game's moves and starting position are not needed
-      // once counted. Only dropped games are kept whole, to be written out as replayable fixtures.
-      result.moves = []
-      result.initialState = null
-    }
-    games.push(result)
-    // After the push, so the count is games finished rather than games started. A dropped game still
-    // counts: an hour of them is progress, and reading it as silence would call a working shard hung.
-    config.onProgress?.(games.length)
-  }
+    })
 
-  const done = games.filter(g => g.status === 'completed')
-  const completed = done.length
-  // Read from aiA's seat, not from the `player` seat: half the games have them swapped.
-  const winsA = wonByA.filter(Boolean).length
-  const draws = done.filter(g => g.winner === 'draw').length
+  const { completed, wins: winsA, draws } = t
   const ci = wilsonInterval(winsA, completed)
+  const done = games.filter(g => g.status === 'completed')
 
   const totalMoves = games.reduce((n, g) => n + g.moveCount, 0)
   const totalMs = games.reduce((ms, g) => ms + g.durationMs, 0)
@@ -204,15 +183,15 @@ export function runBench(config: BenchConfig): BenchReport {
     winRateA: completed === 0 ? 0 : winsA / completed,
     drawRate: completed === 0 ? 0 : draws / completed,
     winCi: ci.halfWidth,
-    avgMargin: mean(marginsForA),
+    avgMargin: completed === 0 ? 0 : t.marginSum / completed,
     decks: source,
     decksUsed: Math.min(decks.length, Math.max(1, Math.ceil(config.games / SEATING_CYCLE))),
     // Both halves under an asymmetric source, since "which deck did this run open on" is two decks
     // there and naming only one of them would read as a mirror that it is not.
     firstDeck: matchupName(decks[deckOffset % decks.length]),
     seatsSwapped,
-    gamesOnPlay,
-    winsOnPlay,
+    gamesOnPlay: t.gamesOnPlay,
+    winsOnPlay: t.winsOnPlay,
     avgRounds: mean(done.map(g => g.rounds)),
     movesPerSec: totalMs === 0 ? 0 : totalMoves / (totalMs / 1000),
     failures,

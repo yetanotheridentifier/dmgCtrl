@@ -4,8 +4,8 @@ import type { SwuCard } from '../data/cards'
 import { nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
 import type { Ai } from '../ai/types'
-import { playGame } from './selfPlay'
-import { seating, resultForA, movedFirstForA } from './seating'
+import { seating } from './seating'
+import { runGames, newTally, addToTally, mergeTallies, reverseTally, type ScheduledGame, type Tally } from './gameRun'
 import { buildMatchupDecks, type MatchupDeck } from './matchupDecks'
 import { poolFor } from './setPools'
 import { engineDeck, sweepCardDb } from './sweep'
@@ -15,7 +15,8 @@ import { engineDeck, sweepCardDb } from './sweep'
  * every deck (mirrors included) and record the row deck's win rate and base-damage margin against the
  * column deck. First player is alternated so seat advantage cancels; that also means "i vs j" already
  * measures "j vs i", so only the upper triangle + diagonal is played and the rest is derived, halving
- * the work.
+ * the work. That is a configuration of the one game runner (`gameRun.ts`), not a harness of its own:
+ * one AI on both sides, the two sides being the row and column decks, and a triangle schedule.
  *
  * The result is N*N ordered cells, stored in SQLite so it can be interrogated: average a row for deck
  * strength under a fixed model, or diff two models' rows to see which decks improve or degrade.
@@ -49,15 +50,6 @@ export interface MatchupCell {
   winsOnPlay: number
 }
 
-/** One cell's tally, from the row deck's point of view. */
-interface Tally {
-  games: number
-  wins: number
-  gamesOnPlay: number
-  winsOnPlay: number
-  margin: number
-}
-
 export interface MatrixResult {
   commitId: string
   model: string
@@ -82,12 +74,14 @@ export interface MatrixResult {
   cells: MatchupCell[]
 }
 
+/** A cell from the row deck's tally. Its `games` are the completed ones. */
 function cell(a: MatchupDeck, b: MatchupDeck, t: Tally): MatchupCell {
+  const n = t.completed
   return {
     aLabel: a.label, bLabel: b.label,
     leaderA: a.leaderName, baseA: a.baseAspect,
     leaderB: b.leaderName, baseB: b.baseAspect,
-    games: t.games, winsA: t.wins, winRateA: t.games === 0 ? 0 : t.wins / t.games, avgMargin: t.margin,
+    games: n, winsA: t.wins, winRateA: n === 0 ? 0 : t.wins / n, avgMargin: n === 0 ? 0 : t.marginSum / n,
     gamesOnPlay: t.gamesOnPlay, winsOnPlay: t.winsOnPlay,
   }
 }
@@ -175,65 +169,34 @@ export function runMatchupMatrix(
   // ASH holds only canonical printings, so for ASH this is the plain card database.
   const cardDb = sweepCardDb(config.pool ?? POOL)
   const engineDecks = decks.map(d => engineDeck(d.deck))
-  const cells: MatchupCell[] = []
-  let dropped = 0
-  let played = 0
+  const pairs = dealPairs(decks.length, config.shardIndex ?? 0, config.shardCount ?? 1)
 
-  for (const [i, j] of dealPairs(decks.length, config.shardIndex ?? 0, config.shardCount ?? 1)) {
-    {
-      let winsA = 0
-      let winsB = 0
-      let completed = 0
-      let marginSum = 0
-      // The first-player split, tallied inside the loop because it cannot be recovered afterwards.
-      // Deck j's on-play half is exactly the games deck i did NOT move first in, so both cells' halves
-      // are counted here rather than derived by subtraction, where a sign slip would be silent.
-      let iFirstGames = 0
-      let iWinsWhileFirst = 0
-      let jWinsWhileFirst = 0
+  // Side A is deck i and side B deck j, with one AI on both seats. Swapping which deck sits in the
+  // player seat lands the seat advantage on neither deck, which is what makes the reverse-matchup
+  // derivation below sound: it assumes the two directions are the same games, which an uncancelled
+  // seat bias would falsify.
+  function* schedule(): Generator<ScheduledGame<[number, number]>> {
+    for (const pair of pairs) {
+      const [i, j] = pair
       let seed = pairSeed(config.seed, i, j)
       for (let g = 0; g < config.gamesPerCell; g++) {
         seed = nextSeed(seed)
-        // One AI plays both sides, so the seat advantage lands on a DECK. Swapping which deck sits
-        // in the player seat is what makes the reverse-matchup derivation below sound: it assumes
-        // the two directions are the same games, which an uncancelled seat bias would falsify.
-        const seats = seating(g)
-        const r = playGame({
-          deckPlayer: seats.swapped ? engineDecks[j] : engineDecks[i],
-          deckOpponent: seats.swapped ? engineDecks[i] : engineDecks[j],
-          cardDb,
-          aiPlayer: ai,
-          aiOpponent: ai,
-          seed,
-          firstPlayer: seats.firstPlayer,
-          stepCeiling: config.stepCeiling,
-        })
-        played++
-        config.onProgress?.(played)
-        if (r.status !== 'completed') { dropped++; continue }
-        completed++
-        const forI = resultForA(r, seats) // "A" here is deck i
-        const iFirst = movedFirstForA(seats)
-        if (iFirst) iFirstGames++
-        if (forI.won) { winsA++; if (iFirst) iWinsWhileFirst++ }
-        else if (!forI.draw) { winsB++; if (!iFirst) jWinsWhileFirst++ }
-        marginSum += forI.margin // from deck i's perspective, whichever seat it took
-      }
-      const avgMargin = completed === 0 ? 0 : marginSum / completed
-      cells.push(cell(decks[i], decks[j], {
-        games: completed, wins: winsA, margin: avgMargin,
-        gamesOnPlay: iFirstGames, winsOnPlay: iWinsWhileFirst,
-      }))
-      // The same games give the reverse matchup: deck j's wins are winsB, margin flips sign, and its
-      // on-play half is deck i's on-draw half.
-      if (i !== j) {
-        cells.push(cell(decks[j], decks[i], {
-          games: completed, wins: winsB, margin: -avgMargin,
-          gamesOnPlay: completed - iFirstGames, winsOnPlay: jWinsWhileFirst,
-        }))
+        yield { seed, seats: seating(g), deckA: engineDecks[i], deckB: engineDecks[j], key: pair }
       }
     }
   }
+
+  const byPair = new Map<[number, number], Tally>(pairs.map(p => [p, newTally()]))
+  runGames(schedule(), { aiA: ai, aiB: ai, cardDb, stepCeiling: config.stepCeiling, onProgress: config.onProgress },
+    g => addToTally(byPair.get(g.key)!, g))
+
+  const cells: MatchupCell[] = []
+  for (const [[i, j], t] of byPair) {
+    cells.push(cell(decks[i], decks[j], t))
+    // The same games give the reverse matchup, read from deck j's side.
+    if (i !== j) cells.push(cell(decks[j], decks[i], reverseTally(t)))
+  }
+  const all = mergeTallies(byPair.values())
 
   return {
     commitId: COMMIT_ID,
@@ -242,8 +205,8 @@ export function runMatchupMatrix(
     deckSuite: deckSuiteId(decks),
     gamesPerCell: config.gamesPerCell,
     seed: config.seed,
-    dropped,
-    gamesPlayed: played,
+    dropped: all.dropped,
+    gamesPlayed: all.games,
     cells,
   }
 }

@@ -13,8 +13,8 @@ including the evidence for avenues that are closed.
 Rules learned the hard way, each of them from getting it wrong first.
 
 - **Read an arm against its matched control, never a theoretical baseline.** Identical bots measure
-  **48.70%** over the coverage decks, not 50%, and the generalisation harness reads **50.4%** on the
-  same decks. The baseline is a property of the harness. The same 2,040 games read +1.1 and not
+  **48.70%** over the coverage decks, not 50%, and the generalisation harness reads **50.4% ± 6.1%** on
+  the same decks over a smaller sample. The baseline is a property of the schedule and the sample. The same 2,040 games read +1.1 and not
   significant against 50, and **+2.35 at p < 0.001** against a control on the same seeds: one arm, one
   dataset, opposite conclusions. Pairing also removes deck variance, which dominates the coverage pool.
 - **A result that shrinks as the sample grows was never there at full size.** One arm measured 55.0% at

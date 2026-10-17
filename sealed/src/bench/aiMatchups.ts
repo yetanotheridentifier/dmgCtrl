@@ -5,9 +5,9 @@ import { buildCardDb } from '../engine/cardDb'
 import { nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
 import type { Ai } from '../ai/types'
-import { playGame } from './selfPlay'
-import { seating, resultForA, movedFirstForA } from './seating'
+import { seating } from './seating'
 import { wilsonInterval, firstPlayerSplit, type FirstPlayerSplit } from './stats'
+import { runGames, newTally, addToTally, mergeTallies, type ScheduledGame, type Tally } from './gameRun'
 import type { MatchupDeck } from './matchupDecks'
 
 /**
@@ -23,10 +23,10 @@ import type { MatchupDeck } from './matchupDecks'
  * - `matrix.ts` plays ONE AI against itself to measure deck strength, and leans on a symmetry trick
  *   (i vs j also gives j vs i) that is only valid when both seats play identically.
  *
- * That trick is exactly why this is a separate function rather than a flag on `runMatchupMatrix`:
- * with two different AIs, `aiA on deck i vs aiB on deck j` is a genuinely different experiment from
- * the reverse, so every ORDERED pair has to be played. Hence the reduced deck set
- * (`buildMatchupDecks(pool, 1)`), which keeps it to N*N over 18 decks rather than 72.
+ * All three play through the one game runner (`gameRun.ts`); what differs is the schedule. With two
+ * different AIs, `aiA on deck i vs aiB on deck j` is a genuinely different experiment from the
+ * reverse, so this schedules every ORDERED pair where the matrix schedules a triangle. Hence the
+ * reduced deck set (`buildMatchupDecks(pool, 1)`), which keeps it to N*N over 18 decks rather than 72.
  *
  * Seats are alternated within each cell so first-player advantage cancels.
  */
@@ -80,70 +80,52 @@ export function runAiMatchups(
   nameB: string,
   config: { gamesPerCell: number; seed: number; stepCeiling?: number },
 ): AiMatchupReport {
-  const cardDb = buildCardDb(POOL)
-  const cells: AiMatchupCell[] = []
-  let seed = config.seed
-  let dropped = 0
-  let totalWins = 0
-  let totalGames = 0
-  let totalOnPlay = 0
-  let totalWinsOnPlay = 0
+  type Cell = [MatchupDeck, MatchupDeck]
+  const pairs: Cell[] = decks.flatMap(a => decks.map((b): Cell => [a, b]))
 
-  for (const deckA of decks) {
-    for (const deckB of decks) {
-      let winsA = 0
-      let completed = 0
-      let gamesOnPlay = 0
-      let winsOnPlay = 0
+  function* schedule(): Generator<ScheduledGame<Cell>> {
+    let seed = config.seed
+    for (const pair of pairs) {
       for (let g = 0; g < config.gamesPerCell; g++) {
         seed = nextSeed(seed)
         // Each AI keeps its own deck, but they swap SEATS on an independent cycle from who moves
         // first, so neither advantage settles on one side.
-        const seats = seating(g)
-        const r = playGame({
-          deckPlayer: seats.swapped ? deckB.deck : deckA.deck,
-          deckOpponent: seats.swapped ? deckA.deck : deckB.deck,
-          cardDb,
-          aiPlayer: seats.swapped ? aiB : aiA,
-          aiOpponent: seats.swapped ? aiA : aiB,
-          seed,
-          firstPlayer: seats.firstPlayer,
-          stepCeiling: config.stepCeiling,
-        })
-        if (r.status !== 'completed') { dropped++; continue }
-        completed++
-        const aFirst = movedFirstForA(seats)
-        if (aFirst) gamesOnPlay++
-        if (resultForA(r, seats).won) { winsA++; if (aFirst) winsOnPlay++ }
+        yield { seed, seats: seating(g), deckA: pair[0].deck, deckB: pair[1].deck, key: pair }
       }
-      totalWins += winsA
-      totalGames += completed
-      totalOnPlay += gamesOnPlay
-      totalWinsOnPlay += winsOnPlay
-      cells.push({
-        aLabel: deckA.label,
-        bLabel: deckB.label,
-        games: completed,
-        winsA,
-        winRateA: completed === 0 ? 0 : winsA / completed,
-        gamesOnPlay,
-        winsOnPlay,
-      })
     }
   }
 
-  const overall = wilsonInterval(totalWins, totalGames)
+  const byCell = new Map<Cell, Tally>(pairs.map(p => [p, newTally()]))
+  runGames(schedule(), { aiA, aiB, cardDb: buildCardDb(POOL), stepCeiling: config.stepCeiling },
+    g => addToTally(byCell.get(g.key)!, g))
+
+  const cells: AiMatchupCell[] = pairs.map(pair => {
+    const [deckA, deckB] = pair
+    const t = byCell.get(pair)!
+    return {
+      aLabel: deckA.label,
+      bLabel: deckB.label,
+      games: t.completed,
+      winsA: t.wins,
+      winRateA: t.completed === 0 ? 0 : t.wins / t.completed,
+      gamesOnPlay: t.gamesOnPlay,
+      winsOnPlay: t.winsOnPlay,
+    }
+  })
+  const all = mergeTallies(byCell.values())
+
+  const overall = wilsonInterval(all.wins, all.completed)
   return {
     commitId: COMMIT_ID,
     aiA: nameA,
     aiB: nameB,
     deckCount: decks.length,
     gamesPerCell: config.gamesPerCell,
-    totalGames,
-    dropped,
+    totalGames: all.completed,
+    dropped: all.dropped,
     overallWinRateA: overall.rate,
     overallCi: overall.halfWidth,
-    split: firstPlayerSplit(totalWinsOnPlay, totalOnPlay, totalWins - totalWinsOnPlay, totalGames - totalOnPlay),
+    split: firstPlayerSplit(all.winsOnPlay, all.gamesOnPlay, all.wins - all.winsOnPlay, all.completed - all.gamesOnPlay),
     cells: cells.slice().sort((x, y) => x.winRateA - y.winRateA),
     byDeck: byDeck(cells),
   }

@@ -6,12 +6,12 @@ import { nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
 import { resolveAi } from '../ai/registry'
 import type { Ai } from '../ai/types'
-import { wilsonInterval } from './stats'
+import type { ParsedDeck } from '../utils/parseProtectThePod'
+import { wilsonInterval, firstPlayerSplit, type FirstPlayerSplit } from './stats'
 import { buildCoverageDecks } from './coverageDecks'
-import { playGame } from './selfPlay'
 import type { DropReason, GameResult } from './selfPlay'
-import { seating, resultForA } from './seating'
-import type { OutcomeForA } from './seating'
+import { seating } from './seating'
+import { runGames, newTally, addToTally, mergeTallies, type ScheduledGame, type Tally } from './gameRun'
 
 /**
  * Generalisation diagnostic (#408 follow-up): play `aiA` against `aiB` on each coverage deck and
@@ -74,6 +74,8 @@ export interface GeneralisationReport {
   dropped: number
   overallWinRateA: number
   overallCi: number
+  /** aiA's win rate on the play and on the draw, over every completed game. */
+  split: FirstPlayerSplit
   /** Per-deck results, sorted weakest-first for aiA (the decks it struggles with come up top). */
   perDeck: DeckResult[]
   /** Win rate aggregated by leader, weakest-first. */
@@ -83,8 +85,6 @@ export interface GeneralisationReport {
   failures: Failure[]
   droppedGames: GameResult[]
 }
-
-const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length)
 
 export function runGeneralisation(config: GeneralisationConfig): GeneralisationReport {
   return runGeneralisationWith(resolveAi(config.aiA), resolveAi(config.aiB), config.aiA, config.aiB, config)
@@ -105,94 +105,71 @@ export function runGeneralisationWith(
   const cardDb = buildCardDb(POOL)
   const byId = new Map(POOL.map(c => [`${c.Set}_${c.Number}`, c]))
 
-  let seed = config.seed
-  const perDeck: DeckResult[] = []
-  const failures: Failure[] = []
-  const droppedGames: GameResult[] = []
-  let totalWinsA = 0
-  let totalCompleted = 0
-
-  interface Agg { decks: number; wins: number; completed: number; marginSum: number }
-  const leaderAgg = new Map<string, Agg>()
-  const baseAgg = new Map<string, Agg>()
-  const bump = (map: Map<string, Agg>, key: string, wins: number, completed: number, marginSum: number): void => {
-    const e = map.get(key) ?? { decks: 0, wins: 0, completed: 0, marginSum: 0 }
-    e.decks++; e.wins += wins; e.completed += completed; e.marginSum += marginSum
-    map.set(key, e)
-  }
-
-  for (const deck of decks) {
-    const results: GameResult[] = []
-    const outcomes: OutcomeForA[] = []
-    for (let g = 0; g < config.gamesPerDeck; g++) {
-      seed = nextSeed(seed)
-      // Seat and first player both cycle, independently, so neither advantage lands on one AI.
-      const seats = seating(g)
-      const result = playGame({
-        deckPlayer: deck,
-        deckOpponent: deck,
-        cardDb,
-        aiPlayer: seats.swapped ? aiB : aiA,
-        aiOpponent: seats.swapped ? aiA : aiB,
-        seed,
-        firstPlayer: seats.firstPlayer,
-        stepCeiling: config.stepCeiling,
-      })
-      results.push(result)
-      // The raw result stays untouched, because a dropped game is replayed from it and must keep the
-      // seats it was actually played with. aiA's view is kept alongside instead.
-      if (result.status === 'completed') outcomes.push(resultForA(result, seats))
-      if (result.status === 'dropped') {
-        failures.push({ deck: deck.name, seed: result.seed, reason: result.dropReason! })
-        droppedGames.push(result)
+  function* schedule(): Generator<ScheduledGame<ParsedDeck>> {
+    let seed = config.seed
+    for (const deck of decks) {
+      for (let g = 0; g < config.gamesPerDeck; g++) {
+        seed = nextSeed(seed)
+        // Seat and first player both cycle, independently, so neither advantage lands on one AI.
+        yield { seed, seats: seating(g), deckA: deck, deckB: deck, key: deck }
       }
     }
-
-    // Everything below reads `outcomes`, which is already from aiA's seat, never the raw winner.
-    const done = results.filter(r => r.status === 'completed')
-    const winsA = outcomes.filter(o => o.won).length
-    const draws = outcomes.filter(o => o.draw).length
-    const ci = wilsonInterval(winsA, done.length)
-    totalWinsA += winsA
-    totalCompleted += done.length
-
-    const leaderName = byId.get(deck.leader)?.Name ?? deck.leader
-    const baseAspect = (byId.get(deck.base)?.Aspects ?? [])[0] ?? '?'
-    const marginSum = outcomes.reduce((s, o) => s + o.margin, 0)
-    bump(leaderAgg, leaderName, winsA, done.length, marginSum)
-    bump(baseAgg, baseAspect, winsA, done.length, marginSum)
-
-    perDeck.push({
-      deck: deck.name,
-      leader: deck.leader,
-      leaderName,
-      baseAspect,
-      games: results.length,
-      completed: done.length,
-      dropped: results.length - done.length,
-      winRateA: done.length === 0 ? 0 : winsA / done.length,
-      winCi: ci.halfWidth,
-      drawRate: done.length === 0 ? 0 : draws / done.length,
-      avgMargin: mean(outcomes.map(o => o.margin)),
-    })
   }
 
-  perDeck.sort((a, b) => a.winRateA - b.winRateA)
-  const overall = wilsonInterval(totalWinsA, totalCompleted)
-  const toGroups = (map: Map<string, Agg>): GroupResult[] =>
-    [...map.entries()]
-      .map(([key, e]) => ({
-        key,
-        decks: e.decks,
-        completed: e.completed,
-        winRateA: e.completed === 0 ? 0 : e.wins / e.completed,
-        winCi: wilsonInterval(e.wins, e.completed).halfWidth,
-        avgMargin: e.completed === 0 ? 0 : e.marginSum / e.completed,
-      }))
-      .sort((a, b) => a.winRateA - b.winRateA)
-  const perLeader = toGroups(leaderAgg)
-  const perBase = toGroups(baseAgg)
+  const failures: Failure[] = []
+  const droppedGames: GameResult[] = []
+  const byDeck = new Map<ParsedDeck, Tally>(decks.map(d => [d, newTally()]))
+  runGames(schedule(), { aiA, aiB, cardDb, stepCeiling: config.stepCeiling }, g => {
+    // Every tally reads the game from aiA's seat. The raw result stays as played, because a dropped
+    // game is replayed from it and must keep the seats it was actually played with.
+    addToTally(byDeck.get(g.key)!, g)
+    if (g.result.status === 'dropped') {
+      failures.push({ deck: g.key.name, seed: g.result.seed, reason: g.result.dropReason! })
+      droppedGames.push(g.result)
+    }
+  })
 
+  const leaderOf = (deck: ParsedDeck): string => byId.get(deck.leader)?.Name ?? deck.leader
+  const baseOf = (deck: ParsedDeck): string => (byId.get(deck.base)?.Aspects ?? [])[0] ?? '?'
+  const perDeck: DeckResult[] = decks.map(deck => {
+    const t = byDeck.get(deck)!
+    return {
+      deck: deck.name,
+      leader: deck.leader,
+      leaderName: leaderOf(deck),
+      baseAspect: baseOf(deck),
+      games: t.games,
+      completed: t.completed,
+      dropped: t.dropped,
+      winRateA: t.completed === 0 ? 0 : t.wins / t.completed,
+      winCi: wilsonInterval(t.wins, t.completed).halfWidth,
+      drawRate: t.completed === 0 ? 0 : t.draws / t.completed,
+      avgMargin: t.completed === 0 ? 0 : t.marginSum / t.completed,
+    }
+  })
+  perDeck.sort((a, b) => a.winRateA - b.winRateA)
+
+  /** Per-deck tallies merged under a leader or a base aspect, in deck order. */
+  const toGroups = (keyOf: (deck: ParsedDeck) => string): GroupResult[] => {
+    const groups = new Map<string, ParsedDeck[]>()
+    for (const deck of decks) groups.set(keyOf(deck), [...(groups.get(keyOf(deck)) ?? []), deck])
+    return [...groups.entries()]
+      .map(([key, members]) => {
+        const e = mergeTallies(members.map(d => byDeck.get(d)!))
+        return {
+          key,
+          decks: members.length,
+          completed: e.completed,
+          winRateA: e.completed === 0 ? 0 : e.wins / e.completed,
+          winCi: wilsonInterval(e.wins, e.completed).halfWidth,
+          avgMargin: e.completed === 0 ? 0 : e.marginSum / e.completed,
+        }
+      })
+      .sort((a, b) => a.winRateA - b.winRateA)
+  }
+
+  const all = mergeTallies(byDeck.values())
+  const overall = wilsonInterval(all.wins, all.completed)
   return {
     commitId: COMMIT_ID,
     aiA: labelA,
@@ -200,13 +177,14 @@ export function runGeneralisationWith(
     decks: decks.length,
     gamesPerDeck: config.gamesPerDeck,
     totalGames: decks.length * config.gamesPerDeck,
-    completed: totalCompleted,
+    completed: all.completed,
     dropped: droppedGames.length,
-    overallWinRateA: totalCompleted === 0 ? 0 : totalWinsA / totalCompleted,
+    overallWinRateA: all.completed === 0 ? 0 : all.wins / all.completed,
     overallCi: overall.halfWidth,
+    split: firstPlayerSplit(all.winsOnPlay, all.gamesOnPlay, all.wins - all.winsOnPlay, all.completed - all.gamesOnPlay),
     perDeck,
-    perLeader,
-    perBase,
+    perLeader: toGroups(leaderOf),
+    perBase: toGroups(baseOf),
     failures,
     droppedGames,
   }

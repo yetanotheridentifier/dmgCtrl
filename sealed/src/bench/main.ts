@@ -447,6 +447,7 @@ function formatGeneralisation(report: GeneralisationReport, wallMs: number): str
     `${report.aiA} vs ${report.aiB}   ${report.decks} decks × ${report.gamesPerDeck} games`,
     '',
     row(`overall win rate (${report.aiA})`, `${pct(report.overallWinRateA)}  ± ${pct(report.overallCi)}   (${pct(lo)} – ${pct(hi)})`),
+    row('turn order', turnOrderLine(report.split)),
     row('completed / dropped', `${report.completed} / ${report.dropped}`),
     row('wall clock', `${(wallMs / 1000).toFixed(1)}s`),
     '',
