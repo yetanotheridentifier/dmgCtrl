@@ -252,7 +252,8 @@ Everything is optional:
   "opponent" seat. Registered AIs:
   - `random` rung 0, uniform.
   - `greedy` rung 1, one-ply with quiescent scoring. The reference most results are quoted against.
-  - `greedy-baseline` a frozen early greedy, kept only as a fixed reference for tuning.
+  - `greedy-baseline` a frozen early greedy, kept only as a fixed reference for tuning. Frozen in what
+    it reads too: it scores on the whole state, so a move that draws is scored with the real card.
   - `greedy-flat` the live model minus quiescent scoring. Unlike the baseline it tracks every other
     evaluation change, which is what makes it a control for that one feature rather than a snapshot.
   - `beam` rung 2, own-turn lookahead at width 4, depth 3, assuming the opponent does nothing. Same

@@ -11,6 +11,7 @@ import {
   type LethalLimits, type LethalGate,
 } from './lethal'
 import { role } from './race'
+import { seatView } from '../engine/seatView'
 
 /**
  * Rung-1 opponent: one-ply greedy. For each legal move, apply it and score the resulting board from
@@ -24,12 +25,15 @@ import { role } from './race'
  * so replays and saved records reproduce exactly. The scoring `resolve` calls advance the seed only
  * on their own discarded copies; the real seed advances once, when the chosen move is applied.
  */
-export function makeGreedyAi(evaluate: Evaluator): Ai {
+export function makeGreedyAi(evaluate: Evaluator, options: GreedyOptions = {}): Ai {
   return (real: GameState): Action | null => {
+    // Scored on what the MOVER can see, as the beam is (`makeBeamAi`): resolved on the engine's state,
+    // a candidate that draws is scored holding the card actually on top of the deck.
+    const seen = options.readHidden === true ? real : seatView(real, real.activePlayer)
     // One ply still crosses the boundary: a `pass` that ends the action phase resolves the whole
     // regroup, so without this the score of passing depends on two cards nobody has drawn. The same
     // stamp the beam uses, so the control and the arm cheat or do not cheat together.
-    const state = asSimulation(real)
+    const state = asSimulation(seen)
     const moves = legalMoves(state)
     if (moves.length === 0) return null
 
@@ -53,8 +57,19 @@ export function makeGreedyAi(evaluate: Evaluator): Ai {
       }
     }
 
-    return bestMoves[Math.floor(seededUnit(state.rngSeed) * bestMoves.length)]
+    // The REAL seed, as in the beam: the view's is zeroed. A coin and nothing else.
+    return bestMoves[Math.floor(seededUnit(real.rngSeed) * bestMoves.length)]
   }
+}
+
+/** How a one-ply bot is built, beyond its evaluation. */
+export interface GreedyOptions {
+  /**
+   * Score each candidate on the state as the engine holds it, its own deck's order included. Off by
+   * default. The same switch as `BeamLimits.readHidden`, and like it, a control and a frozen reference
+   * (`greedy-baseline`) are the only sanctioned readings of `true`.
+   */
+  readHidden?: boolean
 }
 
 /**
@@ -65,8 +80,8 @@ export function makeGreedyAi(evaluate: Evaluator): Ai {
  * so without this it drifts from the deployed one whenever the driver changes, and then spends a
  * night tuning weights for a bot nobody plays.
  */
-export function makeTunedGreedy(weights: EvalWeights): Ai {
-  const inner = makeGreedyAi(makeQuiescent(makeEvaluate(weights)))
+export function makeTunedGreedy(weights: EvalWeights, options?: GreedyOptions): Ai {
+  const inner = makeGreedyAi(makeQuiescent(makeEvaluate(weights)), options)
   // Point the crossing settlement at THIS bot's weights, per decision: an A/B runs two bots in one
   // process, and a crossing settled with the other arm's weights would quietly measure neither.
   return (state: GameState): Action | null => {
@@ -83,8 +98,9 @@ export const greedyAi = makeTunedGreedy(DEFAULT_WEIGHTS)
  *  is re-run every time the evaluation changes underneath it. */
 export const greedyFlatAi = makeGreedyAi(evaluate)
 
-/** The frozen pre-#392 greedy, kept only as a fixed comparison point for the generalisation runs. */
-export const greedyBaselineAi = makeGreedyAi(evaluateBaseline)
+/** The frozen pre-#392 greedy, kept only as a fixed comparison point for the generalisation runs.
+ *  Frozen in what it reads too: it scores on the whole state, its own deck's order included. */
+export const greedyBaselineAi = makeGreedyAi(evaluateBaseline, { readHidden: true })
 
 /**
  * Own-turn self-lookahead (#410) on the shipped evaluation: the same weights and the same quiescent

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import type { GameState } from '../engine/types'
 import { seatView } from '../engine/seatView'
 import { resolveAi, beamLimitsFor, namedLimitsFor, aiNames } from '../ai/registry'
-import { makeBeamGreedy, BEAM_REPLY_LIMITS, BEAM_REPLY_OMNISCIENT_LIMITS } from '../ai/greedyAi'
+import { makeBeamGreedy, makeTunedGreedy, BEAM_REPLY_LIMITS, BEAM_REPLY_OMNISCIENT_LIMITS } from '../ai/greedyAi'
 import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { OPPONENT_AI } from '../config'
 import {
@@ -110,5 +110,40 @@ describe('the shipped search', () => {
     const counts = probeHidden(resolveAi(name), at(TWO_PLY_POSITIONS))
     expect(found(counts, 'changed', TWO_PLY_POSITIONS)).toEqual({})
     expect(found(counts, 'revalued', TWO_PLY_POSITIONS)).toEqual({})
+  }, 120_000)
+})
+
+/**
+ * One ply is a separate construction site from the search, so it is held separately. It is quick
+ * enough to ask about every quiet position. It models no reply, so what it could read is its own
+ * deck's order: a candidate that draws, resolved on the real state, is scored holding the card that
+ * is actually on top.
+ */
+describe('one-ply greedy', () => {
+  /**
+   * Every action position of the mirror probe games with nothing owed (`quietActionPositions` at a
+   * stride of 1, 437 of them), by index, where the one ply that reads the whole state changes its move
+   * with its own deck's order. Found by running the probe over all of them: on a deck of thirty units
+   * a draw rarely decides a move, so the stride-3 sample above holds none.
+   */
+  const READING_GREEDY = { ownDeckOrder: [176, 383, 434] }
+  const GREEDY_POSITIONS = [176, 383, 434]
+  let reading: GameState[]
+  beforeAll(() => {
+    const all = quietActionPositions(probeGames('mirror'), 1)
+    expect(all).toHaveLength(437)
+    reading = GREEDY_POSITIONS.map(i => all[i])
+  }, 120_000)
+
+  it('reads its own deck’s order when told to read the whole state (the control)', () => {
+    const counts = probeHidden(makeTunedGreedy(DEFAULT_WEIGHTS, { readHidden: true }), reading)
+    expect(found(counts, 'changed', GREEDY_POSITIONS)).toEqual(READING_GREEDY)
+  })
+
+  it.each(['greedy', 'greedy-flat'])('%s plays the same move whatever is hidden', name => {
+    expect(found(probeHidden(resolveAi(name), reading), 'changed', GREEDY_POSITIONS)).toEqual({})
+    const counts = probeHidden(resolveAi(name), quiet)
+    expect(found(counts, 'changed')).toEqual({})
+    for (const zone of HIDDEN_ZONES) expect(counts[zone].asked, zone).toBeGreaterThan(0)
   }, 120_000)
 })
