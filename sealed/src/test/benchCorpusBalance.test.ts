@@ -33,13 +33,13 @@ describe('an instrumented corpus opens both ways', () => {
   }, 120_000)
 
   it('--terms balances the first player at one game per deck', () => {
-    const report = runTerms({ gamesPerDeck: 1, seed: 4242, decks: 2 })
+    const report = runTerms({ gamesPerDeck: 1, seed: 4242, deckLimit: 2 })
     expect(report.games).toBe(2)
     expect(report.gamesPlayerFirst).toBe(1)
   }, 240_000)
 
   it('--lethal balances the first player at one game per deck', () => {
-    const report = runLethal({ gamesPerDeck: 1, seed: 4242, decks: 2, oracleSamples: 0 })
+    const report = runLethal({ gamesPerDeck: 1, seed: 4242, deckLimit: 2, oracleSamples: 0 })
     expect(report.games).toBe(2)
     expect(report.gamesPlayerFirst).toBe(1)
   }, 240_000)

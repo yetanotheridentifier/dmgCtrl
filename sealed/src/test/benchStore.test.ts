@@ -3,8 +3,8 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { DatabaseSync } from 'node:sqlite'
-import { openDb, saveReport, listRuns, gamesForRun } from '../bench/store'
+import { DatabaseSync } from 'node:sqlite'
+import { openDb, saveReport, listRuns, gamesForRun, saveTermRun, listTermRuns } from '../bench/store'
 import { runBench } from '../bench/runBench'
 
 /** Read a pragma back, which is how the connection settings are asserted rather than assumed. */
@@ -101,5 +101,25 @@ describe('concurrent writers', () => {
     const broken = { ...report, games: [report.games[0], { ...report.games[1], rounds: null }] as typeof report.games }
     expect(() => saveReport(db, broken)).toThrow()
     expect(listRuns(db)).toHaveLength(0)
+  })
+
+  /**
+   * Populations must never pool. `--terms` plays any deck population, and a term absent from the
+   * mirror deck reads neutral there, so a term run is stored with the population it read. Every run
+   * stored before it could choose was on the coverage decks.
+   */
+  it('keeps the deck population a term run read', () => {
+    const db = openDb(':memory:')
+    const stats = [{ weight: 'unit', step: 2, hasQuantity: true, varies: 1, pivotal: 0, loadBearing: 0, spread: 1 }]
+    saveTermRun(db, 'one-ply', { decks: 'mirror', games: 1, decisions: 4, stats })
+    expect(listTermRuns(db).map(r => r.decks)).toEqual(['mirror'])
+
+    const path = tmp()
+    const old = new DatabaseSync(path)
+    old.exec(`CREATE TABLE term_runs (run_id TEXT PRIMARY KEY, started_at TEXT NOT NULL, build_tag TEXT NOT NULL,
+      model TEXT NOT NULL, games INTEGER NOT NULL, decisions INTEGER NOT NULL)`)
+    old.exec(`INSERT INTO term_runs VALUES ('t1', '2026-01-01', 'abc', 'one-ply', 44, 900)`)
+    old.close()
+    expect(listTermRuns(openDb(path)).map(r => r.decks)).toEqual(['coverage'])
   })
 })

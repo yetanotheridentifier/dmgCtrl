@@ -151,8 +151,15 @@ plausible number.
 
 ### The deck population decides what can be measured at all
 
-`--decks` chooses what a run plays over: `mirror` (the default), `coverage`, or `lockout`. The first
-two deal both seats the same list, so they stay mirror matches and deck strength cancels.
+`--decks` chooses what a run plays over: `mirror` (the head-to-head's default), `coverage`, `lockout`,
+or `matchup` (the one-base-per-leader set `--matchups` plays, fixed whatever the seed). All but
+`lockout` deal both seats the same list, so they stay mirror matches and deck strength cancels.
+
+It is a parameter of every run that plays a population: the head-to-head (with `--shard` and
+`--control`), `--generalise`, `--decisions`, `--terms` and `--lethal`. The last four default to
+`coverage`, and each report names the population it read; `--terms` stores it with the run, so term
+runs over different populations never pool. `--matchups`, `--matrix`, `--sweep`, `--cost` and
+`--budget` build their own decks or replay a fixed corpus, and refuse the flag.
 
 **`mirror` is one fixed deck of the first 30 aspect-matching units, and a term whose cards are not
 among them cannot fire.** It then reports neutral, which is indistinguishable from a genuine null
@@ -169,8 +176,9 @@ hours against a population that could not express them, and both returned the ha
 identical-bot baseline rather than a measurement.
 
 So: **before sweeping a weight, confirm its quantity actually varies in the population you are about
-to run**. `--decisions` and `--terms` walk the coverage decks, so their prevalence numbers do not
-transfer to a `mirror` A/B. Deck and seat are decoupled by playing each deck for a whole four-game
+to run**. `--decisions` and `--terms` walk the coverage decks unless told otherwise, so their
+prevalence numbers do not transfer to a `mirror` A/B; run them with the A/B's `--decks` to read the
+population the A/B will play. Deck and seat are decoupled by playing each deck for a whole four-game
 seating cycle: cycling decks per game would pin each deck to one seat whenever the counts share a
 factor, and 44 decks against a 4-game cycle does.
 
@@ -1711,7 +1719,7 @@ and writes exactly what it always did.
 It is a choice on the head-to-head run, alone or with `--shard` and `--control`. Every other mode
 refuses the flag at parse time. The matchups, the matrix, the generalisation harness and the sweep play
 through the same game runner, which takes recorders per run, but none of them hands its games to the
-records writer; the instrumented corpora play through their own loops.
+records writer, and nor do the instrumented corpora, which play through it as well.
 
 **Where records go.** One file per seed, under `bench-results/records/`:
 
@@ -2130,7 +2138,9 @@ eight of eighteen modules were missing.
   writer, where the file lives, and the rule that decides hung from slow. Pure reading and formatting
   apart from the heartbeat file itself, so `shard.ts` depends on it and not the reverse.
 - `bench/selfPlay.ts` `playGame`: one full game, seeded, with the drop classification, conceded
-  once a seat's loss is certain.
+  once a seat's loss is certain unless `concede` is off. A `GameWatch` sees every step, setup
+  included, and the final position; an instrument's own error (`instrumented`) stops the run rather
+  than reading as an engine drop.
 - `bench/gameRun.ts` the one game runner, separating what a run plays from what it records. A run
   hands `runGames` a schedule (each game's seed, seating and the deck each side plays, with a key of
   the run's choosing) and a list of recorders; the runner seats each side with its own deck and AI,
@@ -2138,8 +2148,14 @@ eight of eighteen modules were missing.
   `Tally` and `tallyBy` are the cheap recorder every run keeps: outcome, margin and the first-player
   halves, grouped by any key, merged by `mergeTallies` and read from side B by `reverseTally`. The
   head-to-head, the matchups, the generalisation harness, the matrix and the sweep all play through
-  it and differ only in their schedules. The decision, term, lethal, cost and budget corpora drive
-  their own loops, since they record from inside a decision rather than from a finished game.
+  it and differ only in their schedules. So do the decision, term and lethal corpora (`runCorpus`):
+  one AI on both seats over `corpusSchedule` (every deck in turn, seats never swapped, the opening
+  balanced by `firstPlayerFor`), never conceding. They are the opt-in, expensive instruments and read
+  a game from inside: `--decisions` opens a watch per game and takes the search trace from a wrapper
+  round its AI, while `--terms` and `--lethal` are an AI that measures each decision before making
+  it. A game the engine drops is counted in their reports and its decisions up to the drop stay in.
+  The cost and budget corpus is the other run shape (positions collected once, replayed under each
+  configuration) and keeps its own loop.
 - `bench/runBench.ts` `runBench`: N games, alternating seat and first player, aggregated into a report.
 - `bench/seating.ts` seat and first-player alternation on independent axes, so four games cover all
   four combinations once and neither advantage settles on one side. `movedFirstForA` is the one place

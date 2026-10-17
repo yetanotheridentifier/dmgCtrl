@@ -6,9 +6,12 @@ import { buildCardDb } from '../engine/cardDb'
 import { nextSeed } from '../engine/rng'
 import { buildMatchupDecks } from '../bench/matchupDecks'
 import { poolFor } from '../bench/setPools'
-import { seating, seatForA } from '../bench/seating'
-import { runGames, bySeat, newTally, addToTally, tallyBy, mergeTallies, reverseTally, type FinishedGame, type ScheduledGame } from '../bench/gameRun'
+import { seating, seatForA, firstPlayerFor } from '../bench/seating'
+import { runGames, bySeat, corpusSchedule, newTally, addToTally, tallyBy, mergeTallies, reverseTally, type FinishedGame, type ScheduledGame } from '../bench/gameRun'
 import { runGeneralisation } from '../bench/generalisation'
+import { benchDeckSet } from '../bench/decks'
+import { runTerms } from '../bench/terms'
+import { runLethal } from '../bench/lethal'
 import '../engine/cardDefinitions'
 
 /**
@@ -140,6 +143,76 @@ describe('the tally', () => {
     expect(r.wins + t.wins + t.draws).toBe(t.completed)
     expect(r.winsOnPlay).toBe(played.filter(g => !g.forA!.won && !g.forA!.draw && g.seats.firstPlayer !== seatForA(g.seats)).length)
   })
+})
+
+describe('a watched game run', () => {
+  /**
+   * The instrumented corpora record from inside a game rather than from its result, so the runner
+   * opens a watch per game and shows it every step, setup included, then the final position.
+   */
+  it('shows each game\'s watch every step and the final position', () => {
+    const steps: Array<Array<{ before: GameState; after: GameState }>> = []
+    const finals: GameState[] = []
+    const results: Array<{ moveCount: number; winner: PlayerId | 'draw' | null }> = []
+    runGames(schedule(2), {
+      aiA: resolveAi('random'), aiB: resolveAi('random'), cardDb,
+      watch: () => {
+        const mine: Array<{ before: GameState; after: GameState }> = []
+        steps.push(mine)
+        return { step: (before, _action, after) => mine.push({ before, after }), end: final => finals.push(final) }
+      },
+    }, g => results.push({ moveCount: g.result.moveCount, winner: g.result.winner }))
+
+    expect(steps).toHaveLength(2)
+    steps.forEach((game, i) => {
+      expect(game).toHaveLength(results[i].moveCount)
+      expect(game[0].before.phase).toBe('setup')
+      for (let k = 1; k < game.length; k++) expect(game[k].before).toBe(game[k - 1].after)
+      expect(finals[i]).toBe(game[game.length - 1].after)
+      expect(finals[i].winner).toBe(results[i].winner)
+    })
+  })
+})
+
+describe('the corpus schedule', () => {
+  /**
+   * The decision, term and lethal corpora: one AI on both seats, so the seats never swap and the first
+   * player is the only thing to balance, indexed across the whole corpus (`firstPlayerFor`).
+   */
+  it('plays every deck in turn, never swapping seats, opening both ways corpus-wide', () => {
+    const matchups = [{ player: deckA, opponent: deckA }, { player: deckB, opponent: deckA }]
+    const games = [...corpusSchedule(matchups, 3, 100)]
+    expect(games.map(g => g.key)).toEqual([0, 0, 0, 1, 1, 1])
+    expect(games.every(g => !g.seats.swapped)).toBe(true)
+    expect(games.map(g => g.seats.firstPlayer)).toEqual(games.map((_, i) => firstPlayerFor(i)))
+    expect(games[4].deckA).toBe(deckB)
+    expect(games[4].deckB).toBe(deckA)
+    expect(games[4].seed).toBe(nextSeed(100 + 37 + 1))
+  })
+})
+
+describe('deck populations', () => {
+  /** The matchup deck set is a population like any other, not something only `--matchups` reaches. */
+  it('offers the matchup decks as a deck source', () => {
+    const { decks: set } = benchDeckSet('matchup', 1)
+    expect(set.map(m => m.player)).toEqual(buildMatchupDecks(undefined, 1).map(d => d.deck))
+    expect(set.every(m => m.opponent === m.player)).toBe(true)
+  })
+
+  it('lets the term and lethal corpora play any population', () => {
+    const terms = runTerms({ gamesPerDeck: 1, seed: 4242, decks: 'mirror', weights: ['saturation'] })
+    expect(terms.decks).toBe('mirror')
+    expect(terms.games).toBe(1)
+    const lethal = runLethal({ gamesPerDeck: 1, seed: 4242, decks: 'mirror', oracleSamples: 0 })
+    expect(lethal.decks).toBe('mirror')
+    expect(lethal.games).toBe(1)
+  }, 240_000)
+
+  it('lets the generalisation harness play any population', () => {
+    const report = runGeneralisation({ gamesPerDeck: 2, seed: 5, aiA: 'random', aiB: 'random', decks: 'mirror' })
+    expect(report.decks).toBe(1)
+    expect(report.totalGames).toBe(2)
+  }, 30_000)
 })
 
 describe('the generalisation harness', () => {

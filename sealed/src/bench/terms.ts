@@ -1,16 +1,13 @@
-import ashSet from '../test/fixtures/ashSet.json'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
-import type { SwuCard } from '../data/cards'
 import type { GameState, PlayerId } from '../engine/types'
 import type { Action } from '../engine/actions'
+import type { Ai } from '../ai/types'
 import { hasPendingChoices } from '../engine/types'
-import { buildCardDb } from '../engine/cardDb'
 import { initGame } from '../engine/initGame'
-import { DEFAULT_STEP_CEILING } from './selfPlay'
+import { instrumented } from './selfPlay'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
-import { seededShuffle, nextSeed, seededUnit } from '../engine/rng'
-import { setupAi } from '../ai/setupAi'
+import { seededUnit } from '../engine/rng'
 import { publicBreakdown, makeEvaluate, DEFAULT_WEIGHTS, type EvalWeights } from '../ai/evaluate'
 import { makeBeamGreedy } from '../ai/greedyAi'
 import { namedLimitsFor, beamLimitsFor, splitWeightOverride } from '../ai/registry'
@@ -19,8 +16,8 @@ import { DEFAULT_HAND_WEIGHTS, handQuantities } from '../ai/handValue'
 import { makeQuiescent, type BeamLimits } from '../ai/search'
 import { role } from '../ai/race'
 import { COMMIT_ID } from '../buildIdentity'
-import { buildCoverageDecks } from './coverageDecks'
-import { firstPlayerFor } from './seating'
+import { benchDeckSet, type DeckSource } from './decks'
+import { runCorpus, type CorpusGames } from './gameRun'
 import { SCALAR_KEYS, type WeightKey } from './tune'
 
 /**
@@ -58,14 +55,14 @@ import { SCALAR_KEYS, type WeightKey } from './tune'
  * apart, and "dormant" is a claim about the Pivotal column.
  */
 
-const POOL = ashSet as unknown as SwuCard[]
-
 export interface TermConfig {
   gamesPerDeck: number
   seed: number
-  /** Limit the coverage decks used. Every decision is re-scored once per weight per direction, so a
-   *  full pass is ~30x a plain one and tests want a couple of decks rather than all 42. */
-  decks?: number
+  /** The deck population (`DeckSource`), coverage unless named. */
+  decks?: DeckSource
+  /** Limit the decks used. Every decision is re-scored once per weight per direction, so a full pass
+   *  is ~30x a plain one and tests want a couple of decks rather than all 42. */
+  deckLimit?: number
   stepCeiling?: number
   /**
    * The model whose picks are perturbed. Defaults to the one-ply scorer, which is what every recorded
@@ -137,12 +134,9 @@ export interface TermStat {
   byKind: TermKindStat[]
 }
 
-export interface TermReport {
+export interface TermReport extends CorpusGames {
   commitId: string
-  games: number
-  /** Games opened by the `player` seat. Half of `games`, and the check that the corpus samples both
-   *  openings rather than merely intending to. See `firstPlayerFor`. */
-  gamesPlayerFirst: number
+  decks: DeckSource
   /** Decisions with a real choice. A single forced move cannot be mis-ranked against anything. */
   decisions: number
   stats: TermStat[]
@@ -323,10 +317,9 @@ const emptyAcc = (): Acc => ({
 })
 
 export function runTerms(config: TermConfig): TermReport {
-  const all = buildCoverageDecks(POOL, config.seed).decks
-  const decks = config.decks === undefined ? all : all.slice(0, config.decks)
-  const cardDb = buildCardDb(POOL)
-  const ceiling = config.stepCeiling ?? DEFAULT_STEP_CEILING
+  const source = config.decks ?? 'coverage'
+  const { decks: all, cardDb } = benchDeckSet(source, config.seed)
+  const decks = config.deckLimit === undefined ? all : all.slice(0, config.deckLimit)
   const keys = config.weights ?? SCALAR_KEYS
   // The arm's OWN weights are the baseline every perturbation moves from, and the bot the run
   // compares against. Reading `DEFAULT_WEIGHTS` here measured the shipped bot under the arm's name.
@@ -340,94 +333,77 @@ export function runTerms(config: TermConfig): TermReport {
   const shippedPick = pickerFor(config.model, armWeights)
 
   const acc = new Map<WeightKey, Acc>(keys.map(k => [k, emptyAcc()]))
-  let games = 0
-  let gamesPlayerFirst = 0
   let decisions = 0
 
-  decks.forEach((deck, d) => {
-    for (let g = 0; g < config.gamesPerDeck; g++) {
-      const seed = nextSeed(config.seed + d * 37 + g)
-      const shuffleSeed = { v: seed }
-      const shuffle = <T,>(arr: T[]): T[] => { shuffleSeed.v = nextSeed(shuffleSeed.v); return seededShuffle(arr, shuffleSeed.v) }
-      // Indexed across the whole corpus, not within the deck: at one game per deck, which is this
-      // mode's default, a within-deck alternation never fires and every game opens the same way.
-      const firstPlayer = firstPlayerFor(d * config.gamesPerDeck + g)
-      let s: GameState = initGame(deck, deck, cardDb, { firstPlayer, shuffle, rngSeed: seed })
-      games++
-      if (firstPlayer === 'player') gamesPlayerFirst++
+  // The shipped pick drives both seats, measuring each decision before it makes it. The runner's
+  // setup heuristic drives the opening, exactly as a real game does, and never consults the
+  // evaluation, so those positions never reach here: scoring them would report on decisions the
+  // weights never make.
+  const measuring: Ai = s => instrumented(() => {
+    const moves = legalMoves(s)
+    if (moves.length < 2) return moves[0] ?? null
 
-      for (let i = 0; i < ceiling && s.winner === null; i++) {
-        const moves = legalMoves(s)
-        if (moves.length === 0) break
+    const me: PlayerId = s.activePlayer
+    // Fixed once per decision, as the greedy driver does it, so what is measured here is what
+    // happens there.
+    const asRole = role(s, me)
+    const kind = kindOf(s)
+    const nexts = moves.map(m => resolve(s, m))
+    decisions++
 
-        // The setup heuristic drives the opening, exactly as a real game does, and never consults the
-        // evaluation. Scoring those positions would report on decisions the weights never make.
-        const forced = setupAi(s)
-        if (forced) { s = resolve(s, forced); continue }
-        if (moves.length < 2) { s = resolve(s, moves[0]); continue }
+    const chosen = shippedPick(s, moves, nexts, me, asRole)
+    if (chosen === null) return null
 
-        const me: PlayerId = s.activePlayer
-        // Fixed once per decision, as the greedy driver does it, so what is measured here is what
-        // happens there.
-        const asRole = role(s, me)
-        const kind = kindOf(s)
-        const nexts = moves.map(m => resolve(s, m))
-        decisions++
+    // Decomposed once per candidate, not once per candidate per weight. A decided position
+    // short-circuits to +/-WIN before any term is computed, so it has no decomposition and is not
+    // evidence either way.
+    const decomposed = nexts.filter(n => n.winner === null).map(n => quantitiesOf(n, me, asRole))
 
-        const chosen = shippedPick(s, moves, nexts, me, asRole)
-        if (chosen === null) break
+    for (const key of keys) {
+      const a = acc.get(key)!
+      const bucket = a.byKind.get(kind)!
+      bucket.decisions++
 
-        // Decomposed once per candidate, not once per candidate per weight. A decided position
-        // short-circuits to +/-WIN before any term is computed, so it has no decomposition and is not
-        // evidence either way.
-        const decomposed = nexts.filter(n => n.winner === null).map(n => quantitiesOf(n, me, asRole))
-
-        for (const key of keys) {
-          const a = acc.get(key)!
-          const bucket = a.byKind.get(kind)!
-          bucket.decisions++
-
-          const quantities = decomposed
-            .map(q => q[key])
-            .filter((q): q is number => q !== undefined)
-          if (quantities.length > 1) {
-            const lo = Math.min(...quantities)
-            const hi = Math.max(...quantities)
-            if (hi > lo) {
-              a.varies++
-              bucket.varies++
-              a.spreadSum += hi - lo
-            }
-          }
-
-          const sc = pickers.get(key)!
-          // Compared by VALUE: a searching model builds its own move objects, so the reference
-          // comparison that worked for the shared `nexts` array would report every decision as
-          // pivotal. The one-ply path returns objects out of `moves` and is unaffected either way.
-          const picks = (p: Picker): boolean => {
-            const move = p(s, moves, nexts, me, asRole)
-            return move !== null && sameAction(move, chosen)
-          }
-
-          if (sc.nudged.some(p => !picks(p))) {
-            a.pivotal++
-            bucket.pivotal++
-          }
-          if (!picks(sc.ablated)) {
-            a.loadBearing++
-            bucket.loadBearing++
-          }
+      const quantities = decomposed
+        .map(q => q[key])
+        .filter((q): q is number => q !== undefined)
+      if (quantities.length > 1) {
+        const lo = Math.min(...quantities)
+        const hi = Math.max(...quantities)
+        if (hi > lo) {
+          a.varies++
+          bucket.varies++
+          a.spreadSum += hi - lo
         }
+      }
 
-        s = resolve(s, chosen)
+      const sc = pickers.get(key)!
+      // Compared by VALUE: a searching model builds its own move objects, so the reference
+      // comparison that worked for the shared `nexts` array would report every decision as
+      // pivotal. The one-ply path returns objects out of `moves` and is unaffected either way.
+      const picks = (p: Picker): boolean => {
+        const move = p(s, moves, nexts, me, asRole)
+        return move !== null && sameAction(move, chosen)
+      }
+
+      if (sc.nudged.some(p => !picks(p))) {
+        a.pivotal++
+        bucket.pivotal++
+      }
+      if (!picks(sc.ablated)) {
+        a.loadBearing++
+        bucket.loadBearing++
       }
     }
+
+    return chosen
   })
+  const corpus = runCorpus(decks, config, measuring, cardDb)
 
   // Any real position answers "does this weight price a quantity", since that is structural rather
   // than positional. Taken from the last decision seen, falling back to the opening board.
   const sample = quantitiesOf(
-    initGame(decks[0], decks[0], cardDb, { firstPlayer: 'player', shuffle: a => a, rngSeed: config.seed }),
+    initGame(decks[0].player, decks[0].opponent, cardDb, { firstPlayer: 'player', shuffle: a => a, rngSeed: config.seed }),
     'player',
     'neutral',
   )
@@ -446,5 +422,5 @@ export function runTerms(config: TermConfig): TermReport {
     }
   })
 
-  return { commitId: COMMIT_ID, games, gamesPlayerFirst, decisions, stats }
+  return { commitId: COMMIT_ID, decks: source, ...corpus, decisions, stats }
 }

@@ -1,15 +1,10 @@
-import ashSet from '../test/fixtures/ashSet.json'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
-import type { SwuCard } from '../data/cards'
 import type { GameState, PlayerId } from '../engine/types'
+import type { Ai } from '../ai/types'
 import { hasPendingChoices } from '../engine/types'
-import { buildCardDb } from '../engine/cardDb'
-import { initGame } from '../engine/initGame'
-import { DEFAULT_STEP_CEILING } from './selfPlay'
+import { instrumented } from './selfPlay'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
-import { seededShuffle, nextSeed } from '../engine/rng'
-import { setupAi } from '../ai/setupAi'
 import { evaluate } from '../ai/evaluate'
 import { beamAi } from '../ai/greedyAi'
 import { beamReachesWin, DEFAULT_BEAM_LIMITS } from '../ai/search'
@@ -18,8 +13,8 @@ import {
   DEFAULT_LETHAL_LIMITS, DEFAULT_LETHAL_GATE, type LethalGate,
 } from '../ai/lethal'
 import { COMMIT_ID } from '../buildIdentity'
-import { buildCoverageDecks } from './coverageDecks'
-import { firstPlayerFor } from './seating'
+import { benchDeckSet, type DeckSource } from './decks'
+import { runCorpus, type CorpusGames } from './gameRun'
 
 /**
  * Sizing the lethal solver (#433): is it worth wiring into the bot?
@@ -43,12 +38,13 @@ import { firstPlayerFor } from './seating'
  * a damage-relevance filter is most likely to be wrong.
  */
 
-const POOL = ashSet as unknown as SwuCard[]
-
 export interface LethalConfig {
   gamesPerDeck: number
   seed: number
-  decks?: number
+  /** The deck population (`DeckSource`), coverage unless named. */
+  decks?: DeckSource
+  /** Play only the first this many decks of it. */
+  deckLimit?: number
   stepCeiling?: number
   /** How many positions to check against brute force. The oracle is exponential, so this is bounded
    *  and deliberately spread across the run rather than taken from one game. */
@@ -189,12 +185,9 @@ export interface NodeCheck {
   exhausted: number
 }
 
-export interface LethalReport {
+export interface LethalReport extends CorpusGames {
   commitId: string
-  games: number
-  /** Games opened by the `player` seat. Half of `games`, and the check that the corpus samples both
-   *  openings rather than merely intending to. See `firstPlayerFor`. */
-  gamesPlayerFirst: number
+  decks: DeckSource
   decisions: number
   /** Every gate in `GATE_VARIANTS`, scored on this one corpus, shipped gate first. */
   gates: GateRow[]
@@ -235,10 +228,9 @@ function bruteForceLethal(state: GameState, seat: PlayerId, actionsLeft: number)
 }
 
 export function runLethal(config: LethalConfig): LethalReport {
-  const all = buildCoverageDecks(POOL, config.seed).decks
-  const decks = config.decks === undefined ? all : all.slice(0, config.decks)
-  const cardDb = buildCardDb(POOL)
-  const ceiling = config.stepCeiling ?? DEFAULT_STEP_CEILING
+  const source = config.decks ?? 'coverage'
+  const { decks: all, cardDb } = benchDeckSet(source, config.seed)
+  const decks = config.deckLimit === undefined ? all : all.slice(0, config.deckLimit)
   const oracleSamples = config.oracleSamples ?? 60
   const oracleStride = config.oracleStride ?? 17
   const oracleDepth = config.oracleDepth ?? 3
@@ -256,8 +248,6 @@ export function runLethal(config: LethalConfig): LethalReport {
   // so a row never carries a running total that reads like a finished share.
   const admittedNodes = GATE_VARIANTS.map(() => 0)
   const admittedMs = GATE_VARIANTS.map(() => 0)
-  let games = 0
-  let gamesPlayerFirst = 0
   let decisions = 0
   let solverMs = 0
   let solverCalls = 0
@@ -268,109 +258,90 @@ export function runLethal(config: LethalConfig): LethalReport {
   let maxNodes = 0
   let exhausted = 0
 
-  decks.forEach((deck, d) => {
-    for (let g = 0; g < config.gamesPerDeck; g++) {
-      const seed = nextSeed(config.seed + d * 37 + g)
-      const shuffleSeed = { v: seed }
-      const shuffle = <T,>(arr: T[]): T[] => { shuffleSeed.v = nextSeed(shuffleSeed.v); return seededShuffle(arr, shuffleSeed.v) }
-      // Indexed across the whole corpus, not within the deck: at one game per deck, which is this
-      // mode's default, a within-deck alternation never fires and every game opens the same way.
-      const firstPlayer = firstPlayerFor(d * config.gamesPerDeck + g)
-      let s: GameState = initGame(deck, deck, cardDb, { firstPlayer, shuffle, rngSeed: seed })
-      games++
-      if (firstPlayer === 'player') gamesPlayerFirst++
+  // The beam drives both seats, and each of its decisions is measured before it is made. The runner's
+  // setup heuristic drives the opening and never consults the search, so those positions are not
+  // decisions any of this applies to, and never reach here.
+  const measuring: Ai = s => instrumented(() => {
+    if (legalMoves(s).length === 0) return null
+    const me: PlayerId = s.activePlayer
+    decisions++
+    const row = rounds.get(s.round) ?? { round: s.round, decisions: 0, lethal: 0, beamMissed: 0 }
+    row.decisions++
 
-      for (let i = 0; i < ceiling && s.winner === null; i++) {
-        const moves = legalMoves(s)
-        if (moves.length === 0) break
+    const start = performance.now()
+    const probe = probeLethal(s, me, solverLimits)
+    const solver = probe.won
+    const callMs = performance.now() - start
+    solverMs += callMs
+    solverCalls++
+    nodesTotal += probe.nodesUsed
+    maxNodes = Math.max(maxNodes, probe.nodesUsed)
+    if (probe.exhausted) exhausted++
+    if (solver) { callsFound++; nodesFound += probe.nodesUsed } else { nodesNotFound += probe.nodesUsed }
 
-        // The setup heuristic drives the opening and never consults the search, so those positions
-        // are not decisions any of this applies to.
-        const forced = setupAi(s)
-        if (forced) { s = resolve(s, forced); continue }
+    // One beam verdict per decision, shared by every gate row and by the classification below.
+    // It is only meaningful where a line exists, and asking costs a real search, so a position
+    // with no lethal never pays for it.
+    const beamSees = solver && beamReachesWin(s, me, evaluate, DEFAULT_BEAM_LIMITS)
 
-        const me: PlayerId = s.activePlayer
-        decisions++
-        const row = rounds.get(s.round) ?? { round: s.round, decisions: 0, lethal: 0, beamMissed: 0 }
-        row.decisions++
-
-        const start = performance.now()
-        const probe = probeLethal(s, me, solverLimits)
-        const solver = probe.won
-        const callMs = performance.now() - start
-        solverMs += callMs
-        solverCalls++
-        nodesTotal += probe.nodesUsed
-        maxNodes = Math.max(maxNodes, probe.nodesUsed)
-        if (probe.exhausted) exhausted++
-        if (solver) { callsFound++; nodesFound += probe.nodesUsed } else { nodesNotFound += probe.nodesUsed }
-
-        // One beam verdict per decision, shared by every gate row and by the classification below.
-        // It is only meaningful where a line exists, and asking costs a real search, so a position
-        // with no lethal never pays for it.
-        const beamSees = solver && beamReachesWin(s, me, evaluate, DEFAULT_BEAM_LIMITS)
-
-        // The solver above runs UNGATED, so the gates can be scored against the truth rather than
-        // against their own admissions. A gate measured only on the positions it admits can never
-        // look wrong.
-        for (let v = 0; v < GATE_VARIANTS.length; v++) {
-          if (shouldSearchLethal(s, me, GATE_VARIANTS[v].gate)) {
-            // Admitted, so this call's cost is what the gate leaves behind.
-            admittedNodes[v] += probe.nodesUsed
-            admittedMs[v] += callMs
-            continue
-          }
-          const g = gates[v]
-          g.skipped++
-          if (solver) {
-            g.skippedWithLethal++
-            if (!beamSees) g.skippedCostingAWin++
-          }
-        }
-
-        if (!solver) {
-          lethal.none++
-        } else {
-          row.lethal++
-          // Closed form first: if the ready board alone covers the base within the same budget, the
-          // search contributed nothing and this is not evidence for building anything.
-          if (attacksToFinish(s, me) <= solverDepth) lethal.attacksOnly++
-          else lethal.searchOnly++
-
-          if (beamSees) {
-            lethal.beamSaw++
-          } else {
-            lethal.beamMissed++
-            row.beamMissed++
-          }
-        }
-
-        // Spread the oracle across the run rather than clustering it in one game, and spend it where
-        // correctness can actually be wrong: lethal is arithmetically impossible before round 4, so
-        // checking those positions only confirms that two searches both return false.
-        if (oracle.checked < oracleSamples && s.round >= 4 && decisions % oracleStride === 0) {
-          oracle.checked++
-          const truth = bruteForceLethal(s, me, oracleDepth)
-          const pruned = hasLethal(s, me, { ...DEFAULT_LETHAL_LIMITS, depth: oracleDepth })
-          if (truth !== pruned) {
-            if (truth) oracle.solverMissed++
-            else oracle.solverExtra++
-            if (hasPendingChoices(s)) oracle.disagreedWithChoicePending++
-          }
-        }
-
-        rounds.set(row.round, row)
-        const action = beamAi(s)
-        if (!action) break
-        s = resolve(s, action)
+    // The solver above runs UNGATED, so the gates can be scored against the truth rather than
+    // against their own admissions. A gate measured only on the positions it admits can never
+    // look wrong.
+    for (let v = 0; v < GATE_VARIANTS.length; v++) {
+      if (shouldSearchLethal(s, me, GATE_VARIANTS[v].gate)) {
+        // Admitted, so this call's cost is what the gate leaves behind.
+        admittedNodes[v] += probe.nodesUsed
+        admittedMs[v] += callMs
+        continue
+      }
+      const g = gates[v]
+      g.skipped++
+      if (solver) {
+        g.skippedWithLethal++
+        if (!beamSees) g.skippedCostingAWin++
       }
     }
+
+    if (!solver) {
+      lethal.none++
+    } else {
+      row.lethal++
+      // Closed form first: if the ready board alone covers the base within the same budget, the
+      // search contributed nothing and this is not evidence for building anything.
+      if (attacksToFinish(s, me) <= solverDepth) lethal.attacksOnly++
+      else lethal.searchOnly++
+
+      if (beamSees) {
+        lethal.beamSaw++
+      } else {
+        lethal.beamMissed++
+        row.beamMissed++
+      }
+    }
+
+    // Spread the oracle across the run rather than clustering it in one game, and spend it where
+    // correctness can actually be wrong: lethal is arithmetically impossible before round 4, so
+    // checking those positions only confirms that two searches both return false.
+    if (oracle.checked < oracleSamples && s.round >= 4 && decisions % oracleStride === 0) {
+      oracle.checked++
+      const truth = bruteForceLethal(s, me, oracleDepth)
+      const pruned = hasLethal(s, me, { ...DEFAULT_LETHAL_LIMITS, depth: oracleDepth })
+      if (truth !== pruned) {
+        if (truth) oracle.solverMissed++
+        else oracle.solverExtra++
+        if (hasPendingChoices(s)) oracle.disagreedWithChoicePending++
+      }
+    }
+
+    rounds.set(row.round, row)
+    return beamAi(s)
   })
+  const corpus = runCorpus(decks, config, measuring, cardDb)
 
   return {
     commitId: COMMIT_ID,
-    games,
-    gamesPlayerFirst,
+    decks: source,
+    ...corpus,
     decisions,
     solverDepth,
     solverNodes,

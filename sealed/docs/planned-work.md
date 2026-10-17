@@ -44,17 +44,12 @@ engine or the horizon invalidates a calibration done before it.
    set. And per-card win
    rates need far more decks than 52 before a card-sized effect can clear the noise.
 3. **The rest of #565, what a run plays split from what it records.** The game runner exists
-   (`gameRun.ts`): the head-to-head, matchups, generalisation, matrix and sweep play through it with
-   their own schedules and recorders. Still to do, none of it ticketed separately:
-   - **The decision, term and lethal corpora onto the runner.** They are game runs that record from
-     inside a decision; each still drives its own loop and seats by `firstPlayerFor`. Taking them up
-     means a recorder that can wrap the AI it observes, with the opt-in cost kept opt-in (`--terms` is
-     roughly 30x a plain pass).
-   - **Deck population as a parameter everywhere.** `mirror`, `coverage` and `lockout` are a
-     `--decks` value on the head-to-head only; the matchup deck set is reachable only by choosing
-     `--matchups` or `--matrix`, and the generalisation harness is fixed to the coverage decks.
+   (`gameRun.ts`): every game run, the decision, term and lethal corpora included, plays through it
+   with its own schedule and recorders, and `--decks` (now with `matchup`) reaches every mode that
+   plays a population. Still to do, parked on the ticket as a decision (`needs-decision`):
    - **Recorders chosen per run on the command line**, `--record` included, rather than fixed by the
-     mode.
+     mode: a corpus alongside an A/B, or records from `--matchups` and `--generalise`. Where those
+     games are written and under what key is the same question as the table below.
    - **One table**, so "which decks degraded between build X and build Y" is a query over stored
      games rather than another run. The store must keep keying on deck source: populations never pool.
 

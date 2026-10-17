@@ -24,7 +24,8 @@ import {
 } from './status'
 import { pairedDifference, renderPaired } from './paired'
 import type { CostReport } from './cost'
-import type { DeckSource } from './decks'
+import { DECK_SOURCES, type DeckSource } from './decks'
+import type { CorpusGames } from './gameRun'
 import { runLethal } from './lethal'
 import type { LethalReport } from './lethal'
 import { DEFAULT_LETHAL_LIMITS } from '../ai/lethal'
@@ -232,10 +233,10 @@ export function parseArgs(argv: string[]): Args {
     else if (arg === '--shard-count') shardCount = Number(argv[++i])
     else if (arg === '--decks') {
       const v = argv[++i]
-      if (v !== 'mirror' && v !== 'coverage' && v !== 'lockout') {
-        throw new Error(`--decks must be mirror, coverage or lockout, got "${v}"`)
+      if (!DECK_SOURCES.includes(v as DeckSource)) {
+        throw new Error(`--decks must be mirror, coverage, lockout or matchup, got "${v}"`)
       }
-      decks = v
+      decks = v as DeckSource
     }
     else if (arg === '--triage') triage = true
     else if (arg === '--fixture') fixture = true
@@ -287,6 +288,12 @@ export function parseArgs(argv: string[]): Args {
   // records says so before it plays anything, where taking the flag and writing nothing would not.
   const otherMode = sweep || generalise || matrix || decisions || terms || cost || budget || lethal || matchups || status || history || triage || fixture || rows || collectedMode
   if (record && otherMode) throw new Error('--record applies to the head-to-head game run only (with or without --shard)')
+  // The head-to-head, `--generalise` and the three corpora play any population. The matchups and the
+  // matrix rate leaders against each other on decks built per leader, the sweep plays a set's whole
+  // pool, and cost and budget replay one fixed corpus: none would read the flag, so it is refused.
+  if (decks !== undefined && (matchups || matrix || sweep || cost || budget)) {
+    throw new Error('--decks applies to the head-to-head, --generalise, --decisions, --terms and --lethal')
+  }
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
   // The matrix rates one set's leaders against each other; a mixed pool builds decks nobody builds.
   if (matrix && poolSets.length !== 1) throw new Error(`--matrix takes one set, got ${poolSets.join(',')}`)
@@ -444,7 +451,7 @@ function formatGeneralisation(report: GeneralisationReport, wallMs: number): str
   const lines = [
     '',
     `dmgCtrl generalisation  (engine ${report.commitId})`,
-    `${report.aiA} vs ${report.aiB}   ${report.decks} decks × ${report.gamesPerDeck} games`,
+    `${report.aiA} vs ${report.aiB}   ${report.decks} ${report.population} decks × ${report.gamesPerDeck} games`,
     '',
     row(`overall win rate (${report.aiA})`, `${pct(report.overallWinRateA)}  ± ${pct(report.overallCi)}   (${pct(lo)} – ${pct(hi)})`),
     row('turn order', turnOrderLine(report.split)),
@@ -480,7 +487,7 @@ function runGeneraliseMode(args: Args): void {
   const start = Date.now()
   let report: GeneralisationReport
   try {
-    report = runGeneralisation({ gamesPerDeck, seed: args.seed, aiA, aiB })
+    report = runGeneralisation({ gamesPerDeck, seed: args.seed, aiA, aiB, decks: args.decks })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     process.exit(2)
@@ -493,12 +500,17 @@ function runGeneraliseMode(args: Args): void {
   if (report.dropped > 0) process.exit(1)
 }
 
+/** The decision, term and lethal corpora's games line: how many, over which decks, opened which way. */
+function corpusGames(report: CorpusGames & { decks: DeckSource }): string {
+  const dropped = report.dropped === 0 ? '' : `, ${report.dropped} dropped by the engine`
+  return `${report.games} games across the ${report.decks} decks (${report.gamesPlayerFirst} opened by player${dropped})`
+}
+
 function formatDecisions(report: DecisionReport, wallMs: number): string {
   const lines = [
     '',
     `dmgCtrl decision quality  (engine ${report.commitId})`,
-    `${report.ai}, ${report.games} games across the ${report.decks} decks`
-      + ` (${report.gamesPlayerFirst} opened by player)`,
+    `${report.ai}, ${corpusGames(report)}`,
     ...(report.decks === 'lockout'
       ? ['', '  LOCKOUT DECKS: the player seat faces a purpose-built shielded-Sentinel wall, so these',
         '  rates are NOT comparable with a coverage run. The wall sits on the opponent seat, which',
@@ -939,7 +951,7 @@ function runTermsMode(args: Args): void {
       console.log('\n  NOTE: perturbing every weight through a searching model is ~60x a one-ply pass.')
       console.log('        Narrow it with --weights key1,key2 unless you mean to run for hours.\n')
     }
-    report = runTerms({ gamesPerDeck, seed: args.seed, model: args.aiExplicit ? args.aiA : undefined, weights: args.weights })
+    report = runTerms({ gamesPerDeck, seed: args.seed, model: args.aiExplicit ? args.aiA : undefined, weights: args.weights, decks: args.decks })
     // Persisted, because "has this weight woken up since the search landed?" is a question about two
     // readings taken months apart, and until now every one of them printed to a terminal and vanished.
     const db = openDb(DEFAULT_DB_PATH)
@@ -956,7 +968,7 @@ function runTermsMode(args: Args): void {
     '',
     `dmgCtrl term sensitivity  (engine ${report.commitId})`,
     row('model', args.aiExplicit ? args.aiA : 'one-ply (default)'),
-    row('games', `${report.games}  (${report.gamesPlayerFirst} opened by player)`),
+    row('games', corpusGames(report)),
     row('decisions', `${report.decisions}`),
     row('saved run', `${termRunId}  ->  ${DEFAULT_DB_PATH}`),
     '',
@@ -1011,7 +1023,8 @@ function runLethalMode(args: Args): void {
       // Undefined plays the whole coverage set, which is what every recorded run played. Sizing the
       // rail takes a run per candidate budget per depth, and the full set is too large a unit for
       // that: `--deck-count` is what makes the sweep affordable.
-      decks: args.deckCount,
+      deckLimit: args.deckCount,
+      decks: args.decks,
     })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
@@ -1025,7 +1038,7 @@ function runLethalMode(args: Args): void {
   const lines = [
     '',
     `dmgCtrl lethal solver sizing  (engine ${report.commitId})`,
-    row('games', `${report.games}  (${report.gamesPlayerFirst} opened by player)`),
+    row('games', corpusGames(report)),
     row('decisions', `${report.decisions}`),
     row('solver depth / nodes', `${report.solverDepth} / ${report.solverNodes}`),
     '',

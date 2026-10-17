@@ -2,24 +2,22 @@ import '../engine/cardDefinitions' // side effect: registers every implemented c
 import type { GameState, PlayerId, UnitState } from '../engine/types'
 import type { Action } from '../engine/actions'
 import { opponentOf, hasPendingChoices } from '../engine/types'
-import { initGame } from '../engine/initGame'
-import { DEFAULT_STEP_CEILING } from './selfPlay'
+import type { Ai } from '../ai/types'
+import type { GameWatch } from './selfPlay'
+import { runCorpus, type CorpusGames } from './gameRun'
 import { legalMoves } from '../engine/legalMoves'
 import { unitHasKeyword } from '../engine/keywords'
 import { effectivePower } from '../engine/stats'
 import { getCardDefinition } from '../engine/abilities'
 import { resolve } from '../engine/resolve'
-import { seededShuffle, nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
 import { evaluate, blockedFor, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { makeQuiescent, lastSearchTrace, clearSearchTrace } from '../ai/search'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { resolveAi } from '../ai/registry'
-import { setupAi } from '../ai/setupAi'
 import { role, reachSteady, canFinishNow, canFinishThisAction, lockedLanes, lossIsCertain, type Role } from '../ai/race'
 import { isCardPlay, playableHandIndexes } from './cardUse'
 import { benchDeckSet, type DeckSource } from './decks'
-import { firstPlayerFor } from './seating'
 
 /**
  * Decision-quality diagnostics (#393).
@@ -1242,7 +1240,7 @@ export function advantageSpend(before: GameState, after: GameState, action: Acti
   return out
 }
 
-export interface DecisionReport {
+export interface DecisionReport extends CorpusGames {
   commitId: string
   ai: string
   /**
@@ -1250,10 +1248,6 @@ export interface DecisionReport {
    * `coverage` rate are not comparable, and the header used to name the coverage decks unconditionally.
    */
   decks: DeckSource
-  games: number
-  /** Games opened by the `player` seat. Half of `games`, and the check that the corpus samples both
-   *  openings rather than merely intending to. See `firstPlayerFor`. */
-  gamesPlayerFirst: number
   stats: DecisionStat[]
   ties: TieStat
   initiativeHorizon: InitiativeHorizonStat
@@ -1381,7 +1375,6 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   const { decks: all, cardDb } = benchDeckSet(config.decks ?? 'coverage', config.seed)
   const decks = config.deckLimit === undefined ? all : all.slice(0, config.deckLimit)
   const ai = resolveAi(config.aiName ?? 'greedy')
-  const ceiling = config.stepCeiling ?? DEFAULT_STEP_CEILING
 
   const shields: ShieldStat = {
     decisionsFacingShield: 0, removalAvailable: 0, removals: 0, shieldsSeen: 0, decisionsHoldingShield: 0,
@@ -1392,8 +1385,6 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   const attacks = empty()
   const plays = empty()
   const answering = empty()
-  let games = 0
-  let gamesPlayerFirst = 0
   let banked = 0
   let skipped = 0
   let bankedPool = 0
@@ -1496,68 +1487,67 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
     decidedFoeNext: 0, decidedFoeFinished: 0,
   }
 
-  decks.forEach((deck, d) => {
-    for (let g = 0; g < config.gamesPerDeck; g++) {
-      const seed = nextSeed(config.seed + d * 37 + g)
-      const shuffleSeed = { v: seed }
-      const shuffle = <T,>(arr: T[]): T[] => { shuffleSeed.v = nextSeed(shuffleSeed.v); return seededShuffle(arr, shuffleSeed.v) }
-      // Indexed across the whole corpus, not within the deck: a within-deck alternation only balances
-      // when games-per-deck is even, and this mode's default of three ran 2:1 on the same opening.
-      const firstPlayer = firstPlayerFor(d * config.gamesPerDeck + g)
-      let s: GameState = initGame(deck.player, deck.opponent, cardDb, { firstPlayer, shuffle, rngSeed: seed })
-      games++
-      if (firstPlayer === 'player') gamesPlayerFirst++
-      passes.games++
-      let lastRole: Exclude<Role, 'neutral'> | null = null
-      let sampledRound = 0
-      // Per game, so a card sat on all match counts as ONE game rather than as thirty declines. The
-      // two answer opposite questions and a single occasion count cannot separate them.
-      const declinedThisGame = new Set<string>()
-      const playedThisGame = new Set<string>()
-      // Per seat, so an exposure can be charged to whoever made it when the game is decided.
-      const avoidableBy: Record<PlayerId, boolean> = { player: false, opponent: false }
-      // Per seat, the action index of its first unavoidable exposure: the point its game was decided.
-      const decidedAt: Record<PlayerId, number | null> = { player: null, opponent: null }
-      let actionsThisGame = 0
-      // A decided point waiting to see whether the opponent's next action finished it. Opened at the
-      // decided action's index, read after the next action whoever takes it, so it never spans two.
-      let finishWatch: { foe: PlayerId; at: number } | null = null
-      /**
-       * Leaders inside their "did it survive arriving" window. **Per game.** Declared alongside the
-       * other accumulators once, and a watch left open when a game ended carried into the next one,
-       * where its instance id no longer existed and was counted as a death. That read 72% against a
-       * known baseline of 2.5%, which is the only reason it was caught.
-       */
-      const watching: Array<{ seat: PlayerId; instanceId: string; until: number }> = []
+  // The AI's own valuation of each candidate is a by-product of asking it to move, and that valuation
+  // is what the search column reports, so it is taken as the AI decides, BEFORE any scoring below.
+  // `setupAi` decides setup without consulting any evaluation, and the runner asks it first, so a
+  // setup step never reaches this AI and has no trace: the search column falls back to the one-ply
+  // values there.
+  let aiTrace: ReturnType<typeof lastSearchTrace> = null
+  const tracing: Ai = s => {
+    clearSearchTrace()
+    const action = ai(s)
+    aiTrace = lastSearchTrace()
+    return action
+  }
 
-      // Per game, for the same reason: a lockout run must reset between games or the "longest run"
-      // would be a run across the whole corpus rather than within one game.
-      let lockSampledRound = -1
-      let lockRun = 0
+  /** One game's watch: its own per-game state, every step read as the game plays it. */
+  const watchGame = (): GameWatch => {
+    passes.games++
+    let lastRole: Exclude<Role, 'neutral'> | null = null
+    let sampledRound = 0
+    // Per game, so a card sat on all match counts as ONE game rather than as thirty declines. The
+    // two answer opposite questions and a single occasion count cannot separate them.
+    const declinedThisGame = new Set<string>()
+    const playedThisGame = new Set<string>()
+    // Per seat, so an exposure can be charged to whoever made it when the game is decided.
+    const avoidableBy: Record<PlayerId, boolean> = { player: false, opponent: false }
+    // Per seat, the action index of its first unavoidable exposure: the point its game was decided.
+    const decidedAt: Record<PlayerId, number | null> = { player: null, opponent: null }
+    let actionsThisGame = 0
+    // A decided point waiting to see whether the opponent's next action finished it. Opened at the
+    // decided action's index, read after the next action whoever takes it, so it never spans two.
+    let finishWatch: { foe: PlayerId; at: number } | null = null
+    /**
+     * Leaders inside their "did it survive arriving" window. **Per game.** Declared alongside the
+     * other accumulators once, and a watch left open when a game ended carried into the next one,
+     * where its instance id no longer existed and was counted as a death. That read 72% against a
+     * known baseline of 2.5%, which is the only reason it was caught.
+     */
+    const watching: Array<{ seat: PlayerId; instanceId: string; until: number }> = []
 
-      // Per game, for the same reason as `watching` above: a watch list that outlives its game follows
-      // a decision into a game it was never part of.
-      const denialWatches: DenialWatch[] = []
-      const claimWatches: ClaimWatch[] = []
+    // Per game, for the same reason: a lockout run must reset between games or the "longest run"
+    // would be a run across the whole corpus rather than within one game.
+    let lockSampledRound = -1
+    let lockRun = 0
 
-      for (let i = 0; i < ceiling && s.winner === null; i++) {
+    // Per game, for the same reason as `watching` above: a watch list that outlives its game follows
+    // a decision into a game it was never part of.
+    const denialWatches: DenialWatch[] = []
+    const claimWatches: ClaimWatch[] = []
+
+    return {
+      step(before, action, after) {
+        let s = before
         const moves = legalMoves(s)
-        if (moves.length === 0) break
         const me = s.activePlayer
         // The role is fixed once per decision, exactly as the greedy driver does it, so a tie here
         // is a tie there.
         const asRole = role(s, me)
         const foe = opponentOf(me)
 
-        // Taken BEFORE scoring, because the AI's own valuation of each candidate is a by-product of
-        // asking it to move, and that valuation is what the search column reports. `setupAi` decides
-        // setup without consulting any evaluation, so there is nothing to read there and the search
-        // column falls back to the one-ply values.
-        const forced = setupAi(s)
-        clearSearchTrace()
-        const action = forced ?? ai(s)
-        if (!action) break
-        const trace = forced ? null : lastSearchTrace()
+        // Null after a setup step, which the AI never saw.
+        const trace = aiTrace
+        aiTrace = null
         const searched = trace?.candidates ?? null
         const searchValue = (i: number): number => (searched && searched.length === moves.length ? searched[i] : NaN)
 
@@ -2017,7 +2007,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         // Only a watch opened by an EARLIER action: one opened by this action, above, waits for the next.
         const watched = finishWatch && finishWatch.at < actionsThisGame ? finishWatch : null
         if (watched) finishWatch = null
-        s = resolve(s, action)
+        s = after
         actionsThisGame++
         if (watched && me === watched.foe) {
           exposure.decidedFoeNext++
@@ -2077,39 +2067,41 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           if (!alive) { leader.diedSoon++; watching.splice(w, 1) }
           else if (s.round > watch.until) watching.splice(w, 1) // survived the window
         }
-      }
-
-      for (const cardId of declinedThisGame) {
-        const row = unspentByCard.get(cardId)
-        if (row) row.games++
-      }
-      for (const cardId of playedThisGame) {
-        playedGamesByCard.set(cardId, (playedGamesByCard.get(cardId) ?? 0) + 1)
-      }
-
-      for (const watch of denialWatches) closeDenialWatch(watch, s, denialOutcome)
-
-      // Charge each seat's avoidable exposures against whether that seat actually lost. A gate can
-      // only ever recover games where the exposure preceded the defeat.
-      exposure.games++
-      const loser = s.winner === 'player' ? 'opponent' : s.winner === 'opponent' ? 'player' : null
-      if (loser !== null) exposure.losses++
-      for (const seat of ['player', 'opponent'] as PlayerId[]) {
-        if (avoidableBy[seat]) {
-          exposure.gamesWithAvoidable++
-          if (seat === loser) exposure.lostAfterAvoidable++
-        } else {
-          exposure.gamesWithoutAvoidable++
-          if (seat === loser) exposure.lostWithoutAvoidable++
+      },
+      end(s) {
+        for (const cardId of declinedThisGame) {
+          const row = unspentByCard.get(cardId)
+          if (row) row.games++
         }
-      }
-      const decided = tallyDecided(decidedAt, actionsThisGame, s.winner)
-      exposure.actions += actionsThisGame
-      exposure.decidedSeats += decided.decided
-      exposure.lostAfterDecided += decided.lostAfter
-      exposure.actionsAfterDecided += decided.actionsAfter
+        for (const cardId of playedThisGame) {
+          playedGamesByCard.set(cardId, (playedGamesByCard.get(cardId) ?? 0) + 1)
+        }
+
+        for (const watch of denialWatches) closeDenialWatch(watch, s, denialOutcome)
+
+        // Charge each seat's avoidable exposures against whether that seat actually lost. A gate can
+        // only ever recover games where the exposure preceded the defeat.
+        exposure.games++
+        const loser = s.winner === 'player' ? 'opponent' : s.winner === 'opponent' ? 'player' : null
+        if (loser !== null) exposure.losses++
+        for (const seat of ['player', 'opponent'] as PlayerId[]) {
+          if (avoidableBy[seat]) {
+            exposure.gamesWithAvoidable++
+            if (seat === loser) exposure.lostAfterAvoidable++
+          } else {
+            exposure.gamesWithoutAvoidable++
+            if (seat === loser) exposure.lostWithoutAvoidable++
+          }
+        }
+        const decided = tallyDecided(decidedAt, actionsThisGame, s.winner)
+        exposure.actions += actionsThisGame
+        exposure.decidedSeats += decided.decided
+        exposure.lostAfterDecided += decided.lostAfter
+        exposure.actionsAfterDecided += decided.actionsAfter
+      },
     }
-  })
+  }
+  const { games, gamesPlayerFirst, dropped } = runCorpus(decks, config, tracing, cardDb, watchGame)
 
   const stat = (label: string, t: Tally): DecisionStat => ({
     label,
@@ -2125,6 +2117,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
     decks: config.decks ?? 'coverage',
     games,
     gamesPlayerFirst,
+    dropped,
     stats: [
       stat('regroup: which card', resourcing),
       stat('initiative: take it', initiative),

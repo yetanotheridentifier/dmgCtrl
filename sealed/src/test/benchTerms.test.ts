@@ -200,7 +200,7 @@ describe('runTerms driven by a searching model', () => {
   // Three runs shared across the file, not one per assertion. A searching pass is the most expensive
   // thing in this suite and it runs in parallel with everything else: seven runs cost 25s of test time
   // and are exactly what pushed unrelated marginal tests over their timeouts before.
-  const cfg = { gamesPerDeck: 1, seed: 4242, decks: 1, weights: keys, stepCeiling: 300 }
+  const cfg = { gamesPerDeck: 1, seed: 4242, deckLimit: 1, weights: keys, stepCeiling: 300 }
   const onePly = runTerms({ ...cfg, model: 'greedy' })
   const searched = runTerms({ ...cfg, model: 'beam:2x2' })
   const defaulted = runTerms(cfg)
@@ -285,7 +285,7 @@ describe('runTerms driven by a searching model', () => {
 
 describe('runTerms', () => {
   // Two decks keeps this quick: each decision is re-scored once per weight per direction.
-  const report = runTerms({ gamesPerDeck: 1, seed: 4242, decks: 2 })
+  const report = runTerms({ gamesPerDeck: 1, seed: 4242, deckLimit: 2 })
 
   it('observes real decisions and reports one row per weight', () => {
     expect(report.games).toBeGreaterThan(0)
@@ -339,7 +339,7 @@ describe('runTerms', () => {
     expect(DEFAULT_WEIGHTS.resourceSurplus, 'the pool still ships flat, so the RATE prices nothing')
       .toBe(DEFAULT_WEIGHTS.resource)
     expect(DEFAULT_WEIGHTS.cardScarcity, 'while the bonus it gates is live').toBeGreaterThan(0)
-    const wider = runTerms({ gamesPerDeck: 1, seed: 4242, decks: 8, weights: ['saturation'] })
+    const wider = runTerms({ gamesPerDeck: 1, seed: 4242, deckLimit: 8, weights: ['saturation'] })
     const saturation = wider.stats.find(s => s.weight === 'saturation')!
     expect(saturation.pivotal + saturation.loadBearing, 'the threshold reaches real decisions')
       .toBeGreaterThan(0)
@@ -415,7 +415,7 @@ describe('runTerms', () => {
   })
 
   it('is deterministic for a given seed', () => {
-    const again = runTerms({ gamesPerDeck: 1, seed: 4242, decks: 2 })
+    const again = runTerms({ gamesPerDeck: 1, seed: 4242, deckLimit: 2 })
     expect(again.stats).toEqual(report.stats)
   }, 240_000)
 })

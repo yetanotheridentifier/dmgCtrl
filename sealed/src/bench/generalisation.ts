@@ -1,17 +1,16 @@
 import ashSet from '../test/fixtures/ashSet.json'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 import type { SwuCard } from '../data/cards'
-import { buildCardDb } from '../engine/cardDb'
 import { nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
 import { resolveAi } from '../ai/registry'
 import type { Ai } from '../ai/types'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { wilsonInterval, firstPlayerSplit, type FirstPlayerSplit } from './stats'
-import { buildCoverageDecks } from './coverageDecks'
+import { benchDeckSet, type DeckSource } from './decks'
 import type { DropReason, GameResult } from './selfPlay'
 import { seating } from './seating'
-import { runGames, newTally, addToTally, mergeTallies, type ScheduledGame, type Tally } from './gameRun'
+import { runGames, bySeat, newTally, addToTally, mergeTallies, type ScheduledGame, type Tally } from './gameRun'
 
 /**
  * Generalisation diagnostic (#408 follow-up): play `aiA` against `aiB` on each coverage deck and
@@ -31,6 +30,8 @@ export interface GeneralisationConfig {
   aiA: string
   aiB: string
   stepCeiling?: number
+  /** The deck population (`DeckSource`), coverage unless named. A deck is named by its player-seat list. */
+  decks?: DeckSource
 }
 
 export interface DeckResult {
@@ -67,6 +68,8 @@ export interface GeneralisationReport {
   commitId: string
   aiA: string
   aiB: string
+  /** The deck population played. */
+  population: DeckSource
   decks: number
   gamesPerDeck: number
   totalGames: number
@@ -99,19 +102,20 @@ export function runGeneralisationWith(
   aiB: Ai,
   labelA: string,
   labelB: string,
-  config: { gamesPerDeck: number; seed: number; stepCeiling?: number },
+  config: { gamesPerDeck: number; seed: number; stepCeiling?: number; decks?: DeckSource },
 ): GeneralisationReport {
-  const { decks } = buildCoverageDecks(POOL, config.seed)
-  const cardDb = buildCardDb(POOL)
+  const { decks: matchups, cardDb } = benchDeckSet(config.decks ?? 'coverage', config.seed)
+  const decks = matchups.map(m => m.player)
   const byId = new Map(POOL.map(c => [`${c.Set}_${c.Number}`, c]))
 
   function* schedule(): Generator<ScheduledGame<ParsedDeck>> {
     let seed = config.seed
-    for (const deck of decks) {
+    for (const m of matchups) {
       for (let g = 0; g < config.gamesPerDeck; g++) {
         seed = nextSeed(seed)
         // Seat and first player both cycle, independently, so neither advantage lands on one AI.
-        yield { seed, seats: seating(g), deckA: deck, deckB: deck, key: deck }
+        const seats = seating(g)
+        yield { seed, seats, ...bySeat(m, seats), key: m.player }
       }
     }
   }
@@ -174,6 +178,7 @@ export function runGeneralisationWith(
     commitId: COMMIT_ID,
     aiA: labelA,
     aiB: labelB,
+    population: config.decks ?? 'coverage',
     decks: decks.length,
     gamesPerDeck: config.gamesPerDeck,
     totalGames: decks.length * config.gamesPerDeck,
