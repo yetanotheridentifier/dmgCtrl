@@ -84,7 +84,7 @@ describe('--collected', () => {
 
 describe('the collected-game modes and the rest of the bench', () => {
   it.each([['--pull'], ['--backup', '/x'], ['--restore', 'a.jsonl.gz'], ['--collected']])('%s keeps no bench records', (...mode) => {
-    expect(() => parseArgs([...mode, '--record'])).toThrow('--record applies to the head-to-head game run only')
+    expect(() => parseArgs([...mode, '--record'])).toThrow('--record applies to the head-to-head, --generalise and --matchups')
   })
 
   it.each([['--pull'], ['--backup', '/x'], ['--restore', 'a.jsonl.gz'], ['--collected']])('%s takes no AI names or files', (...mode) => {

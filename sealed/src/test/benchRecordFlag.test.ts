@@ -5,8 +5,8 @@ import { seedJobs, shardRunKey, type ShardConfig } from '../bench/shard'
 
 /**
  * `--record` keeps a game run's completed games as records. It is a choice on the head-to-head run
- * and on its sharded form, and on nothing else: parse-level, so a run that cannot record says so
- * before it plays anything.
+ * (sharded or not), `--generalise` and `--matchups`, and on nothing else: parse-level, so a run that
+ * cannot record says so before it plays anything.
  */
 
 const config = (over: Partial<ShardConfig> = {}): ShardConfig =>
@@ -25,15 +25,19 @@ describe('--record', () => {
     expect(parseArgs(['--shard', '4', '--record', '--control', 'beam-reply', 'greedy']).record).toBe(true)
   })
 
-  it.each(['--sweep', '--generalise', '--matrix', '--decisions', '--terms', '--cost', '--budget', '--lethal', '--matchups', '--status', '--history'])(
+  it.each(['--generalise', '--matchups'])('is taken on %s, a game run over a population', mode => {
+    expect(parseArgs([mode, '--record', 'greedy', 'random']).record).toBe(true)
+  })
+
+  it.each(['--sweep', '--matrix', '--decisions', '--terms', '--cost', '--budget', '--lethal', '--status', '--history'])(
     'is refused with %s, which keeps no records',
     mode => {
-      expect(() => parseArgs([mode, '--record', 'greedy'])).toThrow('--record applies to the head-to-head game run only')
+      expect(() => parseArgs([mode, '--record', 'greedy'])).toThrow('--record applies to the head-to-head, --generalise and --matchups')
     },
   )
 
   it('is refused with --rows, which reads records and plays nothing', () => {
-    expect(() => parseArgs(['--rows', 'one.json', '--out', 'rows.jsonl', '--record'])).toThrow('--record applies to the head-to-head game run only')
+    expect(() => parseArgs(['--rows', 'one.json', '--out', 'rows.jsonl', '--record'])).toThrow('--record applies to the head-to-head, --generalise and --matchups')
   })
 })
 
