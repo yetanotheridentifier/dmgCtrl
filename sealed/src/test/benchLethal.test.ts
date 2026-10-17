@@ -20,7 +20,7 @@ const shippedGate = (report: LethalReport): GateRow => report.gates[0]
  */
 describe('runLethal', () => {
   // One game per deck over a few decks: enough to exercise every counter without a long test.
-  const report = runLethal({ gamesPerDeck: 1, seed: 4242, decks: 2 })
+  const report = runLethal({ gamesPerDeck: 1, seed: 4242, deckLimit: 2 })
 
   it('observes real decisions', () => {
     expect(report.games).toBeGreaterThan(0)
@@ -112,8 +112,8 @@ describe('runLethal', () => {
     // **It takes 50x the default to stop binding**, not a little headroom: at 40,000 the deeper search
     // still reports less, and only 200,000 makes depth 4 monotone over depth 2 here.
     const solverNodes = 200_000
-    const shallow = runLethal({ gamesPerDeck: 1, seed: 4242, decks: 2, solverDepth: 2, solverNodes, oracleSamples: 0 })
-    const deep = runLethal({ gamesPerDeck: 1, seed: 4242, decks: 2, solverDepth: 4, solverNodes, oracleSamples: 0 })
+    const shallow = runLethal({ gamesPerDeck: 1, seed: 4242, deckLimit: 2, solverDepth: 2, solverNodes, oracleSamples: 0 })
+    const deep = runLethal({ gamesPerDeck: 1, seed: 4242, deckLimit: 2, solverDepth: 4, solverNodes, oracleSamples: 0 })
     const found = (r: typeof shallow): number => r.lethal.attacksOnly + r.lethal.searchOnly
     expect(found(deep)).toBeGreaterThanOrEqual(found(shallow))
   }, 240_000)
@@ -240,7 +240,7 @@ describe('runLethal', () => {
   })
 
   it('is deterministic for a given seed', () => {
-    const again = runLethal({ gamesPerDeck: 1, seed: 4242, decks: 2 })
+    const again = runLethal({ gamesPerDeck: 1, seed: 4242, deckLimit: 2 })
     expect(again.lethal).toEqual(report.lethal)
     expect(again.oracle).toEqual(report.oracle)
   }, 240_000)

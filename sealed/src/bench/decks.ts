@@ -5,6 +5,7 @@ import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { buildCardDb } from '../engine/cardDb'
 import { buildCoverageDecks } from './coverageDecks'
 import { buildLockoutDecks } from './lockoutDecks'
+import { buildMatchupDecks } from './matchupDecks'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 
 /**
@@ -70,9 +71,14 @@ export function benchInputs(): { deck: ParsedDeck; cardDb: CardDb } {
  * strategy self-play never builds, so the population that could measure it had to be constructed. See
  * `lockoutDecks.ts` for what that costs, chiefly that an absolute win rate over it means nothing.
  *
- * `mirror` stays the default so every historical result keeps its meaning.
+ * `matchup` is the set `--matchups` plays: one deck per leader, on one base each (`matchupDecks.ts`),
+ * fixed whatever the run seed, so it is the population for questions about leaders.
+ *
+ * `mirror` stays the head-to-head's default so every historical result keeps its meaning.
  */
-export type DeckSource = 'mirror' | 'coverage' | 'lockout'
+export type DeckSource = 'mirror' | 'coverage' | 'lockout' | 'matchup'
+
+export const DECK_SOURCES: readonly DeckSource[] = ['mirror', 'coverage', 'lockout', 'matchup']
 
 /**
  * The matchups a run plays: the list each seat is dealt.
@@ -95,6 +101,7 @@ export function benchDeckSet(source: DeckSource, seed: number): { decks: DeckMat
   const mirrored = (list: ParsedDeck[]): DeckMatchup[] => list.map(d => ({ player: d, opponent: d }))
   if (source === 'mirror') return { decks: mirrored([buildBenchDeck(SET)]), cardDb }
   if (source === 'coverage') return { decks: mirrored(buildCoverageDecks(SET, seed).decks), cardDb }
+  if (source === 'matchup') return { decks: mirrored(buildMatchupDecks(SET, 1).map(d => d.deck)), cardDb }
   // The wall sits on `opponent` so the seat facing it is `player`, which is the seat the decision
   // diagnostic's own duration instrument samples. Lining those up means the deck set and the
   // measurement are talking about the same seat rather than nearly the same seat.

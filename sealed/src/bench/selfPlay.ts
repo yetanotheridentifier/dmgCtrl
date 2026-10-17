@@ -85,9 +85,39 @@ export interface PlayGameOptions {
    * result. It saves little: most decided points fall while the loser is answering a choice of its
    * own, where no offer is made, so greedy self-play concedes about 0.5% of its actions and 48 beam
    * games conceded none, at no measurable cost either way. The coverage sweep turns it off, since
-   * playing the lethal out is play it exercises.
+   * playing the lethal out is play it exercises. So do the instrumented corpora, which never conceded.
    */
   concede?: boolean
+  /** Shown every step of this game and its final position. See `GameWatch`. */
+  watch?: GameWatch
+}
+
+/**
+ * An instrument watching one game from inside: the decision corpus reads every step, setup included,
+ * and closes its per-game counts on the final position.
+ *
+ * **A watch that throws stops the run** (`instrumented`). A game whose engine throws is dropped as
+ * `threw`, but an instrument's own error is not the engine's, and swallowing it as a drop would let a
+ * broken measurement read as a quiet corpus.
+ */
+export interface GameWatch {
+  /** After each action, with the position it was chosen in and the one it produced. */
+  step(before: GameState, action: Action, after: GameState): void
+  /** Once, with the position the game ended on, dropped or not. */
+  end(final: GameState): void
+}
+
+/** Carries an instrument's own error past the catch that turns an engine throw into a dropped game. */
+class InstrumentFailed {
+  constructor(readonly error: unknown) {}
+}
+
+/**
+ * Run an instrument's code inside a game so that its error stops the run instead of dropping the game.
+ * A watch is run this way, and so is an AI that measures as it decides (the term and lethal corpora).
+ */
+export function instrumented<T>(f: () => T): T {
+  try { return f() } catch (error) { throw new InstrumentFailed(error) }
 }
 
 /**
@@ -176,10 +206,13 @@ export function playGame(opts: PlayGameOptions): GameResult {
       // Read the action against the state it was chosen in: a hand index means nothing afterwards.
       if (coverage) observeAction(coverage, state, action)
       moves.push({ by: active, action })
+      const before = state
       state = resolve(state, action)
       steps++
+      if (opts.watch) instrumented(() => opts.watch!.step(before, action, state))
     }
-  } catch {
+  } catch (e) {
+    if (e instanceof InstrumentFailed) throw e.error
     status = 'dropped'
     dropReason = 'threw'
   }
@@ -187,6 +220,7 @@ export function playGame(opts: PlayGameOptions): GameResult {
   // The loop observes before acting, so the final position has not been seen yet. A unit played by
   // the winning move would otherwise be missed.
   if (coverage) observeState(coverage, state)
+  opts.watch?.end(state)
 
   const baseDamage: Record<PlayerId, number> = {
     player: state.players.player.base.damage,

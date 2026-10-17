@@ -1,8 +1,9 @@
 import type { Ai } from '../ai/types'
 import type { CardDb } from '../engine/types'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
-import { playGame, type GameResult } from './selfPlay'
-import { resultForA, movedFirstForA, type OutcomeForA, type Seating } from './seating'
+import { nextSeed } from '../engine/rng'
+import { playGame, type GameResult, type GameWatch } from './selfPlay'
+import { resultForA, movedFirstForA, firstPlayerFor, type OutcomeForA, type Seating } from './seating'
 import type { DeckMatchup } from './decks'
 
 /**
@@ -26,9 +27,10 @@ import type { DeckMatchup } from './decks'
  *
  * **What to keep is the recorders' business.** The cheap ones (`tallyBy`, below) cost nothing over
  * games already played, so a run can group the same games by deck, leader, cell or turn order without
- * re-running. Expensive instruments are not recorders here: the decision, term and lethal corpora
- * still drive their own loops, because what they record is read from inside a decision rather than
- * from a finished game.
+ * re-running. The expensive instruments are opt-in, and read a game from inside rather than from its
+ * result: the decision corpus opens a watch per game (`GameRunOptions.watch`), and the term and lethal
+ * corpora are an AI that measures each decision before it makes it. All three play the corpus
+ * schedule (`corpusSchedule`) through this loop, without conceding.
  */
 
 /** One game as a run's schedule deals it. */
@@ -66,8 +68,33 @@ export interface GameRunOptions {
   /** See `PlayGameOptions`. The sweep tracks coverage and plays a lethal out. */
   trackCoverage?: boolean
   concede?: boolean
+  /** Opens a watch for each game, which sees every step and the final position (`GameWatch`). */
+  watch?: () => GameWatch
   /** Called with the running count after every game, dropped ones included, after the recorders. */
   onProgress?: (gamesPlayed: number) => void
+}
+
+/**
+ * The instrumented corpora's schedule: every deck in turn, `gamesPerDeck` games each.
+ *
+ * One AI drives both seats and every decision is recorded whoever takes it, so the seats never swap
+ * and the first player is the only thing to balance. It is indexed across the whole corpus
+ * (`firstPlayerFor`): within a deck, one game per deck would open the same way every time. Each game's
+ * seed derives from the run seed and its place, so a deck's games do not depend on the decks before it.
+ * The key is the deck's index.
+ */
+export function* corpusSchedule(decks: DeckMatchup[], gamesPerDeck: number, seed: number): Generator<ScheduledGame<number>> {
+  for (let d = 0; d < decks.length; d++) {
+    for (let g = 0; g < gamesPerDeck; g++) {
+      yield {
+        seed: nextSeed(seed + d * 37 + g),
+        seats: { swapped: false, firstPlayer: firstPlayerFor(d * gamesPerDeck + g) },
+        deckA: decks[d].player,
+        deckB: decks[d].opponent,
+        key: d,
+      }
+    }
+  }
 }
 
 /**
@@ -79,6 +106,39 @@ export interface GameRunOptions {
  */
 export function bySeat(m: DeckMatchup, seats: Seating): { deckA: ParsedDeck; deckB: ParsedDeck } {
   return seats.swapped ? { deckA: m.opponent, deckB: m.player } : { deckA: m.player, deckB: m.opponent }
+}
+
+/** What every instrumented corpus reports about the games it was read from. */
+export interface CorpusGames {
+  games: number
+  /** Games opened by the `player` seat: half of `games`, and the check that the corpus samples both
+   *  openings rather than merely intending to. See `firstPlayerFor`. */
+  gamesPlayerFirst: number
+  /** Games the engine abandoned (`DropReason`). Their decisions up to the drop are still counted. */
+  dropped: number
+}
+
+/**
+ * An instrumented corpus run: `ai` drives both seats over the corpus schedule, and `watch`, when
+ * given, sees each game from inside. No concession, so every game is played out, as the corpora
+ * always have been.
+ */
+export function runCorpus(
+  decks: DeckMatchup[],
+  config: { gamesPerDeck: number; seed: number; stepCeiling?: number },
+  ai: Ai,
+  cardDb: CardDb,
+  watch?: () => GameWatch,
+): CorpusGames {
+  const out: CorpusGames = { games: 0, gamesPlayerFirst: 0, dropped: 0 }
+  runGames(corpusSchedule(decks, config.gamesPerDeck, config.seed),
+    { aiA: ai, aiB: ai, cardDb, stepCeiling: config.stepCeiling, concede: false, watch },
+    g => {
+      out.games++
+      if (g.seats.firstPlayer === 'player') out.gamesPlayerFirst++
+      if (g.forA === null) out.dropped++
+    })
+  return out
 }
 
 /** Play every scheduled game, seated, and hand each to every recorder in turn. */
@@ -101,6 +161,7 @@ export function runGames<K>(
       stepCeiling: opts.stepCeiling,
       trackCoverage: opts.trackCoverage,
       concede: opts.concede,
+      watch: opts.watch?.(),
     })
     const finished: FinishedGame<K> = {
       ...game,

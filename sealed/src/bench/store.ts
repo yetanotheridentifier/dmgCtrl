@@ -5,6 +5,7 @@ import { dirname } from 'node:path'
 import type { BenchReport } from './runBench'
 import type { MatrixResult } from './matrix'
 import type { PairedResult } from './paired'
+import type { DeckSource } from './decks'
 import { firstPlayerSplit, wilsonInterval, type SplitSide } from './stats'
 import { COMMIT_ID } from '../buildIdentity'
 
@@ -106,7 +107,8 @@ const SCHEMA = `
     build_tag  TEXT    NOT NULL,
     model      TEXT    NOT NULL,
     games      INTEGER NOT NULL,
-    decisions  INTEGER NOT NULL
+    decisions  INTEGER NOT NULL,
+    decks      TEXT    NOT NULL DEFAULT 'coverage'
   );
   CREATE TABLE IF NOT EXISTS term_stats (
     run_id       TEXT    NOT NULL,
@@ -145,6 +147,8 @@ const MIGRATIONS: Array<{ table: string; column: string; ddl: string }> = [
   // half as absent rather than as a measured 0%, which is what keeps an old run readable.
   { table: 'matchups', column: 'games_on_play', ddl: 'ALTER TABLE matchups ADD COLUMN games_on_play INTEGER NOT NULL DEFAULT 0' },
   { table: 'matchups', column: 'wins_on_play', ddl: 'ALTER TABLE matchups ADD COLUMN wins_on_play INTEGER NOT NULL DEFAULT 0' },
+  // `--terms` read only the coverage decks until it could be pointed at any population.
+  { table: 'term_runs', column: 'decks', ddl: `ALTER TABLE term_runs ADD COLUMN decks TEXT NOT NULL DEFAULT 'coverage'` },
 ]
 
 /** Apply any column a live database is missing. Reading the schema is cheaper than tracking a version
@@ -537,9 +541,11 @@ export interface TermRunRow {
   model: string
   games: number
   decisions: number
+  decks: DeckSource
 }
 
 export function saveTermRun(db: DatabaseSync, model: string, report: {
+  decks: DeckSource
   games: number
   decisions: number
   stats: Array<{ weight: string; step: number; hasQuantity: boolean; varies: number; pivotal: number; loadBearing: number; spread: number }>
@@ -549,8 +555,8 @@ export function saveTermRun(db: DatabaseSync, model: string, report: {
   db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare(
-      `INSERT INTO term_runs (run_id, started_at, build_tag, model, games, decisions) VALUES (?,?,?,?,?,?)`,
-    ).run(runId, startedAt, COMMIT_ID, model, report.games, report.decisions)
+      `INSERT INTO term_runs (run_id, started_at, build_tag, model, games, decisions, decks) VALUES (?,?,?,?,?,?,?)`,
+    ).run(runId, startedAt, COMMIT_ID, model, report.games, report.decisions, report.decks)
     const insert = db.prepare(
       `INSERT INTO term_stats (run_id, weight, step, has_quantity, varies, pivotal, load_bearing, spread)
        VALUES (?,?,?,?,?,?,?,?)`,
@@ -571,7 +577,7 @@ export function listTermRuns(db: DatabaseSync): TermRunRow[] {
   return (db.prepare(`SELECT * FROM term_runs ORDER BY started_at DESC`).all() as Record<string, unknown>[])
     .map(r => ({
       runId: str(r.run_id), startedAt: str(r.started_at), buildTag: str(r.build_tag),
-      model: str(r.model), games: num(r.games), decisions: num(r.decisions),
+      model: str(r.model), games: num(r.games), decisions: num(r.decisions), decks: str(r.decks) as DeckSource,
     }))
 }
 
