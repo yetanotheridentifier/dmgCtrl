@@ -1710,22 +1710,28 @@ WHERE a.run_id = ? AND b.run_id = ? GROUP BY a.deck_a ORDER BY delta;
 npm run bench --prefix sealed -- --record --shard 12 --games 800 --seed 4880 --decks coverage beam-reply beam-reply
 ```
 
-With `--record`, the head-to-head run writes **every completed game as a record**: the starting
-position without its card database, plus every move. That is the replayable minimum, in the shape the
-app exports its saved games in, so everything else about the game is derived by replaying it and
-`--rows` reads a records file as it stands (next section). Off by default, and a run without it does
-and writes exactly what it always did.
+With `--record`, a game run writes **every completed game as a record**: the starting position
+without its card database, plus every move. That is the replayable minimum, in the shape the app
+exports its saved games in, so everything else about the game is derived by replaying it and `--rows`
+reads a records file as it stands (next section). Off by default, and a run without it does and writes
+exactly what it always did.
 
-It is a choice on the head-to-head run, alone or with `--shard` and `--control`. Every other mode
-refuses the flag at parse time. The matchups, the matrix, the generalisation harness and the sweep play
-through the same game runner, which takes recorders per run, but none of them hands its games to the
-records writer, and nor do the instrumented corpora, which play through it as well.
+It is a choice on every game run over a deck population: the head-to-head (alone or with `--shard`
+and `--control`), `--generalise` and `--matchups`. Each hands its games to the same recorder through
+the game runner. Every other mode refuses the flag at parse time: the matrix and the sweep build their
+decks per set rather than drawing them from a population, which a record names in `bench.decks`, and
+the instrumented corpora and the replay modes keep no records.
 
-**Where records go.** One file per seed, under `bench-results/records/`:
+**Where records go.** One file per run, or per seed of a sharded one, under `bench-results/records/`:
 
 ```
-bench-results/records/<commit>/<aiA>__vs__<aiB>__g<games>__s<seed>[__d<decks>].json
+bench-results/records/<commit>/<aiA>__vs__<aiB>__g<games>__s<seed>[__d<decks>][__<mode>].json
 ```
+
+- **The mode is in the name**, `__generalise` or `__matchups`, because the same games, seed, AIs and
+  decks under another mode schedule different games. The head-to-head has no suffix. `--games` is per
+  deck under `--generalise` and per cell under `--matchups`, as each mode reads it, and `--matchups`
+  always records the `matchup` population.
 
 - **A shard is a seed, so each shard writes its own file** and a dozen can record at once. The
   control of an A/B is the baseline against itself, which is a different pair of bots, so it has its
@@ -2196,7 +2202,8 @@ eight of eighteen modules were missing.
 - `bench/records.ts` completed games as records, behind `--record`: the record of one game
   (`benchRecord`), where a run's file goes (`recordsPath`), the writer that appends a game at a time
   and renames the file when the run ends, and which shards of a resumed run have no file. A recorder
-  is a callback `runBench` hands each completed game, and this is the one there is.
+  is a callback a run hands each completed game; `recordGames` is the game-runner recorder that calls
+  it, shared by the head-to-head, `--generalise` and `--matchups`.
 - `bench/cardUse.ts` a question asked of recorded games by replaying them: per bot, deck and card,
   plays and declined plays. Also owns the two predicates it shares with `decisions.ts` (a move that
   plays a card, and the hand positions the legal moves let a seat play from).

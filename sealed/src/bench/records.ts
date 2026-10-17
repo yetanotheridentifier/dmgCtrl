@@ -5,6 +5,7 @@ import { EXPORT_FORMAT_VERSION, type ExportedRecord, type GameExport } from '../
 import { withoutCards } from '../data/replayData'
 import type { PlayerId } from '../engine/types'
 import type { DeckMatchup, DeckSource } from './decks'
+import type { GameRunRecorder } from './gameRun'
 import type { GameResult } from './selfPlay'
 import { shardRunKey, type ShardConfig } from './shard'
 
@@ -19,9 +20,11 @@ import { shardRunKey, type ShardConfig } from './shard'
  * size of its record.
  *
  * **A recorder is a function the run calls once per completed game** (`GameRecorder`), and this
- * module is one: `runBench` knows only that it was handed a callback, which it calls from one of the
- * recorders it hands the game runner (`gameRun.ts`). Only the head-to-head offers it; the other modes
- * that play through the runner, the instrumented corpora among them, do not hand their games to it.
+ * module is one: a run knows only that it was handed a callback, which `recordGames` calls from among
+ * the recorders the run hands the game runner (`gameRun.ts`). The head-to-head, the generalisation
+ * run and the matchups offer it, each to its own file (`recordsPath`). The matrix and the sweep do
+ * not: their decks are built per set rather than drawn from a population (`DeckSource`), which a
+ * record names. Nor do the instrumented corpora.
  *
  * A dropped game is not recorded here. It has its own file, as a fixture to replay and file
  * (`reports.ts`), and it has no result for a row to carry.
@@ -45,6 +48,31 @@ export interface PlayedGame {
 }
 
 export type GameRecorder = (game: PlayedGame) => void
+
+/**
+ * The recorder a game run hands the runner (`gameRun.ts`) to pass each completed game to `onGame`.
+ *
+ * The seated decks and names are read from the game as played, so every mode that plays through the
+ * runner records the same way. A dropped game is skipped: it has its own file (`reports.ts`).
+ */
+export function recordGames<K>(
+  run: { runSeed: number; decks: DeckSource; aiA: string; aiB: string },
+  onGame: GameRecorder,
+): GameRunRecorder<K> {
+  return g => {
+    const { result, seats } = g
+    if (result.status !== 'completed') return
+    onGame({
+      index: g.index,
+      runSeed: run.runSeed,
+      decks: run.decks,
+      deck: { player: seats.swapped ? g.deckB : g.deckA, opponent: seats.swapped ? g.deckA : g.deckB },
+      ais: { player: seats.swapped ? run.aiB : run.aiA, opponent: seats.swapped ? run.aiA : run.aiB },
+      // A copy, so what the recorder was handed keeps its moves when the runner lets go of its own.
+      result: { ...result },
+    })
+  }
+}
 
 /**
  * The record of one completed game.
@@ -79,10 +107,16 @@ export interface RecordedRun {
   aiA: string
   aiB: string
   decks?: DeckSource
+  /** The mode that played the games, absent for the head-to-head. Games is then per deck or per cell. */
+  mode?: 'generalise' | 'matchups'
 }
 
 /**
- * Where a run's records go: one file for each build, pair of bots, game count, seed and deck set.
+ * Where a run's records go: one file for each build, pair of bots, game count, seed, deck set and mode.
+ *
+ * The mode is in the name because the same values under another mode schedule different games. It is
+ * left out for the head-to-head, so every records file written before other modes recorded keeps its
+ * name.
  *
  * **One file per seed is what lets shards record at once.** A sharded run is a process per seed,
  * each a whole run of its own, so each writes its own file and none can touch another's. The arm and
@@ -95,7 +129,7 @@ export interface RecordedRun {
  */
 export function recordsPath(run: RecordedRun, root: string = RECORDS_DIR): string {
   const key = shardRunKey({ shards: 1, games: run.games, baseSeed: run.seed, aiA: run.aiA, aiB: run.aiB, decks: run.decks })
-  return join(root, COMMIT_ID, `${key}.json`)
+  return join(root, COMMIT_ID, `${key}${run.mode ? `__${run.mode}` : ''}.json`)
 }
 
 /**

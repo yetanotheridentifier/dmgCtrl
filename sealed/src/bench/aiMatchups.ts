@@ -9,6 +9,7 @@ import { seating } from './seating'
 import { wilsonInterval, firstPlayerSplit, type FirstPlayerSplit } from './stats'
 import { runGames, newTally, addToTally, mergeTallies, type ScheduledGame, type Tally } from './gameRun'
 import type { MatchupDeck } from './matchupDecks'
+import { recordGames, type GameRecorder } from './records'
 
 /**
  * AI versus AI, broken down by matchup (#319, #395).
@@ -78,7 +79,13 @@ export function runAiMatchups(
   aiB: Ai,
   nameA: string,
   nameB: string,
-  config: { gamesPerCell: number; seed: number; stepCeiling?: number },
+  config: {
+    gamesPerCell: number
+    seed: number
+    stepCeiling?: number
+    /** Handed each completed game, as `runBench`'s is (`records.ts`). The decks are the `matchup` population. */
+    onGame?: GameRecorder
+  },
 ): AiMatchupReport {
   type Cell = [MatchupDeck, MatchupDeck]
   const pairs: Cell[] = decks.flatMap(a => decks.map((b): Cell => [a, b]))
@@ -97,7 +104,8 @@ export function runAiMatchups(
 
   const byCell = new Map<Cell, Tally>(pairs.map(p => [p, newTally()]))
   runGames(schedule(), { aiA, aiB, cardDb: buildCardDb(POOL), stepCeiling: config.stepCeiling },
-    g => addToTally(byCell.get(g.key)!, g))
+    g => addToTally(byCell.get(g.key)!, g),
+    ...(config.onGame ? [recordGames<Cell>({ runSeed: config.seed, decks: 'matchup', aiA: nameA, aiB: nameB }, config.onGame)] : []))
 
   const cells: AiMatchupCell[] = pairs.map(pair => {
     const [deckA, deckB] = pair

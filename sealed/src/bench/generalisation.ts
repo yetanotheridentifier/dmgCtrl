@@ -11,6 +11,7 @@ import { benchDeckSet, type DeckSource } from './decks'
 import type { DropReason, GameResult } from './selfPlay'
 import { seating } from './seating'
 import { runGames, bySeat, newTally, addToTally, mergeTallies, type ScheduledGame, type Tally } from './gameRun'
+import { recordGames, type GameRecorder } from './records'
 
 /**
  * Generalisation diagnostic (#408 follow-up): play `aiA` against `aiB` on each coverage deck and
@@ -32,6 +33,8 @@ export interface GeneralisationConfig {
   stepCeiling?: number
   /** The deck population (`DeckSource`), coverage unless named. A deck is named by its player-seat list. */
   decks?: DeckSource
+  /** Handed each completed game, as `runBench`'s is (`records.ts`). */
+  onGame?: GameRecorder
 }
 
 export interface DeckResult {
@@ -102,7 +105,7 @@ export function runGeneralisationWith(
   aiB: Ai,
   labelA: string,
   labelB: string,
-  config: { gamesPerDeck: number; seed: number; stepCeiling?: number; decks?: DeckSource },
+  config: { gamesPerDeck: number; seed: number; stepCeiling?: number; decks?: DeckSource; onGame?: GameRecorder },
 ): GeneralisationReport {
   const { decks: matchups, cardDb } = benchDeckSet(config.decks ?? 'coverage', config.seed)
   const decks = matchups.map(m => m.player)
@@ -131,7 +134,7 @@ export function runGeneralisationWith(
       failures.push({ deck: g.key.name, seed: g.result.seed, reason: g.result.dropReason! })
       droppedGames.push(g.result)
     }
-  })
+  }, ...(config.onGame ? [recordGames<ParsedDeck>({ runSeed: config.seed, decks: config.decks ?? 'coverage', aiA: labelA, aiB: labelB }, config.onGame)] : []))
 
   const leaderOf = (deck: ParsedDeck): string => byId.get(deck.leader)?.Name ?? deck.leader
   const baseOf = (deck: ParsedDeck): string => (byId.get(deck.base)?.Aspects ?? [])[0] ?? '?'
