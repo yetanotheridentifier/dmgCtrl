@@ -45,7 +45,7 @@ import { resolveAi } from '../ai/registry'
 import { fetchSets, formatTriage, triage } from './triage'
 import { artOffRule, fixtureFile, poolFor, resolveSealedSets, SET_CODES, toFixture } from './setPools'
 import { ROWS_FORMAT_VERSION, trainingCardDb, type RowView } from './trainingRows'
-import { benchRecord, missingRecords, recordsPath, recordsWriter, RECORDS_DIR } from './records'
+import { benchRecord, missingRecords, recordsPath, recordsWriter, RECORDS_DIR, type GameRecorder, type RecordedRun } from './records'
 import { inputsFromArchive, inputsFromFile, writeRows, type RowInput } from './rowSources'
 import { archiveStatus, DEFAULT_ARCHIVE_PATH, openArchive, restoreSnapshot, today, writeSnapshot } from './recordArchive'
 import { pullStaged } from './pull'
@@ -284,10 +284,11 @@ export function parseArgs(argv: string[]): Args {
   if (del && !dryRun && backup === undefined) throw new Error('--delete needs --backup DIR: once a game is removed from staging the archive is its only copy')
   const collectedMode = pull || backup !== undefined || restore !== undefined || (collected && !rows)
   if (collectedMode && positional.length > 0) throw new Error(`a collected-games run takes no names or files, got ${positional.join(' ')}`)
-  // Only the head-to-head run hands its games to a recorder. Refused here, so a mode that keeps no
-  // records says so before it plays anything, where taking the flag and writing nothing would not.
-  const otherMode = sweep || generalise || matrix || decisions || terms || cost || budget || lethal || matchups || status || history || triage || fixture || rows || collectedMode
-  if (record && otherMode) throw new Error('--record applies to the head-to-head game run only (with or without --shard)')
+  // The game runs over a population hand their games to a recorder (`records.ts`). Refused here, so a
+  // mode that keeps no records says so before it plays anything, where taking the flag and writing
+  // nothing would not.
+  const otherMode = sweep || matrix || decisions || terms || cost || budget || lethal || status || history || triage || fixture || rows || collectedMode
+  if (record && otherMode) throw new Error('--record applies to the head-to-head, --generalise and --matchups')
   // The head-to-head, `--generalise` and the three corpora play any population. The matchups and the
   // matrix rate leaders against each other on decks built per leader, the sweep plays a set's whole
   // pool, and cost and budget replay one fixed corpus: none would read the flag, so it is refused.
@@ -479,6 +480,22 @@ function formatGeneralisation(report: GeneralisationReport, wallMs: number): str
   return lines.join('\n')
 }
 
+/**
+ * The records file a `--record` run writes to (`records.ts`), or nothing when the run was not asked
+ * to record. `close` finishes the file and prints where it went.
+ */
+function recordsFor(run: RecordedRun | false): { onGame?: GameRecorder; close: () => void } {
+  if (!run) return { close: () => {} }
+  const writer = recordsWriter(recordsPath(run))
+  return {
+    onGame: game => writer.record(benchRecord(game)),
+    close: () => {
+      const file = writer.close()
+      console.log(row('records', `${file.games} games, ${file.bytes.toLocaleString('en-GB')} bytes  →  ${file.path}`))
+    },
+  }
+}
+
 function runGeneraliseMode(args: Args): void {
   // Default to "the AI under test vs random"; explicit names override.
   const aiA = args.aiExplicit ? args.aiA : 'greedy'
@@ -486,14 +503,17 @@ function runGeneraliseMode(args: Args): void {
   const gamesPerDeck = args.gamesSet ? args.games : 20
   const start = Date.now()
   let report: GeneralisationReport
+  const decks = args.decks ?? 'coverage'
+  const records = recordsFor(args.record && { games: gamesPerDeck, seed: args.seed, aiA, aiB, decks, mode: 'generalise' })
   try {
-    report = runGeneralisation({ gamesPerDeck, seed: args.seed, aiA, aiB, decks: args.decks })
+    report = runGeneralisation({ gamesPerDeck, seed: args.seed, aiA, aiB, decks, onGame: records.onGame })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     process.exit(2)
     return
   }
   console.log(formatGeneralisation(report, Date.now() - start))
+  records.close()
   const written = writeFailures(`generalise-${new Date().toISOString()}`, report.droppedGames)
   if (written.length > 0) console.log(row('reproductions', `${written.length} file(s) in ${FAILURES_DIR}/`))
   console.log('')
@@ -1331,8 +1351,9 @@ function runMatchupsMode(args: Args): void {
 
   const start = Date.now()
   let report
+  const records = recordsFor(args.record && { games: gamesPerCell, seed: args.seed, aiA, aiB, decks: 'matchup', mode: 'matchups' })
   try {
-    report = runAiMatchups(decks, resolveAi(aiA), resolveAi(aiB), aiA, aiB, { gamesPerCell, seed: args.seed })
+    report = runAiMatchups(decks, resolveAi(aiA), resolveAi(aiB), aiA, aiB, { gamesPerCell, seed: args.seed, onGame: records.onGame })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     process.exit(2)
@@ -1362,6 +1383,7 @@ function runMatchupsMode(args: Args): void {
     '',
   ]
   console.log(lines.join('\n'))
+  records.close()
   if (report.dropped > 0) process.exit(1)
 }
 
@@ -1848,16 +1870,14 @@ function main(): void {
 
   let report: BenchReport
   const start = Date.now()
-  // The one recorder there is, on the one run that takes one. A shard is this same run, started by
-  // its parent with `--record`, so it writes its own seed's file and needs telling nothing else.
-  const records = args.record
-    ? recordsWriter(recordsPath({ games: args.games, seed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks }))
-    : undefined
+  // A shard is this same run, started by its parent with `--record`, so it writes its own seed's file
+  // and needs telling nothing else.
+  const records = recordsFor(args.record && { games: args.games, seed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks })
   try {
     report = runBench({
       games: args.games, seed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks,
       onProgress: shardProgress(args.out, args.games),
-      onGame: records && (game => records.record(benchRecord(game))),
+      onGame: records.onGame,
     })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
@@ -1865,10 +1885,7 @@ function main(): void {
     return
   }
   console.log(format(report, Date.now() - start))
-  if (records) {
-    const file = records.close()
-    console.log(row('records', `${file.games} games, ${file.bytes.toLocaleString('en-GB')} bytes  →  ${file.path}`))
-  }
+  records.close()
 
   // Written before the database save, so a shard whose save fails is still counted by its parent.
   // This is what replaced regexing the printed report: what a run measured no longer depends on how

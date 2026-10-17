@@ -43,17 +43,12 @@ engine or the horizon invalidates a calibration done before it.
    pool varies which cards a leader can have at all, where a seed only varies the draw from the whole
    set. And per-card win
    rates need far more decks than 52 before a card-sized effect can clear the noise.
-3. **The rest of #565, what a run plays split from what it records.** The game runner exists
-   (`gameRun.ts`): every game run, the decision, term and lethal corpora included, plays through it
-   with its own schedule and recorders, and `--decks` (now with `matchup`) reaches every mode that
-   plays a population. Still to do, parked on the ticket as a decision (`needs-decision`):
-   - **Recorders chosen per run on the command line**, `--record` included, rather than fixed by the
-     mode: a corpus alongside an A/B, or records from `--matchups` and `--generalise`. Where those
-     games are written and under what key is the same question as the table below.
-   - **One table**, so "which decks degraded between build X and build Y" is a query over stored
-     games rather than another run. The store must keep keying on deck source: populations never pool.
 
 ## Deferred
+
+**One table of bench games across builds**, so "which decks degraded between build X and build Y" is a
+query over stored games rather than another run, keyed on deck source so populations never pool (the
+rest of #565, deferred by decision).
 
 Optional abilities, token value, and hand and resource optionality are all "value something whose
 payoff arrives later", and all were closed once the search tie-break turned out to be the answer rather

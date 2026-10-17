@@ -5,7 +5,7 @@ import { wilsonInterval } from './stats'
 import { benchDeckSet, type DeckSource, type DeckMatchup } from './decks'
 import { seating } from './seating'
 import type { DropReason, GameResult } from './selfPlay'
-import type { GameRecorder } from './records'
+import { recordGames, type GameRecorder } from './records'
 import { runGames, bySeat, newTally, addToTally, type ScheduledGame } from './gameRun'
 
 /** Seat and first player cycle on independent axes, so four games cover all four combinations once.
@@ -149,20 +149,9 @@ export function runBench(config: BenchConfig): BenchReport {
       // The runner releases a completed game's moves once its recorders have run, so this keeps the
       // finished game rather than the whole one. Only dropped games stay whole, as replayable fixtures.
       games.push(result)
-      if (result.status === 'dropped') {
-        failures.push({ gameIndex: g.index, seed: result.seed, reason: result.dropReason! })
-        return
-      }
-      // A copy, so what the recorder was handed keeps its moves when the runner lets go of its own.
-      config.onGame?.({
-        index: g.index,
-        runSeed: config.seed,
-        decks: source,
-        deck: g.key,
-        ais: { player: seats.swapped ? config.aiB : config.aiA, opponent: seats.swapped ? config.aiA : config.aiB },
-        result: { ...result },
-      })
-    })
+      if (result.status === 'dropped') failures.push({ gameIndex: g.index, seed: result.seed, reason: result.dropReason! })
+    },
+    ...(config.onGame ? [recordGames<DeckMatchup>({ runSeed: config.seed, decks: source, aiA: config.aiA, aiB: config.aiB }, config.onGame)] : []))
 
   const { completed, wins: winsA, draws } = t
   const ci = wilsonInterval(winsA, completed)
