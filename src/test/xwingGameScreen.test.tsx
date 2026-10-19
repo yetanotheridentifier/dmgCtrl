@@ -66,6 +66,13 @@ beforeEach(() => {
   mockOnXwingRoundAdvanced.mockClear()
 })
 
+// Reaching 50 ends the game at the end of that round, so a test that wants the game over taps the
+// phase button from Planning through End and confirms it.
+async function endRound(user: ReturnType<typeof userEvent.setup>) {
+  const btn = screen.getByTestId('phase-btn')
+  for (let i = 0; i < 5; i++) await user.click(btn)
+}
+
 // ---------------------------------------------------------------------------
 // Portrait orientation
 // ---------------------------------------------------------------------------
@@ -164,27 +171,69 @@ describe('XwingGameScreen score counters', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Terminal condition — 50 points
+// Terminal condition — 50 points, at the end of the round
 // ---------------------------------------------------------------------------
 
 describe('XwingGameScreen game over', () => {
 
-  it('shows Game Won when player reaches 50', async () => {
+  it('reaching 50 mid-round does not end the game', async () => {
     const user = userEvent.setup()
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('start-game-btn'))
     const btn = screen.getByTestId('player-increment')
     for (let i = 0; i < 50; i++) fireEvent.click(btn)
+    expect(screen.queryByTestId('result-banner')).not.toBeInTheDocument()
+    expect(screen.getByTestId('player-increment')).toBeEnabled()
+    expect(screen.getByTestId('opponent-increment')).toBeEnabled()
+  })
+
+  it('scores can go past 50 within the round', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('player-increment')
+    for (let i = 0; i < 53; i++) fireEvent.click(btn)
+    expect(screen.getByTestId('player-score')).toHaveTextContent('53')
+  })
+
+  it('shows Game Won at the end of the round in which the player reaches 50', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('player-increment')
+    for (let i = 0; i < 50; i++) fireEvent.click(btn)
+    await endRound(user)
     expect(screen.getByTestId('result-banner')).toHaveTextContent(/game won/i)
   })
 
-  it('shows Game Lost when opponent reaches 50', async () => {
+  it('shows Game Lost at the end of the round in which the opponent reaches 50', async () => {
     const user = userEvent.setup()
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('start-game-btn'))
     const btn = screen.getByTestId('opponent-increment')
     for (let i = 0; i < 50; i++) fireEvent.click(btn)
+    await endRound(user)
     expect(screen.getByTestId('result-banner')).toHaveTextContent(/game lost/i)
+  })
+
+  it('when both pass 50 the higher total wins, not the first to 50', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    for (let i = 0; i < 50; i++) fireEvent.click(screen.getByTestId('player-increment'))
+    for (let i = 0; i < 52; i++) fireEvent.click(screen.getByTestId('opponent-increment'))
+    await endRound(user)
+    expect(screen.getByTestId('result-banner')).toHaveTextContent(/game lost/i)
+  })
+
+  it('the round tracker ends the game instead of advancing once a player has 50', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    for (let i = 0; i < 50; i++) fireEvent.click(screen.getByTestId('player-increment'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    expect(screen.getByTestId('result-banner')).toHaveTextContent(/game won/i)
+    expect(mockOnXwingRoundAdvanced).not.toHaveBeenCalled()
   })
 
   it('player increment is disabled when game is over', async () => {
@@ -193,6 +242,7 @@ describe('XwingGameScreen game over', () => {
     await user.click(screen.getByTestId('start-game-btn'))
     const btn = screen.getByTestId('player-increment')
     for (let i = 0; i < 50; i++) fireEvent.click(btn)
+    await endRound(user)
     expect(screen.getByTestId('player-increment')).toBeDisabled()
   })
 
@@ -202,6 +252,7 @@ describe('XwingGameScreen game over', () => {
     await user.click(screen.getByTestId('start-game-btn'))
     const btn = screen.getByTestId('opponent-increment')
     for (let i = 0; i < 50; i++) fireEvent.click(btn)
+    await endRound(user)
     expect(screen.getByTestId('opponent-increment')).toBeDisabled()
   })
 
@@ -380,6 +431,8 @@ describe('XwingGameScreen timer', () => {
     await user.click(screen.getByTestId('start-game-btn'))
     const btn = screen.getByTestId('player-increment')
     for (let i = 0; i < 50; i++) fireEvent.click(btn)
+    expect(mockTimerState.stop).not.toHaveBeenCalled()
+    await endRound(user)
     expect(mockTimerState.stop).toHaveBeenCalled()
   })
 
@@ -529,6 +582,7 @@ describe('XwingGameScreen round tracker', () => {
     await user.click(screen.getByTestId('start-game-btn'))
     const scoreBtn = screen.getByTestId('player-increment')
     for (let i = 0; i < 50; i++) fireEvent.click(scoreBtn)
+    await endRound(user)
     await user.click(screen.getByRole('button', { name: 'Round 2' }))
     // Result banner shown means game is over; round 1 still highlighted (not advanced)
     expect(screen.getByTestId('result-banner')).toBeInTheDocument()
@@ -840,11 +894,12 @@ describe('XwingGameScreen undo', () => {
     expect(mockTimerState.reset).not.toHaveBeenCalled()
   })
 
-  it('timer resumes after undoing the score change that triggered score-based game over', async () => {
+  it('timer resumes after undoing the round end that triggered score-based game over', async () => {
     const user = userEvent.setup()
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('start-game-btn'))
-    for (let i = 0; i < 50; i++) await user.click(screen.getByTestId('player-increment'))
+    for (let i = 0; i < 50; i++) fireEvent.click(screen.getByTestId('player-increment'))
+    await endRound(user)
     mockTimerState.stop.mockClear()
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
@@ -1071,8 +1126,9 @@ describe('XwingGameScreen phase tracker', () => {
     const user = userEvent.setup()
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('start-game-btn'))
-    // drive player score to 50 to trigger game over
-    for (let i = 0; i < 50; i++) await user.click(screen.getByTestId('player-increment'))
+    // drive player score to 50, then end the round to trigger game over
+    for (let i = 0; i < 50; i++) fireEvent.click(screen.getByTestId('player-increment'))
+    await endRound(user)
     expect(screen.queryByTestId('phase-btn')).not.toBeInTheDocument()
   })
 
