@@ -278,11 +278,11 @@ export default function XwingGameScreenView({
   onPlayerShipAdvance,
   onOpponentShipAdvance,
 }: Props) {
-  // Score scrubbers — active during game; floor is 0 (deficit applied separately, future ticket)
+  // Score scrubbers — active during game; floor is 0, and no ceiling, since scores can pass 50
   const playerScrubber = useDragScrubber(
     onPlayerIncrement,
     onPlayerDecrement,
-    50 - playerScore,
+    Infinity,
     playerScore,
     enableLongPress && gameStarted && !gameOver,
   )
@@ -290,7 +290,7 @@ export default function XwingGameScreenView({
   const opponentScrubber = useDragScrubber(
     onOpponentIncrement,
     onOpponentDecrement,
-    50 - opponentScore,
+    Infinity,
     opponentScore,
     enableLongPress && gameStarted && !gameOver,
   )

@@ -2,7 +2,7 @@
 
 ## Mission Points
 
-Each player's mission points are shown on the left (**You**) and right (**Opp**). Points start at 0. If the opponent's entire squad is destroyed, their mission point deficit (if any) is automatically added to your score at that moment. The first player to reach 50 wins.
+Each player's mission points are shown on the left (**You**) and right (**Opp**). Points start at 0. If the opponent's entire squad is destroyed, their mission point deficit (if any) is automatically added to your score at that moment. The game ends at the end of the round in which a player reaches 50, and both players can finish above 50: the player with the most points wins.
 
 - Tap **+** to add a point
 - Tap **−** to remove a point (won't go below zero)
@@ -23,7 +23,7 @@ The countdown timer is shown in the centre of the screen during a game. It start
 
 - The timer turns amber when less than 5 minutes remain
 - The timer turns red when less than 1 minute remains
-- The timer stops when the game ends (50 points reached, or End phase confirmed at round 12 or timer expiry)
+- The timer stops when the game ends (the round ended after a player reached 50, or End phase confirmed at round 12 or timer expiry)
 
 To configure the timer duration, tap <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> **Settings** → **X-Wing** → **Game Timer**.
 
@@ -45,7 +45,7 @@ From round 2 onwards, three scoring buttons (**0**, **2**, **4**) appear at the 
 
 - Points are applied when you advance from the End phase (by tapping the phase button or the next round in the round tracker)
 - Each set of scenario points is logged as a separate entry ("Scenario: You +Y, Opp +Z") before the round advance
-- If the running total of ship points plus scenario points reaches 50, the game ends immediately
+- If ship points plus scenario points take a player to 50 or more, the game ends when that End phase is confirmed
 - Scenario buttons are disabled if points have already been entered for the current round (e.g. after an undo) — undo a second time to re-enable them
 
 **Invalid combinations are automatically disabled:**
@@ -74,7 +74,7 @@ The round tracker bar runs across the top of the screen, showing all 12 rounds. 
 ## Game End
 
 The game ends when:
-- Either player reaches **50 mission points** — a result banner (Game Won / Game Lost / Draw) replaces the timer immediately
+- A player has reached **50 mission points** and the round is ended, by confirming the **End** phase or tapping the next round in the round tracker. Reaching 50 doesn't stop play: scores can go past 50 for the rest of the round, and the player with more points wins
 - The **phase tracker** is enabled and the **End** phase is tapped at Round 12 or after the timer has expired — the result is calculated from current scores
 
 To undo a game-end result, open the action log and tap **Undo**. The game state is restored to the moment before the end was confirmed, and the timer resumes from where it left off.

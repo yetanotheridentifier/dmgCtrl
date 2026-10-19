@@ -1,5 +1,12 @@
 import { useState } from 'react'
 
+// Reaching 50 ends the game at the end of that round rather than on the spot, so points scored
+// later in the round still count and both players can finish above it.
+export const XWING_TARGET_SCORE = 50
+
+export const reachesTarget = (playerTotal: number, opponentTotal: number) =>
+  playerTotal >= XWING_TARGET_SCORE || opponentTotal >= XWING_TARGET_SCORE
+
 // Deficits are accepted by the parent component and stored separately.
 // They will be applied to the score when the opponent's ships are destroyed
 // (future ticket). The hook operates with scores starting at 0.
@@ -11,10 +18,7 @@ export function useXwingGame() {
   const [round, setRound] = useState(1)
   const [gameEnded, setGameEnded] = useState(false)
 
-  const gameOver =
-    (playerScore + playerScenarioScore) >= 50 ||
-    (opponentScore + opponentScenarioScore) >= 50 ||
-    gameEnded
+  const gameOver = gameEnded
 
   const incrementPlayer = (n: number) => {
     if (gameOver) return
@@ -75,6 +79,7 @@ export function useXwingGame() {
 
   return {
     playerScore, opponentScore, playerScenarioScore, opponentScenarioScore,
+    combinedPlayer, combinedOpponent,
     round, gameOver, gameEnded, result,
     incrementPlayer, decrementPlayer,
     incrementOpponent, decrementOpponent,

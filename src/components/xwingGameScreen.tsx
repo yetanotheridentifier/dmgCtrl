@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useOrientation } from '../hooks/useOrientation'
 import { useUserSettings } from '../hooks/useUserSettings'
-import { useXwingGame } from '../hooks/useXwingGame'
+import { useXwingGame, reachesTarget } from '../hooks/useXwingGame'
 import { useGameHistory } from '../hooks/useGameHistory'
 import { useTimer } from '../hooks/useTimer'
 import { useWakeLock } from '../hooks/useWakeLock'
@@ -100,10 +100,33 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     }
   }, [gameStarted, timer.isExpired]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const pendingScenario = (): [number, number] => scenarioScoringActive
+    ? [pendingPlayerScenario ?? 0, pendingOpponentScenario ?? 0]
+    : [0, 0]
+
+  // The round's scenario points count before the result, since they were scored in it.
+  const finishGame = (p: number, o: number) => {
+    const snap = snapshot()
+    if (p > 0 || o > 0) game.addScenarioPoints(p, o)
+    setPendingPlayerScenario(null)
+    setPendingOpponentScenario(null)
+    const finalPlayer = game.combinedPlayer + p
+    const finalOpponent = game.combinedOpponent + o
+    const resultMsg = finalPlayer > finalOpponent ? 'Game Won'
+      : finalOpponent > finalPlayer ? 'Game Lost'
+      : 'Draw'
+    game.endGame()
+    log.add({ type: 'game-result', message: resultMsg, color: '#ffffff', snapshot: snap })
+  }
+
   const handleRoundAdvance = () => {
     if (timer.isExpired || game.gameOver || game.round >= 12) return
-    const p = scenarioScoringActive ? (pendingPlayerScenario ?? 0) : 0
-    const o = scenarioScoringActive ? (pendingOpponentScenario ?? 0) : 0
+    const [p, o] = pendingScenario()
+    // A player who reached 50 this round ends the game when the round ends, however it is ended.
+    if (reachesTarget(game.combinedPlayer + p, game.combinedOpponent + o)) {
+      finishGame(p, o)
+      return
+    }
     const fromRound = game.round
     const snap = snapshot()
     if (p > 0 || o > 0) {
@@ -122,19 +145,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
   const handlePhaseAdvance = () => {
     if (phaseTracker.isLastPhase) {
       if (game.round >= 12 || timer.isExpired) {
-        const p = scenarioScoringActive ? (pendingPlayerScenario ?? 0) : 0
-        const o = scenarioScoringActive ? (pendingOpponentScenario ?? 0) : 0
-        const snap = snapshot()
-        if (p > 0 || o > 0) game.addScenarioPoints(p, o)
-        setPendingPlayerScenario(null)
-        setPendingOpponentScenario(null)
-        const finalPlayer = game.playerScore + game.playerScenarioScore + p
-        const finalOpponent = game.opponentScore + game.opponentScenarioScore + o
-        const resultMsg = finalPlayer > finalOpponent ? 'Game Won'
-          : finalOpponent > finalPlayer ? 'Game Lost'
-          : 'Draw'
-        game.endGame()
-        log.add({ type: 'game-result', message: resultMsg, color: '#ffffff', snapshot: snap })
+        finishGame(...pendingScenario())
         return
       }
       handleRoundAdvance()
@@ -221,10 +232,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     game.restoreState(entry.snapshot)
     setGameStarted(entry.snapshot.gameStarted)
     phaseTracker.restore(entry.snapshot.phaseIndex)
-    const snapshotGameOver =
-      (entry.snapshot.playerScore + (entry.snapshot.playerScenarioScore ?? 0)) >= 50 ||
-      (entry.snapshot.opponentScore + (entry.snapshot.opponentScenarioScore ?? 0)) >= 50 ||
-      (entry.snapshot.gameEnded ?? false)
+    const snapshotGameOver = entry.snapshot.gameEnded ?? false
     setPlayerShips(entry.snapshot.playerShips ?? [])
     setOpponentShips(entry.snapshot.opponentShips ?? [])
     if (!entry.snapshot.gameStarted) {
