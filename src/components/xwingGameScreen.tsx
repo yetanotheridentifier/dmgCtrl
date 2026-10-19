@@ -33,7 +33,6 @@ interface Props {
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
-  onGameEnd?: () => void
   onTimerExpired?: () => void
   playerDeficit?: number
   opponentDeficit?: number
@@ -42,7 +41,7 @@ interface Props {
   opponentPilots?: XwingPilot[]
 }
 
-export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario = 'None', playerPilots, opponentPilots }: Props) {
+export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario = 'None', playerPilots, opponentPilots }: Props) {
   const { enableLongPress, enableActionLog, enableWakeLock, enableInitiativeBar, enableXwingPhases, enableXwingAlwaysIncDec, xwingTimerMinutes } = useUserSettings()
   const { isPortrait } = useOrientation()
 
@@ -296,7 +295,6 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
       onBack={handleBack}
       onHelp={onHelp}
       onSettings={onSettings}
-      onGameEnd={onGameEnd}
       scenario={scenario}
       scenarioScoringActive={scenarioScoringActive}
       scenarioAlreadyScoredThisRound={scenarioAlreadyScoredThisRound}

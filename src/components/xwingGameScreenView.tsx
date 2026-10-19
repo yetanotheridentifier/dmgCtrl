@@ -46,7 +46,6 @@ interface Props {
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
-  onGameEnd?: () => void
   scenario?: string
   scenarioScoringActive?: boolean
   scenarioAlreadyScoredThisRound?: boolean
