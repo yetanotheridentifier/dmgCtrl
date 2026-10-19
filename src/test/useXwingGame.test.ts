@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useXwingGame } from '../hooks/useXwingGame'
+import { useXwingGame, reachesTarget } from '../hooks/useXwingGame'
 
 describe('useXwingGame', () => {
 
@@ -121,29 +121,25 @@ describe('useXwingGame', () => {
   // Reaching 50 does not end the game: it ends at the end of that round, so points scored later in
   // the round still count and either player can finish above 50.
 
-  it('targetReached is false at 49', () => {
-    const { result } = renderHook(() => useXwingGame())
-    act(() => result.current.incrementPlayer(49))
-    expect(result.current.targetReached).toBe(false)
+  it('reachesTarget is false when both totals are below 50', () => {
+    expect(reachesTarget(49, 49)).toBe(false)
   })
 
-  it('targetReached is true when player reaches 50', () => {
-    const { result } = renderHook(() => useXwingGame())
-    act(() => result.current.incrementPlayer(50))
-    expect(result.current.targetReached).toBe(true)
+  it('reachesTarget is true when the player total reaches 50', () => {
+    expect(reachesTarget(50, 0)).toBe(true)
   })
 
-  it('targetReached is true when opponent reaches 50', () => {
-    const { result } = renderHook(() => useXwingGame())
-    act(() => result.current.incrementOpponent(50))
-    expect(result.current.targetReached).toBe(true)
+  it('reachesTarget is true when the opponent total reaches 50', () => {
+    expect(reachesTarget(0, 50)).toBe(true)
   })
 
-  it('targetReached counts scenario points towards 50', () => {
+  it('combined totals include scenario points', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.incrementPlayer(46))
-    act(() => result.current.addScenarioPoints(4, 0))
-    expect(result.current.targetReached).toBe(true)
+    act(() => result.current.incrementOpponent(10))
+    act(() => result.current.addScenarioPoints(4, 2))
+    expect(result.current.combinedPlayer).toBe(50)
+    expect(result.current.combinedOpponent).toBe(12)
   })
 
   it('gameOver stays false when player reaches 50', () => {
@@ -323,7 +319,6 @@ describe('useXwingGame', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.restoreState({ playerScore: 50, opponentScore: 0, round: 6 }))
     expect(result.current.gameOver).toBe(false)
-    expect(result.current.targetReached).toBe(true)
   })
 
   // --- endGame ---
