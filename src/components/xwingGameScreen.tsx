@@ -24,7 +24,7 @@ interface XwingGameSnapshot {
   round: number
   gameStarted: boolean
   phaseIndex: number
-  gameEnded: boolean
+  gameOver: boolean
   playerShips: ShipEntry[]
   opponentShips: ShipEntry[]
 }
@@ -83,7 +83,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     round: game.round,
     gameStarted,
     phaseIndex: phaseTracker.phaseIndex,
-    gameEnded: game.gameEnded,
+    gameOver: game.gameOver,
     playerShips: [...playerShips],
     opponentShips: [...opponentShips],
   })
@@ -232,7 +232,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     game.restoreState(entry.snapshot)
     setGameStarted(entry.snapshot.gameStarted)
     phaseTracker.restore(entry.snapshot.phaseIndex)
-    const snapshotGameOver = entry.snapshot.gameEnded ?? false
+    const snapshotGameOver = entry.snapshot.gameOver ?? false
     setPlayerShips(entry.snapshot.playerShips ?? [])
     setOpponentShips(entry.snapshot.opponentShips ?? [])
     if (!entry.snapshot.gameStarted) {
