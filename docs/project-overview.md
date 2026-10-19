@@ -2,7 +2,7 @@
 
 A Progressive Web App for tracking game state in tabletop games, supporting Star Wars: Unlimited (SWU) and Star Wars X-Wing. Built to run on iPhone in landscape mode, installed via Safari "Add to Home Screen". No App Store, no native build tools required.
 
-**Live app:** https://yetanotheridentifier.github.io/dmgCtrl/
+**Live app:** https://dmgctrl.app
 
 **GitHub repo:** https://github.com/yetanotheridentifier/dmgCtrl
 
@@ -47,7 +47,7 @@ A Progressive Web App for tracking game state in tabletop games, supporting Star
    - On iPhone: open the file from the Files app → iOS redirects to Settings → General → VPN & Device Management → install the profile
    - **Then separately:** Settings → General → About → Certificate Trust Settings → enable full trust for the mkcert certificate. This second step is required — installing the profile alone is not enough and will result in a "not trusted" warning in Safari.
 
-After setup, `npm run dev:https` will print a local network URL (e.g. `https://192.168.x.x:5173/dmgCtrl/`). Open that URL in Safari on the device.
+After setup, `npm run dev:https` will print a local network URL (e.g. `https://192.168.x.x:5173/`). Open that URL in Safari on the device.
 
 ### Base validation script
 
@@ -96,7 +96,7 @@ npx playwright install chromium
 
 The script can also be pointed at a custom URL (e.g. the local network HTTPS address for device testing):
 ```
-node scripts/validate-errors.mjs https://192.168.1.100:5173/dmgCtrl/
+node scripts/validate-errors.mjs https://192.168.1.100:5173/
 ```
 
 Timing can be adjusted via `VISUAL_PAUSE_MS` at the top of the script.

@@ -3,7 +3,7 @@
 Two applications in one repository:
 
 - **The tracker** — a mobile-first progressive web app for tracking game state in tabletop games, supporting Star Wars: Unlimited and Star Wars X-Wing.
-  **Live:** https://yetanotheridentifier.github.io/dmgCtrl/
+  **Live:** https://dmgctrl.app
 - **Sealed** (`sealed/`) — a playable digital Star Wars: Unlimited sealed-deck game: a full rules engine, card abilities, and a searching AI opponent with its own benchmark harness. Desktop browser only.
   **Live:** https://dmgctrl.app/sealed
 
@@ -53,7 +53,7 @@ npm install --prefix sealed
 The tracker:
 
 ```bash
-npm run dev          # http://localhost:5173/dmgCtrl/
+npm run dev          # http://localhost:5173/
 ```
 
 Sealed, or both at once:

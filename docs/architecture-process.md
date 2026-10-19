@@ -49,10 +49,10 @@ test ┘        → preview  (pull request)
 
 | Job | Steps |
 |---|---|
-| `lint` | `npm ci` → `npm run lint` for the PWA and for sealed |
-| `test` | `npm ci` → the three suites as three steps (Vitest) |
-| `build` | `npm ci` → `tsc` → `vite build` |
-| `preview` | Upload the same build to the `dmgctrl` Cloudflare Worker as a preview, and link it on the pull request |
+| `lint` | `npm install` → `npm run lint` for the PWA and for sealed |
+| `test` | `npm install` → the three suites as three steps (Vitest) |
+| `build` | `npm install` → `tsc` → `vite build` for the PWA and for sealed → sealed copied into `dist/sealed/` |
+| `preview` | `npm install` (for wrangler) → upload the same build to the `dmgctrl` Cloudflare Worker as a preview, and link it on the pull request |
 | `deploy` | Upload `dist/` to GitHub Pages |
 
 `lint` and `test` are separate jobs and run in parallel; `build` waits for both. Kept apart so one push reports both answers: as steps in a single job, a lint failure stopped the tests from running at all, and the test result only appeared on the next push.
