@@ -315,6 +315,13 @@ describe('useXwingGame', () => {
     expect(result.current.round).toBe(5)
   })
 
+  it('restoreState restores an ended game', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.restoreState({ playerScore: 52, opponentScore: 50, round: 4, gameOver: true }))
+    expect(result.current.gameOver).toBe(true)
+    expect(result.current.result).toBe('win')
+  })
+
   it('restoreState to scores above 50 leaves the game running', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.restoreState({ playerScore: 50, opponentScore: 0, round: 6 }))
@@ -353,7 +360,7 @@ describe('useXwingGame', () => {
     expect(result.current.result).toBe('draw')
   })
 
-  it('reset clears gameEnded', () => {
+  it('reset clears gameOver after endGame', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.endGame())
     expect(result.current.gameOver).toBe(true)
