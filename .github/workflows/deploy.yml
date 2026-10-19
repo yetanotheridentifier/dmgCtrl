@@ -114,10 +114,103 @@ jobs:
       - name: Assemble sealed under /sealed
         run: mkdir -p dist/sealed && cp -r sealed/dist/* dist/sealed/
 
+      # The preview gets the build as is: the Cloudflare Vite plugin writes dist/wrangler.json and
+      # dist/.assetsignore, which wrangler needs to upload it. Hidden files are left out of an
+      # artifact unless asked for, and .assetsignore is one.
+      - name: Upload the build for the preview
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-artifact@v5
+        with:
+          name: preview-build
+          path: dist
+          include-hidden-files: true
+
+      # Those two files are Cloudflare's, so GitHub Pages would otherwise publish them as part of
+      # the site.
+      - name: Drop the Cloudflare files from the Pages build
+        run: rm dist/wrangler.json dist/.assetsignore
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
           path: dist
+
+  # Each pull request gets its own preview at https://pr-<number>-dmgctrl.dmgctrl.workers.dev, so a
+  # branch can be tried on a phone before it reaches production. Production is GitHub Pages (the
+  # `deploy` job below); the `dmgctrl` Worker on Cloudflare serves nothing on dmgctrl.app, so
+  # nothing here can change the live site. `versions upload` adds a version without deploying it:
+  # the alias points at the new version, and the Worker's own production version is untouched.
+  #
+  # It uploads the exact files `build` produced, so the preview is what would ship.
+  #
+  # Needs the `CLOUDFLARE_API_TOKEN` repository secret (Account, Workers Scripts, Edit) and Preview
+  # URLs turned on for the Worker in the Cloudflare dashboard. Pull requests from forks are skipped:
+  # they get no secrets, and outside pull requests are closed anyway (close-outside-prs.yml).
+  preview:
+    needs: build
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    # Only the comment needs write access. A later push to the same pull request supersedes an
+    # upload still in progress.
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      # For wrangler, at the version the lockfile pins.
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: preview-build
+          path: dist
+
+      - name: Upload the preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: d728bc2284c2b9a503b82a3930cc7696
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-output.json
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        # The build's own config, which names dist/ as the assets and carries the .assetsignore.
+        run: npx wrangler versions upload --config dist/wrangler.json --preview-alias "pr-$PR_NUMBER"
+
+      # One comment per pull request, edited on each push rather than added again. The URL comes
+      # from wrangler's own output, so the step fails loudly if no preview URL was made (for
+      # instance, Preview URLs turned off for the Worker) instead of posting a dead link.
+      - name: Link the preview on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          OUTPUT: ${{ runner.temp }}/wrangler-output.json
+        run: |
+          url=$(jq -r 'select(.type == "version-upload") | .preview_alias_url // empty' "$OUTPUT")
+          if [ -z "$url" ]; then
+            echo "::error::No preview URL was made. Are Preview URLs turned on for the dmgctrl Worker?"
+            exit 1
+          fi
+          marker='<!-- pr-preview -->'
+          body="$marker
+          **Preview:** $url (sealed at $url/sealed/)
+
+          Built from $SHA. Analytics and game records are refused from this address, so nothing reaches production data."
+          id=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$id" -f body="$body" > /dev/null
+          else
+            gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments" -f body="$body" > /dev/null
+          fi
 
   deploy:
     needs: build

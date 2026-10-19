@@ -27,7 +27,7 @@ Core functionality:
 - **Tournament mode** (beta) — a dedicated tournament screen that tracks multiple rounds in a structured tournament (e.g. a local game-store Premier event); persists tournament state across sessions so the app can be closed between rounds; supports Best of 1 and Best of 3 match formats; configurable total round count (dropdown, 2–16); shows a per-round result table with win/loss/draw totals and cumulative tournament points (Win=3, Draw=1, Loss=0) displayed as e.g. `1–0–0 · 3pts`; displays the tournament base card art using the same `ImagePreview` component and `useBaseArt` fallback chain as the setup and game screens; a two-step confirmation prevents accidental drops; game state (damage counter, action log) is preserved when navigating between the game screen and the tournament screen mid-match — the game screen stays mounted behind the tournament screen via `display: none` and the Back button does not reset game state when `isInTournament` is true
 - **Offline capability** — PWA support means the app can be installed and used without a network connection
 
-The app is served at `/dmgCtrl/` and is designed to be added to an iOS home screen for a native-like experience.
+The app is served at the root of `dmgctrl.app` and is designed to be added to an iOS home screen for a native-like experience.
 
 ---
 
@@ -61,7 +61,7 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 | Styling | Inline styles + CSS custom properties (no CSS framework) |
 | Data fetching | Custom React hooks (`useBases`) |
 | Testing | Vitest + React Testing Library |
-| CI/CD | GitHub Actions → GitHub Pages |
+| CI/CD | GitHub Actions → GitHub Pages, with pull request previews on a Cloudflare Worker |
 | Markdown | Custom Vite plugin (`marked`) — transforms `.md` to HTML string exports |
 | API proxy | Cloudflare Worker (`worker.dmgctrl.app`) — proxies card data and receives analytics events |
 | Analytics storage | InfluxDB Cloud free tier — time-series store for custom game events; queried via SQL |
