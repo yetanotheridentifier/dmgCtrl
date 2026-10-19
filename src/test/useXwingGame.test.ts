@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useXwingGame } from '../hooks/useXwingGame'
+import { useXwingGame, reachesTarget } from '../hooks/useXwingGame'
 
 describe('useXwingGame', () => {
 
@@ -117,37 +117,80 @@ describe('useXwingGame', () => {
     expect(result.current.opponentScore).toBe(0)
   })
 
-  // --- gameOver at 50 ---
+  // --- reaching 50 ---
+  // Reaching 50 does not end the game: it ends at the end of that round, so points scored later in
+  // the round still count and either player can finish above 50.
 
-  it('gameOver is false at 49', () => {
+  it('reachesTarget is false when both totals are below 50', () => {
+    expect(reachesTarget(49, 49)).toBe(false)
+  })
+
+  it('reachesTarget is true when the player total reaches 50', () => {
+    expect(reachesTarget(50, 0)).toBe(true)
+  })
+
+  it('reachesTarget is true when the opponent total reaches 50', () => {
+    expect(reachesTarget(0, 50)).toBe(true)
+  })
+
+  it('combined totals include scenario points', () => {
     const { result } = renderHook(() => useXwingGame())
-    act(() => result.current.incrementPlayer(49))
+    act(() => result.current.incrementPlayer(46))
+    act(() => result.current.incrementOpponent(10))
+    act(() => result.current.addScenarioPoints(4, 2))
+    expect(result.current.combinedPlayer).toBe(50)
+    expect(result.current.combinedOpponent).toBe(12)
+  })
+
+  it('gameOver stays false when player reaches 50', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.incrementPlayer(50))
     expect(result.current.gameOver).toBe(false)
   })
 
-  it('gameOver is true when player reaches 50', () => {
-    const { result } = renderHook(() => useXwingGame())
-    act(() => result.current.incrementPlayer(50))
-    expect(result.current.gameOver).toBe(true)
-  })
-
-  it('gameOver is true when opponent reaches 50', () => {
+  it('gameOver stays false when opponent reaches 50', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.incrementOpponent(50))
-    expect(result.current.gameOver).toBe(true)
+    expect(result.current.gameOver).toBe(false)
+  })
+
+  it('player score can go past 50', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.incrementPlayer(50))
+    act(() => result.current.incrementPlayer(3))
+    expect(result.current.playerScore).toBe(53)
+  })
+
+  it('opponent score can go past 50', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.incrementOpponent(50))
+    act(() => result.current.incrementOpponent(3))
+    expect(result.current.opponentScore).toBe(53)
+  })
+
+  it('scenario points can be added after a player reaches 50', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.incrementPlayer(50))
+    act(() => result.current.addScenarioPoints(2, 4))
+    expect(result.current.playerScenarioScore).toBe(2)
+    expect(result.current.opponentScenarioScore).toBe(4)
   })
 
   // --- result ---
 
-  it('result is win when player reaches 50', () => {
+  it('result is win when both pass 50 and player has more', () => {
     const { result } = renderHook(() => useXwingGame())
-    act(() => result.current.incrementPlayer(50))
+    act(() => result.current.incrementPlayer(54))
+    act(() => result.current.incrementOpponent(51))
+    act(() => result.current.endGame())
     expect(result.current.result).toBe('win')
   })
 
-  it('result is loss when opponent reaches 50', () => {
+  it('result is loss when both pass 50 and opponent has more', () => {
     const { result } = renderHook(() => useXwingGame())
-    act(() => result.current.incrementOpponent(50))
+    act(() => result.current.incrementPlayer(50))
+    act(() => result.current.incrementOpponent(52))
+    act(() => result.current.endGame())
     expect(result.current.result).toBe('loss')
   })
 
@@ -156,6 +199,7 @@ describe('useXwingGame', () => {
   it('incrementPlayer no-ops when gameOver', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.incrementPlayer(50))
+    act(() => result.current.endGame())
     act(() => result.current.incrementPlayer(1))
     expect(result.current.playerScore).toBe(50)
   })
@@ -163,6 +207,7 @@ describe('useXwingGame', () => {
   it('decrementPlayer no-ops when gameOver', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.incrementPlayer(50))
+    act(() => result.current.endGame())
     act(() => result.current.decrementPlayer(1))
     expect(result.current.playerScore).toBe(50)
   })
@@ -170,6 +215,7 @@ describe('useXwingGame', () => {
   it('incrementOpponent no-ops when gameOver', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.incrementOpponent(50))
+    act(() => result.current.endGame())
     act(() => result.current.incrementOpponent(1))
     expect(result.current.opponentScore).toBe(50)
   })
@@ -177,6 +223,7 @@ describe('useXwingGame', () => {
   it('decrementOpponent no-ops when gameOver', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.incrementOpponent(50))
+    act(() => result.current.endGame())
     act(() => result.current.decrementOpponent(1))
     expect(result.current.opponentScore).toBe(50)
   })
@@ -221,6 +268,7 @@ describe('useXwingGame', () => {
   it('reset returns gameOver to false', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.incrementPlayer(50))
+    act(() => result.current.endGame())
     act(() => result.current.reset())
     expect(result.current.gameOver).toBe(false)
   })
@@ -248,27 +296,36 @@ describe('useXwingGame', () => {
     expect(result.current.round).toBe(1)
   })
 
-  it('restoreState clears gameOver when restored scores are below 50', () => {
+  it('restoreState clears gameOver when the restored game had not ended', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.incrementPlayer(50))
+    act(() => result.current.endGame())
     expect(result.current.gameOver).toBe(true)
-    act(() => result.current.restoreState({ playerScore: 49, opponentScore: 0, round: 3 }))
+    act(() => result.current.restoreState({ playerScore: 50, opponentScore: 0, round: 3 }))
     expect(result.current.gameOver).toBe(false)
   })
 
   it('restoreState works when called while gameOver is true', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.incrementPlayer(50))
+    act(() => result.current.endGame())
     act(() => result.current.restoreState({ playerScore: 20, opponentScore: 10, round: 5 }))
     expect(result.current.playerScore).toBe(20)
     expect(result.current.opponentScore).toBe(10)
     expect(result.current.round).toBe(5)
   })
 
-  it('restoreState to scores above 50 sets gameOver to true', () => {
+  it('restoreState restores an ended game', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.restoreState({ playerScore: 52, opponentScore: 50, round: 4, gameOver: true }))
+    expect(result.current.gameOver).toBe(true)
+    expect(result.current.result).toBe('win')
+  })
+
+  it('restoreState to scores above 50 leaves the game running', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.restoreState({ playerScore: 50, opponentScore: 0, round: 6 }))
-    expect(result.current.gameOver).toBe(true)
+    expect(result.current.gameOver).toBe(false)
   })
 
   // --- endGame ---
@@ -303,7 +360,7 @@ describe('useXwingGame', () => {
     expect(result.current.result).toBe('draw')
   })
 
-  it('reset clears gameEnded', () => {
+  it('reset clears gameOver after endGame', () => {
     const { result } = renderHook(() => useXwingGame())
     act(() => result.current.endGame())
     expect(result.current.gameOver).toBe(true)

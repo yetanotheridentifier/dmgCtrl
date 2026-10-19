@@ -1,20 +1,21 @@
 import { useState } from 'react'
 
-// Deficits are accepted by the parent component and stored separately.
-// They will be applied to the score when the opponent's ships are destroyed
-// (future ticket). The hook operates with scores starting at 0.
+// Reaching 50 ends the game at the end of that round rather than on the spot, so points scored
+// later in the round still count and both players can finish above it.
+export const XWING_TARGET_SCORE = 50
+
+export const reachesTarget = (playerTotal: number, opponentTotal: number) =>
+  playerTotal >= XWING_TARGET_SCORE || opponentTotal >= XWING_TARGET_SCORE
+
+// Scores start at 0. Deficits are not held here: the game screen adds a squad's deficit to the
+// other player's score when the last of its ships is destroyed.
 export function useXwingGame() {
   const [playerScore, setPlayerScore] = useState(0)
   const [opponentScore, setOpponentScore] = useState(0)
   const [playerScenarioScore, setPlayerScenarioScore] = useState(0)
   const [opponentScenarioScore, setOpponentScenarioScore] = useState(0)
   const [round, setRound] = useState(1)
-  const [gameEnded, setGameEnded] = useState(false)
-
-  const gameOver =
-    (playerScore + playerScenarioScore) >= 50 ||
-    (opponentScore + opponentScenarioScore) >= 50 ||
-    gameEnded
+  const [gameOver, setGameOver] = useState(false)
 
   const incrementPlayer = (n: number) => {
     if (gameOver) return
@@ -38,14 +39,14 @@ export function useXwingGame() {
     setOpponentScenarioScore(s => s + opponent)
   }
   const advanceRound = () => setRound(r => Math.min(12, r + 1))
-  const endGame = () => setGameEnded(true)
+  const endGame = () => setGameOver(true)
   const reset = (initialPlayerScore = 0, initialOpponentScore = 0) => {
     setPlayerScore(initialPlayerScore)
     setOpponentScore(initialOpponentScore)
     setPlayerScenarioScore(0)
     setOpponentScenarioScore(0)
     setRound(1)
-    setGameEnded(false)
+    setGameOver(false)
   }
   const restoreState = (snapshot: {
     playerScore: number
@@ -53,14 +54,14 @@ export function useXwingGame() {
     playerScenarioScore?: number
     opponentScenarioScore?: number
     round: number
-    gameEnded?: boolean
+    gameOver?: boolean
   }) => {
     setPlayerScore(snapshot.playerScore)
     setOpponentScore(snapshot.opponentScore)
     setPlayerScenarioScore(snapshot.playerScenarioScore ?? 0)
     setOpponentScenarioScore(snapshot.opponentScenarioScore ?? 0)
     setRound(snapshot.round)
-    setGameEnded(snapshot.gameEnded ?? false)
+    setGameOver(snapshot.gameOver ?? false)
   }
 
   const combinedPlayer = playerScore + playerScenarioScore
@@ -75,7 +76,8 @@ export function useXwingGame() {
 
   return {
     playerScore, opponentScore, playerScenarioScore, opponentScenarioScore,
-    round, gameOver, gameEnded, result,
+    combinedPlayer, combinedOpponent,
+    round, gameOver, result,
     incrementPlayer, decrementPlayer,
     incrementOpponent, decrementOpponent,
     addScenarioPoints,
