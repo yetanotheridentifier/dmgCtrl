@@ -8,6 +8,7 @@
   "assets": {
     "not_found_handling": "single-page-application"
   },
+  "preview_urls": true,
   "compatibility_flags": [
     "nodejs_compat"
   ]

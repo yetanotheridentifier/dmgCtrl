@@ -39,10 +39,12 @@ bug/hyperspace-art-resolution improves resolution of hyperspace art
 
 ### Pipeline: `.github/workflows/deploy.yml`
 
-Triggered on push to `main` and on pull requests targeting `main`. Three sequential jobs:
+Triggered on push to `main` and on pull requests targeting `main`:
 
 ```
-test → build → deploy
+lint ┐
+     ├→ build → deploy   (push to main)
+test ┘        → preview  (pull request)
 ```
 
 | Job | Steps |
@@ -50,6 +52,7 @@ test → build → deploy
 | `lint` | `npm ci` → `npm run lint` for the PWA and for sealed |
 | `test` | `npm ci` → the three suites as three steps (Vitest) |
 | `build` | `npm ci` → `tsc` → `vite build` |
+| `preview` | Upload the same build to the `dmgctrl` Cloudflare Worker as a preview, and link it on the pull request |
 | `deploy` | Upload `dist/` to GitHub Pages |
 
 `lint` and `test` are separate jobs and run in parallel; `build` waits for both. Kept apart so one push reports both answers: as steps in a single job, a lint failure stopped the tests from running at all, and the test result only appeared on the next push.
@@ -58,12 +61,23 @@ Sealed's simulation tests are not in that `test` job. They play real games to re
 
 ### Deployment target
 
-The app is hosted on **GitHub Pages** at `/dmgCtrl/`. The `base` config in `vite.config.ts` is set to `/dmgCtrl/` to ensure all asset paths are correct.
+Production is hosted on **GitHub Pages** under the custom domain `dmgctrl.app` (set by `public/CNAME`), with Cloudflare handling the domain's DNS. The site is served from the root, so the build uses base `/`. The PWA is at `/` and sealed at `/sealed/`; the `build` job assembles both into one `dist/`.
+
+### Pull request previews
+
+Every pull request from this repository gets its own preview at `https://pr-<number>-dmgctrl.dmgctrl.workers.dev`, so a branch can be tried on a phone before it reaches production. The `preview` job uploads the exact `dist/` that `build` produced to the `dmgctrl` Cloudflare Worker with `wrangler versions upload --preview-alias pr-<number>`, then posts the URL as a comment on the pull request, edited in place on each later push.
+
+- **Production is untouched.** The `dmgctrl` Worker serves nothing on `dmgctrl.app`, and `versions upload` adds a version without deploying it.
+- **Real HTTPS**, so the PWA installs and runs its service worker as it does in production. Each preview is its own origin, so it does not share storage or the service worker with `dmgctrl.app`.
+- **Analytics and game records are refused.** `worker.dmgctrl.app` only accepts them from `https://dmgctrl.app` and `https://dev.dmgctrl.app`, which keeps preview traffic out of production data. Card data and art load from any origin.
+- **Pull requests from forks get no preview**, as they get no secrets.
+
+It needs the `CLOUDFLARE_API_TOKEN` repository secret (a custom token with only Account → Workers Scripts → Edit) and Preview URLs turned on for the `dmgctrl` Worker in the Cloudflare dashboard. Without the latter the job fails rather than posting a dead link.
 
 ### What triggers the pipeline
 
-- Push to `main` — runs all three jobs and deploys on success
-- PRs targeting `main` — runs `test` and `build` jobs; deploy is skipped
+- Push to `main`: `lint`, `test`, `build`, then `deploy` on success
+- PRs targeting `main`: `lint`, `test`, `build`, then `preview`; `deploy` is skipped
 
 ### Pipeline: `.github/workflows/populate-base-aspects.yml`
 

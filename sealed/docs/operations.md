@@ -247,6 +247,10 @@ push to `main`. The workflow:
    URLs rooted at `/sealed/`)
 4. copies `sealed/dist/*` into `dist/sealed/` and publishes `dist` to Pages
 
+On a pull request the same build goes to a preview instead of Pages, with sealed at
+`https://pr-<number>-dmgctrl.dmgctrl.workers.dev/sealed/` (see
+[Pull request previews](../../docs/architecture-process.md#pull-request-previews)).
+
 So **pushing to main is all that's needed**: dmgctrl.app/sealed deploys with
 the PWA. The app's only server is the existing Cloudflare worker: it makes read-only
 calls to it and to swuapi.com for cards, and, for a player who opted in, posts each
