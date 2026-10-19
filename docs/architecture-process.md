@@ -71,6 +71,7 @@ Every pull request from this repository gets its own preview at `https://pr-<num
 - **Real HTTPS**, so the PWA installs and runs its service worker as it does in production. Each preview is its own origin, so it does not share storage or the service worker with `dmgctrl.app`.
 - **Analytics and game records are refused.** `worker.dmgctrl.app` only accepts them from `https://dmgctrl.app` and `https://dev.dmgctrl.app`, which keeps preview traffic out of production data. Card data and art load from any origin.
 - **Pull requests from forks get no preview**, as they get no secrets.
+- **Only previews are reachable.** The Worker's own address, `dmgctrl.dmgctrl.workers.dev`, is switched off (`workers_dev: false` in `wrangler.jsonc`), so there is no public copy of the site outside `dmgctrl.app` and the `pr-<number>` previews.
 - **The Cloudflare files stay off GitHub Pages.** The Cloudflare Vite plugin writes `dist/wrangler.json` and `dist/.assetsignore`, which the preview needs. `build` hands the preview the build with them, then removes them before packaging the build for Pages.
 
 It needs the `CLOUDFLARE_API_TOKEN` repository secret (a custom token with only Account → Workers Scripts → Edit) and Preview URLs turned on for the `dmgctrl` Worker in the Cloudflare dashboard. Without the latter the job fails rather than posting a dead link.
