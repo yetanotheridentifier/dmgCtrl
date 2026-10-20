@@ -12,8 +12,9 @@
  */
 
 import { writeFileSync } from 'fs'
+import { fileURLToPath } from 'url'
 
-const PROXY_URL = 'https://swu-proxy.dmgctrl.workers.dev'
+const PROXY_URL = 'https://worker.dmgctrl.app'
 const SWUAPI_URL = 'https://api.swuapi.com'
 const SWU_DB_CDN = 'https://cdn.swu-db.com/images/cards'
 
@@ -104,12 +105,16 @@ async function fetchAllSwuApiCards() {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+export async function fetchSwuDbBases(fetchImpl = fetch) {
+  const res = await fetchImpl(`${PROXY_URL}/cards/search?q=type:base`)
+  if (!res.ok) throw new Error(`swu-db proxy failed: ${res.status}`)
+  const json = await res.json()
+  return json.data.filter(c => c.VariantType === 'Normal')
+}
+
 async function main() {
   console.log('Fetching swu-db.com (via proxy)...')
-  const swuDbRes = await fetch(`${PROXY_URL}/cards/search?q=type:base`)
-  if (!swuDbRes.ok) throw new Error(`swu-db proxy failed: ${swuDbRes.status}`)
-  const swuDbJson = await swuDbRes.json()
-  const swuDbCards = swuDbJson.data.filter(c => c.VariantType === 'Normal')
+  const swuDbCards = await fetchSwuDbBases()
   console.log(`  swu-db.com: ${swuDbCards.length} normal bases`)
 
   console.log('Fetching swuapi.com (all pages)...')
@@ -285,4 +290,7 @@ async function main() {
   console.log('  docs/base-data-summary.json   (compact summary with art coverage)')
 }
 
-main().catch(err => { console.error(err); process.exit(1) })
+// Only when run as a script, so the tests can import fetchSwuDbBases without it running.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch(err => { console.error(err); process.exit(1) })
+}
