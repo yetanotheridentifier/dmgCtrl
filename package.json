@@ -15,7 +15,6 @@
     "test": "npm run test:pwa && npm --prefix proxy test && npm --prefix sealed test",
     "test:pwa": "vitest run",
     "test:watch": "vitest",
-    "deploy": "npm run build && wrangler deploy",
     "deploy:proxy": "npm --prefix proxy run deploy"
   },
   "dependencies": {

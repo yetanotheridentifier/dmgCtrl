@@ -52,7 +52,7 @@ test ┘        → preview  (pull request)
 | `lint` | `npm install` → `npm run lint` for the PWA and for sealed |
 | `test` | `npm install` → the three suites as three steps (Vitest) |
 | `build` | `npm install` → `tsc` → `vite build` for the PWA and for sealed → sealed copied into `dist/sealed/` |
-| `preview` | `npm install` (for wrangler) → upload the same build to the `dmgctrl` Cloudflare Worker as a preview, and link it on the pull request |
+| `preview` | `npm install` (for wrangler) → deploy the same build to a `pr-<number>` Cloudflare Worker, and link it on the pull request |
 | `deploy` | Upload `dist/` to GitHub Pages |
 
 `lint` and `test` are separate jobs and run in parallel; `build` waits for both. Kept apart so one push reports both answers: as steps in a single job, a lint failure stopped the tests from running at all, and the test result only appeared on the next push.
@@ -65,21 +65,24 @@ Production is hosted on **GitHub Pages** under the custom domain `dmgctrl.app` (
 
 ### Pull request previews
 
-Every pull request from this repository gets its own preview at `https://pr-<number>-dmgctrl.dmgctrl.workers.dev`, so a branch can be tried on a phone before it reaches production. The `preview` job uploads the exact `dist/` that `build` produced to the `dmgctrl` Cloudflare Worker with `wrangler versions upload --preview-alias pr-<number>`, then posts the URL as a comment on the pull request, edited in place on each later push.
+Every pull request from this repository gets its own preview at `https://pr-<number>.dmgctrl.workers.dev`, so a branch can be tried on a phone before it reaches production. Each preview is a Cloudflare Worker of its own, named `pr-<number>`. The `preview` job deploys the exact `dist/` that `build` produced to it with `wrangler deploy --name pr-<number>`, then posts the URL as a comment on the pull request, edited in place on each later push (`scripts/pr-preview-comment.sh`).
 
-- **Production is untouched.** The `dmgctrl` Worker serves nothing on `dmgctrl.app`, and `versions upload` adds a version without deploying it.
+When the pull request is merged or closed, `.github/workflows/preview-teardown.yml` deletes the `pr-<number>` Worker through the Cloudflare API and edits the comment to say the preview is deleted. Deleting the Worker removes every version and address it had, so nothing from the branch stays reachable. A whole Worker is the unit Cloudflare can delete: it offers no way to remove a single version or preview alias, which is why each preview is its own Worker rather than a version of a shared one. If the delete fails, the teardown run fails, and the Worker is deleted by hand in the Cloudflare dashboard. The teardown shares its concurrency group with the `preview` job, so a deploy still running when the pull request closes is cancelled rather than recreating the Worker.
+
+- **Production is untouched.** The preview Workers serve nothing on `dmgctrl.app`.
+- **One address per preview.** `wrangler.jsonc` turns `workers_dev` on (the `pr-<number>` address) and `preview_urls` off, so a preview has no version-numbered addresses besides it.
 - **Real HTTPS**, so the PWA installs and runs its service worker as it does in production. Each preview is its own origin, so it does not share storage or the service worker with `dmgctrl.app`.
 - **Analytics and game records are refused.** `worker.dmgctrl.app` only accepts them from `https://dmgctrl.app` and `https://dev.dmgctrl.app`, which keeps preview traffic out of production data. Card data and art load from any origin.
 - **Pull requests from forks get no preview**, as they get no secrets.
-- **Only previews are reachable.** The Worker's own address, `dmgctrl.dmgctrl.workers.dev`, is switched off (`workers_dev: false` in `wrangler.jsonc`), so there is no public copy of the site outside `dmgctrl.app` and the `pr-<number>` previews.
 - **The Cloudflare files stay off GitHub Pages.** The Cloudflare Vite plugin writes `dist/wrangler.json` and `dist/.assetsignore`, which the preview needs. `build` hands the preview the build with them, then removes them before packaging the build for Pages.
 
-It needs the `CLOUDFLARE_API_TOKEN` repository secret (a custom token with only Account → Workers Scripts → Edit) and Preview URLs turned on for the `dmgctrl` Worker in the Cloudflare dashboard. Without the latter the job fails rather than posting a dead link.
+Both workflows need the `CLOUDFLARE_API_TOKEN` repository secret (a custom token with only Account → Workers Scripts → Edit). Nothing is deployed to Cloudflare from the repo root by hand; there is no `npm run deploy` script.
 
 ### What triggers the pipeline
 
 - Push to `main`: `lint`, `test`, `build`, then `deploy` on success
 - PRs targeting `main`: `lint`, `test`, `build`, then `preview`; `deploy` is skipped
+- PR merged or closed: `preview-teardown.yml` deletes the preview
 
 ### Pipeline: `.github/workflows/populate-base-aspects.yml`
 

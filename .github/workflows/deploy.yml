@@ -135,23 +135,24 @@ jobs:
         with:
           path: dist
 
-  # Each pull request gets its own preview at https://pr-<number>-dmgctrl.dmgctrl.workers.dev, so a
-  # branch can be tried on a phone before it reaches production. Production is GitHub Pages (the
-  # `deploy` job below); the `dmgctrl` Worker on Cloudflare serves nothing on dmgctrl.app, so
-  # nothing here can change the live site. `versions upload` adds a version without deploying it:
-  # the alias points at the new version, and the Worker's own production version is untouched.
+  # Each pull request gets its own preview at https://pr-<number>.dmgctrl.workers.dev, so a branch
+  # can be tried on a phone before it reaches production. The preview is a Worker of its own,
+  # `pr-<number>`, which preview-teardown.yml deletes when the pull request is merged or closed.
+  # A whole Worker is the unit Cloudflare can delete: there is no way to remove one version or
+  # alias of a Worker, so previews as versions of a shared Worker could never be cleaned up.
   #
-  # It uploads the exact files `build` produced, so the preview is what would ship.
+  # Production is GitHub Pages (the `deploy` job below) and is not touched. It deploys the exact
+  # files `build` produced, so the preview is what would ship.
   #
-  # Needs the `CLOUDFLARE_API_TOKEN` repository secret (Account, Workers Scripts, Edit) and Preview
-  # URLs turned on for the Worker in the Cloudflare dashboard. Pull requests from forks are skipped:
-  # they get no secrets, and outside pull requests are closed anyway (close-outside-prs.yml).
+  # Needs the `CLOUDFLARE_API_TOKEN` repository secret (Account, Workers Scripts, Edit). Pull
+  # requests from forks are skipped: they get no secrets, and outside pull requests are closed
+  # anyway (close-outside-prs.yml).
   preview:
     needs: build
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    # Only the comment needs write access. A later push to the same pull request supersedes an
-    # upload still in progress.
+    # Only the comment needs write access. The group is shared with preview-teardown.yml, so a
+    # later push, or the pull request closing, supersedes a deploy still in progress.
     permissions:
       contents: read
       pull-requests: write
@@ -174,18 +175,17 @@ jobs:
           name: preview-build
           path: dist
 
-      - name: Upload the preview
+      - name: Deploy the preview
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: d728bc2284c2b9a503b82a3930cc7696
           WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-output.json
           PR_NUMBER: ${{ github.event.pull_request.number }}
         # The build's own config, which names dist/ as the assets and carries the .assetsignore.
-        run: npx wrangler versions upload --config dist/wrangler.json --preview-alias "pr-$PR_NUMBER"
+        run: npx wrangler deploy --config dist/wrangler.json --name "pr-$PR_NUMBER"
 
-      # One comment per pull request, edited on each push rather than added again. The URL comes
-      # from wrangler's own output, so the step fails loudly if no preview URL was made (for
-      # instance, Preview URLs turned off for the Worker) instead of posting a dead link.
+      # The URL comes from wrangler's own output (a full https:// URL), so the step fails loudly if
+      # the Worker got no workers.dev address instead of posting a dead link.
       - name: Link the preview on the pull request
         env:
           GH_TOKEN: ${{ github.token }}
@@ -194,23 +194,14 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha }}
           OUTPUT: ${{ runner.temp }}/wrangler-output.json
         run: |
-          url=$(jq -r 'select(.type == "version-upload") | .preview_alias_url // empty' "$OUTPUT")
+          url=$(jq -r 'select(.type == "deploy") | .targets[]? | select(endswith(".workers.dev"))' "$OUTPUT" | head -n 1)
           if [ -z "$url" ]; then
-            echo "::error::No preview URL was made. Are Preview URLs turned on for the dmgctrl Worker?"
+            echo "::error::The preview has no workers.dev address. Is workers_dev still true in wrangler.jsonc?"
             exit 1
           fi
-          marker='<!-- pr-preview -->'
-          body="$marker
-          **Preview:** $url (sealed at $url/sealed/)
+          scripts/pr-preview-comment.sh "**Preview:** $url (sealed at $url/sealed/)
 
-          Built from $SHA. Analytics and game records are refused from this address, so nothing reaches production data."
-          id=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
-            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)
-          if [ -n "$id" ]; then
-            gh api --method PATCH "repos/$REPO/issues/comments/$id" -f body="$body" > /dev/null
-          else
-            gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments" -f body="$body" > /dev/null
-          fi
+          Built from $SHA. Analytics and game records are refused from this address, so nothing reaches production data. The preview is deleted when this pull request is merged or closed."
 
   deploy:
     needs: build

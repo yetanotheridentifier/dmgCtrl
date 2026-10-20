@@ -61,7 +61,7 @@ The app is served at the root of `dmgctrl.app` and is designed to be added to an
 | Styling | Inline styles + CSS custom properties (no CSS framework) |
 | Data fetching | Custom React hooks (`useBases`) |
 | Testing | Vitest + React Testing Library |
-| CI/CD | GitHub Actions → GitHub Pages, with pull request previews on a Cloudflare Worker |
+| CI/CD | GitHub Actions → GitHub Pages, with a Cloudflare Worker per pull request as its preview |
 | Markdown | Custom Vite plugin (`marked`) — transforms `.md` to HTML string exports |
 | API proxy | Cloudflare Worker (`worker.dmgctrl.app`) — proxies card data and receives analytics events |
 | Analytics storage | InfluxDB Cloud free tier — time-series store for custom game events; queried via SQL |

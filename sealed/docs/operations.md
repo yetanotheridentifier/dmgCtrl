@@ -248,7 +248,7 @@ push to `main`. The workflow:
 4. copies `sealed/dist/*` into `dist/sealed/` and publishes `dist` to Pages
 
 On a pull request the same build goes to a preview instead of Pages, with sealed at
-`https://pr-<number>-dmgctrl.dmgctrl.workers.dev/sealed/` (see
+`https://pr-<number>.dmgctrl.workers.dev/sealed/` (see
 [Pull request previews](../../docs/architecture-process.md#pull-request-previews)).
 
 So **pushing to main is all that's needed**: dmgctrl.app/sealed deploys with
@@ -289,10 +289,11 @@ easy to confuse:
 | Worker | Config | Serves | Deploy |
 |---|---|---|---|
 | **swu-proxy** | `proxy/wrangler.toml` | `worker.dmgctrl.app`, the CORS/art proxy the sealed app depends on | `npm run deploy:proxy` |
-| **dmgctrl** | root `wrangler.jsonc` | the main app as a CF Worker (added with `@cloudflare/vite-plugin`) | `npm run deploy` |
+| **pr-&lt;number&gt;** | root `wrangler.jsonc` | one pull request's preview of the main app and sealed (added with `@cloudflare/vite-plugin`) | CI only: the `preview` job in `deploy.yml`, deleted by `preview-teardown.yml` |
 
-Running bare `wrangler deploy` (or `npm run deploy`) **from the repo root deploys
-the main-app worker, NOT the proxy**: it picks up the root `wrangler.jsonc`.
+Running bare `wrangler deploy` **from the repo root deploys the main app as a
+`dmgctrl` worker, NOT the proxy**: it picks up the root `wrangler.jsonc`. Nothing
+should be deployed from the root by hand.
 Changes to `proxy/worker.js` (the `/art/`, `/cards/`, `/analytics`, `/records` routes) only
 go live via **`npm run deploy:proxy`**.
 
