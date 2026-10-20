@@ -58,7 +58,7 @@ vi.mock('../hooks/useXwingSetup', () => ({
 
 const mockXwingLists = vi.hoisted(() => ({
   lists: [] as XwingList[],
-  addList: vi.fn(),
+  saveList: vi.fn(),
   removeList: vi.fn(),
   clearLists: vi.fn(),
 }))
@@ -78,7 +78,7 @@ const SAMPLE_FAVOURITE: XwingList = {
 
 beforeEach(() => {
   mockXwingLists.lists = []
-  mockXwingLists.addList.mockClear()
+  mockXwingLists.saveList.mockClear()
   mockXwingLists.removeList.mockClear()
   mockXwingLists.clearLists.mockClear()
   mockSetupState.ruleset = 'XWA'
@@ -618,14 +618,14 @@ describe('XwingSetupScreen', () => {
 
     // --- star click: save (☆) ---
 
-    it('clicking ☆ star calls addFavourite with squad name and pilots', async () => {
+    it('clicking ☆ star calls saveList with squad name and pilots', async () => {
       const user = userEvent.setup()
       mockSetupState.playerListImport = 'XWA'
       render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
       fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS } })
       await user.click(screen.getByTestId('player-confirm-btn'))
       await user.click(screen.getByTestId('player-star-btn'))
-      expect(mockXwingLists.addList).toHaveBeenCalledWith('Scum Syndicate', expect.any(Array))
+      expect(mockXwingLists.saveList).toHaveBeenCalledWith('Scum Syndicate', expect.any(Array))
     })
 
     it('star shows ★ after clicking ☆ to save', async () => {
@@ -649,7 +649,7 @@ describe('XwingSetupScreen', () => {
       expect(screen.getByTestId('player-overwrite-confirm-btn')).toBeInTheDocument()
     })
 
-    it('overwrite confirm calls removeFavourite then addFavourite', async () => {
+    it('overwrite confirm calls saveList, which replaces the list with that name', async () => {
       const user = userEvent.setup()
       mockSetupState.playerListImport = 'XWA'
       mockXwingLists.lists = [{ id: 'old', name: 'Scum Syndicate', pilots: [] }]
@@ -658,8 +658,8 @@ describe('XwingSetupScreen', () => {
       await user.click(screen.getByTestId('player-confirm-btn'))
       await user.click(screen.getByTestId('player-star-btn'))
       await user.click(screen.getByTestId('player-overwrite-confirm-btn'))
-      expect(mockXwingLists.removeList).toHaveBeenCalledWith('old')
-      expect(mockXwingLists.addList).toHaveBeenCalledWith('Scum Syndicate', expect.any(Array))
+      expect(mockXwingLists.saveList).toHaveBeenCalledWith('Scum Syndicate', expect.any(Array))
+      expect(mockXwingLists.removeList).not.toHaveBeenCalled()
     })
 
     it('overwrite cancel dismisses the warning and restores the star', async () => {

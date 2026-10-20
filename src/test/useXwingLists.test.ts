@@ -60,50 +60,109 @@ describe('useXwingLists', () => {
     expect(result.current.lists[0].name).toBe('Scum Squad')
   })
 
-  // --- addList ---
-
-  it('addList adds an entry to the list', () => {
+  it('loads lists saved before faction and createdAt existed', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([{ id: '1', name: 'Old Squad', pilots: PILOTS_A }]))
     const { result } = renderHook(() => useXwingLists())
-    act(() => { result.current.addList('Scum Squad', PILOTS_A) })
+    expect(result.current.lists[0]).toEqual({ id: '1', name: 'Old Squad', pilots: PILOTS_A })
+  })
+
+  // --- saveList ---
+
+  it('saveList adds an entry to the list', () => {
+    const { result } = renderHook(() => useXwingLists())
+    act(() => { result.current.saveList('Scum Squad', PILOTS_A) })
     expect(result.current.lists).toHaveLength(1)
   })
 
-  it('addList stores the name and pilots', () => {
+  it('saveList stores the name and pilots', () => {
     const { result } = renderHook(() => useXwingLists())
-    act(() => { result.current.addList('Scum Squad', PILOTS_A) })
+    act(() => { result.current.saveList('Scum Squad', PILOTS_A) })
     expect(result.current.lists[0].name).toBe('Scum Squad')
     expect(result.current.lists[0].pilots).toEqual(PILOTS_A)
   })
 
-  it('addList generates a unique id', () => {
+  it('saveList stores the faction when given', () => {
     const { result } = renderHook(() => useXwingLists())
-    act(() => { result.current.addList('Squad A', PILOTS_A) })
-    act(() => { result.current.addList('Squad B', PILOTS_B) })
+    act(() => { result.current.saveList('Scum Squad', PILOTS_A, 'scumandvillainy') })
+    expect(result.current.lists[0].faction).toBe('scumandvillainy')
+  })
+
+  it('saveList records when the list was created', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-20T12:00:00Z'))
+    const { result } = renderHook(() => useXwingLists())
+    act(() => { result.current.saveList('Scum Squad', PILOTS_A) })
+    expect(result.current.lists[0].createdAt).toBe('2026-10-20T12:00:00.000Z')
+    vi.useRealTimers()
+  })
+
+  it('saveList generates a unique id', () => {
+    const { result } = renderHook(() => useXwingLists())
+    act(() => { result.current.saveList('Squad A', PILOTS_A) })
+    act(() => { result.current.saveList('Squad B', PILOTS_B) })
     const ids = result.current.lists.map(f => f.id)
     expect(ids[0]).not.toBe(ids[1])
   })
 
-  it('addList appends to existing list', () => {
+  it('saveList appends to existing list', () => {
     const { result } = renderHook(() => useXwingLists())
-    act(() => { result.current.addList('Squad A', PILOTS_A) })
-    act(() => { result.current.addList('Squad B', PILOTS_B) })
+    act(() => { result.current.saveList('Squad A', PILOTS_A) })
+    act(() => { result.current.saveList('Squad B', PILOTS_B) })
     expect(result.current.lists).toHaveLength(2)
   })
 
-  it('addList persists to localStorage', () => {
+  it('saveList with an existing name replaces that list in place', () => {
     const { result } = renderHook(() => useXwingLists())
-    act(() => { result.current.addList('Scum Squad', PILOTS_A) })
+    act(() => { result.current.saveList('Squad A', PILOTS_A) })
+    act(() => { result.current.saveList('Squad B', PILOTS_B) })
+    act(() => { result.current.saveList('Squad A', PILOTS_B) })
+    expect(result.current.lists.map(l => l.name)).toEqual(['Squad A', 'Squad B'])
+    expect(result.current.lists[0].pilots).toEqual(PILOTS_B)
+  })
+
+  it('saveList persists to localStorage', () => {
+    const { result } = renderHook(() => useXwingLists())
+    act(() => { result.current.saveList('Scum Squad', PILOTS_A) })
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
     expect(stored).toHaveLength(1)
     expect(stored[0].name).toBe('Scum Squad')
+  })
+
+  // --- renameList ---
+
+  it('renameList changes the name of the list with the given id', () => {
+    const { result } = renderHook(() => useXwingLists())
+    act(() => { result.current.saveList('Squad A', PILOTS_A) })
+    const id = result.current.lists[0].id
+    act(() => { result.current.renameList(id, 'Renamed') })
+    expect(result.current.lists[0].name).toBe('Renamed')
+    expect(result.current.lists[0].pilots).toEqual(PILOTS_A)
+  })
+
+  it('renameList persists the new name', () => {
+    const { result } = renderHook(() => useXwingLists())
+    act(() => { result.current.saveList('Squad A', PILOTS_A) })
+    const id = result.current.lists[0].id
+    act(() => { result.current.renameList(id, 'Renamed') })
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+    expect(stored[0].name).toBe('Renamed')
+  })
+
+  it('renameList is a no-op when another list already has that name', () => {
+    const { result } = renderHook(() => useXwingLists())
+    act(() => { result.current.saveList('Squad A', PILOTS_A) })
+    act(() => { result.current.saveList('Squad B', PILOTS_B) })
+    const id = result.current.lists[0].id
+    act(() => { result.current.renameList(id, 'Squad B') })
+    expect(result.current.lists.map(l => l.name)).toEqual(['Squad A', 'Squad B'])
   })
 
   // --- removeList ---
 
   it('removeList removes the entry with the given id', () => {
     const { result } = renderHook(() => useXwingLists())
-    act(() => { result.current.addList('Squad A', PILOTS_A) })
-    act(() => { result.current.addList('Squad B', PILOTS_B) })
+    act(() => { result.current.saveList('Squad A', PILOTS_A) })
+    act(() => { result.current.saveList('Squad B', PILOTS_B) })
     const idToRemove = result.current.lists[0].id
     act(() => { result.current.removeList(idToRemove) })
     expect(result.current.lists).toHaveLength(1)
@@ -112,14 +171,14 @@ describe('useXwingLists', () => {
 
   it('removeList is a no-op when the id does not exist', () => {
     const { result } = renderHook(() => useXwingLists())
-    act(() => { result.current.addList('Squad A', PILOTS_A) })
+    act(() => { result.current.saveList('Squad A', PILOTS_A) })
     act(() => { result.current.removeList('does-not-exist') })
     expect(result.current.lists).toHaveLength(1)
   })
 
   it('removeList persists the updated list', () => {
     const { result } = renderHook(() => useXwingLists())
-    act(() => { result.current.addList('Squad A', PILOTS_A) })
+    act(() => { result.current.saveList('Squad A', PILOTS_A) })
     const id = result.current.lists[0].id
     act(() => { result.current.removeList(id) })
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
@@ -130,15 +189,15 @@ describe('useXwingLists', () => {
 
   it('clearLists empties the list', () => {
     const { result } = renderHook(() => useXwingLists())
-    act(() => { result.current.addList('Squad A', PILOTS_A) })
-    act(() => { result.current.addList('Squad B', PILOTS_B) })
+    act(() => { result.current.saveList('Squad A', PILOTS_A) })
+    act(() => { result.current.saveList('Squad B', PILOTS_B) })
     act(() => { result.current.clearLists() })
     expect(result.current.lists).toEqual([])
   })
 
   it('clearLists persists empty list to localStorage', () => {
     const { result } = renderHook(() => useXwingLists())
-    act(() => { result.current.addList('Squad A', PILOTS_A) })
+    act(() => { result.current.saveList('Squad A', PILOTS_A) })
     act(() => { result.current.clearLists() })
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
     expect(stored).toEqual([])
