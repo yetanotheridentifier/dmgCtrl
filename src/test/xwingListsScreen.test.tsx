@@ -339,12 +339,12 @@ describe('XwingListsScreen', () => {
     expect(within(row).getByTestId('lists-new-panel')).toBeInTheDocument()
   })
 
-  it('portrait: the new-list panel sits above the saved lists', () => {
+  it('portrait: the saved lists sit above the new-list panel', () => {
     makeMatchMediaMock(true)
     renderScreen()
     const row = screen.getByTestId('lists-layout')
     expect(row).toHaveStyle({ flexDirection: 'column' })
     const panels = within(row).getAllByTestId(/^lists-(new|saved)-panel$/).map(p => p.dataset.testid)
-    expect(panels).toEqual(['lists-new-panel', 'lists-saved-panel'])
+    expect(panels).toEqual(['lists-saved-panel', 'lists-new-panel'])
   })
 })
