@@ -1,12 +1,11 @@
-import { useState } from 'react'
 import { useXwingSetup, XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
-import type { XwingScenario, XwingListImport } from '../hooks/useXwingSetup'
-import { useSquadSlot } from '../hooks/useSquadSlot'
+import type { XwingScenario, XwingPlayerChoice } from '../hooks/useXwingSetup'
 import { useXwingLists } from '../hooks/useXwingLists'
+import type { XwingList } from '../hooks/useXwingLists'
 import { listPoints } from '../utils/xwingListInfo'
 import XwingSetupScreenView from './xwingSetupScreenView'
+import type { ResolvedChoice } from './xwingSetupScreenView'
 import type { XwingPilot } from '../utils/parseXwsText'
-import type { XwingList } from '../hooks/useXwingLists'
 
 interface Props {
   onStart: (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario, playerPilots: XwingPilot[], opponentPilots: XwingPilot[]) => void
@@ -16,77 +15,24 @@ interface Props {
   onLists?: () => void
 }
 
+// A chosen list deleted on Squad Lists resolves to no choice, so the player picks again.
+function resolve(choice: XwingPlayerChoice | null, lists: XwingList[]): ResolvedChoice | null {
+  if (choice === null || choice.kind === 'none') return choice
+  const list = lists.find(l => l.id === choice.listId)
+  return list ? { kind: 'list', list } : null
+}
+
+function deficitAndPilots(choice: ResolvedChoice, manualDeficit: number): [number, XwingPilot[]] {
+  if (choice.kind === 'none') return [manualDeficit, []]
+  return [Math.max(0, 50 - listPoints(choice.list.pilots)), choice.list.pilots]
+}
+
 export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, onLists }: Props) {
   const setup = useXwingSetup()
-  const playerSlot = useSquadSlot()
-  const opponentSlot = useSquadSlot()
-  const { lists, saveList, removeList } = useXwingLists()
+  const { lists } = useXwingLists()
 
-  // A remembered 'Favourites' preference is only valid while saved squads exist —
-  // otherwise the dropdown would show a mode with no options, so fall back to None.
-  const sanitizeImport = (v: XwingListImport): XwingListImport =>
-    v === 'Favourites' && lists.length === 0 ? 'None' : v
-
-  const [playerListImport, setPlayerListImportState] = useState<XwingListImport>(sanitizeImport(setup.playerListImport))
-  const [opponentListImport, setOpponentListImportState] = useState<XwingListImport>(sanitizeImport(setup.opponentListImport))
-  const [playerManualSaved, setPlayerManualSaved] = useState(false)
-  const [opponentManualSaved, setOpponentManualSaved] = useState(false)
-
-  const handlePlayerListImportChange = (v: XwingListImport) => {
-    setPlayerListImportState(v)
-    setup.setPlayerListImport(v)
-    playerSlot.edit()
-    setPlayerManualSaved(false)
-  }
-
-  const handleOpponentListImportChange = (v: XwingListImport) => {
-    setOpponentListImportState(v)
-    setup.setOpponentListImport(v)
-    opponentSlot.edit()
-    setOpponentManualSaved(false)
-  }
-
-  const handlePlayerEdit = () => {
-    playerSlot.edit()
-    setPlayerManualSaved(false)
-  }
-
-  const handleOpponentEdit = () => {
-    opponentSlot.edit()
-    setOpponentManualSaved(false)
-  }
-
-  const handlePlayerLoadFavourite = (fav: XwingList) => {
-    playerSlot.confirmFromFavourite(fav)
-  }
-
-  const handleOpponentLoadFavourite = (fav: XwingList) => {
-    opponentSlot.confirmFromFavourite(fav)
-  }
-
-  const handlePlayerSave = (name: string) => {
-    saveList(name, playerSlot.pilots)
-    setPlayerManualSaved(true)
-  }
-
-  const handlePlayerUnsave = () => {
-    const existing = lists.find(f => f.name === playerSlot.squadName)
-    if (existing) removeList(existing.id)
-    playerSlot.markUnsaved()
-    setPlayerManualSaved(false)
-  }
-
-  const handleOpponentSave = (name: string) => {
-    saveList(name, opponentSlot.pilots)
-    setOpponentManualSaved(true)
-  }
-
-  const handleOpponentUnsave = () => {
-    const existing = lists.find(f => f.name === opponentSlot.squadName)
-    if (existing) removeList(existing.id)
-    opponentSlot.markUnsaved()
-    setOpponentManualSaved(false)
-  }
+  const playerChoice = resolve(setup.playerChoice, lists)
+  const opponentChoice = resolve(setup.opponentChoice, lists)
 
   const handleScenarioRandom = () => {
     const idx = Math.floor(Math.random() * XWING_NAMED_SCENARIOS.length)
@@ -94,11 +40,10 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, 
   }
 
   const handleStart = () => {
-    const pTotal = listPoints(playerSlot.pilots)
-    const oTotal = listPoints(opponentSlot.pilots)
-    const pDeficit = playerListImport === 'XWA' ? Math.max(0, 50 - pTotal) : setup.playerDeficit
-    const oDeficit = opponentListImport === 'XWA' ? Math.max(0, 50 - oTotal) : setup.opponentDeficit
-    onStart(pDeficit, oDeficit, setup.scenario, playerSlot.pilots, opponentSlot.pilots)
+    if (!playerChoice || !opponentChoice) return
+    const [pDeficit, pPilots] = deficitAndPilots(playerChoice, setup.playerDeficit)
+    const [oDeficit, oPilots] = deficitAndPilots(opponentChoice, setup.opponentDeficit)
+    onStart(pDeficit, oDeficit, setup.scenario, pPilots, oPilots)
   }
 
   return (
@@ -107,43 +52,19 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, 
       onMatchTypeChange={setup.setMatchType}
       rounds={setup.rounds}
       onRoundsChange={setup.setRounds}
-      playerListImport={playerListImport}
-      onPlayerListImportChange={handlePlayerListImportChange}
-      opponentListImport={opponentListImport}
-      onOpponentListImportChange={handleOpponentListImportChange}
+      scenario={setup.scenario}
+      onScenarioChange={setup.setScenario}
+      onScenarioRandom={handleScenarioRandom}
+      lists={lists}
+      playerChoice={playerChoice}
+      onPlayerChoose={setup.setPlayerChoice}
+      opponentChoice={opponentChoice}
+      onOpponentChoose={setup.setOpponentChoice}
       playerDeficit={setup.playerDeficit}
       onPlayerDeficitChange={setup.setPlayerDeficit}
       opponentDeficit={setup.opponentDeficit}
       onOpponentDeficitChange={setup.setOpponentDeficit}
-      playerConfirmed={playerSlot.confirmed}
-      onPlayerConfirm={() => playerSlot.confirm(playerListImport)}
-      onPlayerEdit={handlePlayerEdit}
-      opponentConfirmed={opponentSlot.confirmed}
-      onOpponentConfirm={() => opponentSlot.confirm(opponentListImport)}
-      onOpponentEdit={handleOpponentEdit}
-      playerText={playerSlot.text}
-      onPlayerTextChange={playerSlot.setText}
-      opponentText={opponentSlot.text}
-      onOpponentTextChange={opponentSlot.setText}
-      playerError={playerSlot.error}
-      opponentError={opponentSlot.error}
-      playerPilots={playerSlot.pilots}
-      opponentPilots={opponentSlot.pilots}
-      playerSquadName={playerSlot.squadName}
-      opponentSquadName={opponentSlot.squadName}
-      playerStarFilled={playerSlot.isFromFavourite || playerManualSaved}
-      opponentStarFilled={opponentSlot.isFromFavourite || opponentManualSaved}
-      favourites={lists}
-      onPlayerLoadFavourite={handlePlayerLoadFavourite}
-      onOpponentLoadFavourite={handleOpponentLoadFavourite}
-      onPlayerSave={handlePlayerSave}
-      onOpponentSave={handleOpponentSave}
-      onPlayerUnsave={handlePlayerUnsave}
-      onOpponentUnsave={handleOpponentUnsave}
-      scenario={setup.scenario}
-      onScenarioChange={setup.setScenario}
-      onScenarioRandom={handleScenarioRandom}
-      canStart={playerSlot.confirmed && opponentSlot.confirmed}
+      canStart={playerChoice !== null && opponentChoice !== null}
       onStart={handleStart}
       onBack={onBack}
       onHelp={onHelp}

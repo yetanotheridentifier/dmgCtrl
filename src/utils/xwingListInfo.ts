@@ -19,3 +19,9 @@ export function factionName(xws: string | undefined): string | undefined {
   if (xws === undefined) return undefined
   return FACTION_NAMES[xws] ?? xws
 }
+
+// The "49 pts · Rebel Alliance" line shown for a list on Squad Lists and setup.
+export function listMeta(pilots: XwingPilot[], faction: string | undefined): string {
+  const fName = factionName(faction)
+  return fName ? `${listPoints(pilots)} pts · ${fName}` : `${listPoints(pilots)} pts`
+}

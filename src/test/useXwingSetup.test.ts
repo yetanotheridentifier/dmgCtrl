@@ -36,16 +36,6 @@ describe('useXwingSetup', () => {
     expect(result.current.rounds).toBe(6)
   })
 
-  it('defaults playerListImport to None', () => {
-    const { result } = renderHook(() => useXwingSetup())
-    expect(result.current.playerListImport).toBe('None')
-  })
-
-  it('defaults opponentListImport to None', () => {
-    const { result } = renderHook(() => useXwingSetup())
-    expect(result.current.opponentListImport).toBe('None')
-  })
-
   it('defaults playerDeficit to 0', () => {
     const { result } = renderHook(() => useXwingSetup())
     expect(result.current.playerDeficit).toBe(0)
@@ -80,54 +70,6 @@ describe('useXwingSetup', () => {
     )
     const { result } = renderHook(() => useXwingSetup())
     expect(result.current.rounds).toBe(8)
-  })
-
-  it('loads playerListImport from localStorage', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ playerListImport: 'YASB' }) : null
-    )
-    const { result } = renderHook(() => useXwingSetup())
-    expect(result.current.playerListImport).toBe('YASB')
-  })
-
-  it('migrates stored Text value to None for playerListImport', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ playerListImport: 'Text' }) : null
-    )
-    const { result } = renderHook(() => useXwingSetup())
-    expect(result.current.playerListImport).toBe('None')
-  })
-
-  it('migrates legacy listImport field to playerListImport', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ listImport: 'YASB' }) : null
-    )
-    const { result } = renderHook(() => useXwingSetup())
-    expect(result.current.playerListImport).toBe('YASB')
-  })
-
-  it('loads opponentListImport from localStorage', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ opponentListImport: 'XWA' }) : null
-    )
-    const { result } = renderHook(() => useXwingSetup())
-    expect(result.current.opponentListImport).toBe('XWA')
-  })
-
-  it('loads Favourites value for playerListImport', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ playerListImport: 'Favourites' }) : null
-    )
-    const { result } = renderHook(() => useXwingSetup())
-    expect(result.current.playerListImport).toBe('Favourites')
-  })
-
-  it('loads Favourites value for opponentListImport', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ opponentListImport: 'Favourites' }) : null
-    )
-    const { result } = renderHook(() => useXwingSetup())
-    expect(result.current.opponentListImport).toBe('Favourites')
   })
 
   it('does not load playerDeficit from localStorage (always starts at 0)', () => {
@@ -169,20 +111,6 @@ describe('useXwingSetup', () => {
     expect(saved.rounds).toBe(8)
   })
 
-  it('saves playerListImport to localStorage when setPlayerListImport is called', () => {
-    const { result } = renderHook(() => useXwingSetup())
-    act(() => result.current.setPlayerListImport('YASB'))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.playerListImport).toBe('YASB')
-  })
-
-  it('saves opponentListImport to localStorage when setOpponentListImport is called', () => {
-    const { result } = renderHook(() => useXwingSetup())
-    act(() => result.current.setOpponentListImport('XWA'))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.opponentListImport).toBe('XWA')
-  })
-
   it('does not save playerDeficit to localStorage', () => {
     const { result } = renderHook(() => useXwingSetup())
     act(() => result.current.setPlayerDeficit(3))
@@ -193,6 +121,53 @@ describe('useXwingSetup', () => {
     const { result } = renderHook(() => useXwingSetup())
     act(() => result.current.setOpponentDeficit(2))
     expect(vi.mocked(localStorage.setItem).mock.calls).toHaveLength(0)
+  })
+
+  // --- Player choices ---
+
+  it('starts with no choice for either player', () => {
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.playerChoice).toBeNull()
+    expect(result.current.opponentChoice).toBeNull()
+  })
+
+  it('setPlayerChoice records a saved list for the player only', () => {
+    const { result } = renderHook(() => useXwingSetup())
+    act(() => result.current.setPlayerChoice({ kind: 'list', listId: 'l1' }))
+    expect(result.current.playerChoice).toEqual({ kind: 'list', listId: 'l1' })
+    expect(result.current.opponentChoice).toBeNull()
+  })
+
+  it('setOpponentChoice records No list for the opponent', () => {
+    const { result } = renderHook(() => useXwingSetup())
+    act(() => result.current.setOpponentChoice({ kind: 'none' }))
+    expect(result.current.opponentChoice).toEqual({ kind: 'none' })
+  })
+
+  it('a choice can be cleared', () => {
+    const { result } = renderHook(() => useXwingSetup())
+    act(() => result.current.setPlayerChoice({ kind: 'none' }))
+    act(() => result.current.setPlayerChoice(null))
+    expect(result.current.playerChoice).toBeNull()
+  })
+
+  it('choices are not saved to localStorage', () => {
+    const { result } = renderHook(() => useXwingSetup())
+    act(() => result.current.setPlayerChoice({ kind: 'list', listId: 'l1' }))
+    act(() => result.current.setOpponentChoice({ kind: 'none' }))
+    expect(vi.mocked(localStorage.setItem).mock.calls).toHaveLength(0)
+  })
+
+  it('drops the old remembered list import fields on the next save', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY
+        ? JSON.stringify({ matchType: 'Tournament', playerListImport: 'XWA', opponentListImport: 'Favourites', listImport: 'YASB' })
+        : null
+    )
+    const { result } = renderHook(() => useXwingSetup())
+    act(() => result.current.setRounds(8))
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
+    expect(saved).toEqual({ ruleset: 'XWA', matchType: 'Tournament', rounds: 8 })
   })
 
   // --- Deficit clamping ---

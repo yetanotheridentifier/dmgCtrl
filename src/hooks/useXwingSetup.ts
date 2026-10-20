@@ -4,7 +4,9 @@ const STORAGE_KEY = 'xwing_setup'
 
 export type XwingRuleset = 'XWA' | 'Legacy' | 'AMG' | '2.0' | '1.0'
 export type XwingMatchType = 'Casual' | 'Tournament'
-export type XwingListImport = 'None' | 'YASB' | 'XWA' | 'Favourites'
+// A player's list for the next game: No list (manual deficit) or a saved list by id.
+export type XwingPlayerChoice = { kind: 'none' } | { kind: 'list'; listId: string }
+
 export type XwingScenario = 'None' | 'Assault at the Satellite Array' | 'Chance Engagement' | 'Salvage Mission' | 'Scramble the Transmissions' | 'Ancient Knowledge'
 
 export const XWING_NAMED_SCENARIOS: XwingScenario[] = [
@@ -19,22 +21,12 @@ interface PersistedSetup {
   ruleset: XwingRuleset
   matchType: XwingMatchType
   rounds: number
-  playerListImport: XwingListImport
-  opponentListImport: XwingListImport
 }
 
 const DEFAULTS: PersistedSetup = {
   ruleset: 'XWA',
   matchType: 'Casual',
   rounds: 6,
-  playerListImport: 'None',
-  opponentListImport: 'None',
-}
-
-function migrateListImport(value: unknown): XwingListImport {
-  if (value === 'Text') return 'None'
-  if (value === 'None' || value === 'YASB' || value === 'XWA' || value === 'Favourites') return value as XwingListImport
-  return 'None'
 }
 
 function load(): PersistedSetup {
@@ -42,13 +34,10 @@ function load(): PersistedSetup {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...DEFAULTS }
     const parsed = JSON.parse(raw) as Record<string, unknown>
-    const rawImport = parsed.playerListImport ?? parsed.listImport
     return {
       ruleset: (parsed.ruleset as XwingRuleset) ?? DEFAULTS.ruleset,
       matchType: (parsed.matchType as XwingMatchType) ?? DEFAULTS.matchType,
       rounds: (parsed.rounds as number) ?? DEFAULTS.rounds,
-      playerListImport: migrateListImport(rawImport),
-      opponentListImport: migrateListImport(parsed.opponentListImport),
     }
   } catch {
     return { ...DEFAULTS }
@@ -70,10 +59,10 @@ export interface XwingSetupValue {
   setMatchType: (v: XwingMatchType) => void
   rounds: number
   setRounds: (v: number) => void
-  playerListImport: XwingListImport
-  setPlayerListImport: (v: XwingListImport) => void
-  opponentListImport: XwingListImport
-  setOpponentListImport: (v: XwingListImport) => void
+  playerChoice: XwingPlayerChoice | null
+  setPlayerChoice: (v: XwingPlayerChoice | null) => void
+  opponentChoice: XwingPlayerChoice | null
+  setOpponentChoice: (v: XwingPlayerChoice | null) => void
   playerDeficit: number
   setPlayerDeficit: (v: number) => void
   opponentDeficit: number
@@ -87,6 +76,8 @@ export function useXwingSetup(): XwingSetupValue {
   const [playerDeficit, setPlayerDeficitState] = useState(0)
   const [opponentDeficit, setOpponentDeficitState] = useState(0)
   const [scenario, setScenario] = useState<XwingScenario>('None')
+  const [playerChoice, setPlayerChoice] = useState<XwingPlayerChoice | null>(null)
+  const [opponentChoice, setOpponentChoice] = useState<XwingPlayerChoice | null>(null)
 
   function update(patch: Partial<PersistedSetup>) {
     setPersisted(prev => {
@@ -103,10 +94,10 @@ export function useXwingSetup(): XwingSetupValue {
     setMatchType: (v) => update({ matchType: v }),
     rounds: persisted.rounds,
     setRounds: (v) => update({ rounds: v }),
-    playerListImport: persisted.playerListImport,
-    setPlayerListImport: (v) => update({ playerListImport: v }),
-    opponentListImport: persisted.opponentListImport,
-    setOpponentListImport: (v) => update({ opponentListImport: v }),
+    playerChoice,
+    setPlayerChoice,
+    opponentChoice,
+    setOpponentChoice,
     playerDeficit,
     setPlayerDeficit: (v) => setPlayerDeficitState(clampDeficit(v)),
     opponentDeficit,

@@ -7,7 +7,7 @@ import { labelStyle, submitButtonStyle, squadNameInputStyle, overwriteCancelStyl
 import { PilotList, TextareaField } from './shared/xwsListFields'
 import type { XwingList } from '../hooks/useXwingLists'
 import type { XwingPilot } from '../utils/parseXwsText'
-import { listPoints, factionName } from '../utils/xwingListInfo'
+import { listMeta } from '../utils/xwingListInfo'
 
 interface Props {
   lists: XwingList[]
@@ -26,11 +26,6 @@ interface Props {
   onSave: () => void
   onBack: () => void
   onHelp: () => void
-}
-
-function listMeta(pilots: XwingPilot[], faction: string | undefined): string {
-  const fName = factionName(faction)
-  return fName ? `${listPoints(pilots)} pts · ${fName}` : `${listPoints(pilots)} pts`
 }
 
 const smallButtonStyle = (small: boolean, accent = false): React.CSSProperties => ({

@@ -6,6 +6,7 @@ import SwuGameScreen from './components/swuGameScreen'
 import XwingGameScreen from './components/xwingGameScreen'
 import XwingSetupScreen from './components/xwingSetupScreen'
 import XwingListsScreen from './components/xwingListsScreen'
+import { XwingListsProvider } from './hooks/useXwingLists'
 import SwuTournamentScreen from './components/swuTournamentScreen'
 import HelpScreen from './components/helpScreen'
 import SettingsScreen from './components/settingsScreen'
@@ -21,7 +22,7 @@ import type { Format } from './utils/formatFilter'
 
 type Screen = 'loading' | 'gameSelect' | 'xwingSetup' | 'xwing' | 'xwingLists' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
 
-function App() {
+function AppScreens() {
   const [screen, setScreen] = useState<Screen>('loading')
   const [backStack, setBackStack] = useState<Screen[]>([])
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
@@ -30,6 +31,7 @@ function App() {
   const [lastSelection, setLastSelection] = useState<InitialSelection | null>(null)
   const [isInGame, setIsInGame] = useState(false)
   const [isInXwing, setIsInXwing] = useState(false)
+  const [isInXwingSetup, setIsInXwingSetup] = useState(false)
   const [xwingPlayerDeficit, setXwingPlayerDeficit] = useState(0)
   const [xwingOpponentDeficit, setXwingOpponentDeficit] = useState(0)
   const [xwingScenario, setXwingScenario] = useState<XwingScenario>('None')
@@ -82,13 +84,25 @@ function App() {
     }
   }, [])
 
+  // X-Wing setup stays mounted from here until Back to game select, so its choices survive
+  // Squad Lists, Help, Settings and a game (a rematch is one tap).
+  const enterXwingSetup = () => {
+    setIsInXwingSetup(true)
+    setScreen('xwingSetup')
+  }
+
+  const leaveXwingSetup = () => {
+    setIsInXwingSetup(false)
+    setScreen('gameSelect')
+  }
+
   const handleReady = () => {
     if (tournament !== null) {
       setScreen('tournament')
       return
     }
     if (startScreen === 'xwing') {
-      setScreen('xwingSetup')
+      enterXwingSetup()
     } else if (startScreen === 'swu') {
       setScreen('setup')
     } else {
@@ -187,7 +201,7 @@ function App() {
 
   const handleXwingBack = () => {
     setIsInXwing(false)
-    setScreen('xwingSetup')
+    enterXwingSetup()
   }
 
   const handleOverlayBack = () => {
@@ -204,26 +218,10 @@ function App() {
     return (
       <GameSelectScreen
         onSelectSwu={() => setScreen('setup')}
-        onSelectXwing={() => setScreen('xwingSetup')}
+        onSelectXwing={enterXwingSetup}
         onSettings={handleSettings}
       />
     )
-  }
-
-  if (screen === 'xwingSetup') {
-    return (
-      <XwingSetupScreen
-        onStart={handleXwingStart}
-        onBack={() => setScreen('gameSelect')}
-        onHelp={handleHelp}
-        onSettings={handleSettings}
-        onLists={handleXwingLists}
-      />
-    )
-  }
-
-  if (screen === 'xwingLists') {
-    return <XwingListsScreen onBack={handleOverlayBack} onHelp={handleHelp} />
   }
 
   if (screen === 'setup') {
@@ -238,13 +236,25 @@ function App() {
     )
   }
 
-  // Keep game screen mounted while navigating to help/settings/tournament so game state is preserved.
+  // Keep game and X-Wing setup screens mounted while navigating to help/settings/tournament so game state is preserved.
   // Use tournament.base as fallback when selectedBase is null (e.g. app resumed into an active tournament).
   const gameBase = tournamentCurrentBase ?? selectedBase ?? tournament?.base ?? null
   const tournamentBase = tournament?.base ?? selectedBase ?? null
 
   return (
     <>
+      {isInXwingSetup && (
+        <div style={screen === 'xwingSetup' ? undefined : { display: 'none' }}>
+          <XwingSetupScreen
+            onStart={handleXwingStart}
+            onBack={leaveXwingSetup}
+            onHelp={handleHelp}
+            onSettings={handleSettings}
+            onLists={handleXwingLists}
+          />
+        </div>
+      )}
+      {screen === 'xwingLists' && <XwingListsScreen onBack={handleOverlayBack} onHelp={handleHelp} />}
       {isInXwing && (
         <div style={screen === 'xwing' ? undefined : { display: 'none' }}>
           <XwingGameScreen
@@ -296,6 +306,15 @@ function App() {
       {screen === 'help' && <HelpScreen onBack={handleOverlayBack} source={helpSource} />}
       {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} onManageXwingLists={handleXwingLists} defaultTab={settingsDefaultTab} />}
     </>
+  )
+}
+
+// The lists provider sits here, not in main.tsx, so every screen App renders (and App's tests) has it.
+function App() {
+  return (
+    <XwingListsProvider>
+      <AppScreens />
+    </XwingListsProvider>
   )
 }
 
