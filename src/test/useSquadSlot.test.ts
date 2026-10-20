@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useSquadSlot } from '../hooks/useSquadSlot'
-import type { XwingSquadFavourite } from '../hooks/useXwingFavourites'
+import type { XwingList } from '../hooks/useXwingLists'
 
 const PILOTS = [
   { name: 'asajjventress', ship: 'lancerclasspursuitcraft', points: 15 },
@@ -20,7 +20,7 @@ const VALID_XWS_NAMED = JSON.stringify({
   points: 50,
 })
 
-const FAVOURITE: XwingSquadFavourite = {
+const FAVOURITE: XwingList = {
   id: 'fav-1',
   name: 'My Scum Squad',
   pilots: PILOTS,

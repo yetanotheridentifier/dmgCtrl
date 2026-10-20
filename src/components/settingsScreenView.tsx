@@ -3,7 +3,7 @@ import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon, HelpIcon } from './icons'
 import { NAV_BTN_STYLE } from '../styles/navButton'
 import type { FavouriteBase } from '../hooks/useFavourites'
-import type { XwingSquadFavourite } from '../hooks/useXwingFavourites'
+import type { XwingList } from '../hooks/useXwingLists'
 import TimerStepper from './shared/timerStepper'
 
 interface ToggleRowProps {
@@ -143,7 +143,7 @@ interface Props {
   onStartScreenChange: (v: StartScreen) => void
   onRemoveFavourite: (key: string) => void
   onClearFavourites: () => void
-  xwingFavourites: XwingSquadFavourite[]
+  xwingFavourites: XwingList[]
   onRemoveXwingFavourite: (id: string) => void
   onClearXwingFavourites: () => void
   onBack: () => void

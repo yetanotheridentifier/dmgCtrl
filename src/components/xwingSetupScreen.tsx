@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { useXwingSetup, XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
 import type { XwingScenario, XwingListImport } from '../hooks/useXwingSetup'
 import { useSquadSlot } from '../hooks/useSquadSlot'
-import { useXwingFavourites } from '../hooks/useXwingFavourites'
+import { useXwingLists } from '../hooks/useXwingLists'
 import XwingSetupScreenView from './xwingSetupScreenView'
 import type { XwingPilot } from '../utils/parseXwsText'
-import type { XwingSquadFavourite } from '../hooks/useXwingFavourites'
+import type { XwingList } from '../hooks/useXwingLists'
 
 interface Props {
   onStart: (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario, playerPilots: XwingPilot[], opponentPilots: XwingPilot[]) => void
@@ -18,12 +18,12 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings }
   const setup = useXwingSetup()
   const playerSlot = useSquadSlot()
   const opponentSlot = useSquadSlot()
-  const { favourites, addFavourite, removeFavourite } = useXwingFavourites()
+  const { lists, addList, removeList } = useXwingLists()
 
   // A remembered 'Favourites' preference is only valid while saved squads exist —
   // otherwise the dropdown would show a mode with no options, so fall back to None.
   const sanitizeImport = (v: XwingListImport): XwingListImport =>
-    v === 'Favourites' && favourites.length === 0 ? 'None' : v
+    v === 'Favourites' && lists.length === 0 ? 'None' : v
 
   const [playerListImport, setPlayerListImportState] = useState<XwingListImport>(sanitizeImport(setup.playerListImport))
   const [opponentListImport, setOpponentListImportState] = useState<XwingListImport>(sanitizeImport(setup.opponentListImport))
@@ -54,38 +54,38 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings }
     setOpponentManualSaved(false)
   }
 
-  const handlePlayerLoadFavourite = (fav: XwingSquadFavourite) => {
+  const handlePlayerLoadFavourite = (fav: XwingList) => {
     playerSlot.confirmFromFavourite(fav)
   }
 
-  const handleOpponentLoadFavourite = (fav: XwingSquadFavourite) => {
+  const handleOpponentLoadFavourite = (fav: XwingList) => {
     opponentSlot.confirmFromFavourite(fav)
   }
 
   const handlePlayerSave = (name: string) => {
-    const existing = favourites.find(f => f.name === name)
-    if (existing) removeFavourite(existing.id)
-    addFavourite(name, playerSlot.pilots)
+    const existing = lists.find(f => f.name === name)
+    if (existing) removeList(existing.id)
+    addList(name, playerSlot.pilots)
     setPlayerManualSaved(true)
   }
 
   const handlePlayerUnsave = () => {
-    const existing = favourites.find(f => f.name === playerSlot.squadName)
-    if (existing) removeFavourite(existing.id)
+    const existing = lists.find(f => f.name === playerSlot.squadName)
+    if (existing) removeList(existing.id)
     playerSlot.markUnsaved()
     setPlayerManualSaved(false)
   }
 
   const handleOpponentSave = (name: string) => {
-    const existing = favourites.find(f => f.name === name)
-    if (existing) removeFavourite(existing.id)
-    addFavourite(name, opponentSlot.pilots)
+    const existing = lists.find(f => f.name === name)
+    if (existing) removeList(existing.id)
+    addList(name, opponentSlot.pilots)
     setOpponentManualSaved(true)
   }
 
   const handleOpponentUnsave = () => {
-    const existing = favourites.find(f => f.name === opponentSlot.squadName)
-    if (existing) removeFavourite(existing.id)
+    const existing = lists.find(f => f.name === opponentSlot.squadName)
+    if (existing) removeList(existing.id)
     opponentSlot.markUnsaved()
     setOpponentManualSaved(false)
   }
@@ -135,7 +135,7 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings }
       opponentSquadName={opponentSlot.squadName}
       playerStarFilled={playerSlot.isFromFavourite || playerManualSaved}
       opponentStarFilled={opponentSlot.isFromFavourite || opponentManualSaved}
-      favourites={favourites}
+      favourites={lists}
       onPlayerLoadFavourite={handlePlayerLoadFavourite}
       onOpponentLoadFavourite={handleOpponentLoadFavourite}
       onPlayerSave={handlePlayerSave}

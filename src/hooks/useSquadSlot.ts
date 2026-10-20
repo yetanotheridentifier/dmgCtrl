@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { XwingListImport } from './useXwingSetup'
 import { parseXwsText } from '../utils/parseXwsText'
 import type { XwingPilot } from '../utils/parseXwsText'
-import type { XwingSquadFavourite } from './useXwingFavourites'
+import type { XwingList } from './useXwingLists'
 
 export interface SquadSlot {
   text: string
@@ -14,7 +14,7 @@ export interface SquadSlot {
   pilots: XwingPilot[]
   confirm: (listImport: XwingListImport) => void
   edit: () => void
-  confirmFromFavourite: (fav: XwingSquadFavourite) => void
+  confirmFromFavourite: (fav: XwingList) => void
   markUnsaved: () => void
 }
 
@@ -47,7 +47,7 @@ export function useSquadSlot(): SquadSlot {
     setError(null)
   }
 
-  function confirmFromFavourite(fav: XwingSquadFavourite) {
+  function confirmFromFavourite(fav: XwingList) {
     setText('')
     setPilots(fav.pilots)
     setSquadName(fav.name)

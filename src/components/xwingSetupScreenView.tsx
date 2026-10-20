@@ -8,7 +8,7 @@ import type { XwingMatchType, XwingListImport, XwingScenario } from '../hooks/us
 import { XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
 import type { XwingPilot } from '../utils/parseXwsText'
 import { displayPilots } from '../utils/displayPilots'
-import type { XwingSquadFavourite } from '../hooks/useXwingFavourites'
+import type { XwingList } from '../hooks/useXwingLists'
 
 interface Props {
   matchType: XwingMatchType
@@ -41,9 +41,9 @@ interface Props {
   opponentSquadName: string | undefined
   playerStarFilled: boolean
   opponentStarFilled: boolean
-  favourites: XwingSquadFavourite[]
-  onPlayerLoadFavourite: (fav: XwingSquadFavourite) => void
-  onOpponentLoadFavourite: (fav: XwingSquadFavourite) => void
+  favourites: XwingList[]
+  onPlayerLoadFavourite: (fav: XwingList) => void
+  onOpponentLoadFavourite: (fav: XwingList) => void
   onPlayerSave: (name: string) => void
   onOpponentSave: (name: string) => void
   onPlayerUnsave: () => void
