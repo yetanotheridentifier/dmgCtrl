@@ -602,34 +602,44 @@ function SettingsScreenView({
   // ── X-Wing tab ────────────────────────────────────────────────────────────
 
   const xwingSquadListsSection = onManageXwingLists && (
-    <>
-      <div style={{
-        color: 'var(--color-text-primary)',
-        fontWeight: '300',
-        fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
-        letterSpacing: '0.03em',
-        padding: '1.5vh 0 0.5vh',
-        borderBottom: '1px solid rgba(107, 114, 128, 0.3)',
-      }}>
-        Squad Lists
+    <div data-testid="xwing-lists-row" style={{
+      display: 'flex',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: '2vw',
+      padding: '1.5vh 0',
+      borderBottom: '1px solid rgba(107, 114, 128, 0.3)',
+    }}>
+      <div style={{ flex: 1 }}>
+        <div style={{
+          color: 'var(--color-text-primary)',
+          fontWeight: '300',
+          fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
+          letterSpacing: '0.03em',
+        }}>
+          Squad Lists
+        </div>
+        <div style={{
+          color: 'var(--color-text-muted)',
+          fontWeight: '300',
+          fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
+          marginTop: '0.25em',
+        }}>
+          Create, rename and delete your saved squads.
+        </div>
       </div>
-      <div style={{
-        marginLeft: '0.5em',
-        paddingLeft: '1em',
-        borderLeft: '2px solid rgba(var(--color-accent-rgb), 0.35)',
-        padding: '1vh 0 1vh 1em',
-      }}>
-        <button
-          onClick={onManageXwingLists}
-          style={{
-            ...smallButtonStyle,
-            fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
-          }}
-        >
-          Manage lists
-        </button>
-      </div>
-    </>
+      <button
+        onClick={onManageXwingLists}
+        style={{
+          ...smallButtonStyle,
+          flexShrink: 0,
+          fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
+        }}
+      >
+        Manage lists
+      </button>
+    </div>
   )
 
   const xwingContent = (
