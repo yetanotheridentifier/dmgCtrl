@@ -101,6 +101,27 @@ beforeEach(() => {
 
 describe('XwingSetupScreen', () => {
 
+  // --- Squad lists ---
+
+  it('shows a Squad lists button when onLists is given', () => {
+    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} onLists={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Squad lists' })).toBeInTheDocument()
+  })
+
+  it('Squad lists button calls onLists', async () => {
+    const user = userEvent.setup()
+    const onLists = vi.fn()
+    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} onLists={onLists} />)
+    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
+    expect(onLists).toHaveBeenCalledOnce()
+  })
+
+  it('portrait: Squad lists button is shown', () => {
+    makeMatchMediaMock(true)
+    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} onLists={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Squad lists' })).toBeInTheDocument()
+  })
+
   // --- Ruleset ---
 
   it('ruleset dropdown is not shown', () => {
