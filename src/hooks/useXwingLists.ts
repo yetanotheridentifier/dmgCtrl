@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { createContext, createElement, useContext, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { XwingPilot } from '../utils/parseXwsText'
 
 const STORAGE_KEY = 'xwing_favourites'
@@ -28,7 +29,7 @@ function save(lists: XwingList[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(lists))
 }
 
-export function useXwingLists() {
+function useXwingListsState() {
   const [lists, setLists] = useState<XwingList[]>(load)
 
   // Saving under a name that already exists replaces that list in place.
@@ -67,4 +68,19 @@ export function useXwingLists() {
   }
 
   return { lists, saveList, renameList, removeList, clearLists }
+}
+
+type XwingListsValue = ReturnType<typeof useXwingListsState>
+
+// Shared so a list saved on Squad Lists shows at once on the setup screen, which stays mounted.
+const XwingListsContext = createContext<XwingListsValue | null>(null)
+
+export function XwingListsProvider({ children }: { children: ReactNode }) {
+  return createElement(XwingListsContext.Provider, { value: useXwingListsState() }, children)
+}
+
+export function useXwingLists(): XwingListsValue {
+  const ctx = useContext(XwingListsContext)
+  if (!ctx) throw new Error('useXwingLists must be used within XwingListsProvider')
+  return ctx
 }

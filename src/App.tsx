@@ -6,6 +6,7 @@ import SwuGameScreen from './components/swuGameScreen'
 import XwingGameScreen from './components/xwingGameScreen'
 import XwingSetupScreen from './components/xwingSetupScreen'
 import XwingListsScreen from './components/xwingListsScreen'
+import { XwingListsProvider } from './hooks/useXwingLists'
 import SwuTournamentScreen from './components/swuTournamentScreen'
 import HelpScreen from './components/helpScreen'
 import SettingsScreen from './components/settingsScreen'
@@ -21,7 +22,7 @@ import type { Format } from './utils/formatFilter'
 
 type Screen = 'loading' | 'gameSelect' | 'xwingSetup' | 'xwing' | 'xwingLists' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
 
-function App() {
+function AppScreens() {
   const [screen, setScreen] = useState<Screen>('loading')
   const [backStack, setBackStack] = useState<Screen[]>([])
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
@@ -296,6 +297,15 @@ function App() {
       {screen === 'help' && <HelpScreen onBack={handleOverlayBack} source={helpSource} />}
       {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} onManageXwingLists={handleXwingLists} defaultTab={settingsDefaultTab} />}
     </>
+  )
+}
+
+// The lists provider sits here, not in main.tsx, so every screen App renders (and App's tests) has it.
+function App() {
+  return (
+    <XwingListsProvider>
+      <AppScreens />
+    </XwingListsProvider>
   )
 }
 
