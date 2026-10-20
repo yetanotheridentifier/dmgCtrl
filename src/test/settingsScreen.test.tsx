@@ -854,6 +854,14 @@ describe('SettingsScreen analytics', () => {
       expect(onManageXwingLists).toHaveBeenCalledOnce()
     })
 
+    it('Manage lists sits inline on the Squad Lists row, like the toggle rows', () => {
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} onManageXwingLists={vi.fn()} defaultTab="xwing" />)
+      const row = screen.getByTestId('xwing-lists-row')
+      expect(row).toHaveStyle({ display: 'flex', flexDirection: 'row' })
+      expect(within(row).getByText('Squad Lists')).toBeInTheDocument()
+      expect(within(row).getByRole('button', { name: 'Manage lists' })).toBeInTheDocument()
+    })
+
     it('no longer lists saved squads itself (they are managed on the Squad Lists screen)', () => {
       render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} onManageXwingLists={vi.fn()} defaultTab="xwing" />)
       expect(screen.queryByTestId('xwing-favourites-empty')).not.toBeInTheDocument()
