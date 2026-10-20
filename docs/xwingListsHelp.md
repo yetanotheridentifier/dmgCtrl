@@ -1,8 +1,8 @@
 # X-Wing: Squad Lists Help
 
-Squad Lists is where you create and manage your saved X-Wing squads. Saved squads appear in the **Favourites** import mode on the X-Wing setup screen.
+Squad Lists is where you create and manage your saved X-Wing squads. Saved squads are offered for each player on the X-Wing setup screen.
 
-Open it with the **list button** in the header of the X-Wing setup screen, or with **Manage lists** on the X-Wing tab of Settings. **Back** returns you to where you came from.
+Open it with the **list button** in the header of the X-Wing setup screen, with **＋ New list** when choosing a player's list, or with **Manage lists** on the X-Wing tab of Settings. **Back** returns you to where you came from.
 
 ## Creating a List
 
