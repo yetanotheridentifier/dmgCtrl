@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { useBases } from '../hooks/useBases'
@@ -971,6 +971,79 @@ describe('App game select', () => {
     await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Match Type' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /back/i }))
     await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
+  })
+
+  // ── X-Wing Squad Lists ────────────────────────────────────────────────────
+
+  async function openXwingSetup(user: ReturnType<typeof userEvent.setup>) {
+    mockUserSettings.startScreen = 'gameSelect'
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
+  }
+
+  it('Squad lists on xwing setup opens the Squad Lists screen', async () => {
+    const user = userEvent.setup()
+    await openXwingSetup(user)
+    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
+    expect(screen.getByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
+  })
+
+  it('back from Squad Lists returns to xwing setup', async () => {
+    const user = userEvent.setup()
+    await openXwingSetup(user)
+    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
+  })
+
+  it('help on Squad Lists shows the squad lists help, and back returns to Squad Lists', async () => {
+    const user = userEvent.setup()
+    await openXwingSetup(user)
+    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Creating a List' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Match Type' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
+  })
+
+  it('Manage lists in settings opens Squad Lists, and back returns to settings', async () => {
+    const user = userEvent.setup()
+    await openXwingSetup(user)
+    await user.click(screen.getByRole('button', { name: /settings/i }))
+    await user.click(screen.getByRole('button', { name: 'Manage lists' }))
+    expect(screen.getByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument()
+  })
+
+  it('a list created on Squad Lists is offered on xwing setup', async () => {
+    const store = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => { store.set(key, value) },
+      removeItem: (key: string) => { store.delete(key) },
+      clear: () => { store.clear() },
+    })
+    const user = userEvent.setup()
+    await openXwingSetup(user)
+    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
+    fireEvent.change(screen.getByTestId('lists-textarea'), { target: { value: JSON.stringify({
+      name: 'Round Trip',
+      pilots: [
+        { name: 'pilota', ship: 'shipa', points: 16 },
+        { name: 'pilotb', ship: 'shipb', points: 15 },
+        { name: 'pilotc', ship: 'shipc', points: 15 },
+      ],
+      points: 46,
+    }) } })
+    await user.click(screen.getByTestId('lists-check-btn'))
+    await user.click(screen.getByTestId('lists-save-btn'))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
+    expect(within(screen.getByTestId('player-list-import-select')).getByText('Favourites')).toBeInTheDocument()
   })
 
   // ── Settings tab defaults per source screen ───────────────────────────────

@@ -93,7 +93,21 @@ describe('parseXwsText — valid input', () => {
     expect(result.name).toBeUndefined()
   })
 
-  it('ignores extra top-level fields (faction, vendor, etc.)', () => {
+  it('extracts the faction from the top-level faction field', () => {
+    const result = parseXwsText(VALID_LIST)
+    if (!result.ok) throw new Error('expected ok')
+    expect(result.faction).toBe('scumandvillainy')
+  })
+
+  it('returns undefined for faction when the faction field is absent', () => {
+    const obj = JSON.parse(VALID_LIST)
+    delete obj.faction
+    const result = parseXwsText(JSON.stringify(obj))
+    if (!result.ok) throw new Error('expected ok')
+    expect(result.faction).toBeUndefined()
+  })
+
+  it('ignores extra top-level fields (vendor, etc.)', () => {
     expect(parseXwsText(VALID_LIST).ok).toBe(true)
   })
 })

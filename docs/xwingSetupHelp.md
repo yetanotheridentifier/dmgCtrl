@@ -42,7 +42,7 @@ After confirming an XWA import or loading a Favourites squad, the squad name is 
 - **☆ (empty star)** — squad is not saved. Tap to save it to your favourites.
 - **★ (filled star)** — squad is currently saved. Tap to remove it from your favourites.
 
-If you save a squad with the same name as an existing favourite, a confirmation prompt appears asking you to confirm the overwrite. Saved squads can be managed (removed or cleared) from the Settings screen under **X-Wing Saved Squads**.
+If you save a squad with the same name as an existing favourite, a confirmation prompt appears asking you to confirm the overwrite. Saved squads can be created, renamed and deleted on the **Squad Lists** screen — tap the **list button** in the header.
 
 ### XWS Import
 

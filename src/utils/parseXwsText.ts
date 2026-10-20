@@ -5,7 +5,7 @@ export interface XwingPilot {
 }
 
 export type ParseResult =
-  | { ok: true; pilots: XwingPilot[]; total: number; name: string | undefined }
+  | { ok: true; pilots: XwingPilot[]; total: number; name: string | undefined; faction: string | undefined }
   | { ok: false; error: 'invalid-format' | 'too-few-ships' | 'too-many-ships' | 'invalid-total' }
 
 export function parseXwsText(text: string): ParseResult {
@@ -47,5 +47,6 @@ export function parseXwsText(text: string): ParseResult {
   if (total < 46 || total > 50) return { ok: false, error: 'invalid-total' }
 
   const name = typeof obj.name === 'string' ? obj.name : undefined
-  return { ok: true, pilots, total, name }
+  const faction = typeof obj.faction === 'string' ? obj.faction : undefined
+  return { ok: true, pilots, total, name, faction }
 }

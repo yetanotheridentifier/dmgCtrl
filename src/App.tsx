@@ -5,6 +5,7 @@ import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
 import XwingGameScreen from './components/xwingGameScreen'
 import XwingSetupScreen from './components/xwingSetupScreen'
+import XwingListsScreen from './components/xwingListsScreen'
 import SwuTournamentScreen from './components/swuTournamentScreen'
 import HelpScreen from './components/helpScreen'
 import SettingsScreen from './components/settingsScreen'
@@ -18,7 +19,7 @@ import { onAppStart, onAppInstall, onAppResume, onTournamentRoundCompleted } fro
 import type { PlayMode, SetupMode } from './utils/playMode'
 import type { Format } from './utils/formatFilter'
 
-type Screen = 'loading' | 'gameSelect' | 'xwingSetup' | 'xwing' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
+type Screen = 'loading' | 'gameSelect' | 'xwingSetup' | 'xwing' | 'xwingLists' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('loading')
@@ -36,7 +37,7 @@ function App() {
   const [xwingOpponentPilots, setXwingOpponentPilots] = useState<XwingPilot[]>([])
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
-  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'settings'>('setup')
+  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' | 'settings'>('setup')
   const [settingsDefaultTab, setSettingsDefaultTab] = useState<'general' | 'swu' | 'xwing'>('swu')
   const { loading } = useBases()
   const { startScreen } = useUserSettings()
@@ -146,11 +147,12 @@ function App() {
   }
 
   const handleHelp = () => {
-    const source: 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'settings' =
+    const source: 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' | 'settings' =
       screen === 'game' ? 'game' :
       screen === 'tournament' ? 'tournament' :
       screen === 'xwing' ? 'xwing' :
       screen === 'xwingSetup' ? 'xwingSetup' :
+      screen === 'xwingLists' ? 'xwingLists' :
       screen === 'settings' ? 'settings' :
       'setup'
     setHelpSource(source)
@@ -166,6 +168,11 @@ function App() {
     setSettingsDefaultTab(tab)
     setBackStack(prev => [...prev, screen])
     setScreen('settings')
+  }
+
+  const handleXwingLists = () => {
+    setBackStack(prev => [...prev, screen])
+    setScreen('xwingLists')
   }
 
   const handleXwingStart = (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario, playerPilots: XwingPilot[], opponentPilots: XwingPilot[]) => {
@@ -210,8 +217,13 @@ function App() {
         onBack={() => setScreen('gameSelect')}
         onHelp={handleHelp}
         onSettings={handleSettings}
+        onLists={handleXwingLists}
       />
     )
+  }
+
+  if (screen === 'xwingLists') {
+    return <XwingListsScreen onBack={handleOverlayBack} onHelp={handleHelp} />
   }
 
   if (screen === 'setup') {
@@ -282,7 +294,7 @@ function App() {
         />
       )}
       {screen === 'help' && <HelpScreen onBack={handleOverlayBack} source={helpSource} />}
-      {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} defaultTab={settingsDefaultTab} />}
+      {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} onManageXwingLists={handleXwingLists} defaultTab={settingsDefaultTab} />}
     </>
   )
 }
