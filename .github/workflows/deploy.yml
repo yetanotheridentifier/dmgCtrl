@@ -184,8 +184,8 @@ jobs:
         # The build's own config, which names dist/ as the assets and carries the .assetsignore.
         run: npx wrangler deploy --config dist/wrangler.json --name "pr-$PR_NUMBER"
 
-      # The URL comes from wrangler's own output, so the step fails loudly if the Worker got no
-      # workers.dev address instead of posting a dead link.
+      # The URL comes from wrangler's own output (a full https:// URL), so the step fails loudly if
+      # the Worker got no workers.dev address instead of posting a dead link.
       - name: Link the preview on the pull request
         env:
           GH_TOKEN: ${{ github.token }}
@@ -194,12 +194,11 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha }}
           OUTPUT: ${{ runner.temp }}/wrangler-output.json
         run: |
-          host=$(jq -r 'select(.type == "deploy") | .targets[]? | select(endswith(".workers.dev"))' "$OUTPUT" | head -n 1)
-          if [ -z "$host" ]; then
+          url=$(jq -r 'select(.type == "deploy") | .targets[]? | select(endswith(".workers.dev"))' "$OUTPUT" | head -n 1)
+          if [ -z "$url" ]; then
             echo "::error::The preview has no workers.dev address. Is workers_dev still true in wrangler.jsonc?"
             exit 1
           fi
-          url="https://$host"
           scripts/pr-preview-comment.sh "**Preview:** $url (sealed at $url/sealed/)
 
           Built from $SHA. Analytics and game records are refused from this address, so nothing reaches production data. The preview is deleted when this pull request is merged or closed."
