@@ -40,4 +40,4 @@ Settings for the X-Wing game mode.
 
 **Enable Phase Tracker** — Shows a phase button in the centre of the game screen during a game. Tap to advance through Planning → System → Activation → Engagement → End. Tapping End advances the round (or ends the game at round 12 / timer expiry). When enabled, initiative can only be set during the Planning phase.
 
-**X-Wing Saved Squads** — Lists all squads you have saved as favourites from the setup screen. Each entry shows the squad name with a Remove button. Use **Clear All** (with a confirmation step) to remove all saved squads at once. Squads saved here appear in the **Favourites** import mode on the X-Wing setup screen.
+**Squad Lists** — **Manage lists** opens the Squad Lists screen, where you create, rename and delete saved squads. Saved squads appear in the **Favourites** import mode on the X-Wing setup screen.

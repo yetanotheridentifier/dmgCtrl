@@ -13,9 +13,10 @@ interface Props {
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
+  onLists?: () => void
 }
 
-export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings }: Props) {
+export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, onLists }: Props) {
   const setup = useXwingSetup()
   const playerSlot = useSquadSlot()
   const opponentSlot = useSquadSlot()
@@ -147,6 +148,7 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings }
       onBack={onBack}
       onHelp={onHelp}
       onSettings={onSettings}
+      onLists={onLists}
     />
   )
 }

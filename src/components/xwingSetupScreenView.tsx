@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useOrientation } from '../hooks/useOrientation'
 import AppScreenLayout from './layout/appScreenLayout'
-import { BackIcon, CheckIcon, CogIcon, DiceIcon, EditIcon, ForwardIcon, HelpIcon } from './icons'
+import { BackIcon, CheckIcon, CogIcon, DiceIcon, EditIcon, ForwardIcon, HelpIcon, ListIcon } from './icons'
 import { NAV_BTN_STYLE } from '../styles/navButton'
 import TimerStepper from './shared/timerStepper'
 import type { XwingMatchType, XwingListImport, XwingScenario } from '../hooks/useXwingSetup'
@@ -57,6 +57,7 @@ interface Props {
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
+  onLists?: () => void
 }
 
 const selectStyle = (enabled: boolean, hasValue: boolean, small = false): React.CSSProperties => ({
@@ -149,6 +150,7 @@ export default function XwingSetupScreenView({
   onBack,
   onHelp,
   onSettings,
+  onLists,
 }: Props) {
   const { isPortrait } = useOrientation()
   const small = !isPortrait
@@ -734,6 +736,11 @@ export default function XwingSetupScreenView({
               </h1>
             </div>
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+              {onLists && (
+                <button onClick={onLists} aria-label="Squad lists" style={NAV_BTN_STYLE}>
+                  <ListIcon />
+                </button>
+              )}
               {onSettings && (
                 <button onClick={onSettings} aria-label="Settings" style={NAV_BTN_STYLE}>
                   <CogIcon />
@@ -873,6 +880,11 @@ export default function XwingSetupScreenView({
             </h1>
           </div>
           <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '2vw' }}>
+            {onLists && (
+              <button onClick={onLists} aria-label="Squad lists" style={NAV_BTN_STYLE}>
+                <ListIcon />
+              </button>
+            )}
             {onSettings && (
               <button onClick={onSettings} aria-label="Settings" style={NAV_BTN_STYLE}>
                 <CogIcon />

@@ -4,6 +4,7 @@ import tournamentHelpHtml from '../../docs/swuTournamentHelp.md'
 import xwingHelpHtml from '../../docs/xwingGameHelp.md'
 import xwingSetupHelpHtml from '../../docs/xwingSetupHelp.md'
 import settingsHelpHtml from '../../docs/settingsHelp.md'
+import xwingListsHelpHtml from '../../docs/xwingListsHelp.md'
 import AppScreenLayout from './layout/appScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon } from './icons'
@@ -12,7 +13,7 @@ import { NAV_BTN_STYLE } from '../styles/navButton'
 
 interface Props {
   onBack: () => void
-  source?: 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'settings'
+  source?: 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' | 'settings'
 }
 
 function HelpScreen({ onBack, source = 'setup' }: Props) {
@@ -20,6 +21,7 @@ function HelpScreen({ onBack, source = 'setup' }: Props) {
     : source === 'tournament' ? tournamentHelpHtml
     : source === 'xwing' ? xwingHelpHtml
     : source === 'xwingSetup' ? xwingSetupHelpHtml
+    : source === 'xwingLists' ? xwingListsHelpHtml
     : source === 'settings' ? settingsHelpHtml
     : setupHelpHtml
   const contentHtml = rawHtml.replace(/^<h1[^>]*>[\s\S]*?<\/h1>\n?/, '')

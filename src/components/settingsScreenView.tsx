@@ -3,7 +3,6 @@ import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon, HelpIcon } from './icons'
 import { NAV_BTN_STYLE } from '../styles/navButton'
 import type { FavouriteBase } from '../hooks/useFavourites'
-import type { XwingList } from '../hooks/useXwingLists'
 import TimerStepper from './shared/timerStepper'
 
 interface ToggleRowProps {
@@ -143,9 +142,7 @@ interface Props {
   onStartScreenChange: (v: StartScreen) => void
   onRemoveFavourite: (key: string) => void
   onClearFavourites: () => void
-  xwingFavourites: XwingList[]
-  onRemoveXwingFavourite: (id: string) => void
-  onClearXwingFavourites: () => void
+  onManageXwingLists?: () => void
   onBack: () => void
   onHelp: () => void
 }
@@ -185,15 +182,12 @@ function SettingsScreenView({
   onStartScreenChange,
   onRemoveFavourite,
   onClearFavourites,
-  xwingFavourites,
-  onRemoveXwingFavourite,
-  onClearXwingFavourites,
+  onManageXwingLists,
   onBack,
   onHelp,
 }: Props) {
   const { vmin, isPortrait } = useOrientation()
   const [confirmingClear, setConfirmingClear] = useState(false)
-  const [confirmingClearXwing, setConfirmingClearXwing] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>(defaultTab)
 
   const scrollableColumn: React.CSSProperties = {
@@ -607,7 +601,7 @@ function SettingsScreenView({
 
   // ── X-Wing tab ────────────────────────────────────────────────────────────
 
-  const xwingSquadFavouritesSection = (
+  const xwingSquadListsSection = onManageXwingLists && (
     <>
       <div style={{
         color: 'var(--color-text-primary)',
@@ -617,100 +611,23 @@ function SettingsScreenView({
         padding: '1.5vh 0 0.5vh',
         borderBottom: '1px solid rgba(107, 114, 128, 0.3)',
       }}>
-        Squad Favourites
+        Squad Lists
       </div>
       <div style={{
         marginLeft: '0.5em',
         paddingLeft: '1em',
         borderLeft: '2px solid rgba(var(--color-accent-rgb), 0.35)',
-        marginTop: '0.5vh',
+        padding: '1vh 0 1vh 1em',
       }}>
-        {xwingFavourites.length === 0 ? (
-          <div
-            data-testid="xwing-favourites-empty"
-            style={{
-              color: 'var(--color-text-muted)',
-              fontWeight: '300',
-              fontSize: `clamp(0.85rem, ${vmin * 0.032}px, 1rem)`,
-              padding: '1vh 0',
-            }}
-          >
-            No squad favourites saved
-          </div>
-        ) : (
-          <>
-            {xwingFavourites.map(fav => (
-              <div key={fav.id} style={{
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '2vw',
-                padding: '1vh 0',
-                borderBottom: '1px solid rgba(107, 114, 128, 0.15)',
-              }}>
-                <span style={{
-                  flex: 1,
-                  color: 'var(--color-text-primary)',
-                  fontWeight: '300',
-                  fontSize: `clamp(0.85rem, ${vmin * 0.032}px, 1rem)`,
-                }}>
-                  {fav.name}
-                </span>
-                <button
-                  data-testid={`xwing-favourite-remove-${fav.id}`}
-                  onClick={() => onRemoveXwingFavourite(fav.id)}
-                  aria-label="Remove"
-                  style={{
-                    ...smallButtonStyle,
-                    fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
-                  }}
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-
-            <div style={{ marginTop: '1.5vh', display: 'flex', gap: '1.5vw' }}>
-              {!confirmingClearXwing ? (
-                <button
-                  data-testid="xwing-favourites-clear-btn"
-                  onClick={() => setConfirmingClearXwing(true)}
-                  style={{
-                    ...smallButtonStyle,
-                    fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
-                  }}
-                >
-                  Clear All
-                </button>
-              ) : (
-                <>
-                  <button
-                    data-testid="xwing-favourites-clear-confirm-btn"
-                    onClick={() => { onClearXwingFavourites(); setConfirmingClearXwing(false) }}
-                    style={{
-                      ...smallButtonStyle,
-                      border: '1px solid var(--color-accent)',
-                      color: 'var(--color-accent)',
-                      fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
-                    }}
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    onClick={() => setConfirmingClearXwing(false)}
-                    style={{
-                      ...smallButtonStyle,
-                      fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </>
-              )}
-            </div>
-          </>
-        )}
+        <button
+          onClick={onManageXwingLists}
+          style={{
+            ...smallButtonStyle,
+            fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
+          }}
+        >
+          Manage lists
+        </button>
       </div>
     </>
   )
@@ -741,7 +658,7 @@ function SettingsScreenView({
         onChange={onEnableXwingAlwaysIncDecChange}
         vmin={vmin}
       />
-      {xwingSquadFavouritesSection}
+      {xwingSquadListsSection}
     </>
   )
 
