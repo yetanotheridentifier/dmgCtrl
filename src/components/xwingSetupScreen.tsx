@@ -3,6 +3,7 @@ import { useXwingSetup, XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
 import type { XwingScenario, XwingListImport } from '../hooks/useXwingSetup'
 import { useSquadSlot } from '../hooks/useSquadSlot'
 import { useXwingLists } from '../hooks/useXwingLists'
+import { listPoints } from '../utils/xwingListInfo'
 import XwingSetupScreenView from './xwingSetupScreenView'
 import type { XwingPilot } from '../utils/parseXwsText'
 import type { XwingList } from '../hooks/useXwingLists'
@@ -18,7 +19,7 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings }
   const setup = useXwingSetup()
   const playerSlot = useSquadSlot()
   const opponentSlot = useSquadSlot()
-  const { lists, addList, removeList } = useXwingLists()
+  const { lists, saveList, removeList } = useXwingLists()
 
   // A remembered 'Favourites' preference is only valid while saved squads exist —
   // otherwise the dropdown would show a mode with no options, so fall back to None.
@@ -63,9 +64,7 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings }
   }
 
   const handlePlayerSave = (name: string) => {
-    const existing = lists.find(f => f.name === name)
-    if (existing) removeList(existing.id)
-    addList(name, playerSlot.pilots)
+    saveList(name, playerSlot.pilots)
     setPlayerManualSaved(true)
   }
 
@@ -77,9 +76,7 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings }
   }
 
   const handleOpponentSave = (name: string) => {
-    const existing = lists.find(f => f.name === name)
-    if (existing) removeList(existing.id)
-    addList(name, opponentSlot.pilots)
+    saveList(name, opponentSlot.pilots)
     setOpponentManualSaved(true)
   }
 
@@ -96,8 +93,8 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings }
   }
 
   const handleStart = () => {
-    const pTotal = playerSlot.pilots.reduce((sum, p) => sum + p.points, 0)
-    const oTotal = opponentSlot.pilots.reduce((sum, p) => sum + p.points, 0)
+    const pTotal = listPoints(playerSlot.pilots)
+    const oTotal = listPoints(opponentSlot.pilots)
     const pDeficit = playerListImport === 'XWA' ? Math.max(0, 50 - pTotal) : setup.playerDeficit
     const oDeficit = opponentListImport === 'XWA' ? Math.max(0, 50 - oTotal) : setup.opponentDeficit
     onStart(pDeficit, oDeficit, setup.scenario, playerSlot.pilots, opponentSlot.pilots)
