@@ -175,7 +175,7 @@ export function Stepper({ label, value, min, max, step = 1, onChange }: StepperP
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       <button type="button" aria-label={`Decrease ${name}`} disabled={value <= min} onClick={() => onChange(Math.max(min, value - step))} style={stepButtonStyle(value <= min)}>−</button>
-      <span style={{ minWidth: '48px', textAlign: 'center', fontSize: '1.3rem', fontWeight: 300 }}>{value}</span>
+      <span style={{ minWidth: '48px', textAlign: 'center', fontSize: '1.3rem', fontWeight: 300, color: 'var(--color-text-primary)' }}>{value}</span>
       <button type="button" aria-label={`Increase ${name}`} disabled={value >= max} onClick={() => onChange(Math.min(max, value + step))} style={stepButtonStyle(value >= max)}>+</button>
       <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>{label}</span>
     </div>
