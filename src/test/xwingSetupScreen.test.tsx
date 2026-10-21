@@ -41,11 +41,13 @@ vi.mock('../hooks/useXwingLists', () => ({
 type Props = Partial<React.ComponentProps<typeof XwingSetupScreen>>
 
 function renderSetup(props: Props = {}) {
-  return render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} onLists={vi.fn()} {...props} />)
+  return render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} onLists={vi.fn()} {...props} />)
 }
 
+let store: Map<string, string>
+
 beforeEach(() => {
-  const store = new Map<string, string>()
+  store = new Map<string, string>()
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => { store.set(key, value) },
@@ -59,233 +61,226 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+const card = (side: 'player' | 'opponent') => screen.getByTestId(`${side}-card`)
+const goToGame = () => screen.getByRole('button', { name: 'Go to game' })
+
+async function openListSheet(user: ReturnType<typeof userEvent.setup>, side: 'player' | 'opponent') {
+  await user.click(within(card(side)).getByRole('button', { name: /choose a list|choose another list|change list/i }))
+}
+
+async function choose(user: ReturnType<typeof userEvent.setup>, side: 'player' | 'opponent', testId: string) {
+  await openListSheet(user, side)
+  await user.click(screen.getByTestId(`${side}-${testId}`))
+}
+
 describe('XwingSetupScreen', () => {
 
-  // --- Header ---
+  // --- Top bar ---
 
-  it('shows a Squad lists button when onLists is given', () => {
-    renderSetup()
-    expect(screen.getByRole('button', { name: 'Squad lists' })).toBeInTheDocument()
-  })
-
-  it('Squad lists button calls onLists', async () => {
-    const user = userEvent.setup()
-    const onLists = vi.fn()
-    renderSetup({ onLists })
-    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
-    expect(onLists).toHaveBeenCalledOnce()
-  })
-
-  it('portrait: Squad lists button is shown', () => {
-    makeMatchMediaMock(true)
-    renderSetup()
-    expect(screen.getByRole('button', { name: 'Squad lists' })).toBeInTheDocument()
-  })
-
-  it('calls onBack when back button is clicked', async () => {
+  it('calls onBack from the back button', async () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
     renderSetup({ onBack })
-    await user.click(screen.getByRole('button', { name: /back/i }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(onBack).toHaveBeenCalledOnce()
   })
 
-  it('calls onHelp when help button is clicked', async () => {
+  it.each([
+    ['Squad lists', 'onLists'],
+    ['Help', 'onHelp'],
+    ['Settings', 'onSettings'],
+  ] as const)('More offers %s, which closes the sheet and calls %s', async (name, handler) => {
     const user = userEvent.setup()
-    const onHelp = vi.fn()
-    renderSetup({ onHelp })
-    await user.click(screen.getByRole('button', { name: /help/i }))
-    expect(onHelp).toHaveBeenCalledOnce()
+    const spy = vi.fn()
+    renderSetup({ [handler]: spy })
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    const sheet = screen.getByRole('dialog', { name: 'More' })
+    await user.click(within(sheet).getByRole('button', { name }))
+    expect(spy).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('calls onSettings when settings button is clicked', async () => {
-    const user = userEvent.setup()
-    const onSettings = vi.fn()
-    renderSetup({ onSettings })
-    await user.click(screen.getByRole('button', { name: /settings/i }))
-    expect(onSettings).toHaveBeenCalledOnce()
+  it('has no outline nav buttons for lists, help or settings in the top bar', () => {
+    renderSetup()
+    expect(screen.queryByRole('button', { name: 'Squad lists' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Help' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
   })
 
   // --- Match, rounds and scenario ---
 
-  it('ruleset dropdown is not shown', () => {
+  it('match defaults to Casual', () => {
     renderSetup()
-    expect(screen.queryByTestId('ruleset-select')).not.toBeInTheDocument()
+    const match = screen.getByRole('group', { name: 'Match' })
+    expect(within(match).getByRole('button', { name: 'Casual' })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('match dropdown defaults to Casual', () => {
-    renderSetup()
-    expect(screen.getByTestId('match-select')).toHaveValue('Casual')
-  })
-
-  it('rounds stepper appears only for a Tournament match', async () => {
+  it('shows the rounds stepper only for a Tournament match', async () => {
     const user = userEvent.setup()
     renderSetup()
-    expect(screen.queryByTestId('rounds-stepper')).not.toBeInTheDocument()
-    await user.selectOptions(screen.getByTestId('match-select'), 'Tournament')
-    expect(screen.getByTestId('rounds-stepper')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Increase rounds' })).not.toBeInTheDocument()
+    await user.click(within(screen.getByRole('group', { name: 'Match' })).getByRole('button', { name: 'Tournament' }))
+    expect(screen.getByRole('button', { name: 'Increase rounds' })).toBeInTheDocument()
   })
 
-  it('scenario dropdown has None and all 5 named scenarios, defaulting to None', () => {
-    renderSetup()
-    const select = screen.getByTestId('scenario-select') as HTMLSelectElement
-    expect(Array.from(select.options).map(o => o.value)).toEqual(['None', ...XWING_NAMED_SCENARIOS])
-    expect(select).toHaveValue('None')
-  })
-
-  it('choosing a scenario updates the dropdown', async () => {
+  it('scenario defaults to None, and its sheet offers None and all 5 named scenarios', async () => {
     const user = userEvent.setup()
     renderSetup()
-    await user.selectOptions(screen.getByTestId('scenario-select'), 'Salvage Mission')
-    expect(screen.getByTestId('scenario-select')).toHaveValue('Salvage Mission')
+    await user.click(screen.getByRole('button', { name: 'Scenario: None' }))
+    const sheet = screen.getByRole('dialog', { name: 'Scenario' })
+    expect(within(sheet).getAllByRole('button').filter(b => b.textContent !== '').map(b => b.textContent))
+      .toEqual(['None', ...XWING_NAMED_SCENARIOS])
   })
 
-  it('the random button picks a named scenario', async () => {
+  it('choosing a scenario closes the sheet and shows it', async () => {
     const user = userEvent.setup()
     renderSetup()
-    await user.click(screen.getByTestId('scenario-random-btn'))
-    expect(XWING_NAMED_SCENARIOS).toContain((screen.getByTestId('scenario-select') as HTMLSelectElement).value)
+    await user.click(screen.getByRole('button', { name: 'Scenario: None' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Scenario' })).getByRole('button', { name: 'Salvage Mission' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Scenario: Salvage Mission' })).toBeInTheDocument()
   })
 
-  // --- The old import controls are gone ---
-
-  it('has no import dropdown, paste box or save star', () => {
-    mockXwingLists.lists = [SCUM]
+  it('rolling picks a named scenario', async () => {
+    const user = userEvent.setup()
     renderSetup()
-    expect(screen.queryByTestId('player-list-import-select')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('player-list-textarea')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('player-star-btn')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Roll a scenario' }))
+    const chosen = screen.getByRole('button', { name: /^Scenario: / }).getAttribute('aria-label')!.replace('Scenario: ', '')
+    expect(XWING_NAMED_SCENARIOS).toContain(chosen)
   })
 
-  // --- Choosing a list ---
+  // --- The two list cards ---
 
-  it('offers No list, New list and each saved list with its points and faction', () => {
+  it('shows both cards from the start, the opponent asking who you are playing', () => {
+    renderSetup()
+    expect(within(card('player')).getByRole('button', { name: 'Choose a list' })).toBeInTheDocument()
+    expect(card('opponent')).toHaveTextContent('Who are you playing?')
+  })
+
+  it('the list sheet offers each saved list, Import XWS, then No list last as a fallback', async () => {
+    const user = userEvent.setup()
     mockXwingLists.lists = [SCUM, EMPIRE]
     renderSetup()
-    const choices = screen.getByTestId('player-choices')
-    expect(within(choices).getByRole('button', { name: 'No list' })).toBeInTheDocument()
-    expect(within(choices).getByRole('button', { name: /new list/i })).toBeInTheDocument()
+    await openListSheet(user, 'player')
+    const sheet = screen.getByRole('dialog', { name: 'Your list' })
     expect(screen.getByTestId('player-list-option-scum')).toHaveTextContent('Scum Squad')
     expect(screen.getByTestId('player-list-option-scum')).toHaveTextContent('50 pts · Scum and Villainy')
     expect(screen.getByTestId('player-list-option-empire')).toHaveTextContent('47 pts')
+    expect(within(sheet).getByRole('button', { name: 'Import XWS' })).toBeInTheDocument()
+    const buttons = within(sheet).getAllByRole('button')
+    expect(buttons.at(-1)).toBe(screen.getByTestId('player-no-list-btn'))
+    expect(screen.getByTestId('player-no-list-btn')).toHaveTextContent('No ships to tap in the game')
   })
 
-  it('with no saved lists, shows a hint instead of list rows', () => {
+  it('the opponent sheet is titled for the opponent', async () => {
+    const user = userEvent.setup()
     renderSetup()
-    expect(screen.getByTestId('player-lists-empty-hint')).toHaveTextContent('No saved lists yet')
+    await openListSheet(user, 'opponent')
+    expect(screen.getByRole('dialog', { name: "Opponent's list" })).toBeInTheDocument()
   })
 
-  it('New list calls onLists', async () => {
+  it('with no saved lists, the sheet says so', async () => {
+    const user = userEvent.setup()
+    renderSetup()
+    await openListSheet(user, 'player')
+    expect(screen.getByRole('dialog')).toHaveTextContent('No saved lists yet')
+  })
+
+  it('Import XWS closes the sheet and calls onLists', async () => {
     const user = userEvent.setup()
     const onLists = vi.fn()
     renderSetup({ onLists })
-    await user.click(screen.getByTestId('player-new-list-btn'))
+    await openListSheet(user, 'player')
+    await user.click(screen.getByRole('button', { name: 'Import XWS' }))
     expect(onLists).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('tapping a saved list chooses it and shows its name and pilots', async () => {
+  it('choosing a saved list closes the sheet and shows its name, points, faction and pilots, but no deficit', async () => {
     const user = userEvent.setup()
     mockXwingLists.lists = [SCUM]
     renderSetup()
-    await user.click(screen.getByTestId('player-list-option-scum'))
-    expect(screen.queryByTestId('player-choices')).not.toBeInTheDocument()
+    await choose(user, 'player', 'list-option-scum')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByTestId('player-chosen-name')).toHaveTextContent('Scum Squad')
-    expect(screen.getByTestId('player-pilot-list')).toHaveTextContent('Asajj Ventress')
+    expect(card('player')).toHaveTextContent('50 pts · Scum and Villainy')
+    expect(card('player')).toHaveTextContent('Asajj Ventress, Boba Fett, Bossk')
+    expect(card('player')).not.toHaveTextContent(/deficit/i)
   })
 
-  it('choosing No list shows the deficit stepper, which stays adjustable', async () => {
+  it('choosing No list shows the fallback note and an adjustable deficit', async () => {
     const user = userEvent.setup()
     renderSetup()
-    await user.click(screen.getByTestId('player-no-list-btn'))
+    await choose(user, 'player', 'no-list-btn')
     expect(screen.getByTestId('player-chosen-name')).toHaveTextContent('No list')
-    const stepper = screen.getByTestId('player-deficit-stepper')
-    await user.click(within(stepper).getByRole('button', { name: '+' }))
-    expect(stepper).toHaveTextContent('1')
+    expect(card('player')).toHaveTextContent('No ships to tap in the game')
+    await user.click(within(card('player')).getByRole('button', { name: 'Increase deficit' }))
+    expect(card('player')).toHaveTextContent('1')
   })
 
-  it('edit returns to the choices', async () => {
-    const user = userEvent.setup()
-    mockXwingLists.lists = [SCUM]
-    renderSetup()
-    await user.click(screen.getByTestId('player-list-option-scum'))
-    await user.click(screen.getByTestId('player-edit-btn'))
-    expect(screen.getByTestId('player-choices')).toBeInTheDocument()
-    expect(screen.queryByTestId('player-pilot-list')).not.toBeInTheDocument()
-  })
-
-  it('a chosen list that has since been deleted falls back to the choices', async () => {
-    const user = userEvent.setup()
-    mockXwingLists.lists = [SCUM]
-    const { rerender } = renderSetup()
-    await user.click(screen.getByTestId('player-list-option-scum'))
-    mockXwingLists.lists = []
-    rerender(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} onLists={vi.fn()} />)
-    expect(screen.getByTestId('player-choices')).toBeInTheDocument()
-  })
-
-  // --- Opponent and the wizard flow ---
-
-  it('portrait: opponent choices appear once the player has chosen', async () => {
-    makeMatchMediaMock(true)
-    const user = userEvent.setup()
-    renderSetup()
-    expect(screen.queryByTestId('opponent-choices')).not.toBeInTheDocument()
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    expect(screen.getByTestId('opponent-choices')).toBeInTheDocument()
-  })
-
-  it('landscape: opponent column shows a placeholder until the player has chosen', async () => {
-    // landscape is the default test orientation
-    const user = userEvent.setup()
-    renderSetup()
-    expect(screen.getByTestId('opponent-placeholder')).toBeInTheDocument()
-    expect(screen.queryByTestId('opponent-choices')).not.toBeInTheDocument()
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    expect(screen.queryByTestId('opponent-placeholder')).not.toBeInTheDocument()
-    expect(screen.getByTestId('opponent-choices')).toBeInTheDocument()
-  })
-
-  it('changing the player choice keeps the opponent choice', async () => {
+  it('Change list reopens the sheet so another list can be chosen', async () => {
     const user = userEvent.setup()
     mockXwingLists.lists = [SCUM, EMPIRE]
     renderSetup()
-    await user.click(screen.getByTestId('player-list-option-scum'))
-    await user.click(screen.getByTestId('opponent-list-option-empire'))
-    await user.click(screen.getByTestId('player-edit-btn'))
+    await choose(user, 'player', 'list-option-scum')
+    await choose(user, 'player', 'list-option-empire')
+    expect(screen.getByTestId('player-chosen-name')).toHaveTextContent('Vader Wing')
+  })
+
+  it('a chosen list that has since been deleted falls back to choosing', async () => {
+    const user = userEvent.setup()
+    mockXwingLists.lists = [SCUM]
+    const { rerender } = renderSetup()
+    await choose(user, 'player', 'list-option-scum')
+    mockXwingLists.lists = []
+    rerender(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} onLists={vi.fn()} />)
+    expect(within(card('player')).getByRole('button', { name: 'Choose a list' })).toBeInTheDocument()
+  })
+
+  // --- Remembered lists ---
+
+  it('pre-fills your remembered list', () => {
+    store.set('xwing_setup', JSON.stringify({ playerListId: 'scum' }))
+    mockXwingLists.lists = [SCUM]
+    renderSetup()
+    expect(screen.getByTestId('player-chosen-name')).toHaveTextContent('Scum Squad')
+  })
+
+  it("offers last game's opponent in one tap", async () => {
+    const user = userEvent.setup()
+    store.set('xwing_setup', JSON.stringify({ lastOpponentListId: 'empire' }))
+    mockXwingLists.lists = [SCUM, EMPIRE]
+    renderSetup()
+    const same = within(card('opponent')).getByRole('button', { name: /Vader Wing.*Same as last game/ })
+    await user.click(same)
     expect(screen.getByTestId('opponent-chosen-name')).toHaveTextContent('Vader Wing')
+  })
+
+  it("doesn't offer last game's opponent once that list is deleted", () => {
+    store.set('xwing_setup', JSON.stringify({ lastOpponentListId: 'empire' }))
+    mockXwingLists.lists = [SCUM]
+    renderSetup()
+    expect(card('opponent')).not.toHaveTextContent('Same as last game')
+    expect(within(card('opponent')).getByRole('button', { name: 'Choose a list' })).toBeInTheDocument()
+  })
+
+  it('with a last opponent offered, the other way in is Choose another list', () => {
+    store.set('xwing_setup', JSON.stringify({ lastOpponentListId: 'empire' }))
+    mockXwingLists.lists = [EMPIRE]
+    renderSetup()
+    expect(within(card('opponent')).getByRole('button', { name: 'Choose another list' })).toBeInTheDocument()
   })
 
   // --- Go to game ---
 
-  it('Go to game appears only once both players have chosen', async () => {
+  it('Go to game is disabled until both sides are chosen', async () => {
     const user = userEvent.setup()
     renderSetup()
-    expect(screen.queryByRole('button', { name: /start game/i })).not.toBeInTheDocument()
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    expect(screen.queryByRole('button', { name: /start game/i })).not.toBeInTheDocument()
-    await user.click(screen.getByTestId('opponent-no-list-btn'))
-    expect(screen.getByRole('button', { name: /start game/i })).toBeInTheDocument()
-  })
-
-  it('Go to game is hidden again after editing a choice', async () => {
-    const user = userEvent.setup()
-    renderSetup()
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    await user.click(screen.getByTestId('opponent-no-list-btn'))
-    await user.click(screen.getByTestId('player-edit-btn'))
-    expect(screen.queryByRole('button', { name: /start game/i })).not.toBeInTheDocument()
-  })
-
-  it('portrait: Go to game sits after the controls', async () => {
-    makeMatchMediaMock(true)
-    const user = userEvent.setup()
-    renderSetup()
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    await user.click(screen.getByTestId('opponent-no-list-btn'))
-    const startBtn = screen.getByRole('button', { name: /start game/i })
-    expect(
-      screen.getByTestId('scenario-select').compareDocumentPosition(startBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
+    expect(goToGame()).toBeDisabled()
+    await choose(user, 'player', 'no-list-btn')
+    expect(goToGame()).toBeDisabled()
+    await choose(user, 'opponent', 'no-list-btn')
+    expect(goToGame()).toBeEnabled()
   })
 
   it('starts with each list player getting 50 minus the list points, and their pilots', async () => {
@@ -293,10 +288,11 @@ describe('XwingSetupScreen', () => {
     const onStart = vi.fn()
     mockXwingLists.lists = [SCUM, EMPIRE]
     renderSetup({ onStart })
-    await user.selectOptions(screen.getByTestId('scenario-select'), 'Chance Engagement')
-    await user.click(screen.getByTestId('player-list-option-scum'))
-    await user.click(screen.getByTestId('opponent-list-option-empire'))
-    await user.click(screen.getByRole('button', { name: /start game/i }))
+    await user.click(screen.getByRole('button', { name: 'Scenario: None' }))
+    await user.click(screen.getByRole('button', { name: 'Chance Engagement' }))
+    await choose(user, 'player', 'list-option-scum')
+    await choose(user, 'opponent', 'list-option-empire')
+    await user.click(goToGame())
     expect(onStart).toHaveBeenCalledWith(0, 3, 'Chance Engagement', SCUM.pilots, EMPIRE.pilots)
   })
 
@@ -305,37 +301,21 @@ describe('XwingSetupScreen', () => {
     const onStart = vi.fn()
     mockXwingLists.lists = [EMPIRE]
     renderSetup({ onStart })
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    const stepper = screen.getByTestId('player-deficit-stepper')
-    await user.click(within(stepper).getByRole('button', { name: '+' }))
-    await user.click(within(stepper).getByRole('button', { name: '+' }))
-    await user.click(screen.getByTestId('opponent-list-option-empire'))
-    await user.click(screen.getByRole('button', { name: /start game/i }))
+    await choose(user, 'player', 'no-list-btn')
+    await user.click(within(card('player')).getByRole('button', { name: 'Increase deficit' }))
+    await user.click(within(card('player')).getByRole('button', { name: 'Increase deficit' }))
+    await choose(user, 'opponent', 'list-option-empire')
+    await user.click(goToGame())
     expect(onStart).toHaveBeenCalledWith(2, 3, 'None', [], EMPIRE.pilots)
   })
 
-  // --- Button sizing ---
+  // --- Layout ---
 
-  it('portrait: the edit button matches the nav buttons', async () => {
+  it('portrait: Go to game comes after the match controls', () => {
     makeMatchMediaMock(true)
-    const user = userEvent.setup()
-    renderSetup({ onSettings: vi.fn() })
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    const action = screen.getByTestId('player-edit-btn')
-    const nav = screen.getByRole('button', { name: /back/i })
-    expect(action.style.width).toBe(nav.style.width)
-    expect(action.style.height).toBe(nav.style.height)
-    expect(action.style.minWidth).toBe(nav.style.minWidth)
-    expect(action.style.minHeight).toBe(nav.style.minHeight)
-    expect(action.style.padding).toBe('0.8vh 1.5vw')
-  })
-
-  it('landscape: the edit button keeps its 44px minimum size', async () => {
-    const user = userEvent.setup()
     renderSetup()
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    const action = screen.getByTestId('player-edit-btn')
-    expect(action.style.minWidth).toBe('44px')
-    expect(action.style.minHeight).toBe('44px')
+    expect(
+      screen.getByRole('button', { name: 'Scenario: None' }).compareDocumentPosition(goToGame()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 })

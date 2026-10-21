@@ -868,10 +868,23 @@ describe('App game select', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars unlimited/i })).toBeInTheDocument())
   })
 
+  // The setup screen is ready once its scenario select shows.
+  const xwingSetupMarker = () => screen.getByRole('button', { name: /^Scenario: / })
+
+  async function openFromMore(user: ReturnType<typeof userEvent.setup>, name: string) {
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name }))
+  }
+
+  async function chooseNoList(user: ReturnType<typeof userEvent.setup>, side: 'player' | 'opponent') {
+    await user.click(within(screen.getByTestId(`${side}-card`)).getByRole('button', { name: /choose a list|change list/i }))
+    await user.click(screen.getByTestId(`${side}-no-list-btn`))
+  }
+
   it('transitions to xwing setup screen after loading when startScreen is xwing', async () => {
     mockUserSettings.startScreen = 'xwing'
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
+    await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
   })
 
   it('navigates to setup screen when Star Wars Unlimited is clicked on game select', async () => {
@@ -890,7 +903,7 @@ describe('App game select', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
-    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
+    await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
   })
 
   it('back from xwing setup returns to game select when startScreen is gameSelect', async () => {
@@ -899,7 +912,7 @@ describe('App game select', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
-    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
+    await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /back/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
   })
@@ -908,7 +921,7 @@ describe('App game select', () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'xwing'
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
+    await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /back/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
   })
@@ -919,10 +932,10 @@ describe('App game select', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
-    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    await user.click(screen.getByTestId('opponent-no-list-btn'))
-    await user.click(screen.getByRole('button', { name: /start game/i }))
+    await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
+    await chooseNoList(user, 'player')
+    await chooseNoList(user, 'opponent')
+    await user.click(screen.getByRole('button', { name: 'Go to game' }))
     await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
   })
 
@@ -932,13 +945,13 @@ describe('App game select', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
-    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    await user.click(screen.getByTestId('opponent-no-list-btn'))
-    await user.click(screen.getByRole('button', { name: /start game/i }))
+    await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
+    await chooseNoList(user, 'player')
+    await chooseNoList(user, 'opponent')
+    await user.click(screen.getByRole('button', { name: 'Go to game' }))
     await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /back/i }))
-    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
+    await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
   })
 
   it('back from setup returns to game select when startScreen is swu', async () => {
@@ -955,8 +968,8 @@ describe('App game select', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /help/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /help/i }))
+    await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
+    await openFromMore(user, 'Help')
     await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Match Type' })).toBeInTheDocument())
   })
 
@@ -966,11 +979,11 @@ describe('App game select', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /help/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /help/i }))
+    await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
+    await openFromMore(user, 'Help')
     await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Match Type' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /back/i }))
-    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
+    await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
   })
 
   // ── X-Wing Squad Lists ────────────────────────────────────────────────────
@@ -980,28 +993,28 @@ describe('App game select', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
-    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
+    await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
   }
 
   it('Squad lists on xwing setup opens the Squad Lists screen', async () => {
     const user = userEvent.setup()
     await openXwingSetup(user)
-    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
+    await openFromMore(user, 'Squad lists')
     expect(await screen.findByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
   })
 
   it('back from Squad Lists returns to xwing setup', async () => {
     const user = userEvent.setup()
     await openXwingSetup(user)
-    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
+    await openFromMore(user, 'Squad lists')
     await user.click(await screen.findByRole('button', { name: 'Back' }))
-    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
+    await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
   })
 
   it('help on Squad Lists shows the squad lists help, and back returns to Squad Lists', async () => {
     const user = userEvent.setup()
     await openXwingSetup(user)
-    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
+    await openFromMore(user, 'Squad lists')
     await user.click(screen.getByRole('button', { name: 'Help' }))
     expect(screen.getByRole('heading', { level: 2, name: 'Creating a List' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 2, name: 'Match Type' })).not.toBeInTheDocument()
@@ -1012,7 +1025,7 @@ describe('App game select', () => {
   it('Manage lists in settings opens Squad Lists, and back returns to settings', async () => {
     const user = userEvent.setup()
     await openXwingSetup(user)
-    await user.click(screen.getByRole('button', { name: /settings/i }))
+    await openFromMore(user, 'Settings')
     await user.click(screen.getByRole('button', { name: 'Manage lists' }))
     expect(screen.getByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back' }))
@@ -1029,7 +1042,7 @@ describe('App game select', () => {
     })
     const user = userEvent.setup()
     await openXwingSetup(user)
-    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
+    await openFromMore(user, 'Squad lists')
     fireEvent.change(screen.getByTestId('lists-textarea'), { target: { value: JSON.stringify({
       name: 'Round Trip',
       pilots: [
@@ -1042,28 +1055,30 @@ describe('App game select', () => {
     await user.click(screen.getByTestId('lists-check-btn'))
     await user.click(screen.getByTestId('lists-save-btn'))
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeVisible())
-    expect(within(screen.getByTestId('player-choices')).getByText('Round Trip')).toBeVisible()
+    await waitFor(() => expect(xwingSetupMarker()).toBeVisible())
+    await user.click(within(screen.getByTestId('player-card')).getByRole('button', { name: 'Choose a list' }))
+    expect(within(screen.getByRole('dialog', { name: 'Your list' })).getByText('Round Trip')).toBeVisible()
   })
 
   it('xwing setup choices survive a visit to Squad Lists', async () => {
     const user = userEvent.setup()
     await openXwingSetup(user)
-    await user.selectOptions(screen.getByTestId('scenario-select'), 'Salvage Mission')
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
+    await user.click(xwingSetupMarker())
+    await user.click(screen.getByRole('button', { name: 'Salvage Mission' }))
+    await chooseNoList(user, 'player')
+    await openFromMore(user, 'Squad lists')
     expect(screen.getByTestId('player-chosen-name')).not.toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByTestId('player-chosen-name')).toBeVisible()
     expect(screen.getByTestId('player-chosen-name')).toHaveTextContent('No list')
-    expect(screen.getByTestId('scenario-select')).toHaveValue('Salvage Mission')
+    expect(screen.getByRole('button', { name: 'Scenario: Salvage Mission' })).toBeVisible()
   })
 
   it('xwing setup choices survive a visit to Help', async () => {
     const user = userEvent.setup()
     await openXwingSetup(user)
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await chooseNoList(user, 'player')
+    await openFromMore(user, 'Help')
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByTestId('player-chosen-name')).toBeVisible()
   })
@@ -1071,23 +1086,23 @@ describe('App game select', () => {
   it('after a game, Back returns to setup with both choices kept for a rematch', async () => {
     const user = userEvent.setup()
     await openXwingSetup(user)
-    await user.click(screen.getByTestId('player-no-list-btn'))
-    await user.click(screen.getByTestId('opponent-no-list-btn'))
-    await user.click(screen.getByRole('button', { name: /start game/i }))
+    await chooseNoList(user, 'player')
+    await chooseNoList(user, 'opponent')
+    await user.click(screen.getByRole('button', { name: 'Go to game' }))
     await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeVisible())
     await user.click(screen.getByRole('button', { name: /back/i }))
-    await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeVisible())
-    expect(screen.getByRole('button', { name: /start game/i })).toBeVisible()
+    await waitFor(() => expect(xwingSetupMarker()).toBeVisible())
+    expect(screen.getByRole('button', { name: 'Go to game' })).toBeVisible()
   })
 
   it('leaving X-Wing for game select and coming back starts setup afresh', async () => {
     const user = userEvent.setup()
     await openXwingSetup(user)
-    await user.click(screen.getByTestId('player-no-list-btn'))
+    await chooseNoList(user, 'player')
     await user.click(screen.getByRole('button', { name: /back/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
-    await waitFor(() => expect(screen.getByTestId('player-choices')).toBeVisible())
+    await waitFor(() => expect(within(screen.getByTestId('player-card')).getByRole('button', { name: 'Choose a list' })).toBeVisible())
   })
 
   // ── Settings tab defaults per source screen ───────────────────────────────
@@ -1123,8 +1138,9 @@ describe('App game select', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /settings/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: 'Settings' }))
     expect(screen.getByRole('tab', { name: /x-wing/i })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: /general/i })).toHaveAttribute('aria-selected', 'false')
   })
