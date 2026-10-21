@@ -138,7 +138,7 @@ export default function XwingSetupScreenView({
           <div style={sectionLabelStyle}>{label}</div>
           {choice !== null && <Button onClick={() => setOpenSheet(side)}>Change list</Button>}
         </div>
-        {choice === null && side === 'opponent' && <div style={{ fontSize: '1.15rem' }}>Who are you playing?</div>}
+        {choice === null && side === 'opponent' && <div style={{ fontSize: '1.15rem' }}>Choose opponent's list</div>}
         {offerLast && (
           <OptionRow
             title={lastOpponentList.name}

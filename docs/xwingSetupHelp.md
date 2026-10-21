@@ -27,7 +27,7 @@ The scenario selection is not saved between sessions — choose it fresh each ga
 Each player has a card. Tap it to choose that player's list from a sheet of your saved squads, each shown with its points total and faction.
 
 - **Your list** is remembered, so next time it is already chosen. Tap **Change list** to pick another.
-- **Your opponent** is chosen each game. Their card asks **Who are you playing?** and offers last game's opponent in one tap; **Choose another list** opens the sheet.
+- **Your opponent** is chosen each game. Their card says **Choose opponent's list** and offers last game's opponent in one tap; **Choose another list** opens the sheet.
 - **Import XWS** in the sheet opens the **Squad Lists** screen, where you paste a squad from YASB and save it. Tap **Back** to return; your choices so far are kept and the new list is ready to pick.
 - **No list** comes last, as a fallback: there are no ships to tap on the game screen, so you set the player's mission point deficit (0–4) with the stepper on their card. The deficit is added to the opponent's score if all of that player's ships are destroyed.
 
