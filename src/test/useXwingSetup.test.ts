@@ -151,11 +151,55 @@ describe('useXwingSetup', () => {
     expect(result.current.playerChoice).toBeNull()
   })
 
-  it('choices are not saved to localStorage', () => {
+  // --- Remembered lists ---
+
+  const lastSaved = () => JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
+  const stored = (value: object) =>
+    vi.mocked(localStorage.getItem).mockImplementation((key) => key === STORAGE_KEY ? JSON.stringify(value) : null)
+
+  it('remembers your chosen list', () => {
     const { result } = renderHook(() => useXwingSetup())
     act(() => result.current.setPlayerChoice({ kind: 'list', listId: 'l1' }))
+    expect(lastSaved().playerListId).toBe('l1')
+  })
+
+  it('starts with your remembered list chosen', () => {
+    stored({ playerListId: 'l1' })
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.playerChoice).toEqual({ kind: 'list', listId: 'l1' })
+  })
+
+  it('does not remember No list for you, so a list is offered first next time', () => {
+    stored({ playerListId: 'l1' })
+    const { result } = renderHook(() => useXwingSetup())
+    act(() => result.current.setPlayerChoice({ kind: 'none' }))
+    expect(lastSaved().playerListId).toBeUndefined()
+  })
+
+  it('chooses the opponent afresh each time, offering the last one', () => {
+    stored({ lastOpponentListId: 'o1' })
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.opponentChoice).toBeNull()
+    expect(result.current.lastOpponentListId).toBe('o1')
+  })
+
+  it('remembers the opponent list as the last opponent', () => {
+    const { result } = renderHook(() => useXwingSetup())
+    act(() => result.current.setOpponentChoice({ kind: 'list', listId: 'o2' }))
+    expect(lastSaved().lastOpponentListId).toBe('o2')
+    expect(result.current.lastOpponentListId).toBe('o2')
+  })
+
+  it('keeps the last opponent when the opponent has No list', () => {
+    stored({ lastOpponentListId: 'o1' })
+    const { result } = renderHook(() => useXwingSetup())
     act(() => result.current.setOpponentChoice({ kind: 'none' }))
-    expect(vi.mocked(localStorage.setItem).mock.calls).toHaveLength(0)
+    expect(result.current.lastOpponentListId).toBe('o1')
+  })
+
+  it('starts with no last opponent', () => {
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.lastOpponentListId).toBeNull()
   })
 
   it('drops the old remembered list import fields on the next save', () => {
