@@ -20,6 +20,14 @@
   --color-force: #3b82f6;
   --color-epic: #f5c518;
   --color-epic-rgb: 245, 197, 24;
+  /* Filled surfaces for the shared controls (src/components/shared/controls.tsx). */
+  --color-on-accent: #04121c;
+  --color-surface: #141b29;
+  --color-surface-raised: #1b2433;
+  --color-tonal: #17324a;
+  --color-tonal-text: #e6f6fe;
+  --color-sheet: #10172a;
+  --color-backdrop: rgba(0, 5, 16, 0.72);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
