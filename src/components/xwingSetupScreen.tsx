@@ -33,6 +33,8 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, 
 
   const playerChoice = resolve(setup.playerChoice, lists)
   const opponentChoice = resolve(setup.opponentChoice, lists)
+  // Last game's opponent is offered only while that list still exists.
+  const lastOpponentList = lists.find(l => l.id === setup.lastOpponentListId) ?? null
 
   const handleScenarioRandom = () => {
     const idx = Math.floor(Math.random() * XWING_NAMED_SCENARIOS.length)
@@ -60,6 +62,7 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, 
       onPlayerChoose={setup.setPlayerChoice}
       opponentChoice={opponentChoice}
       onOpponentChoose={setup.setOpponentChoice}
+      lastOpponentList={lastOpponentList}
       playerDeficit={setup.playerDeficit}
       onPlayerDeficitChange={setup.setPlayerDeficit}
       opponentDeficit={setup.opponentDeficit}

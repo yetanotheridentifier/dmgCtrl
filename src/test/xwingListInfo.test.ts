@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
-import { listPoints, factionName, listMeta } from '../utils/xwingListInfo'
+import { listPoints, factionName, listMeta, pilotSummary } from '../utils/xwingListInfo'
 
 describe('listPoints', () => {
   it('sums the points of every pilot', () => {
@@ -50,5 +50,27 @@ describe('listMeta', () => {
 
   it('shows only the points total when there is no faction', () => {
     expect(listMeta(pilots, undefined)).toBe('49 pts')
+  })
+})
+
+describe('pilotSummary', () => {
+  const pilot = (name: string) => ({ name, ship: 's', points: 5 })
+
+  it('names each pilot by its display name, in list order', () => {
+    expect(pilotSummary([pilot('lukeskywalker'), pilot('bobafett-armedanddangerous')])).toBe('Luke Skywalker, Boba Fett')
+  })
+
+  it('groups repeated pilots as a count, where the first one appears', () => {
+    expect(pilotSummary([
+      pilot('academypilot'), pilot('howlrunner'), pilot('academypilot'), pilot('academypilot'),
+    ])).toBe('3 × Academy Pilot, "Howlrunner"')
+  })
+
+  it('falls back to the slug for an unknown pilot', () => {
+    expect(pilotSummary([pilot('notapilot')])).toBe('notapilot')
+  })
+
+  it('is empty for no pilots', () => {
+    expect(pilotSummary([])).toBe('')
   })
 })
