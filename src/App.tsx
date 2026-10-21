@@ -1,11 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import SwuLoadingScreen from './components/swuLoadingScreen'
 import GameSelectScreen from './components/gameSelectScreen'
 import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
-import XwingGameScreen from './components/xwingGameScreen'
-import XwingSetupScreen from './components/xwingSetupScreen'
-import XwingListsScreen from './components/xwingListsScreen'
 import { XwingListsProvider } from './hooks/useXwingLists'
 import SwuTournamentScreen from './components/swuTournamentScreen'
 import HelpScreen from './components/helpScreen'
@@ -19,6 +16,13 @@ import { useUserSettings } from './hooks/useUserSettings'
 import { onAppStart, onAppInstall, onAppResume, onTournamentRoundCompleted } from './services/analytics'
 import type { PlayMode, SetupMode } from './utils/playMode'
 import type { Format } from './utils/formatFilter'
+
+// The X-Wing screens carry the XWA card table, so they load as their own chunk on entering X-Wing
+// rather than in the bundle every SWU player downloads. The service worker precaches the chunk, so
+// X-Wing still works offline.
+const XwingSetupScreen = lazy(() => import('./components/xwingSetupScreen'))
+const XwingGameScreen = lazy(() => import('./components/xwingGameScreen'))
+const XwingListsScreen = lazy(() => import('./components/xwingListsScreen'))
 
 type Screen = 'loading' | 'gameSelect' | 'xwingSetup' | 'xwing' | 'xwingLists' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
 
@@ -243,32 +247,34 @@ function AppScreens() {
 
   return (
     <>
-      {isInXwingSetup && (
-        <div style={screen === 'xwingSetup' ? undefined : { display: 'none' }}>
-          <XwingSetupScreen
-            onStart={handleXwingStart}
-            onBack={leaveXwingSetup}
-            onHelp={handleHelp}
-            onSettings={handleSettings}
-            onLists={handleXwingLists}
-          />
-        </div>
-      )}
-      {screen === 'xwingLists' && <XwingListsScreen onBack={handleOverlayBack} onHelp={handleHelp} />}
-      {isInXwing && (
-        <div style={screen === 'xwing' ? undefined : { display: 'none' }}>
-          <XwingGameScreen
-            onBack={handleXwingBack}
-            onHelp={handleHelp}
-            onSettings={handleSettings}
-            playerDeficit={xwingPlayerDeficit}
-            opponentDeficit={xwingOpponentDeficit}
-            scenario={xwingScenario}
-            playerPilots={xwingPlayerPilots}
-            opponentPilots={xwingOpponentPilots}
-          />
-        </div>
-      )}
+      <Suspense fallback={null}>
+        {isInXwingSetup && (
+          <div style={screen === 'xwingSetup' ? undefined : { display: 'none' }}>
+            <XwingSetupScreen
+              onStart={handleXwingStart}
+              onBack={leaveXwingSetup}
+              onHelp={handleHelp}
+              onSettings={handleSettings}
+              onLists={handleXwingLists}
+            />
+          </div>
+        )}
+        {screen === 'xwingLists' && <XwingListsScreen onBack={handleOverlayBack} onHelp={handleHelp} />}
+        {isInXwing && (
+          <div style={screen === 'xwing' ? undefined : { display: 'none' }}>
+            <XwingGameScreen
+              onBack={handleXwingBack}
+              onHelp={handleHelp}
+              onSettings={handleSettings}
+              playerDeficit={xwingPlayerDeficit}
+              opponentDeficit={xwingOpponentDeficit}
+              scenario={xwingScenario}
+              playerPilots={xwingPlayerPilots}
+              opponentPilots={xwingOpponentPilots}
+            />
+          </div>
+        )}
+      </Suspense>
       {isInGame && gameBase && (
         <div style={screen === 'game' ? undefined : { display: 'none' }}>
           <SwuGameScreen

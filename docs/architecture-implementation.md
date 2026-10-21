@@ -8,7 +8,7 @@
 
 ```
 src/
-  App.tsx                  Root component — screen routing and top-level state; calls useBases() to drive loading screen transition
+  App.tsx                  Root component — screen routing and top-level state; calls useBases() to drive loading screen transition; loads the three X-Wing screens (setup, game, Squad Lists) with `React.lazy` behind one `Suspense` (fallback `null`), so they and the XWA card table ship as separate chunks fetched on entering X-Wing, not in the main bundle; the service worker precaches those chunks, so X-Wing works offline
   main.tsx                 Entry point
   index.css                Global reset, CSS custom property palette, help screen styles
   markdown.d.ts            Type declaration for .md imports
