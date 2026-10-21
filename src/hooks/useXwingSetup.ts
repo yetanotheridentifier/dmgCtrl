@@ -21,6 +21,9 @@ interface PersistedSetup {
   ruleset: XwingRuleset
   matchType: XwingMatchType
   rounds: number
+  // Your list rarely changes between games, so it is pre-filled; the opponent's is only offered.
+  playerListId?: string
+  lastOpponentListId?: string
 }
 
 const DEFAULTS: PersistedSetup = {
@@ -38,6 +41,8 @@ function load(): PersistedSetup {
       ruleset: (parsed.ruleset as XwingRuleset) ?? DEFAULTS.ruleset,
       matchType: (parsed.matchType as XwingMatchType) ?? DEFAULTS.matchType,
       rounds: (parsed.rounds as number) ?? DEFAULTS.rounds,
+      playerListId: typeof parsed.playerListId === 'string' ? parsed.playerListId : undefined,
+      lastOpponentListId: typeof parsed.lastOpponentListId === 'string' ? parsed.lastOpponentListId : undefined,
     }
   } catch {
     return { ...DEFAULTS }
@@ -63,6 +68,7 @@ export interface XwingSetupValue {
   setPlayerChoice: (v: XwingPlayerChoice | null) => void
   opponentChoice: XwingPlayerChoice | null
   setOpponentChoice: (v: XwingPlayerChoice | null) => void
+  lastOpponentListId: string | null
   playerDeficit: number
   setPlayerDeficit: (v: number) => void
   opponentDeficit: number
@@ -76,8 +82,11 @@ export function useXwingSetup(): XwingSetupValue {
   const [playerDeficit, setPlayerDeficitState] = useState(0)
   const [opponentDeficit, setOpponentDeficitState] = useState(0)
   const [scenario, setScenario] = useState<XwingScenario>('None')
-  const [playerChoice, setPlayerChoice] = useState<XwingPlayerChoice | null>(null)
-  const [opponentChoice, setOpponentChoice] = useState<XwingPlayerChoice | null>(null)
+  const [playerChoice, setPlayerChoiceState] = useState<XwingPlayerChoice | null>(() => {
+    const id = persisted.playerListId
+    return id ? { kind: 'list', listId: id } : null
+  })
+  const [opponentChoice, setOpponentChoiceState] = useState<XwingPlayerChoice | null>(null)
 
   function update(patch: Partial<PersistedSetup>) {
     setPersisted(prev => {
@@ -85,6 +94,17 @@ export function useXwingSetup(): XwingSetupValue {
       save(next)
       return next
     })
+  }
+
+  // No list is a last resort (no ships to tap in the game), so only a saved list is remembered.
+  const setPlayerChoice = (v: XwingPlayerChoice | null) => {
+    setPlayerChoiceState(v)
+    update({ playerListId: v?.kind === 'list' ? v.listId : undefined })
+  }
+
+  const setOpponentChoice = (v: XwingPlayerChoice | null) => {
+    setOpponentChoiceState(v)
+    if (v?.kind === 'list') update({ lastOpponentListId: v.listId })
   }
 
   return {
@@ -98,6 +118,7 @@ export function useXwingSetup(): XwingSetupValue {
     setPlayerChoice,
     opponentChoice,
     setOpponentChoice,
+    lastOpponentListId: persisted.lastOpponentListId ?? null,
     playerDeficit,
     setPlayerDeficit: (v) => setPlayerDeficitState(clampDeficit(v)),
     opponentDeficit,
