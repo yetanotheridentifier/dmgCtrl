@@ -14,7 +14,7 @@ import type { XwingScenario } from '../hooks/useXwingSetup'
 import type { XwingPilot } from '../utils/parseXwsText'
 import { type ShipEntry, initShips, halfPoints, remainingPoints } from '../utils/shipRoster'
 import { resolveXwsName } from '../utils/resolveXwsName'
-import { xwsPilotNames } from '../data/xwsPilotNames'
+import { pilotNames } from '../utils/xwaNames'
 
 interface XwingGameSnapshot {
   playerScore: number
@@ -176,7 +176,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
     if (!entry || entry.state === 'destroyed') return
 
     const snap = snapshot()
-    const displayName = resolveXwsName(entry.pilot.name.split('-')[0], xwsPilotNames)
+    const displayName = resolveXwsName(entry.pilot.name.split('-')[0], pilotNames)
     const isHalf = entry.state === 'half'
     const pts = isHalf ? remainingPoints(entry.pilot.points) : skip ? entry.pilot.points : halfPoints(entry.pilot.points)
     const nextState: 'half' | 'destroyed' = isHalf || skip ? 'destroyed' : 'half'
