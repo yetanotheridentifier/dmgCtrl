@@ -151,10 +151,10 @@ describe('XwingSetupScreen', () => {
 
   // --- The two list cards ---
 
-  it('shows both cards from the start, the opponent asking who you are playing', () => {
+  it('shows both cards from the start, the opponent prompting for their list', () => {
     renderSetup()
     expect(within(card('player')).getByRole('button', { name: 'Choose a list' })).toBeInTheDocument()
-    expect(card('opponent')).toHaveTextContent('Who are you playing?')
+    expect(card('opponent')).toHaveTextContent("Choose opponent's list")
   })
 
   it('the list sheet offers each saved list, Import XWS, then No list last as a fallback', async () => {
