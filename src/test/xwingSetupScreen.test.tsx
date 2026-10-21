@@ -256,6 +256,18 @@ describe('XwingSetupScreen', () => {
     expect(screen.getByTestId('opponent-chosen-name')).toHaveTextContent('Vader Wing')
   })
 
+  it("fills last game's opponent like a button, so it reads as tappable", () => {
+    store.set('xwing_setup', JSON.stringify({ lastOpponentListId: 'empire' }))
+    mockXwingLists.lists = [EMPIRE]
+    renderSetup()
+    expect(within(card('opponent')).getByRole('button', { name: /Same as last game/ })).toHaveStyle({ background: 'var(--color-tonal)' })
+  })
+
+  it('sets its own text colour, so names stay readable on the dark cards', () => {
+    renderSetup()
+    expect(screen.getByTestId('xwing-setup')).toHaveStyle({ color: 'var(--color-text-primary)' })
+  })
+
   it("doesn't offer last game's opponent once that list is deleted", () => {
     store.set('xwing_setup', JSON.stringify({ lastOpponentListId: 'empire' }))
     mockXwingLists.lists = [SCUM]

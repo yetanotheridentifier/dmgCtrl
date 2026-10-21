@@ -108,6 +108,11 @@ describe('Stepper', () => {
     expect(screen.getByText('2')).toBeInTheDocument()
   })
 
+  it('shows the value in the primary text colour, whatever the page colour', () => {
+    render(<Stepper label="Rounds" value={6} min={2} max={10} onChange={vi.fn()} />)
+    expect(screen.getByText('6')).toHaveStyle({ color: 'var(--color-text-primary)' })
+  })
+
   it('steps down and up by one', async () => {
     const onChange = vi.fn()
     const user = userEvent.setup()
