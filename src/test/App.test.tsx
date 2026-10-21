@@ -987,14 +987,14 @@ describe('App game select', () => {
     const user = userEvent.setup()
     await openXwingSetup(user)
     await user.click(screen.getByRole('button', { name: 'Squad lists' }))
-    expect(screen.getByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
   })
 
   it('back from Squad Lists returns to xwing setup', async () => {
     const user = userEvent.setup()
     await openXwingSetup(user)
     await user.click(screen.getByRole('button', { name: 'Squad lists' }))
-    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await user.click(await screen.findByRole('button', { name: 'Back' }))
     await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
   })
 
