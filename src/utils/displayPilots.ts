@@ -1,7 +1,6 @@
 import type { XwingPilot } from './parseXwsText'
 import { resolveXwsName } from './resolveXwsName'
-import { xwsPilotNames } from '../data/xwsPilotNames'
-import { xwsShipNames } from '../data/xwsShipNames'
+import { pilotNames, shipNames } from './xwaNames'
 
 export interface DisplayPilot {
   displayName: string
@@ -14,7 +13,7 @@ export interface DisplayPilot {
 // distinguished. Unique names are never suffixed.
 export function displayPilots(pilots: XwingPilot[]): DisplayPilot[] {
   const baseKey = (p: XwingPilot) => p.name.split('-')[0]
-  const displayName = (p: XwingPilot) => resolveXwsName(baseKey(p), xwsPilotNames)
+  const displayName = (p: XwingPilot) => resolveXwsName(baseKey(p), pilotNames)
 
   const counts: Record<string, number> = {}
   for (const p of pilots) counts[displayName(p)] = (counts[displayName(p)] ?? 0) + 1
@@ -22,7 +21,7 @@ export function displayPilots(pilots: XwingPilot[]): DisplayPilot[] {
   const seen: Record<string, number> = {}
   return pilots.map(p => {
     const name = displayName(p)
-    const ship = resolveXwsName(p.ship, xwsShipNames)
+    const ship = resolveXwsName(p.ship, shipNames)
     if (counts[name] > 1) {
       seen[name] = (seen[name] ?? 0) + 1
       return { displayName: `${name} ${seen[name]}`, ship, points: p.points }
