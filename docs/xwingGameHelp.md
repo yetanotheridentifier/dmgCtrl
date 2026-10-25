@@ -1,102 +1,70 @@
 # X-Wing: Help
 
-## Mission Points
+## The screen
 
-Each player's mission points are shown on the left (**You**) and right (**Opp**). Points start at 0. If the opponent's entire squad is destroyed, their mission point deficit (if any) is automatically added to your score at that moment. The game ends at the end of the round in which a player reaches 50, and both players can finish above 50: the player with the most points wins.
+The game screen has three columns: **your ships** on the left, the centre panel, and **your opponent's ships** on the right. **Back** (to setup) sits above your ships; **Log** and **More** (Help and Settings) sit above your opponent's.
 
-- Tap **+** to add a point
-- Tap **−** to remove a point (won't go below zero)
+## Ships
 
-### Adding or removing multiple points at once
+Every ship in each list has a tile. Tap a ship to damage it; tap again or long-press to destroy.
 
-Press and hold **+** or **−**, then drag upward:
+- **Damaged** shows half its points scored, such as "Half · 2 of 5", and gives the other player half the ship's points (rounded down)
+- **Destroyed** gives the rest of the points, strikes the name through and shows the dmgCtrl mark; the tile stays in place
+- Before the game the tiles are shown but can't be tapped; at game over the ships still flying show **Survived**
+- When the last ship of a squad is destroyed, that player's mission point deficit (if any) goes to the other player with it
 
-1. **Press and hold** — keep your finger down
-2. **Drag upward** — a number appears showing how many points will be applied
-3. **Release** — all points are applied at once
+Up to 4 ships each get a full-width row, with the ship type and points. From the 5th ship, rows hold two, and generic pilots pair up before unique ones, so 8 ships fit in 4 rows without scrolling. Duplicate pilots are numbered ("Academy Pilot 2").
 
-The number increases by 1 for roughly every 14px of upward movement, starting from 2.
+## Scores
 
-## Timer
+Both scores are in the centre panel, under the round and timer button. Points start at 0. The game ends at the end of the round in which a player reaches 50, and both players can finish above 50: the player with the most points wins.
 
-The countdown timer is shown in the centre of the screen during a game. It starts when you tap **Start Game** and runs continuously until the game ends.
+The score **−** and **+** buttons are off unless **Always Show +/− Buttons** is on in Settings › X-Wing; they then show above each ship column, and those above a column score its ships, so the ones over your opponent's ships change your score. A side with **No list** has no tiles, so the buttons above it always show: they are the only way to score it.
 
-- The timer turns amber when less than 5 minutes remain
-- The timer turns red when less than 1 minute remains
-- The timer stops when the game ends (the round ended after a player reached 50, or End phase confirmed at round 12 or timer expiry)
+## Round and timer
 
-To configure the timer duration, tap <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> **Settings** → **X-Wing** → **Game Timer**.
+Tap the round and timer button at the top of the centre panel to see the round and the time left. Before **Start game**, it also sets the **Game length** in 5-minute steps; the next X-Wing game starts at the same length. The timer starts with **Start game** and turns amber under 5 minutes and red under 1 minute.
 
-## Phase Tracker
+## Phase tracker on
 
-When **Enable Phase Tracker** is on in Settings, a phase button appears in the centre of the screen between the two score displays.
+With **Enable Phase Tracker** on in Settings › X-Wing, the centre panel follows the round:
 
-- Tap it to advance to the next phase: **Planning → System → Activation → Engagement → End**
-- Tapping **End** advances the round and resets to Planning (unless the game is about to end — see below)
-- When Round 12 is reached, or when the timer has expired, tapping **End** ends the game and shows the result
+- **Before the game**: **Start game**, which starts the timer
+- **Planning**: who has initiative, **You** or **Opponent**
+- **System**, **Activation**, **Engagement**: the phase button, and **FIRST** under the score of the player with initiative
+- **End**: the round's mission points (0, 2 or 4 each, from round 2 with a scenario), and the phase button starts the next round
 
-Initiative can only be set during the **Planning** phase. It is locked for all other phases and unlocks again at the start of the next Planning phase.
+The phase button names the phase and what tapping it does next.
 
-## Scenario Scoring
+## Phase tracker off
 
-When a named scenario is selected on the setup screen, the scenario name is shown in the centre of the game screen during play.
+With the phase tracker off, the centre panel holds:
 
-From round 2 onwards, three scoring buttons (**0**, **2**, **4**) appear at the bottom of each player's column during the **End** phase. Tap the number of scenario points scored by each player this round. The inc/dec buttons are hidden while these buttons are active, unless **Always Show +/− Buttons** is enabled in Settings.
+- **First**: **You** or **Opp**, under the scores, which you can change at any time
+- the round button ("Round 3 of 12", "Tap to score the round"): one tap opens the round's mission points, and **Start round 4** scores them and starts the next round
 
-- Points are applied when you advance from the End phase (by tapping the phase button or the next round in the round tracker)
-- Each set of scenario points is logged as a separate entry ("Scenario: You +Y, Opp +Z") before the round advance
-- If ship points plus scenario points take a player to 50 or more, the game ends when that End phase is confirmed
-- Scenario buttons are disabled if points have already been entered for the current round (e.g. after an undo) — undo a second time to re-enable them
+Opening the scoring is logged, so **Undo** takes back a mistaken tap.
 
-**Invalid combinations are automatically disabled:**
+## Mission points
 
-- *Standard scenarios* (Assault at the Satellite Array, Salvage Mission, Scramble the Transmissions, Ancient Knowledge): both players scoring 4 is impossible — selecting 4 on one side disables 4 on the other.
-- *Chance Engagement*: only (0, 0), (2, 2), (4, 0), and (0, 4) are valid. Selecting a value on one side disables any opponent values that would form an illegal pair. Changing your selection immediately re-evaluates which opponent values are available.
+From round 2 onwards with a named scenario, tap the points each player scored this round. They are added when the round ends, logged as one entry, and count towards 50 for that round. Points already entered for a round (after an undo) can't be entered again until that entry is undone too.
 
-## Initiative Bar
+Invalid combinations are disabled:
 
-When **Enable Initiative Bar** is on in Settings, a narrow vertical bar appears on the left side of the game screen.
+- *Standard scenarios* (Assault at the Satellite Array, Salvage Mission, Scramble the Transmissions, Ancient Knowledge): both players scoring 4 is impossible, so 4 on one side disables 4 on the other
+- *Chance Engagement*: only (0, 0), (2, 2), (4, 0) and (0, 4) are valid
 
-- Tap the **top half** (OPP) to record that your opponent has initiative this round
-- Tap the **bottom half** (YOU) to record that you have initiative this round
-- Tapping the same side again has no effect
-- When the phase tracker is enabled, initiative can only be set during the **Planning** phase
+## Game over
 
-Initiative resets to neutral at the start of each round (when you tap the next segment in the round tracker), ready for the next roll-off.
+The game ends when a round ends with a player on 50 or more, at the end of round 12, or at the end of the round in which time runs out. The centre panel then shows the result, the score breakdown for both sides (mission points, ship points, the opponent's deficit and the total) and:
 
-## Round Tracker
+- **Rematch**: back to before the game with the same lists
+- **One more round**: in a Casual game that ended on time or after round 12, while both sides have ships left. The game goes on for one round with the timer at 0:00, and ends again at that round's end
+- **New setup**: back to setup
 
-The round tracker bar runs across the top of the screen, showing all 12 rounds. The current round is highlighted and extends slightly below the bar as a tab.
+## Log
 
-- Tap the **next** segment to advance to that round
-- The tracker is not available until the game has started
-
-## Game End
-
-The game ends when:
-- A player has reached **50 mission points** and the round is ended, by confirming the **End** phase or tapping the next round in the round tracker. Reaching 50 doesn't stop play: scores can go past 50 for the rest of the round, and the player with more points wins
-- The **phase tracker** is enabled and the **End** phase is tapped at Round 12 or after the timer has expired — the result is calculated from current scores
-
-To undo a game-end result, open the action log and tap **Undo**. The game state is restored to the moment before the end was confirmed, and the timer resumes from where it left off.
-
-## Navigation
-
-| Button | Position | Action |
-|---|---|---|
-| <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> Back | Top-left | Return to the X-Wing setup screen |
-| <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings | Top-right | Open Settings |
-| ? Help | Top-right | Open this screen |
-
-## Settings
-
-Tap the <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> button (top-right) to open the Settings screen.
-
-| Setting | Default | Description |
-|---|---|---|
-| **Game Timer** | 75 min | Timer duration for an X-Wing game. Adjust in the **X-Wing** section using **+** and **−**. |
-| **Enable Phase Tracker** | On | Shows a phase button in the centre of the game screen. Tap to cycle through Planning → System → Activation → Engagement → End. Tapping End advances the round or ends the game. |
-| **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
-| **Enable Initiative Bar** | On | Shows a vertical initiative tracker on the left side of the game screen. Resets each round when you advance the round tracker. |
+**Log** opens the drawer over your opponent's side: newest first, under the round it happened in. **Undo** takes back the newest entry; repeat to step further back. Undoing a game's end resumes the timer.
 
 ---
 

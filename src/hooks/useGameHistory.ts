@@ -4,6 +4,8 @@ export interface HistoryEntry<TSnapshot> {
   id: string
   type: string
   message: string
+  // A second line, such as who scored and how much.
+  detail?: string
   color: string
   snapshot: TSnapshot
 }

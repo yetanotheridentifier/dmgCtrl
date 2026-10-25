@@ -10,7 +10,7 @@ Settings that apply across the whole app.
 
 **Enable Action Log** — Shows a scrollable log of game actions (damage dealt, healed, force gained/used) with undo support. Also enables the round tracker on the game screen.
 
-**Enable Initiative Bar** — Shows a vertical initiative tracker on the left side of the game screen. Tap the top half to record OPP initiative, or the bottom half to record YOUR initiative. In X-Wing, initiative resets at the start of each round; in SWU, it stays set until you change it.
+**Enable Initiative Bar** — Shows a vertical initiative tracker on the left side of the game screen. Tap the top half to record OPP initiative, or the bottom half to record YOUR initiative. It stays set until you change it. The X-Wing game screen records initiative in its centre panel instead.
 
 ## SWU
 
@@ -36,7 +36,7 @@ Settings for the Star Wars: Unlimited game mode.
 
 Settings for the X-Wing game mode.
 
-**Game Timer** — Duration of the X-Wing game timer in minutes. The 5:30 option is a short test value. All other options are in 5-minute increments from 30 to 90 minutes.
+**Game Timer** — Duration of the X-Wing game timer in minutes. The 5:30 option is a short test value. All other options are in 5-minute increments from 30 to 90 minutes. The game screen's round and timer sheet sets the same length before a game starts.
 
 **Enable Phase Tracker** — Shows a phase button in the centre of the game screen during a game. Tap to advance through Planning → System → Activation → Engagement → End. Tapping End advances the round (or ends the game at round 12 / timer expiry). When enabled, initiative can only be set during the Planning phase.
 

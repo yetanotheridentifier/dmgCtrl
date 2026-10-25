@@ -8,7 +8,7 @@ import SwuTournamentScreen from './components/swuTournamentScreen'
 import HelpScreen from './components/helpScreen'
 import SettingsScreen from './components/settingsScreen'
 import { Base, useBases } from './hooks/useBases'
-import type { XwingScenario } from './hooks/useXwingSetup'
+import type { XwingMatchType, XwingScenario } from './hooks/useXwingSetup'
 import type { XwingPilot } from './utils/parseXwsText'
 import { useTournament } from './hooks/useTournament'
 import { useUserSettings } from './hooks/useUserSettings'
@@ -39,6 +39,7 @@ function AppScreens() {
   const [xwingPlayerDeficit, setXwingPlayerDeficit] = useState(0)
   const [xwingOpponentDeficit, setXwingOpponentDeficit] = useState(0)
   const [xwingScenario, setXwingScenario] = useState<XwingScenario>('None')
+  const [xwingMatchType, setXwingMatchType] = useState<XwingMatchType>('Casual')
   const [xwingPlayerPilots, setXwingPlayerPilots] = useState<XwingPilot[]>([])
   const [xwingOpponentPilots, setXwingOpponentPilots] = useState<XwingPilot[]>([])
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
@@ -207,7 +208,8 @@ function AppScreens() {
     setScreen('xwingLists')
   }
 
-  const handleXwingStart = (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario, playerPilots: XwingPilot[], opponentPilots: XwingPilot[]) => {
+  const handleXwingStart = (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario, playerPilots: XwingPilot[], opponentPilots: XwingPilot[], matchType: XwingMatchType) => {
+    setXwingMatchType(matchType)
     setXwingPlayerDeficit(playerDeficit)
     setXwingOpponentDeficit(opponentDeficit)
     setXwingScenario(scenario)
@@ -285,6 +287,7 @@ function AppScreens() {
               playerDeficit={xwingPlayerDeficit}
               opponentDeficit={xwingOpponentDeficit}
               scenario={xwingScenario}
+              matchType={xwingMatchType}
               playerPilots={xwingPlayerPilots}
               opponentPilots={xwingOpponentPilots}
             />

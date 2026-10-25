@@ -305,7 +305,7 @@ describe('XwingSetupScreen', () => {
     await choose(user, 'player', 'list-option-scum')
     await choose(user, 'opponent', 'list-option-empire')
     await user.click(goToGame())
-    expect(onStart).toHaveBeenCalledWith(0, 3, 'Chance Engagement', SCUM.pilots, EMPIRE.pilots)
+    expect(onStart).toHaveBeenCalledWith(0, 3, 'Chance Engagement', SCUM.pilots, EMPIRE.pilots, 'Casual')
   })
 
   it('starts with a No list player getting the stepper deficit and no pilots', async () => {
@@ -318,7 +318,7 @@ describe('XwingSetupScreen', () => {
     await user.click(within(card('player')).getByRole('button', { name: 'Increase deficit' }))
     await choose(user, 'opponent', 'list-option-empire')
     await user.click(goToGame())
-    expect(onStart).toHaveBeenCalledWith(2, 3, 'None', [], EMPIRE.pilots)
+    expect(onStart).toHaveBeenCalledWith(2, 3, 'None', [], EMPIRE.pilots, 'Casual')
   })
 
   // --- Layout ---
