@@ -112,6 +112,8 @@ function AppScreens() {
     }
   }
 
+  // Setup passes their base too in 2 players. The game screen has no two-player view yet, so a
+  // 2-player game plays as a 1-player game with your base, and their base waits in setup.
   const handleConfirm = (base: Base, mode: SetupMode) => {
     if (mode === 'tournament') {
       // Back to the tournament under way; a new one is started from the setup start sheet.

@@ -198,9 +198,10 @@ function BaseSheetBody({ bases, favouriteBases, recentBases, currentKey, onChoos
 }
 
 // The base sheet: favourites, recent bases and a search over every base, and an SWUDB deck link.
-export default function SwuBaseSheet({ open, onClose, ...body }: Props) {
+// The same sheet chooses their base in 2 players, under its own title.
+export default function SwuBaseSheet({ open, onClose, title = 'Choose your base', ...body }: Props & { title?: string }) {
   return (
-    <Sheet open={open} title="Choose your base" onClose={onClose} wide>
+    <Sheet open={open} title={title} onClose={onClose} wide>
       <BaseSheetBody {...body} />
     </Sheet>
   )

@@ -15,9 +15,9 @@ import { formatValidationError, isBaseValidForFormat } from '../utils/formatFilt
 import type { TournamentSettings } from '../hooks/useSwuSetup'
 
 interface Props {
-  // Casual: go to the game. Tournament: go back to the one under way.
-  onConfirm: (base: Base, mode: SetupMode) => void
-  onStartTournament?: (base: Base, settings: TournamentSettings) => void
+  // Casual: go to the game. Tournament: go back to the one under way. Their base comes only in 2 players.
+  onConfirm: (base: Base, mode: SetupMode, theirBase?: Base) => void
+  onStartTournament?: (base: Base, settings: TournamentSettings, theirBase?: Base) => void
   tournamentInProgress?: boolean
   onHelp: () => void
   onBack?: () => void
@@ -31,6 +31,7 @@ function SwuSetupScreen({ onConfirm, onStartTournament, tournamentInProgress = f
   const { favourites, addFavourite, removeFavourite } = useFavourites()
   const setup = useSwuSetup(onConfirm, onStartTournament)
   const art = useBaseArt(setup.base, useHyperspace)
+  const theirArt = useBaseArt(setup.mode === '2p' ? setup.theirBase : null, useHyperspace)
   const { showBanner, platform, onInstall, onDismiss } = useInstallPrompt()
 
   // Warm the cache with the art the game screen will show first.
@@ -132,6 +133,13 @@ function SwuSetupScreen({ onConfirm, onStartTournament, tournamentInProgress = f
         favouriteBases={favouriteBases}
         recentBases={recentBases}
         onChooseBase={setup.chooseBase}
+        mode={setup.mode}
+        onModeChange={setup.setMode}
+        theirBase={setup.theirBase}
+        theirArt={theirArt}
+        theirBaseFromLastGame={setup.theirBaseFromLastGame}
+        onChooseTheirBase={setup.chooseTheirBase}
+        ready={setup.ready}
         swudb={{ state: swudbShown, onChange: handleSwudbChange, onFocus: handleSwudbFocus, onLoad: handleSwudbLoad }}
         onBack={onBack}
         onHelp={onHelp}

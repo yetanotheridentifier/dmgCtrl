@@ -20,20 +20,36 @@ export interface TournamentSettings {
   totalRounds: number
 }
 
+// Who is playing: you alone, or you and them with a base each. A new mode is one more entry here.
+export type SwuMode = '1p' | '2p'
+export const SWU_MODES: { value: SwuMode; label: string }[] = [
+  { value: '1p', label: '1 player' },
+  { value: '2p', label: '2 players' },
+]
+
 interface PersistedSetup {
   // Your base rarely changes between games, so it is kept, across launches too.
   baseKey?: string
-  // The last bases played (Go to game), most recent first.
+  // The last bases played (Go to game), most recent first. Yours only: their base never enters it.
   recentBaseKeys: string[]
   matchType: SetupMode
   // The format of the last tournament started, offered first next time.
   format: TournamentFormat
+  mode: SwuMode
+  // Their base in 2 players, kept like yours.
+  theirBaseKey?: string
+  // Their base in the last 2-player game, so setup can say their base is the same as then.
+  lastTheirBaseKey?: string
 }
 
 export const baseKey = (b: Base): string => `${b.set}-${b.number}`
 
 const asTournamentFormat = (v: unknown): TournamentFormat | null =>
   TOURNAMENT_FORMATS.find(f => f === v) ?? null
+
+const asMode = (v: unknown): SwuMode => SWU_MODES.find(m => m.value === v)?.value ?? '1p'
+
+const asKey = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined
 
 function legacyMatchType(): SetupMode {
   const saved = localStorage.getItem('pref_play_mode')
@@ -46,16 +62,19 @@ const legacyFormat = (): TournamentFormat => asTournamentFormat(localStorage.get
 function load(): PersistedSetup {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { recentBaseKeys: [], matchType: legacyMatchType(), format: legacyFormat() }
+    if (!raw) return { recentBaseKeys: [], matchType: legacyMatchType(), format: legacyFormat(), mode: '1p' }
     const parsed = JSON.parse(raw) as Record<string, unknown>
     return {
-      baseKey: typeof parsed.baseKey === 'string' ? parsed.baseKey : undefined,
+      baseKey: asKey(parsed.baseKey),
       recentBaseKeys: Array.isArray(parsed.recentBaseKeys) ? parsed.recentBaseKeys.filter((k): k is string => typeof k === 'string') : [],
       matchType: parsed.matchType === 'tournament' ? 'tournament' : 'casual',
       format: asTournamentFormat(parsed.format) ?? legacyFormat(),
+      mode: asMode(parsed.mode),
+      theirBaseKey: asKey(parsed.theirBaseKey),
+      lastTheirBaseKey: asKey(parsed.lastTheirBaseKey),
     }
   } catch {
-    return { recentBaseKeys: [], matchType: 'casual', format: 'premier' }
+    return { recentBaseKeys: [], matchType: 'casual', format: 'premier', mode: '1p' }
   }
 }
 
@@ -73,8 +92,9 @@ export function filterBases(bases: Base[], query: string, aspect: string | null)
 }
 
 export function useSwuSetup(
-  onConfirm: (base: Base, mode: SetupMode) => void,
-  onStartTournament?: (base: Base, settings: TournamentSettings) => void,
+  // Their base comes only in 2 players.
+  onConfirm: (base: Base, mode: SetupMode, theirBase?: Base) => void,
+  onStartTournament?: (base: Base, settings: TournamentSettings, theirBase?: Base) => void,
 ) {
   const { bases, loading, error } = useBases()
   const [persisted, setPersisted] = useState<PersistedSetup>(load)
@@ -97,22 +117,33 @@ export function useSwuSetup(
     [persisted.recentBaseKeys, byKey],
   )
 
-  // A base played (a game or a tournament started) goes to the front of the recent bases.
+  const theirBase = persisted.theirBaseKey ? byKey.get(persisted.theirBaseKey) ?? null : null
+  const twoPlayers = persisted.mode === '2p'
+  // Ready to play: your base, and theirs in 2 players.
+  const ready = base !== null && (!twoPlayers || theirBase !== null)
+
+  // A game or a tournament started: your base goes to the front of the recent bases, and in
+  // 2 players their base is remembered as the one from the last game.
   const rememberPlayed = (b: Base) => {
     const key = baseKey(b)
-    update({ recentBaseKeys: [key, ...persisted.recentBaseKeys.filter(k => k !== key)].slice(0, RECENT_LIMIT) })
+    update({
+      recentBaseKeys: [key, ...persisted.recentBaseKeys.filter(k => k !== key)].slice(0, RECENT_LIMIT),
+      ...(twoPlayers ? { lastTheirBaseKey: persisted.theirBaseKey } : {}),
+    })
   }
 
   const handleSubmit = () => {
-    if (!base) return
+    if (!ready) return
     rememberPlayed(base)
-    onConfirm(base, persisted.matchType)
+    if (twoPlayers && theirBase) onConfirm(base, persisted.matchType, theirBase)
+    else onConfirm(base, persisted.matchType)
   }
 
   const handleStartTournament = (settings: TournamentSettings) => {
-    if (!base) return
+    if (!ready) return
     rememberPlayed(base)
-    onStartTournament?.(base, settings)
+    if (twoPlayers && theirBase) onStartTournament?.(base, settings, theirBase)
+    else onStartTournament?.(base, settings)
   }
 
   return {
@@ -126,6 +157,12 @@ export function useSwuSetup(
     setMatchType: (m: SetupMode) => update({ matchType: m }),
     format: persisted.format,
     setFormat: (f: TournamentFormat) => update({ format: f }),
+    mode: persisted.mode,
+    setMode: (m: SwuMode) => update({ mode: m }),
+    theirBase,
+    chooseTheirBase: (b: Base) => update({ theirBaseKey: baseKey(b) }),
+    theirBaseFromLastGame: theirBase !== null && persisted.theirBaseKey === persisted.lastTheirBaseKey,
+    ready,
     handleSubmit,
     handleStartTournament,
   }

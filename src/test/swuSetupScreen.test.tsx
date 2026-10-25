@@ -914,8 +914,8 @@ describe('SwuSetupScreen: their base', () => {
     keep2p(jediTemple, { format: 'premier' })
     renderSetup()
     await user.click(within(theirCard()).getByRole('button', { name: /Choose their base/ }))
-    await user.type(within(theirSheet()).getByRole('searchbox'), 'echo')
-    expect(tile('Echo Caverns', theirSheet())).toBeInTheDocument()
+    await user.type(within(theirSheet()).getByRole('searchbox'), 'cadera')
+    expect(tile('Catacombs of Cadera', theirSheet())).toBeInTheDocument()
   })
 
   it('in a tournament the sheet lists only the bases legal in its format for them too', async () => {
@@ -923,10 +923,9 @@ describe('SwuSetupScreen: their base', () => {
     keep2p(jediTemple, { matchType: 'tournament', format: 'premier' })
     renderSetup()
     await user.click(within(theirCard()).getByRole('button', { name: /Choose their base/ }))
-    await user.type(within(theirSheet()).getByRole('searchbox'), 'e')
-    const listed = within(within(theirSheet()).getByRole('group', { name: 'Results' })).getAllByRole('button').map(b => b.textContent ?? '')
-    expect(listed.some(n => n.startsWith('Jedi Temple'))).toBe(true)
-    expect(listed.some(n => n.startsWith('Echo Caverns'))).toBe(false)
+    const listed = within(within(theirSheet()).getByRole('group', { name: 'All bases' })).getAllByRole('button').map(b => b.textContent ?? '')
+    expect(listed.some(n => n.startsWith('Echo Caverns'))).toBe(true)
+    expect(listed.some(n => n.startsWith('Catacombs of Cadera'))).toBe(false)
   })
 
   it('Start tournament waits for their base too', async () => {
