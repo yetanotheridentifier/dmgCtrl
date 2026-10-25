@@ -1,111 +1,49 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useSwuSetup } from '../hooks/useSwuSetup'
+import { useSwuSetup, filterBases, baseKey } from '../hooks/useSwuSetup'
 import { useBases, Base } from '../hooks/useBases'
 
 vi.mock('../hooks/useBases')
 
-const baseA: Base = {
-  set: 'SOR',
-  number: '026',
-  name: 'Catacombs of Cadera',
-  subtitle: 'Jedha',
-  hp: 30,
-  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
-  frontArtLowRes: null,
-  hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
-  hyperspaceArt: null,
-  epicAction: '',
-  aspects: ['Aggression'],
-  rarity: 'Common',
+function makeBase(set: string, number: string, name: string, aspects: string[], hp = 30): Base {
+  return {
+    set,
+    number,
+    name,
+    subtitle: '',
+    hp,
+    frontArt: `https://cdn.swu-db.com/images/cards/${set}/${number}.png`,
+    frontArtLowRes: null,
+    hyperspaceArtHiRes: null,
+    hyperspaceArt: null,
+    epicAction: '',
+    aspects,
+    rarity: 'Common',
+  }
 }
 
-const baseB: Base = {
-  set: 'SOR',
-  number: '022',
-  name: 'Energy Conversion Lab',
-  subtitle: 'Eadu',
-  hp: 25,
-  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/022.png',
-  frontArtLowRes: null,
-  hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/288.png',
-  hyperspaceArt: null,
-  epicAction: 'Epic Action: Play a unit that costs 6 or less.',
-  aspects: ['Cunning'],
-  rarity: 'Rare',
-}
+const catacombs = makeBase('SOR', '026', 'Catacombs of Cadera', ['Aggression'])
+const energyLab = makeBase('SOR', '022', 'Energy Conversion Lab', ['Cunning'], 25)
+const jediTemple = makeBase('LOF', '021', 'Jedi Temple', ['Command'], 28)
+const starlightTemple = makeBase('LOF', '024', 'Starlight Temple', ['Command'], 28)
+const templeOfDestruction = makeBase('LOF', '028', 'Temple of Destruction', ['Aggression'], 25)
+const lakeCountry = makeBase('JTL', '030', 'Lake Country', [])
+const coaxium = makeBase('LAW', '021', 'Coaxium Mine', ['Vigilance'], 27)
+const echo = makeBase('IBH', '001', 'Echo Caverns', ['Cunning'], 20)
 
-const baseC: Base = {
-  set: 'TWI',
-  number: '001',
-  name: 'Coruscant Undercity',
-  subtitle: 'Coruscant',
-  hp: 28,
-  frontArt: 'https://cdn.swu-db.com/images/cards/TWI/001.png',
-  frontArtLowRes: null,
-  hyperspaceArtHiRes: null,
-  hyperspaceArt: null,
-  epicAction: '',
-  aspects: ['Aggression'],
-  rarity: 'Common',
-}
+const mockBases = [catacombs, energyLab, jediTemple, starlightTemple, templeOfDestruction, lakeCountry, coaxium, echo]
 
-// Extra bases to give SOR+Aggression and TWI multiple options,
-// preventing auto-select from interfering with cascade-reset tests
-const baseD: Base = {
-  set: 'SOR',
-  number: '027',
-  name: 'Tarkintown',
-  subtitle: 'Lothal',
-  hp: 30,
-  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/027.png',
-  frontArtLowRes: null,
-  hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/293.png',
-  hyperspaceArt: null,
-  epicAction: '',
-  aspects: ['Aggression'],
-  rarity: 'Common',
-}
-
-const baseF: Base = {
-  set: 'TWI',
-  number: '002',
-  name: 'Senate Chamber',
-  subtitle: 'Coruscant',
-  hp: 30,
-  frontArt: 'https://cdn.swu-db.com/images/cards/TWI/002.png',
-  frontArtLowRes: null,
-  hyperspaceArtHiRes: null,
-  hyperspaceArt: null,
-  epicAction: '',
-  aspects: ['Command'],
-  rarity: 'Common',
-}
-
-const aspectlessBase: Base = {
-  set: 'JTL',
-  number: '031',
-  name: 'Lake Country',
-  subtitle: 'Naboo',
-  hp: 30,
-  frontArt: 'https://cdn.swu-db.com/images/cards/JTL/031.png',
-  frontArtLowRes: null,
-  hyperspaceArtHiRes: null,
-  hyperspaceArt: null,
-  epicAction: '',
-  aspects: [],
-  rarity: 'Common',
-}
-
-const mockBases = [baseA, baseB, baseC, baseD, baseF]
+// A working store, so a second render reads what the first one saved, as a relaunch would.
+let store: Map<string, string>
 
 beforeEach(() => {
+  store = new Map()
   vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
   vi.stubGlobal('localStorage', {
-    getItem: vi.fn().mockReturnValue(null),
-    setItem: vi.fn(),
-    removeItem: vi.fn(),
-    clear: vi.fn(),
+    getItem: vi.fn((k: string) => store.get(k) ?? null),
+    setItem: vi.fn((k: string, v: string) => { store.set(k, v) }),
+    removeItem: vi.fn((k: string) => { store.delete(k) }),
+    clear: vi.fn(() => store.clear()),
   })
 })
 
@@ -113,418 +51,168 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('useSwuSetup', () => {
-
-  // --- Initial state ---
-
-  it('selectedSet starts empty', () => {
+describe('useSwuSetup: your base', () => {
+  it('has no base the first time', () => {
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.selectedSet).toBe('')
+    expect(result.current.base).toBeNull()
   })
 
-  it('selectedAspect starts empty', () => {
+  it('chooseBase sets the base', () => {
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.selectedAspect).toBe('')
+    act(() => result.current.chooseBase(jediTemple))
+    expect(result.current.base).toBe(jediTemple)
   })
 
-  it('selectedKey starts empty', () => {
+  it('keeps the base across launches', () => {
+    const first = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => first.result.current.chooseBase(jediTemple))
+    first.unmount()
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.selectedKey).toBe('')
+    expect(result.current.base).toBe(jediTemple)
   })
 
-  it('selectedBase starts as null', () => {
+  it('a kept base that is no longer in the card data reads as no base', () => {
+    store.set('swu_setup', JSON.stringify({ baseKey: 'XYZ-999', recentBaseKeys: [], matchType: 'casual' }))
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.selectedBase).toBeNull()
+    expect(result.current.base).toBeNull()
   })
 
-  // --- Pass-through from useBases ---
-
-  it('exposes loading state from useBases', () => {
-    vi.mocked(useBases).mockReturnValue({ bases: [], loading: true, error: null })
+  it('survives unreadable stored setup', () => {
+    store.set('swu_setup', '{not json')
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.base).toBeNull()
+    expect(result.current.matchType).toBe('casual')
+    expect(result.current.recentBases).toEqual([])
+  })
+
+  it('exposes every base, and the loading and error state of the card data', () => {
+    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: true, error: 'offline' })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.bases).toBe(mockBases)
     expect(result.current.loading).toBe(true)
+    expect(result.current.error).toBe('offline')
   })
+})
 
-  it('exposes error state from useBases', () => {
-    vi.mocked(useBases).mockReturnValue({ bases: [], loading: false, error: 'Failed' })
+describe('useSwuSetup: match', () => {
+  it('is Casual the first time', () => {
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.error).toBe('Failed')
+    expect(result.current.matchType).toBe('casual')
   })
 
-  // --- Available sets ---
-
-  it('availableSets returns sorted unique sets', () => {
+  it('is kept across launches', () => {
+    const first = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => first.result.current.setMatchType('tournament'))
+    first.unmount()
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.availableSets).toEqual(['SOR', 'TWI'])
+    expect(result.current.matchType).toBe('tournament')
   })
 
-  it('availableSets is empty when no bases loaded', () => {
-    vi.mocked(useBases).mockReturnValue({ bases: [], loading: false, error: null })
+  it.each(['tournament', 'bo1', 'bo3'])('reads the older stored match preference %s as Tournament', (saved) => {
+    store.set('pref_play_mode', saved)
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.availableSets).toEqual([])
+    expect(result.current.matchType).toBe('tournament')
   })
+})
 
-  // --- Available aspects ---
-
-  it('availableAspects is empty before a set is selected', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.availableAspects).toEqual([])
-  })
-
-  it('availableAspects returns aspects for the selected set in order', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('SOR'))
-    expect(result.current.availableAspects).toEqual(['Aggression', 'Cunning'])
-  })
-
-  // --- Filtered bases ---
-
-  it('filteredBases is empty before set and aspect are selected', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.filteredBases).toEqual([])
-  })
-
-  it('filteredBases returns only bases matching the selected set and aspect', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    // SOR+Aggression has baseA and baseD in the full mock
-    expect(result.current.filteredBases).toEqual([baseA, baseD])
-  })
-
-  // --- Selected base ---
-
-  it('selectedBase is null when no key is selected', () => {
-    // SOR+Aggression has 2 bases (baseA, baseD) so auto-select does not fire
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    expect(result.current.selectedBase).toBeNull()
-  })
-
-  it('selectedBase returns the base matching the selected key', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('SOR-026'))
-    expect(result.current.selectedBase).toEqual(baseA)
-  })
-
-  // --- Cascade resets ---
-
-  it('handleSetChange resets aspect and key', () => {
-    // TWI has multiple aspects (Aggression + Command) so auto-select does not fire
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('SOR-026'))
-    act(() => result.current.handleSetChange('TWI'))
-    expect(result.current.selectedAspect).toBe('')
-    expect(result.current.selectedKey).toBe('')
-  })
-
-  it('handleAspectChange resets key', () => {
-    // SOR+Cunning has only baseB so auto-select would fire — switch from Cunning to Aggression instead.
-    // SOR+Aggression has 2 bases (baseA, baseD) so no auto-select.
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Cunning'))
-    act(() => result.current.handleKeyChange('SOR-022'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    expect(result.current.selectedKey).toBe('')
-  })
-
-  // --- Auto-select ---
-
-  it('auto-selects aspect when only one is available for the set', () => {
-    // Use a mock where a set only has one aspect
-    vi.mocked(useBases).mockReturnValue({ bases: [baseA, baseB, baseC], loading: false, error: null })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    // TWI only has Aggression (baseC) in the reduced mock
-    act(() => result.current.handleSetChange('TWI'))
-    expect(result.current.selectedAspect).toBe('Aggression')
-  })
-
-  it('auto-selects base when only one base matches set and aspect', () => {
-    // Use a mock where SOR+Aggression only has one base
-    vi.mocked(useBases).mockReturnValue({ bases: [baseA, baseB, baseC], loading: false, error: null })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    expect(result.current.selectedKey).toBe('SOR-026')
-  })
-
-
-
-  // --- handleSubmit ---
-
-  it('handleSubmit calls onConfirm with selectedBase', () => {
+describe('useSwuSetup: starting', () => {
+  it('handleSubmit calls onConfirm with the base and the match', () => {
     const onConfirm = vi.fn()
     const { result } = renderHook(() => useSwuSetup(onConfirm))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('SOR-026'))
+    act(() => result.current.chooseBase(catacombs))
+    act(() => result.current.setMatchType('tournament'))
     act(() => result.current.handleSubmit())
-    expect(onConfirm).toHaveBeenCalledWith(baseA, 'casual', 'premier')
+    expect(onConfirm).toHaveBeenCalledWith(catacombs, 'tournament')
   })
 
-  it('handleSubmit does nothing when no base is selected', () => {
+  it('handleSubmit does nothing without a base', () => {
     const onConfirm = vi.fn()
     const { result } = renderHook(() => useSwuSetup(onConfirm))
     act(() => result.current.handleSubmit())
     expect(onConfirm).not.toHaveBeenCalled()
   })
-
-  // --- selectBaseByKey ---
-
-  it('selectBaseByKey returns true and resolves selectedBase when key matches', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => { result.current.selectBaseByKey('SOR-026') })
-    expect(result.current.selectedBase).toEqual(baseA)
-  })
-
-  it('selectBaseByKey returns true when base is found', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    let found = false
-    act(() => { found = result.current.selectBaseByKey('SOR-026') })
-    expect(found).toBe(true)
-  })
-
-  it('selectBaseByKey returns false and leaves selectedBase null when key not found', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    let found = true
-    act(() => { found = result.current.selectBaseByKey('NEW-001') })
-    expect(found).toBe(false)
-    expect(result.current.selectedBase).toBeNull()
-  })
-
-  it('selectBaseByKey sets selectedSet, selectedAspect and selectedKey', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.selectBaseByKey('SOR-026'))
-    expect(result.current.selectedSet).toBe('SOR')
-    expect(result.current.selectedAspect).toBe('Aggression')
-    expect(result.current.selectedKey).toBe('SOR-026')
-  })
-
-  it('selectBaseByKey uses None as aspect for an aspectless base', () => {
-    vi.mocked(useBases).mockReturnValue({ bases: [...mockBases, aspectlessBase], loading: false, error: null })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.selectBaseByKey('JTL-031'))
-    expect(result.current.selectedAspect).toBe('None')
-    expect(result.current.selectedBase).toEqual(aspectlessBase)
-  })
-
-  // --- Format state ---
-
-  it('selectedFormat defaults to premier', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.selectedFormat).toBe('premier')
-  })
-
-  it('selectedFormat is restored from localStorage (limited)', () => {
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => key === 'pref_format' ? 'limited' : null),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.selectedFormat).toBe('limited')
-  })
-
-  it('selectedFormat is restored from localStorage (twin-suns)', () => {
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => key === 'pref_format' ? 'twin-suns' : null),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.selectedFormat).toBe('twin-suns')
-    vi.unstubAllGlobals()
-  })
-
-  it('selectedFormat migrates sealed/draft/chaos from localStorage to limited', () => {
-    for (const oldValue of ['sealed', 'draft', 'chaos']) {
-      vi.stubGlobal('localStorage', {
-        getItem: vi.fn((key: string) => key === 'pref_format' ? oldValue : null),
-        setItem: vi.fn(),
-        removeItem: vi.fn(),
-        clear: vi.fn(),
-      })
-      const { result } = renderHook(() => useSwuSetup(vi.fn()))
-      expect(result.current.selectedFormat).toBe('limited')
-      vi.unstubAllGlobals()
-    }
-  })
-
-  it('handleFormatChange updates selectedFormat', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleFormatChange('eternal'))
-    expect(result.current.selectedFormat).toBe('eternal')
-  })
-
-  it('handleFormatChange persists to localStorage', () => {
-    const setItem = vi.fn()
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn().mockReturnValue(null),
-      setItem,
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleFormatChange('limited'))
-    expect(setItem).toHaveBeenCalledWith('pref_format', 'limited')
-  })
-
-  // --- validSets filtered by format ---
-
-  it('validSets excludes out-of-rotation sets for premier', () => {
-    // mockBases contains SOR and TWI (both out of rotation) — neither should appear
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.validSets).not.toContain('SOR')
-    expect(result.current.validSets).not.toContain('TWI')
-  })
-
-  it('validSets includes JTL (Rotation A) for premier', () => {
-    vi.mocked(useBases).mockReturnValue({ bases: [...mockBases, aspectlessBase], loading: false, error: null })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.validSets).toContain('JTL')
-  })
-
-  it('validSets includes SOR for eternal', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleFormatChange('eternal'))
-    expect(result.current.validSets).toContain('SOR')
-  })
-
-  it('validSets includes SOR for limited', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleFormatChange('limited'))
-    expect(result.current.validSets).toContain('SOR')
-  })
-
-  // --- Format change clears selection when set becomes invalid ---
-
-  it('handleFormatChange clears set/aspect/key when selected set is no longer valid', () => {
-    // Start in eternal (SOR valid), select SOR, then switch to premier (SOR invalid)
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleFormatChange('eternal'))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('SOR-026'))
-    act(() => result.current.handleFormatChange('premier'))
-    expect(result.current.selectedSet).toBe('')
-    expect(result.current.selectedAspect).toBe('')
-    expect(result.current.selectedKey).toBe('')
-  })
-
-  it('handleFormatChange keeps selection when selected set is still valid', () => {
-    // JTL is valid in both eternal and premier
-    vi.mocked(useBases).mockReturnValue({ bases: [...mockBases, aspectlessBase], loading: false, error: null })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleFormatChange('eternal'))
-    act(() => result.current.handleSetChange('JTL'))
-    act(() => result.current.handleFormatChange('premier'))
-    expect(result.current.selectedSet).toBe('JTL')
-  })
-
 })
 
-// ---------- setup mode ----------
-
-describe('useSwuSetup — setup mode', () => {
-
-  it('selectedMode defaults to casual when storage is empty', () => {
-    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.selectedMode).toBe('casual')
-  })
-
-  it('selectedMode loads tournament from localStorage', () => {
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => key === 'pref_play_mode' ? 'tournament' : null),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.selectedMode).toBe('tournament')
-    vi.unstubAllGlobals()
-  })
-
-  it('selectedMode migrates bo1 from localStorage to tournament', () => {
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => key === 'pref_play_mode' ? 'bo1' : null),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.selectedMode).toBe('tournament')
-    vi.unstubAllGlobals()
-  })
-
-  it('selectedMode migrates bo3 from localStorage to tournament', () => {
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => key === 'pref_play_mode' ? 'bo3' : null),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.selectedMode).toBe('tournament')
-    vi.unstubAllGlobals()
-  })
-
-  it('selectedMode falls back to casual for an unknown value in localStorage', () => {
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => key === 'pref_play_mode' ? 'unknown' : null),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.selectedMode).toBe('casual')
-    vi.unstubAllGlobals()
-  })
-
-  it('handleModeChange updates selectedMode', () => {
-    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleModeChange('tournament'))
-    expect(result.current.selectedMode).toBe('tournament')
-  })
-
-  it('handleModeChange persists to localStorage', () => {
-    const setItem = vi.fn()
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn().mockReturnValue(null),
-      setItem,
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleModeChange('tournament'))
-    expect(setItem).toHaveBeenCalledWith('pref_play_mode', 'tournament')
-    vi.unstubAllGlobals()
-  })
-
-  it('handleSubmit calls onConfirm with tournament mode when tournament is selected', () => {
-    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
-    const onConfirm = vi.fn()
-    const { result } = renderHook(() => useSwuSetup(onConfirm))
-    act(() => result.current.handleModeChange('tournament'))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('SOR-026'))
+describe('useSwuSetup: recent bases', () => {
+  const play = (result: { current: ReturnType<typeof useSwuSetup> }, base: Base) => {
+    act(() => result.current.chooseBase(base))
     act(() => result.current.handleSubmit())
-    expect(onConfirm).toHaveBeenCalledWith(baseA, 'tournament', 'premier')
+  }
+
+  it('lists bases played, most recent first, each once', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    play(result, catacombs)
+    play(result, jediTemple)
+    play(result, catacombs)
+    expect(result.current.recentBases).toEqual([catacombs, jediTemple])
   })
 
+  it('a base chosen but not played is not recent', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.chooseBase(catacombs))
+    expect(result.current.recentBases).toEqual([])
+  })
+
+  it('keeps the last 6 played', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    for (const b of [catacombs, energyLab, jediTemple, starlightTemple, templeOfDestruction, lakeCountry, coaxium]) play(result, b)
+    expect(result.current.recentBases).toEqual([coaxium, lakeCountry, templeOfDestruction, starlightTemple, jediTemple, energyLab])
+  })
+
+  it('are kept across launches', () => {
+    const first = renderHook(() => useSwuSetup(vi.fn()))
+    play(first.result, energyLab)
+    play(first.result, jediTemple)
+    first.unmount()
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.recentBases).toEqual([jediTemple, energyLab])
+  })
+})
+
+describe('useSwuSetup: older stored preferences', () => {
+  it('ignores the stored format and drops it on the next save', () => {
+    store.set('pref_format', 'eternal')
+    store.set('pref_selection_mode', 'swudb-import')
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.chooseBase(catacombs))
+    expect(store.has('pref_format')).toBe(false)
+    expect(store.has('pref_selection_mode')).toBe(false)
+  })
+})
+
+describe('baseKey', () => {
+  it('is the set and the card number', () => {
+    expect(baseKey(catacombs)).toBe('SOR-026')
+  })
+})
+
+describe('filterBases', () => {
+  const names = (bs: Base[]) => bs.map(b => b.name)
+
+  it('with no search and no aspect lists every base, by name', () => {
+    expect(names(filterBases(mockBases, '', null))).toEqual([
+      'Catacombs of Cadera', 'Coaxium Mine', 'Echo Caverns', 'Energy Conversion Lab',
+      'Jedi Temple', 'Lake Country', 'Starlight Temple', 'Temple of Destruction',
+    ])
+  })
+
+  it('every set is listed, whatever its format', () => {
+    expect(new Set(filterBases(mockBases, '', null).map(b => b.set))).toEqual(new Set(['SOR', 'LOF', 'JTL', 'LAW', 'IBH']))
+  })
+
+  it('searches by name, ignoring case and surrounding space', () => {
+    expect(names(filterBases(mockBases, '  TEMPLE ', null))).toEqual(['Jedi Temple', 'Starlight Temple', 'Temple of Destruction'])
+  })
+
+  it('filters by aspect', () => {
+    expect(names(filterBases(mockBases, '', 'Cunning'))).toEqual(['Echo Caverns', 'Energy Conversion Lab'])
+  })
+
+  it('combines the search and the aspect', () => {
+    expect(names(filterBases(mockBases, 'temple', 'Command'))).toEqual(['Jedi Temple', 'Starlight Temple'])
+  })
+
+  it('finds an aspectless base by name', () => {
+    expect(names(filterBases(mockBases, 'lake', null))).toEqual(['Lake Country'])
+  })
 })

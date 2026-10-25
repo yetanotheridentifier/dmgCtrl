@@ -108,21 +108,35 @@ vi.mock('../hooks/useUserSettings', () => ({
 }))
 
 
-// The format and mode selectors are always present; filter them out to get the three
-// base-selection dropdowns (set, aspect, base).
-const getBaseSelectors = () => {
-  const all = screen.getAllByRole('combobox')
-  const formatSelect = screen.queryByTestId('format-select')
-  const modeSelect = screen.queryByTestId('mode-select')
-  return all.filter(el => el !== formatSelect && el !== modeSelect)
+// SWU setup is showing once its title does.
+const setupMarker = () => screen.getByRole('heading', { level: 1, name: 'Star Wars: Unlimited' })
+
+type User = ReturnType<typeof userEvent.setup>
+
+async function openFromMore(user: User, name: string) {
+  await user.click(screen.getByRole('button', { name: 'More' }))
+  await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name }))
 }
 
+async function chooseBase(user: User, name: string) {
+  await user.click(within(screen.getByTestId('base-card')).getByRole('button', { name: /Choose your base|Change base/ }))
+  await user.click(within(screen.getByRole('dialog', { name: 'Choose your base' })).getByRole('button', { name: new RegExp(`^${name}`) }))
+}
+
+async function chooseBaseAndGo(user: User, name: string) {
+  await chooseBase(user, name)
+  await user.click(screen.getByRole('button', { name: /^Go to (game|tournament)$/ }))
+}
+
+let store: Map<string, string>
+
 beforeEach(() => {
+  store = new Map()
   vi.stubGlobal('localStorage', {
-    getItem: vi.fn((key: string) => key === 'pref_format' ? 'eternal' : null),
-    setItem: vi.fn(),
-    removeItem: vi.fn(),
-    clear: vi.fn(),
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => { store.set(key, value) },
+    removeItem: (key: string) => { store.delete(key) },
+    clear: () => { store.clear() },
   })
   mockOnAppStart.mockClear()
   mockOnGameStart.mockClear()
@@ -150,7 +164,7 @@ afterEach(() => {
 
 // useBases is mocked so data is always ready; waitFor handles any async React batching.
 async function waitForSetup() {
-  await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+  await waitFor(() => expect(setupMarker()).toBeInTheDocument())
 }
 
 describe('App', () => {
@@ -163,7 +177,7 @@ describe('App', () => {
 
   it('Transitions to setup screen after loading', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByText('dmgCtrl')).toBeInTheDocument())
+    await waitFor(() => expect(setupMarker()).toBeInTheDocument())
   })
 
   it('Does not render the game screen on load', () => {
@@ -181,10 +195,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByText('Start'))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
@@ -193,10 +204,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Cunning')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-022')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Energy Conversion Lab')
     await user.click(screen.getByText('Start'))
     expect(screen.getByText('Remaining: 25')).toBeInTheDocument()
   })
@@ -205,8 +213,9 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
-    expect(screen.getByText('Source:')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Go to game' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Go to game' }))
+    expect(setupMarker()).toBeInTheDocument()
     expect(screen.queryByText(/Remaining:/)).not.toBeInTheDocument()
   })
 
@@ -214,91 +223,60 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('Source:')).toBeInTheDocument()
+    expect(setupMarker()).toBeInTheDocument()
   })
 
-  // --- Back navigation retains selection ---
+  // --- Your base is kept ---
 
-  it('Retains selected set after navigating back from game screen', async () => {
+  it('Keeps your base after navigating back from game screen', async () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect((getBaseSelectors()[0] as HTMLSelectElement).value).toBe('SOR')
-  })
-
-  it('Retains selected aspect after navigating back from game screen', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
-    await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect((getBaseSelectors()[1] as HTMLSelectElement).value).toBe('Aggression')
-  })
-
-  it('Retains selected base after navigating back from game screen', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
-    await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect((getBaseSelectors()[2] as HTMLSelectElement).value).toBe('SOR-026')
-  })
-
-  it('Submit button is immediately active after navigating back', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
-    await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled()
+    expect(within(screen.getByTestId('base-card')).getByText('Catacombs of Cadera')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Go to game' })).toBeEnabled()
   })
 
   it('Can start a new game immediately after navigating back without re-selecting', async () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await user.click(screen.getByRole('button', { name: 'Go to game' }))
     await user.click(screen.getByText('Start'))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
-  // --- Help navigation ---
-
-  it('Help button is visible on setup screen', async () => {
+  it('Keeps your base across launches', async () => {
+    const user = userEvent.setup()
+    const first = render(<App />)
+    await waitForSetup()
+    await chooseBase(user, 'Energy Conversion Lab')
+    first.unmount()
     render(<App />)
     await waitForSetup()
-    expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
+    expect(within(screen.getByTestId('base-card')).getByText('Energy Conversion Lab')).toBeInTheDocument()
+  })
+
+  // --- Help navigation ---
+
+  it('Help is in the More menu on setup screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    expect(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: 'Help' })).toBeInTheDocument()
   })
 
   it('Clicking help on setup screen shows the help screen', async () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await openFromMore(user, 'Help')
     expect(screen.getByText('Getting Started')).toBeInTheDocument()
   })
 
@@ -306,10 +284,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
   })
 
@@ -317,10 +292,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByRole('button', { name: 'Help' }))
     expect(screen.getByRole('heading', { level: 2, name: 'During a Game' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
@@ -330,19 +302,16 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await openFromMore(user, 'Help')
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('Source:')).toBeInTheDocument()
+    expect(setupMarker()).toBeInTheDocument()
   })
 
   it('Clicking back from help returns to game when help was opened from game', async () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByText('Start'))
     await user.click(screen.getByRole('button', { name: 'Help' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
@@ -383,7 +352,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.click(screen.getByRole('button', { name: '⚙' }))
+    await openFromMore(user, 'Settings')
     await user.click(screen.getByRole('button', { name: 'Help' }))
     expect(screen.getByRole('heading', { level: 2, name: 'General' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
@@ -394,10 +363,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     const img = screen.getByAltText('Catacombs of Cadera')
     expect(img).toHaveAttribute('src', 'https://cdn.swu-db.com/images/cards/SOR/292.png')
   })
@@ -407,10 +373,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     const img = screen.getByAltText('Catacombs of Cadera')
     expect(img).toHaveAttribute('src', 'https://cdn.swu-db.com/images/cards/SOR/026.png')
   })
@@ -418,17 +381,11 @@ describe('App', () => {
 
   // --- Settings navigation ---
 
-  it('Settings button is visible on setup screen', async () => {
-    render(<App />)
-    await waitForSetup()
-    expect(screen.getByRole('button', { name: '⚙' })).toBeInTheDocument()
-  })
-
-  it('Clicking settings on setup screen shows the settings screen', async () => {
+  it('Clicking settings in the More menu on setup screen shows the settings screen', async () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.click(screen.getByRole('button', { name: '⚙' }))
+    await openFromMore(user, 'Settings')
     expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument()
   })
 
@@ -436,19 +393,16 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.click(screen.getByRole('button', { name: '⚙' }))
+    await openFromMore(user, 'Settings')
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('Source:')).toBeInTheDocument()
+    expect(setupMarker()).toBeInTheDocument()
   })
 
   it('Settings button is visible on game screen', async () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     expect(screen.getByRole('button', { name: '⚙' })).toBeInTheDocument()
   })
 
@@ -456,10 +410,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByRole('button', { name: '⚙' }))
     expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument()
   })
@@ -468,10 +419,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByText('Start'))
     await user.click(screen.getByRole('button', { name: '⚙' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
@@ -482,21 +430,18 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.click(screen.getByRole('button', { name: '⚙' }))
+    await openFromMore(user, 'Settings')
     await user.click(screen.getByRole('button', { name: 'Help' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('Source:')).toBeInTheDocument()
+    expect(setupMarker()).toBeInTheDocument()
   })
 
   it('Clicking back from settings returns to game after settings -> help -> back', async () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByText('Start'))
     await user.click(screen.getByRole('button', { name: '⚙' }))
     await user.click(screen.getByRole('button', { name: 'Help' }))
@@ -519,10 +464,7 @@ describe('App analytics', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
     await user.click(screen.getByTestId('game-counter'))
     expect(mockOnGameStart).toHaveBeenCalledWith('SOR-026', 'SOR', true, 'casual')
@@ -532,10 +474,7 @@ describe('App analytics', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
     expect(mockOnGameStart).not.toHaveBeenCalled()
   })
@@ -545,10 +484,7 @@ describe('App analytics', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
     await user.click(screen.getByTestId('game-counter'))
     await user.click(screen.getByRole('button', { name: 'Back' }))
@@ -559,7 +495,7 @@ describe('App analytics', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await openFromMore(user, 'Help')
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(mockOnGameEnd).not.toHaveBeenCalled()
   })
@@ -674,33 +610,26 @@ describe('App lifecycle analytics', () => {
 
 describe('App tournament navigation', () => {
 
-  const getTournamentBaseSelectors = () => {
-    const all = screen.getAllByRole('combobox')
-    const formatSelect = screen.queryByTestId('format-select')
-    const modeSelect = screen.queryByTestId('mode-select')
-    const playModeSelect = screen.queryByTestId('play-mode-select')
-    return all.filter(el => el !== formatSelect && el !== modeSelect && el !== playModeSelect)
-  }
-
-  async function waitForSetupWithTournament() {
-    await waitFor(() => expect(screen.queryByTestId('play-mode-select')).toBeInTheDocument())
-  }
-
-  beforeEach(() => {
-    mockUserSettings.enableCompetitiveMode = true
-  })
-
-  it('navigates to tournament screen when tournament mode is confirmed', async () => {
+  it('navigates to tournament screen when tournament mode is confirmed, with Competitive mode off', async () => {
+    mockUserSettings.enableCompetitiveMode = false
     const user = userEvent.setup()
     render(<App />)
-    await waitForSetupWithTournament()
-    await user.selectOptions(screen.getByTestId('play-mode-select'), 'tournament')
-    await waitFor(() => expect(getTournamentBaseSelectors()).toHaveLength(3))
-    await user.selectOptions(getTournamentBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getTournamentBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getTournamentBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await waitForSetup()
+    await user.click(screen.getByRole('button', { name: 'Tournament' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
     expect(screen.getByRole('button', { name: 'Start Match 1' })).toBeInTheDocument()
+  })
+
+  // Format leaves setup for the tournament start sheet; until then a tournament plays Premier.
+  it('a tournament started from setup plays Premier, whatever format was stored before', async () => {
+    store.set('pref_format', 'eternal')
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.click(screen.getByRole('button', { name: 'Tournament' }))
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
+    await user.click(screen.getByRole('button', { name: 'Start Match 1' }))
+    expect(mockUseTournament.startTournament).toHaveBeenCalledWith(expect.objectContaining({ set: 'SOR', number: '026' }), 'premier', expect.anything(), expect.anything())
   })
 
   it('shows tournament screen (not setup) when a tournament is already active on load', async () => {
@@ -859,7 +788,7 @@ describe('App game select', () => {
   it('transitions to setup screen after loading when startScreen is swu', async () => {
     render(<App />)
     await waitForSetup()
-    expect(getBaseSelectors()).toHaveLength(3)
+    expect(screen.getByTestId('base-card')).toBeInTheDocument()
   })
 
   it('transitions to game select screen after loading when startScreen is gameSelect', async () => {
@@ -870,11 +799,6 @@ describe('App game select', () => {
 
   // The setup screen is ready once its scenario select shows.
   const xwingSetupMarker = () => screen.getByRole('button', { name: /^Scenario: / })
-
-  async function openFromMore(user: ReturnType<typeof userEvent.setup>, name: string) {
-    await user.click(screen.getByRole('button', { name: 'More' }))
-    await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name }))
-  }
 
   async function chooseNoList(user: ReturnType<typeof userEvent.setup>, side: 'player' | 'opponent') {
     await user.click(within(screen.getByTestId(`${side}-card`)).getByRole('button', { name: /choose a list|change list/i }))
@@ -894,7 +818,7 @@ describe('App game select', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars unlimited/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars unlimited/i }))
     await waitForSetup()
-    expect(getBaseSelectors()).toHaveLength(3)
+    expect(screen.getByTestId('base-card')).toBeInTheDocument()
   })
 
   it('navigates to xwing setup screen when X-Wing is clicked on game select', async () => {
@@ -1127,7 +1051,7 @@ describe('App game select', () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
-    await user.click(screen.getByRole('button', { name: '⚙' }))
+    await openFromMore(user, 'Settings')
     expect(screen.getByRole('tab', { name: /swu/i })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: /general/i })).toHaveAttribute('aria-selected', 'false')
   })
