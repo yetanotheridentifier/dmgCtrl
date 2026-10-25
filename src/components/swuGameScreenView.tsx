@@ -1,44 +1,23 @@
 import { useState } from 'react'
-import type { ReactNode } from 'react'
 import { Base } from '../hooks/useBases'
 import type { HistoryEntry } from '../hooks/useGameHistory'
 import type { Initiative } from '../hooks/useInitiative'
 import type { MatchResult } from '../hooks/useMatch'
 import type { PlayMode } from '../utils/playMode'
 import { useCardDrag, useDragScrubber } from '../hooks/useDragScrubber'
-import { baseKey } from '../hooks/useSwuSetup'
 import AppScreenLayout from './layout/appScreenLayout'
 import GameLogOverlay from './gameLogOverlay'
-import SwuBaseSheet from './swuBaseSheet'
 import TimerDisplay from './shared/timerDisplay'
-import { Button, IconButton, SegmentedControl, Sheet, Stepper } from './shared/controls'
+import { Button, IconButton, Sheet } from './shared/controls'
 import { BackIcon, DotsIcon, LogIcon } from './icons'
+import { BaseCard, EpicActionButton, ForceButton, GameSheets, SheetActions } from './swuGamePieces'
+import type { Art, LastGame, OpenSheet } from './swuGamePieces'
+import { CARD_ASPECT_RATIO, DISABLED_BTN, RESULT_WORD, marginButton, mutedText } from './swuGameStyles'
 
-const CARD_NATURAL_WIDTH = 1560
-const CARD_NATURAL_HEIGHT = 1120
-const CARD_ASPECT_RATIO = CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT
 // Each margin keeps at least this much for its 60px column of buttons.
 const MARGIN_MIN = 76
 
-const ICON_URL = `${import.meta.env.BASE_URL}dmgctrl-icon-192-white.svg`
-const FORCE_TOKEN_URL = `${import.meta.env.BASE_URL}dmgCtrl-force-token.png`
-
-export interface LastGame {
-  result: MatchResult
-  round: number
-  damage: number
-}
-
-interface Art {
-  src: string | null
-  rotationDeg: number
-  loaded: boolean
-  failed: boolean
-  onLoad: () => void
-  onError: () => void
-}
-
-interface Props {
+export interface SwuGameViewProps {
   base: Base
   onBack: () => void
   onHelp: () => void
@@ -96,49 +75,8 @@ interface Props {
   onChangeBase?: (b: Base) => void
 }
 
-type OpenSheet = null | 'more' | 'timer' | 'base'
-
-const RESULT_OPTIONS: { value: MatchResult; label: string }[] = [
-  { value: 'won', label: 'Won' },
-  { value: 'lost', label: 'Lost' },
-  { value: 'drawn', label: 'Draw' },
-]
-
-const RECORD_LABEL: Record<MatchResult, string> = { won: 'Record win', lost: 'Record loss', drawn: 'Record draw' }
-const RESULT_WORD: Record<MatchResult, string> = { won: 'won', lost: 'lost', drawn: 'drawn' }
-
-const SHADOW = '0 2px 8px rgba(0,0,0,0.9), 0 0 16px rgba(0,0,0,0.6)'
-
 const MARGIN_BTN: React.CSSProperties = { width: '60px', height: '52px' }
-
-const marginButton = (extra: React.CSSProperties = {}): React.CSSProperties => ({
-  width: '60px',
-  height: '52px',
-  flexShrink: 0,
-  border: 'none',
-  borderRadius: '12px',
-  boxSizing: 'border-box',
-  fontFamily: 'inherit',
-  cursor: 'pointer',
-  WebkitTapHighlightColor: 'transparent',
-  userSelect: 'none',
-  WebkitUserSelect: 'none',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '2px',
-  background: 'var(--color-surface-raised)',
-  color: 'var(--color-text-body)',
-  ...extra,
-})
-
-const DISABLED_BTN: React.CSSProperties = {
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-disabled)',
-  cursor: 'default',
-  boxShadow: 'none',
-}
+const SIDE_BTN: React.CSSProperties = { height: '56px' }
 
 const column: React.CSSProperties = {
   height: '100%',
@@ -151,34 +89,7 @@ const column: React.CSSProperties = {
   gap: '8px',
 }
 
-const mutedText: React.CSSProperties = { fontSize: '0.85rem', lineHeight: 1.45, color: 'var(--color-text-muted)' }
-
-// The dmgCtrl mark, drawn in the button's own colour.
-function MarkIcon() {
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        display: 'block',
-        width: '22px',
-        height: '22px',
-        background: 'currentColor',
-        WebkitMask: `url(${ICON_URL}) center / contain no-repeat`,
-        mask: `url(${ICON_URL}) center / contain no-repeat`,
-      }}
-    />
-  )
-}
-
-function ForceIcon({ faint }: { faint: boolean }) {
-  return <img src={FORCE_TOKEN_URL} alt="" style={{ width: '24px', height: '24px', objectFit: 'contain', opacity: faint ? 0.35 : 0.9 }} />
-}
-
-function SheetActions({ children }: { children: ReactNode }) {
-  return <div style={{ marginTop: 'auto', paddingTop: '4px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>{children}</div>
-}
-
-function SwuGameScreenView(props: Props) {
+function SwuGameScreenView(props: SwuGameViewProps) {
   const {
     base, onBack, onHelp, onSettings, art, count, round, onIncrement, onDecrement, onStartGame, onRoundIncrement,
     showDamageButtons, showEpicAction, epicActionUsed, onEpicActionMark,
@@ -193,17 +104,12 @@ function SwuGameScreenView(props: Props) {
   } = props
 
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null)
-  const close = () => setOpenSheet(null)
-  // Sheet actions close the sheet first, so it isn't left open behind the next screen.
-  const closeThen = (fn: () => void) => () => { close(); fn() }
 
   const isCasual = playMode === 'casual'
   const gameStarted = round > 0
   const matchOver = matchResult !== null
   const hpLeft = base.hp - count
   const destroyed = gameStarted && hpLeft <= 0
-  const gamesPlayed = playerScore + opponentScore
-  const nextGame = gamesPlayed + 1
 
   const cardDrag = useCardDrag(
     gameStarted ? () => onIncrement(1) : onStartGame,
@@ -216,222 +122,39 @@ function SwuGameScreenView(props: Props) {
   const buttons = useDragScrubber(onIncrement, onDecrement, hpLeft, count, gameStarted)
   const dragAmount = cardDrag.amount ?? (buttons.dragIndicator && { type: buttons.dragIndicator.type, value: buttons.dragIndicator.value })
 
-  // --- the card's open art: the damage, or what the next tap does ---
-
-  const big = (text: string, fontSize: string) => (
-    <span style={{ fontSize, fontWeight: 300, lineHeight: 1 }}>{text}</span>
-  )
-  const small = (text: string) => (
-    <span style={{ fontSize: 'max(12px, 3.3vh)', color: 'var(--color-tonal-text)', marginTop: '0.4vh' }}>{text}</span>
-  )
-
-  let cardLabel: string
-  let centre: ReactNode
-  if (matchOver) {
-    cardLabel = base.name
-    centre = big(`Match ${RESULT_WORD[matchResult]}`, '10vh')
-  } else if (gameStarted) {
-    cardLabel = `${base.name}: tap for 1 damage, drag up to add more, drag down to remove`
-    const tone = destroyed ? { color: 'var(--color-error)' } : {}
-    centre = (
-      <>
-        <span data-testid="damage" style={{ fontSize: '22.5vh', fontWeight: 300, lineHeight: 1, ...tone }}>{count}</span>
-        <span style={{ fontSize: '5.6vh', color: destroyed ? 'var(--color-error)' : 'var(--color-tonal-text)' }}>{`${hpLeft} HP left`}</span>
-      </>
-    )
-  } else if (lastGame && !isCasual) {
-    cardLabel = `${base.name}: tap to start game ${nextGame}`
-    centre = (
-      <>
-        <span style={{ fontSize: 'max(12px, 3.3vh)', letterSpacing: '0.12em', color: 'var(--color-tonal-text)', marginBottom: '1vh' }}>
-          {`GAME ${gamesPlayed} ${RESULT_WORD[lastGame.result].toUpperCase()} · ${playerScore}–${opponentScore}`}
-        </span>
-        {big(`Start game ${nextGame}`, '11vh')}
-        {small('tap the card')}
-      </>
-    )
-  } else {
-    cardLabel = `${base.name}: tap to start`
-    centre = (
-      <>
-        {lastGame && (
-          <span style={{ fontSize: 'max(12px, 3.3vh)', letterSpacing: '0.12em', color: 'var(--color-tonal-text)', marginBottom: '1vh' }}>
-            {`GAME ${RESULT_WORD[lastGame.result].toUpperCase()}`}
-          </span>
-        )}
-        {big('Start', '14vh')}
-        {small('tap the card')}
-      </>
-    )
-  }
-
+  // The card fills the height, leaving each margin room for its column; its sizes scale from 1vh.
   const card = (
-    <button
-      type="button"
-      data-testid="game-card"
-      aria-label={cardLabel}
+    <BaseCard
+      base={base}
+      art={art}
+      face={{ count, gameStarted, isCasual, matchResult, lastGame, playerScore, opponentScore }}
       disabled={matchOver}
-      onClick={cardDrag.onClick}
-      onPointerDown={cardDrag.onPointerDown}
-      onPointerMove={cardDrag.onPointerMove}
-      onPointerUp={cardDrag.onPointerUp}
-      onPointerCancel={cardDrag.onPointerCancel}
-      style={{
-        position: 'relative',
-        aspectRatio: `${CARD_ASPECT_RATIO}`,
-        width: `min(calc((100vh - 8px) * ${CARD_ASPECT_RATIO}), calc(100vw - ${2 * MARGIN_MIN}px))`,
-        padding: 0,
-        border: 'none',
-        borderRadius: '3.5%',
-        overflow: 'hidden',
-        background: 'var(--color-surface)',
-        color: 'var(--color-text-primary)',
-        fontFamily: 'inherit',
-        cursor: matchOver ? 'default' : 'pointer',
-        touchAction: 'none',
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        WebkitTapHighlightColor: 'transparent',
-        boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.3)',
-      }}
-    >
-      {/* Border overlay: above the art, to cover its edge fringe */}
-      <span aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: 10, border: '2px solid var(--color-accent)', borderRadius: 'inherit', pointerEvents: 'none' }} />
-
-      <img
-        src={art.src ?? undefined}
-        alt={base.name}
-        onLoad={art.onLoad}
-        onError={art.onError}
-        data-testid="game-card-image"
-        draggable={false}
-        style={art.rotationDeg ? {
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          width: `${100 * CARD_NATURAL_HEIGHT / CARD_NATURAL_WIDTH}%`,
-          height: `${100 * CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT}%`,
-          objectFit: 'cover',
-          transform: `translate(-50%, -50%) rotate(${art.rotationDeg}deg)`,
-          display: art.loaded ? 'block' : 'none',
-          pointerEvents: 'none',
-        } : {
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          display: art.loaded ? 'block' : 'none',
-          pointerEvents: 'none',
-        }}
-      />
-
-      {/* No art: the card's own text, in the places the card prints it */}
-      {art.failed && (
-        <>
-          <span style={{ position: 'absolute', top: '5%', left: '8%', right: '8%', zIndex: 2, textAlign: 'center', fontSize: 'clamp(1rem, 7vh, 1.8rem)', fontWeight: 300, letterSpacing: '0.05em' }}>{base.name}</span>
-          {base.epicAction && (
-            <span style={{ position: 'absolute', top: '66%', left: '8%', right: '8%', height: '24%', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontStyle: 'italic', fontWeight: 300, lineHeight: 1.4, fontSize: 'clamp(0.6rem, 4vh, 1.1rem)' }}>{base.epicAction}</span>
-          )}
-          <span style={{ position: 'absolute', bottom: '3%', left: '8%', right: '8%', zIndex: 2, textAlign: 'center', fontSize: 'clamp(0.7rem, 2.5vh, 1.2rem)', fontWeight: 300, color: 'var(--color-text-muted)' }}>{base.subtitle}</span>
-        </>
-      )}
-
-      {/* Shading behind the number, fading out before the top band and the text box */}
-      {!art.failed && (
-        <span aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none', background: 'radial-gradient(ellipse 40% 26% at 50% 39%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 45%, transparent 100%)' }} />
-      )}
-
-      {/* The open art between the top band (HP, name, aspect) and the text box */}
-      <span
-        data-testid="game-counter"
-        style={{ position: 'absolute', left: 0, right: 0, top: '17%', height: '45%', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textShadow: SHADOW }}
-      >
-        {centre}
-      </span>
-
-      {/* The one thing allowed over the text box, as the physical token is */}
-      {showEpicAction && epicActionUsed && (
-        <span
-          data-testid="epic-action-token"
-          style={{ position: 'absolute', left: '6%', right: '6%', bottom: '13%', height: '23%', zIndex: 3, borderRadius: '10px', background: 'rgba(var(--color-epic-rgb), 0.9)', color: '#2a1a00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'max(12px, 3.6vh)', fontWeight: 700, letterSpacing: '0.1em', pointerEvents: 'none' }}
-        >
-          EPIC ACTION USED
-        </span>
-      )}
-
-      {dragAmount && (
-        <span
-          data-testid="drag-amount"
-          aria-live="polite"
-          style={{ position: 'absolute', left: '64%', top: '22%', zIndex: 4, padding: '4px 12px', borderRadius: '10px', background: 'var(--color-accent)', color: 'var(--color-on-accent)', fontSize: 'max(18px, 6.7vh)', fontWeight: 700, pointerEvents: 'none' }}
-        >
-          {`${dragAmount.type === '+' ? '+' : '−'}${dragAmount.value}`}
-        </span>
-      )}
-    </button>
+      epicActionToken={showEpicAction && epicActionUsed}
+      dragAmount={dragAmount}
+      drag={cardDrag}
+      width={`min(calc((100vh - 8px) * ${CARD_ASPECT_RATIO}), calc(100vw - ${2 * MARGIN_MIN}px))`}
+      unit="1vh"
+    />
   )
 
   // --- left margin ---
 
-  const epicButton = showEpicAction && (() => {
-    if (!gameStarted) {
-      return <button type="button" disabled aria-label="Epic action, from the game’s start" style={marginButton({ height: '56px', ...DISABLED_BTN })}><MarkIcon /></button>
-    }
-    if (epicActionUsed) {
-      return (
-        <button type="button" disabled aria-label="Epic action used" style={marginButton({ height: '56px', ...DISABLED_BTN })}>
-          <MarkIcon /><span style={{ fontSize: '10px' }}>USED</span>
-        </button>
-      )
-    }
-    return (
-      <button
-        type="button"
-        aria-label="Epic action: tap when used"
-        onClick={onEpicActionMark}
-        style={marginButton({ height: '56px', border: '2px solid var(--color-epic)', background: 'rgba(var(--color-epic-rgb), 0.18)', color: 'var(--color-epic)', boxShadow: '0 0 12px rgba(var(--color-epic-rgb), 0.5)' })}
-      >
-        <MarkIcon />
-      </button>
-    )
-  })()
+  const epicButton = showEpicAction && <EpicActionButton gameStarted={gameStarted} used={epicActionUsed} onMark={onEpicActionMark} size={SIDE_BTN} />
 
-  const forceButton = (showForce || showMysticMonastery) && (() => {
-    const usesLeft = showMysticMonastery ? <span style={{ fontSize: '10px', fontWeight: 700 }}>{`${mysticUsesRemaining} LEFT`}</span> : null
-    if (forceActive) {
-      return (
-        <button
-          type="button"
-          aria-label="The Force is with you: tap to clear"
-          onClick={onForceToggle}
-          style={marginButton({ height: '56px', background: 'var(--color-accent)', color: 'var(--color-on-accent)' })}
-        >
-          <ForceIcon faint={false} />{usesLeft}
-        </button>
-      )
-    }
-    const exhausted = showMysticMonastery && mysticUsesRemaining <= 0
-    const label = exhausted ? 'No Force uses left'
-      : showMysticMonastery ? `Gain the Force: ${mysticUsesRemaining} ${mysticUsesRemaining === 1 ? 'use' : 'uses'} left`
-      : 'Gain the Force'
-    const disabled = !gameStarted || exhausted
-    return (
-      <button
-        type="button"
-        aria-label={label}
-        disabled={disabled}
-        onClick={showMysticMonastery ? onMysticAction : onForceToggle}
-        style={marginButton({ height: '56px', ...(disabled ? DISABLED_BTN : { background: 'var(--color-tonal)', color: 'var(--color-tonal-text)' }) })}
-      >
-        <ForceIcon faint={disabled} />{usesLeft}
-      </button>
-    )
-  })()
+  const forceButton = (showForce || showMysticMonastery) && (
+    <ForceButton
+      gameStarted={gameStarted}
+      mysticMonastery={showMysticMonastery}
+      active={forceActive}
+      mysticUsesRemaining={mysticUsesRemaining}
+      onToggle={onForceToggle}
+      onMysticAction={onMysticAction}
+      size={SIDE_BTN}
+    />
+  )
 
   const initiativeSide = (side: 'opponent' | 'player') => {
     const held = initiative === side
-    const who = side === 'opponent' ? 'Opponent' : 'You'
     return (
       <button
         type="button"
@@ -455,7 +178,7 @@ function SwuGameScreenView(props: Props) {
           WebkitTapHighlightColor: 'transparent',
         }}
       >
-        {who === 'Opponent' ? 'OPP' : 'YOU'}
+        {side === 'opponent' ? 'OPP' : 'YOU'}
       </button>
     )
   }
@@ -544,86 +267,6 @@ function SwuGameScreenView(props: Props) {
     </button>
   )
 
-  // --- sheets ---
-
-  const endTitle = isCasual ? 'End game' : `End game ${nextGame}`
-  const endNote = (() => {
-    if (isCasual) return 'Damage resets for a rematch. Undo in the log takes it back.'
-    if (endGameChoice === null) return 'Choose the result to record it.'
-    const p = playerScore + (endGameChoice === 'won' ? 1 : 0)
-    const o = opponentScore + (endGameChoice === 'lost' ? 1 : 0)
-    const needed = playMode === 'bo3' ? 2 : 1
-    const ends = endGameChoice === 'drawn' || p >= needed || o >= needed || timerExpired
-    if (endGameChoice === 'drawn') return `A draw ends the match ${p}–${o}.`
-    if (ends) return `This ends the match ${p}–${o}.`
-    return `Match ${p}–${o} after this; damage resets for game ${nextGame + 1}. Undo in the log takes it back.`
-  })()
-
-  const sheets = (
-    <>
-      <Sheet open={openSheet === 'more'} title="More" onClose={close}>
-        <Button onClick={closeThen(onHelp)}>Help</Button>
-        {onSettings && <Button onClick={closeThen(onSettings)}>Settings</Button>}
-        {changeBaseOptions && <Button onClick={() => setOpenSheet('base')}>Change base</Button>}
-      </Sheet>
-
-      {changeBaseOptions && onChangeBase && (
-        <SwuBaseSheet
-          open={openSheet === 'base'}
-          onClose={close}
-          bases={changeBaseOptions}
-          favouriteBases={[]}
-          recentBases={[]}
-          currentKey={baseKey(base)}
-          onChoose={b => { onChangeBase(b); close() }}
-        />
-      )}
-
-      <Sheet open={openSheet === 'timer'} title="Round and timer" onClose={close}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px' }}>
-          <span style={{ fontSize: '1rem' }}>{gameStarted ? `Round ${round}` : `Before game ${nextGame}`}</span>
-          <TimerDisplay remaining={timerRemaining} style={{ fontSize: '1.6rem', fontWeight: 300 }} />
-        </div>
-        {onTimerMinutesChange && (
-          <>
-            <Stepper label="Game length" value={timerMinutes} min={5} max={90} step={5} onChange={onTimerMinutesChange} />
-            <div style={mutedText}>
-              {`Minutes, in 5-minute steps until game 1 starts; then it’s fixed for this match. The next ${playMode === 'bo3' ? 'best of 3' : 'best of 1'} starts at the same length.`}
-            </div>
-          </>
-        )}
-        <SheetActions><Button onClick={close}>Done</Button></SheetActions>
-      </Sheet>
-
-      <Sheet open={endGameOpen} title={endTitle} onClose={onKeepPlaying}>
-        {destroyed && <div style={{ fontSize: '0.9rem', color: 'var(--color-error)' }}>Your base is destroyed</div>}
-        <SegmentedControl label="Result" options={RESULT_OPTIONS} value={endGameChoice} onChange={onEndGameChoice} />
-        <div style={mutedText}>{endNote}</div>
-        <SheetActions>
-          <Button onClick={onKeepPlaying}>Keep playing</Button>
-          <Button
-            variant="primary"
-            disabled={endGameChoice === null}
-            onClick={() => { if (endGameChoice) onRecord(endGameChoice) }}
-            style={{ minHeight: '52px', padding: '0 24px' }}
-          >
-            {endGameChoice ? RECORD_LABEL[endGameChoice] : 'Record'}
-          </Button>
-        </SheetActions>
-      </Sheet>
-
-      {lastGame && (
-        <Sheet open={gameOverOpen} title={`Game ${RESULT_WORD[lastGame.result]}`} onClose={onCloseGameOver}>
-          <div style={mutedText}>{`Ended in round ${lastGame.round} · ${lastGame.damage} damage taken`}</div>
-          <SheetActions>
-            <Button onClick={onNewSetup}>New setup</Button>
-            <Button variant="primary" onClick={onRematch} style={{ minHeight: '52px', padding: '0 24px' }}>Rematch</Button>
-          </SheetActions>
-        </Sheet>
-      )}
-    </>
-  )
-
   return (
     <AppScreenLayout>
       <div style={{
@@ -660,7 +303,38 @@ function SwuGameScreenView(props: Props) {
       </div>
 
       {showLog && <GameLogOverlay entries={logEntries} onUndo={onUndo} />}
-      {sheets}
+      <GameSheets
+        openSheet={openSheet}
+        setOpenSheet={setOpenSheet}
+        base={base}
+        onHelp={onHelp}
+        onSettings={onSettings}
+        changeBaseOptions={changeBaseOptions}
+        onChangeBase={onChangeBase}
+        playMode={playMode}
+        round={round}
+        playerScore={playerScore}
+        opponentScore={opponentScore}
+        timerRemaining={timerRemaining}
+        timerMinutes={timerMinutes}
+        onTimerMinutesChange={onTimerMinutesChange}
+        timerExpired={timerExpired}
+        endGameOpen={endGameOpen}
+        endGameChoice={endGameChoice}
+        destroyedNote={destroyed ? 'Your base is destroyed' : null}
+        onEndGameChoice={onEndGameChoice}
+        onKeepPlaying={onKeepPlaying}
+        onRecord={onRecord}
+      />
+      {lastGame && (
+        <Sheet open={gameOverOpen} title={`Game ${RESULT_WORD[lastGame.result]}`} onClose={onCloseGameOver}>
+          <div style={mutedText}>{`Ended in round ${lastGame.round} · ${lastGame.damage} damage taken`}</div>
+          <SheetActions>
+            <Button onClick={onNewSetup}>New setup</Button>
+            <Button variant="primary" onClick={onRematch} style={{ minHeight: '52px', padding: '0 24px' }}>Rematch</Button>
+          </SheetActions>
+        </Sheet>
+      )}
     </AppScreenLayout>
   )
 }
