@@ -765,9 +765,11 @@ describe('App tournament navigation', () => {
     // Record game 1 win: navigate to game, click You → Confirm, then Back to tournament
     await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'YOU' })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'YOU' }))
-    await user.click(screen.getByRole('button', { name: 'WIN' }))
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    await user.click(screen.getByTestId('game-counter'))
+    await user.click(screen.getByRole('button', { name: 'End game' }))
+    await user.click(screen.getByRole('button', { name: 'Won' }))
+    await user.click(screen.getByRole('button', { name: 'Record win' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     // Now on tournament screen with hasPlayedGameInCurrentMatch=true, so Change base is offered
     await waitFor(() => expect(screen.getByRole('button', { name: 'Change base' })).toBeInTheDocument())
@@ -775,6 +777,35 @@ describe('App tournament navigation', () => {
     await user.click(within(screen.getByRole('dialog', { name: 'Choose your base' })).getByRole('button', { name: /^Energy Conversion Lab/ }))
     await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    await user.click(screen.getByTestId('game-counter'))
+    expect(mockOnGameStart).toHaveBeenLastCalledWith('SOR-022', 'SOR', false, 'bo3')
+  })
+
+  it('changes base between games from the game screen’s More menu in limited bo3', async () => {
+    mockUserSettings.useHyperspace = false
+    const user = userEvent.setup()
+    mockUseTournament.tournament = {
+      base: { set: 'SOR', number: '026', name: 'Catacombs of Cadera', subtitle: 'Jedha', hp: 30,
+        frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
+        hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
+      format: 'limited',
+      playMode: 'bo3',
+      totalRounds: 3,
+      rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],
+    }
+    mockUseTournament.matchInProgress = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    await user.click(screen.getByTestId('game-counter'))
+    await user.click(screen.getByRole('button', { name: 'End game' }))
+    await user.click(screen.getByRole('button', { name: 'Lost' }))
+    await user.click(screen.getByRole('button', { name: 'Record loss' }))
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    await user.click(screen.getByRole('button', { name: 'Change base' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Choose your base' })).getByRole('button', { name: /^Energy Conversion Lab/ }))
+    await waitFor(() => expect(screen.getByAltText('Energy Conversion Lab')).toBeInTheDocument())
     await user.click(screen.getByTestId('game-counter'))
     expect(mockOnGameStart).toHaveBeenLastCalledWith('SOR-022', 'SOR', false, 'bo3')
   })

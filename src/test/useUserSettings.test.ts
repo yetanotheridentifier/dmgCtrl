@@ -215,6 +215,26 @@ describe('useUserSettings', () => {
     expect(saved.enableInitiativeBar).toBe(false)
   })
 
+  it('defaults enableDamageButtons to false when storage is empty', () => {
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.enableDamageButtons).toBe(false)
+  })
+
+  it('loads enableDamageButtons=true from stored JSON', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ enableDamageButtons: true }) : null
+    )
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.enableDamageButtons).toBe(true)
+  })
+
+  it('saves to localStorage when setEnableDamageButtons is called', () => {
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    act(() => result.current.setEnableDamageButtons(true))
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
+    expect(saved.enableDamageButtons).toBe(true)
+  })
+
   it('saves to localStorage when setEnableXwingPhases is called', () => {
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
     act(() => result.current.setEnableXwingPhases(false))
