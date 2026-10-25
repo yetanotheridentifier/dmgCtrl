@@ -7,14 +7,13 @@ import { useTimer } from '../hooks/useTimer'
 import { useWakeLock } from '../hooks/useWakeLock'
 import { useInitiative } from '../hooks/useInitiative'
 import { usePhaseTracker, XWING_PHASES } from '../hooks/usePhaseTracker'
-import XwingGameScreenView from './xwingGameScreenView'
+import XwingGameScreenView, { type ScoreBreakdown, type GameOverReason } from './xwingGameScreenView'
 import RotatePrompt from './layout/rotatePrompt'
 import { onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced } from '../services/analytics'
-import type { XwingScenario } from '../hooks/useXwingSetup'
+import type { XwingMatchType, XwingScenario } from '../hooks/useXwingSetup'
 import type { XwingPilot } from '../utils/parseXwsText'
 import { type ShipEntry, initShips, halfPoints, remainingPoints } from '../utils/shipRoster'
-import { resolveXwsName } from '../utils/resolveXwsName'
-import { pilotNames } from '../utils/xwaNames'
+import { displayPilots } from '../utils/displayPilots'
 
 interface XwingGameSnapshot {
   playerScore: number
@@ -27,6 +26,9 @@ interface XwingGameSnapshot {
   gameOver: boolean
   playerShips: ShipEntry[]
   opponentShips: ShipEntry[]
+  scoringOpen: boolean
+  extraRound: boolean
+  gameOverReason: GameOverReason | null
 }
 
 interface Props {
@@ -37,19 +39,31 @@ interface Props {
   playerDeficit?: number
   opponentDeficit?: number
   scenario?: XwingScenario
+  matchType?: XwingMatchType
   playerPilots?: XwingPilot[]
   opponentPilots?: XwingPilot[]
 }
 
-export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario = 'None', playerPilots, opponentPilots }: Props) {
-  const { enableLongPress, enableActionLog, enableWakeLock, enableInitiativeBar, enableXwingPhases, enableXwingAlwaysIncDec, xwingTimerMinutes } = useUserSettings()
+// Points scored against a side's ships: half for a damaged ship, all for a destroyed one.
+const shipPointsAgainst = (ships: ShipEntry[]) =>
+  ships.reduce((sum, s) => sum + (s.state === 'half' ? halfPoints(s.pilot.points) : s.state === 'destroyed' ? s.pilot.points : 0), 0)
+
+const allDestroyed = (ships: ShipEntry[]) => ships.length > 0 && ships.every(s => s.state === 'destroyed')
+
+export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario = 'None', matchType = 'Casual', playerPilots = [], opponentPilots = [] }: Props) {
+  const { enableLongPress, enableActionLog, enableWakeLock, enableXwingPhases, enableXwingAlwaysIncDec, xwingTimerMinutes, setXwingTimerMinutes } = useUserSettings()
   const { isPortrait } = useOrientation()
 
   const [gameStarted, setGameStarted] = useState(false)
   const [pendingPlayerScenario, setPendingPlayerScenario] = useState<number | null>(null)
   const [pendingOpponentScenario, setPendingOpponentScenario] = useState<number | null>(null)
-  const [playerShips, setPlayerShips] = useState<ShipEntry[]>([])
-  const [opponentShips, setOpponentShips] = useState<ShipEntry[]>([])
+  const [playerShips, setPlayerShips] = useState<ShipEntry[]>(() => initShips(playerPilots))
+  const [opponentShips, setOpponentShips] = useState<ShipEntry[]>(() => initShips(opponentPilots))
+  // Phase tracker off: the round's scoring is open, between the round button and Start round.
+  const [scoringOpen, setScoringOpen] = useState(false)
+  // In One more round: its End ends the game again.
+  const [extraRound, setExtraRound] = useState(false)
+  const [gameOverReason, setGameOverReason] = useState<GameOverReason | null>(null)
 
   const game = useXwingGame()
   const log = useGameHistory<XwingGameSnapshot>()
@@ -62,10 +76,10 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
 
   const gameStartedRef = useRef(false)
 
+  const atRoundEnd = enableXwingPhases ? phaseTracker.isLastPhase : scoringOpen
   const scenarioScoringActive =
     scenario !== 'None' &&
-    enableXwingPhases &&
-    phaseTracker.isLastPhase &&
+    atRoundEnd &&
     gameStarted &&
     !game.gameOver &&
     game.round >= 2
@@ -85,6 +99,9 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
     gameOver: game.gameOver,
     playerShips: [...playerShips],
     opponentShips: [...opponentShips],
+    scoringOpen,
+    extraRound,
+    gameOverReason,
   })
 
   useEffect(() => {
@@ -104,15 +121,17 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
     : [0, 0]
 
   // The round's scenario points count before the result, since they were scored in it.
-  const finishGame = (p: number, o: number) => {
+  const finishGame = (p: number, o: number, reason: GameOverReason) => {
     const snap = snapshot()
     if (p > 0 || o > 0) game.addScenarioPoints(p, o)
     setPendingPlayerScenario(null)
     setPendingOpponentScenario(null)
+    setScoringOpen(false)
+    setGameOverReason(reason)
     const finalPlayer = game.combinedPlayer + p
     const finalOpponent = game.combinedOpponent + o
-    const resultMsg = finalPlayer > finalOpponent ? 'Game Won'
-      : finalOpponent > finalPlayer ? 'Game Lost'
+    const resultMsg = finalPlayer > finalOpponent ? 'Game won'
+      : finalOpponent > finalPlayer ? 'Game lost'
       : 'Draw'
     game.endGame()
     log.add({ type: 'game-result', message: resultMsg, color: '#ffffff', snapshot: snap })
@@ -123,75 +142,98 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
     const [p, o] = pendingScenario()
     // A player who reached 50 this round ends the game when the round ends, however it is ended.
     if (reachesTarget(game.combinedPlayer + p, game.combinedOpponent + o)) {
-      finishGame(p, o)
+      finishGame(p, o, 'score')
       return
     }
     const fromRound = game.round
     const snap = snapshot()
     if (p > 0 || o > 0) {
-      log.add({ type: 'scenario', message: `Scenario: You +${p}, Opp +${o}`, color: 'var(--color-accent)', snapshot: snap })
+      log.add({ type: 'scenario', message: 'Mission points', detail: `+${p} to you, +${o} to opponent`, color: 'var(--color-accent)', snapshot: snap })
       game.addScenarioPoints(p, o)
     }
     setPendingPlayerScenario(null)
     setPendingOpponentScenario(null)
+    setScoringOpen(false)
     log.add({ type: 'round', message: `Round ${fromRound + 1}`, color: '#ffffff', snapshot: snap })
     game.advanceRound()
-    initiative.reset()
+    if (enableXwingPhases) initiative.reset()
     phaseTracker.reset()
     void onXwingRoundAdvanced(fromRound, Math.min(12, fromRound + 1))
   }
 
-  const handlePhaseAdvance = () => {
-    if (phaseTracker.isLastPhase) {
-      if (game.round >= 12 || timer.isExpired) {
-        finishGame(...pendingScenario())
-        return
-      }
-      handleRoundAdvance()
-    } else {
-      phaseTracker.advance()
+  // The round's end: the game ends after round 12, once time has run out, or after One more round.
+  const roundEndsGame = extraRound || game.round >= 12 || timer.isExpired
+  const handleEndOfRound = () => {
+    if (game.gameOver) return
+    if (roundEndsGame) {
+      const [p, o] = pendingScenario()
+      const reason: GameOverReason = reachesTarget(game.combinedPlayer + p, game.combinedOpponent + o) ? 'score'
+        : extraRound ? 'extra' : timer.isExpired ? 'time' : 'rounds'
+      finishGame(p, o, reason)
+      return
     }
+    handleRoundAdvance()
+  }
+
+  const handlePhaseAdvance = () => {
+    if (phaseTracker.isLastPhase) handleEndOfRound()
+    else phaseTracker.advance()
+  }
+
+  const handleOpenScoring = () => {
+    log.add({ type: 'scoring', message: `Scoring round ${game.round}`, color: 'var(--color-text-muted)', snapshot: snapshot() })
+    setScoringOpen(true)
+  }
+
+  const resetToPregame = () => {
+    log.reset()
+    game.reset()
+    phaseTracker.reset()
+    initiative.reset()
+    setPendingPlayerScenario(null)
+    setPendingOpponentScenario(null)
+    setPlayerShips(initShips(playerPilots))
+    setOpponentShips(initShips(opponentPilots))
+    setScoringOpen(false)
+    setExtraRound(false)
+    setGameOverReason(null)
+    setLogOpen(false)
   }
 
   const handleStartGame = () => {
-    log.reset()
-    setLogOpen(false)
-    log.add({ type: 'round', message: 'Round 1', color: '#ffffff', snapshot: snapshot() })
-    game.reset()
-    phaseTracker.reset()
-    setPendingPlayerScenario(null)
-    setPendingOpponentScenario(null)
-    setPlayerShips(playerPilots ? initShips(playerPilots) : [])
-    setOpponentShips(opponentPilots ? initShips(opponentPilots) : [])
+    resetToPregame()
+    log.add({ type: 'round', message: 'Round 1', color: '#ffffff', snapshot: { ...snapshot(), gameStarted: false } })
     setGameStarted(true)
     gameStartedRef.current = true
     timer.start()
     void onXwingGameStarted(playerDeficit, opponentDeficit)
   }
 
+  const playerNames = displayPilots(playerPilots).map(p => p.displayName)
+  const opponentNames = displayPilots(opponentPilots).map(p => p.displayName)
+
   const handleShipAdvance = (side: 'player' | 'opponent', index: number, skip: boolean) => {
+    if (!gameStarted || game.gameOver) return
     const ships = side === 'player' ? playerShips : opponentShips
     const setShips = side === 'player' ? setPlayerShips : setOpponentShips
     const entry = ships[index]
     if (!entry || entry.state === 'destroyed') return
 
     const snap = snapshot()
-    const displayName = resolveXwsName(entry.pilot.name.split('-')[0], pilotNames)
+    const displayName = (side === 'player' ? playerNames : opponentNames)[index]
     const isHalf = entry.state === 'half'
     const pts = isHalf ? remainingPoints(entry.pilot.points) : skip ? entry.pilot.points : halfPoints(entry.pilot.points)
     const nextState: 'half' | 'destroyed' = isHalf || skip ? 'destroyed' : 'half'
-    const action = nextState === 'half' ? 'Damaged' : 'Destroyed'
+    const action = nextState === 'half' ? 'damaged' : 'destroyed'
     const color = side === 'player' ? 'var(--color-error)' : 'var(--color-success)'
+    const toWhom = side === 'player' ? 'to opponent' : 'to you'
 
     const updated = ships.map((s, i) => i === index ? { ...s, state: nextState } : s)
-    const allDestroyed = nextState === 'destroyed' && updated.every(s => s.state === 'destroyed')
-    const deficit = allDestroyed ? (side === 'player' ? playerDeficit : opponentDeficit) : 0
+    const deficit = allDestroyed(updated) ? (side === 'player' ? playerDeficit : opponentDeficit) : 0
 
-    if (pts > 0) {
-      const suffix = deficit > 0 ? ` +${deficit} deficit` : ''
-      log.add({ type: 'score', message: `${displayName} — ${action} (${pts}${suffix})`, color, snapshot: snap })
-    } else if (deficit > 0) {
-      log.add({ type: 'score', message: `Squad destroyed — +${deficit} deficit`, color, snapshot: snap })
+    if (pts > 0 || deficit > 0) {
+      const detail = deficit > 0 ? `+${pts} and ${deficit} deficit ${toWhom}` : `+${pts} ${toWhom}`
+      log.add({ type: 'score', message: `${displayName} ${action}`, detail, color, snapshot: snap })
     }
     if (side === 'player') {
       if (pts + deficit > 0) game.incrementOpponent(pts + deficit)
@@ -228,34 +270,70 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
     const entry = log.undoLast()
     if (!entry) return
     const wasGameOver = game.gameOver
-    game.restoreState(entry.snapshot)
-    setGameStarted(entry.snapshot.gameStarted)
-    phaseTracker.restore(entry.snapshot.phaseIndex)
-    const snapshotGameOver = entry.snapshot.gameOver ?? false
-    setPlayerShips(entry.snapshot.playerShips ?? [])
-    setOpponentShips(entry.snapshot.opponentShips ?? [])
-    if (!entry.snapshot.gameStarted) {
+    const s = entry.snapshot
+    game.restoreState(s)
+    setGameStarted(s.gameStarted)
+    phaseTracker.restore(s.phaseIndex)
+    setPlayerShips(s.playerShips)
+    setOpponentShips(s.opponentShips)
+    setScoringOpen(s.scoringOpen)
+    setExtraRound(s.extraRound)
+    setGameOverReason(s.gameOverReason)
+    if (!s.gameStarted) {
       timer.reset()
-    } else if (wasGameOver && !snapshotGameOver && !timer.isExpired) {
+      setLogOpen(false)
+    } else if (wasGameOver && !s.gameOver && !timer.isExpired) {
       timer.resume()
     }
   }
 
+  const reportGameEnded = () => {
+    if (!gameStartedRef.current) return
+    const elapsed_seconds = xwingTimerMinutes * 60 - timer.remaining
+    void onXwingGameEnded({
+      final_round: game.round,
+      player_score: game.playerScore + game.playerScenarioScore,
+      opponent_score: game.opponentScore + game.opponentScenarioScore,
+      player_deficit: playerDeficit,
+      opponent_deficit: opponentDeficit,
+      result: game.result,
+      elapsed_seconds,
+      timer_expired: timer.isExpired,
+    })
+  }
+
   const handleBack = () => {
-    if (gameStartedRef.current) {
-      const elapsed_seconds = xwingTimerMinutes * 60 - timer.remaining
-      void onXwingGameEnded({
-        final_round: game.round,
-        player_score: game.playerScore + game.playerScenarioScore,
-        opponent_score: game.opponentScore + game.opponentScenarioScore,
-        player_deficit: playerDeficit,
-        opponent_deficit: opponentDeficit,
-        result: game.result,
-        elapsed_seconds,
-        timer_expired: timer.isExpired,
-      })
-    }
+    reportGameEnded()
     onBack()
+  }
+
+  const handleRematch = () => {
+    reportGameEnded()
+    gameStartedRef.current = false
+    resetToPregame()
+    setGameStarted(false)
+    timer.reset()
+  }
+
+  // A Casual game that ended on time or after its last round can go one round further, unless a
+  // side has lost every ship.
+  const canPlayOneMoreRound = game.gameOver && matchType === 'Casual'
+    && (gameOverReason === 'time' || gameOverReason === 'rounds' || gameOverReason === 'extra')
+    && !allDestroyed(playerShips) && !allDestroyed(opponentShips)
+
+  const handleOneMoreRound = () => {
+    log.add({ type: 'round', message: `Round ${game.round + 1}`, color: '#ffffff', snapshot: snapshot() })
+    game.reopenForRound()
+    phaseTracker.reset()
+    if (enableXwingPhases) initiative.reset()
+    setExtraRound(true)
+    setGameOverReason(null)
+  }
+
+  const breakdown = (againstShips: ShipEntry[], score: number, mission: number, deficit: number): ScoreBreakdown => {
+    const ships = shipPointsAgainst(againstShips)
+    const deficitScored = allDestroyed(againstShips) ? deficit : 0
+    return { mission, ships, deficit: deficitScored, adjustments: score - ships - deficitScored, total: score + mission }
   }
 
   if (isPortrait) {
@@ -266,15 +344,20 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
     <XwingGameScreenView
       gameStarted={gameStarted}
       gameOver={game.gameOver}
+      gameOverReason={gameOverReason}
       phase={phaseTracker.phase}
       onPhaseAdvance={handlePhaseAdvance}
       enableXwingPhases={enableXwingPhases}
       timerRemaining={timer.remaining}
-      timerExpired={timer.isExpired}
+      timerMinutes={xwingTimerMinutes}
+      onTimerMinutesChange={setXwingTimerMinutes}
       round={game.round}
+      roundEndsGame={roundEndsGame}
       result={game.result}
       onStartGame={handleStartGame}
-      onRoundAdvance={handleRoundAdvance}
+      scoringOpen={scoringOpen}
+      onOpenScoring={handleOpenScoring}
+      onEndOfRound={handleEndOfRound}
       playerScore={game.playerScore + game.playerScenarioScore}
       opponentScore={game.opponentScore + game.opponentScenarioScore}
       onPlayerIncrement={handlePlayerIncrement}
@@ -288,7 +371,6 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
       logOpen={logOpen}
       onLogToggle={() => setLogOpen(o => !o)}
       onLogUndo={handleLogUndo}
-      enableInitiativeBar={enableInitiativeBar}
       initiative={initiative.initiative}
       onInitiativeOpponent={initiative.setOpponent}
       onInitiativePlayer={initiative.setPlayer}
@@ -302,12 +384,16 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
       pendingOpponentScenario={pendingOpponentScenario}
       onPlayerScenarioSelect={(v) => setPendingPlayerScenario(v)}
       onOpponentScenarioSelect={(v) => setPendingOpponentScenario(v)}
-      playerPilots={playerPilots}
-      opponentPilots={opponentPilots}
       playerShips={playerShips}
       opponentShips={opponentShips}
+      playerNames={playerNames}
+      opponentNames={opponentNames}
       onPlayerShipAdvance={(i, skip) => handleShipAdvance('player', i, skip)}
       onOpponentShipAdvance={(i, skip) => handleShipAdvance('opponent', i, skip)}
+      onRematch={handleRematch}
+      onOneMoreRound={canPlayOneMoreRound ? handleOneMoreRound : undefined}
+      playerBreakdown={breakdown(opponentShips, game.playerScore, game.playerScenarioScore, opponentDeficit)}
+      opponentBreakdown={breakdown(playerShips, game.opponentScore, game.opponentScenarioScore, playerDeficit)}
     />
   )
 }

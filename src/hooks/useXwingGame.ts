@@ -40,6 +40,11 @@ export function useXwingGame() {
   }
   const advanceRound = () => setRound(r => Math.min(12, r + 1))
   const endGame = () => setGameOver(true)
+  // One more round after the game ended on time or at round 12: it may go past round 12.
+  const reopenForRound = () => {
+    setGameOver(false)
+    setRound(r => r + 1)
+  }
   const reset = (initialPlayerScore = 0, initialOpponentScore = 0) => {
     setPlayerScore(initialPlayerScore)
     setOpponentScore(initialOpponentScore)
@@ -81,6 +86,6 @@ export function useXwingGame() {
     incrementPlayer, decrementPlayer,
     incrementOpponent, decrementOpponent,
     addScenarioPoints,
-    advanceRound, endGame, reset, restoreState,
+    advanceRound, endGame, reopenForRound, reset, restoreState,
   }
 }

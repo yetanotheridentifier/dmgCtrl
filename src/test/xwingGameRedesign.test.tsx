@@ -137,10 +137,10 @@ describe('centre panel, phase tracker off', () => {
     const roundBtn = screen.getByTestId('round-btn')
     expect(roundBtn).toHaveTextContent('Round 1 of 12')
     expect(roundBtn).toHaveTextContent('Tap to score the round')
-    const first = screen.getByRole('radiogroup', { name: 'First' })
-    await user.click(within(first).getByRole('radio', { name: 'Opp' }))
+    const first = screen.getByRole('group', { name: 'First' })
+    await user.click(within(first).getByRole('button', { name: 'Opp' }))
     expect(within(screen.getByTestId('opponent-score-tile')).getByText('FIRST')).toBeInTheDocument()
-    await user.click(within(first).getByRole('radio', { name: 'You' }))
+    await user.click(within(first).getByRole('button', { name: 'You' }))
     expect(within(screen.getByTestId('player-score-tile')).getByText('FIRST')).toBeInTheDocument()
   })
 
@@ -254,11 +254,13 @@ describe('score buttons', () => {
     expect(screen.queryByTestId('opponent-increment')).not.toBeInTheDocument()
   })
 
-  it('always show for a side with No list, which is scored with them', async () => {
+  // The buttons over a column stand in for its tiles: those over the opponent's column score for you.
+  it('always show over a side with No list, which is scored with them', async () => {
     const { user } = await start({ opponentPilots: [] })
-    expect(screen.queryByTestId('player-increment')).not.toBeInTheDocument()
-    await user.click(screen.getByTestId('opponent-increment'))
-    expect(screen.getByTestId('opponent-score')).toHaveTextContent('1')
+    expect(screen.queryByTestId('opponent-increment')).not.toBeInTheDocument()
+    const column = screen.getByTestId('opponent-column')
+    await user.click(within(column).getByTestId('player-increment'))
+    expect(screen.getByTestId('player-score')).toHaveTextContent('1')
   })
 })
 

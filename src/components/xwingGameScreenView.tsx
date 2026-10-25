@@ -1,31 +1,44 @@
-import { useDragScrubber } from '../hooks/useDragScrubber'
+import { useRef, useState } from 'react'
 import AppScreenLayout from './layout/appScreenLayout'
-import { BackIcon, CogIcon, HelpIcon, LogIcon } from './icons'
+import { BackIcon, DotsIcon, LogIcon } from './icons'
 import TimerDisplay from './shared/timerDisplay'
-import GameLogOverlay from './gameLogOverlay'
-import InitiativeToggle from './initiativeToggle'
-import { NAV_BTN_STYLE } from '../styles/navButton'
-import { BAR_CONTAINER_STYLE } from '../styles/barContainer'
-import { START_TEXT_STYLE } from '../styles/startText'
-import { useRef, Fragment } from 'react'
+import { Button, IconButton, SegmentedControl, Sheet, Stepper } from './shared/controls'
 import type { HistoryEntry } from '../hooks/useGameHistory'
 import type { Initiative } from '../hooks/useInitiative'
-import type { XwingPilot } from '../utils/parseXwsText'
-import { displayPilots } from '../utils/displayPilots'
-import type { ShipEntry } from '../utils/shipRoster'
+import { halfPoints, type ShipEntry } from '../utils/shipRoster'
+import { shipRows } from '../utils/shipRows'
+import { resolveXwsName } from '../utils/resolveXwsName'
+import { shipNames } from '../utils/xwaNames'
+
+export type GameOverReason = 'score' | 'time' | 'rounds' | 'extra'
+
+// One side's final score, by where it came from.
+export interface ScoreBreakdown {
+  mission: number
+  ships: number
+  deficit: number
+  // Points added or taken away with the −/+ buttons.
+  adjustments: number
+  total: number
+}
 
 interface Props {
   gameStarted: boolean
   gameOver: boolean
+  gameOverReason: GameOverReason | null
   result: 'win' | 'loss' | 'draw' | null
   timerRemaining: number
-  timerExpired: boolean
+  timerMinutes: number
+  onTimerMinutesChange: (minutes: number) => void
   round: number
+  roundEndsGame: boolean
   phase: string
   onPhaseAdvance: () => void
   enableXwingPhases: boolean
   onStartGame: () => void
-  onRoundAdvance: () => void
+  scoringOpen: boolean
+  onOpenScoring: () => void
+  onEndOfRound: () => void
   playerScore: number
   opponentScore: number
   onPlayerIncrement: (n: number) => void
@@ -35,11 +48,10 @@ interface Props {
   enableLongPress: boolean
   enableActionLog: boolean
   enableXwingAlwaysIncDec?: boolean
-  logEntries: HistoryEntry<{ playerScore: number; opponentScore: number; round: number; gameStarted: boolean }>[]
+  logEntries: HistoryEntry<{ round: number }>[]
   logOpen: boolean
   onLogToggle: () => void
   onLogUndo: () => void
-  enableInitiativeBar: boolean
   initiative: Initiative
   onInitiativeOpponent: () => void
   onInitiativePlayer: () => void
@@ -53,12 +65,17 @@ interface Props {
   pendingOpponentScenario?: number | null
   onPlayerScenarioSelect?: (v: number) => void
   onOpponentScenarioSelect?: (v: number) => void
-  playerPilots?: XwingPilot[]
-  opponentPilots?: XwingPilot[]
-  playerShips?: ShipEntry[]
-  opponentShips?: ShipEntry[]
-  onPlayerShipAdvance?: (index: number, skip: boolean) => void
-  onOpponentShipAdvance?: (index: number, skip: boolean) => void
+  playerShips: ShipEntry[]
+  opponentShips: ShipEntry[]
+  playerNames: string[]
+  opponentNames: string[]
+  onPlayerShipAdvance: (index: number, skip: boolean) => void
+  onOpponentShipAdvance: (index: number, skip: boolean) => void
+  onRematch: () => void
+  // Offered only in a Casual game that ended on time or after its last round.
+  onOneMoreRound?: () => void
+  playerBreakdown: ScoreBreakdown
+  opponentBreakdown: ScoreBreakdown
 }
 
 const CHANCE_ENGAGEMENT = 'Chance Engagement'
@@ -82,44 +99,37 @@ function getDisabledPlayerValues(scenario: string | undefined, opponentSelected:
   return opponentSelected === 4 ? new Set([4]) : new Set()
 }
 
-const SCENARIO_BTN = (selected: boolean, disabled = false): React.CSSProperties => ({
-  width: '100%',
-  height: '10vmin',
-  minHeight: '36px',
-  background: selected ? 'rgba(var(--color-accent-rgb), 0.15)' : 'rgba(0,0,0,0.45)',
-  color: selected ? 'var(--color-accent)' : 'var(--color-text-muted)',
-  border: `2px solid ${selected ? 'var(--color-accent)' : 'var(--color-ui-border)'}`,
-  borderRadius: '8px',
-  fontSize: 'clamp(0.65rem, 2vmin, 1rem)',
-  fontWeight: '300',
-  cursor: disabled ? 'default' : 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  WebkitTapHighlightColor: 'transparent',
-  opacity: disabled ? 0.4 : 1,
-})
-
+const PRE_GAME_HINT = 'Tap a ship to damage it; tap again or long-press to destroy'
 const LONG_PRESS_MS = 400
 
-function DmgCtrlIcon({ color }: { color: string }) {
+const CAPS: React.CSSProperties = { fontSize: '11px', letterSpacing: '0.14em', color: 'var(--color-accent)' }
+const MUTED_CAPS: React.CSSProperties = { fontSize: '11px', letterSpacing: '0.1em', color: 'var(--color-text-muted)' }
+const PANEL_BLOCK: React.CSSProperties = { borderRadius: '12px', background: 'var(--color-surface)' }
+
+// The dmgCtrl mark, in outline: a destroyed ship shows it in place of its name's lead.
+function DestroyedMark() {
   return (
-    <svg viewBox="0 0 192 192" style={{ width: '100%', height: '100%' }} xmlns="http://www.w3.org/2000/svg">
-      <path d="M 96,26 L 103.2,77.2 L 141.3,42.7 L 113.8,86.1 L 138.3,88.9 L 116.2,99.9 L 156.9,131.3 L 109.2,111.8 L 110.8,136.5 L 96.0,116.6 L 72.3,162.3 L 83.2,111.8 L 59.3,117.6 L 76.3,99.9 L 27.3,108.4 L 78.7,86.1 L 51.2,42.7 L 89.4,77.2 Z"
-        fill="none" stroke="rgba(0,0,0,0.6)" strokeWidth="11" strokeLinejoin="round" transform="translate(1,1)" />
-      <path d="M 96,26 L 103.2,77.2 L 141.3,42.7 L 113.8,86.1 L 138.3,88.9 L 116.2,99.9 L 156.9,131.3 L 109.2,111.8 L 110.8,136.5 L 96.0,116.6 L 72.3,162.3 L 83.2,111.8 L 59.3,117.6 L 76.3,99.9 L 27.3,108.4 L 78.7,86.1 L 51.2,42.7 L 89.4,77.2 Z"
-        fill="none" stroke={color} strokeWidth="8" strokeLinejoin="round" />
+    <svg width="14" height="14" viewBox="19 21 146 146" fill="none" stroke="currentColor" strokeWidth="14" strokeLinejoin="round" role="img" aria-label="Destroyed" style={{ verticalAlign: '-2px', marginRight: '6px', flexShrink: 0 }}>
+      <path d="M96 26L103.2 77.2L141.3 42.7L113.8 86.1L138.3 88.9L116.2 99.9L156.9 131.3L109.2 111.8L110.8 136.5L96 116.6L72.3 162.3L83.2 111.8L59.3 117.6L76.3 99.9L27.3 108.4L78.7 86.1L51.2 42.7L89.4 77.2Z" />
     </svg>
   )
 }
 
-function ShipButton({ entry, index, onAdvance, align, side, displayName }: {
+const TILE_COLOURS = {
+  alive: { background: 'var(--color-tonal)', color: 'var(--color-text-primary)', sub: '#9fd8f5' },
+  half: { background: '#3d2a0c', color: '#ffd08a', sub: '#ffd08a' },
+  destroyed: { background: '#11151e', color: '#8b93a1', sub: '#8b93a1' },
+}
+
+function ShipTile({ entry, name, testId, full, disabled, gameOver, onAdvance }: {
   entry: ShipEntry
-  index: number
-  onAdvance: (index: number, skip: boolean) => void
-  align: 'left' | 'right'
-  side: 'player' | 'opponent'
-  displayName: string
+  name: string
+  testId: string
+  // A full-width row shows the ship type and points; a paired tile shows the points under the name.
+  full: boolean
+  disabled: boolean
+  gameOver: boolean
+  onAdvance: (skip: boolean) => void
 }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const startPos = useRef<{ x: number; y: number } | null>(null)
@@ -127,864 +137,480 @@ function ShipButton({ entry, index, onAdvance, align, side, displayName }: {
   const cancel = () => {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
   }
-
   const onPointerDown = (e: React.PointerEvent) => {
     startPos.current = { x: e.clientX, y: e.clientY }
     timerRef.current = setTimeout(() => {
       timerRef.current = null
-      onAdvance(index, true)
+      onAdvance(true)
     }, LONG_PRESS_MS)
   }
-
   const onPointerMove = (e: React.PointerEvent) => {
     if (!startPos.current) return
     if (Math.abs(e.clientX - startPos.current.x) > 10 || Math.abs(e.clientY - startPos.current.y) > 10) cancel()
   }
-
   const onPointerUp = () => {
-    if (timerRef.current) { cancel(); onAdvance(index, false) }
+    if (timerRef.current) { cancel(); onAdvance(false) }
   }
 
-  const isHalf = entry.state === 'half'
-  const color = isHalf ? 'var(--color-warning)' : 'var(--color-accent)'
+  const pts = entry.pilot.points
+  const colours = TILE_COLOURS[entry.state]
+  const destroyed = entry.state === 'destroyed'
+  const status = entry.state === 'half' ? `Half · ${halfPoints(pts)} of ${pts}`
+    : destroyed ? (full ? 'Destroyed' : `Destroyed · ${pts}`)
+    : gameOver ? 'Survived'
+    : full ? resolveXwsName(entry.pilot.ship, shipNames) : `${pts} pts`
 
-  const iconEl = (
+  return (
     <button
-      data-testid={`${side}-ship-btn-${index}`}
-      onPointerDown={onPointerDown}
+      type="button"
+      data-testid={testId}
+      disabled={disabled || destroyed}
+      onPointerDown={disabled ? undefined : onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
+      onPointerUp={disabled ? undefined : onPointerUp}
       onPointerCancel={cancel}
+      onPointerLeave={cancel}
       style={{
-        width: '3vmin',
-        height: '3vmin',
-        minWidth: '20px',
-        minHeight: '20px',
-        background: 'transparent',
-        border: `1.5px solid ${color}`,
-        borderRadius: '5px',
-        padding: '1px',
-        cursor: 'pointer',
+        border: 'none',
+        borderRadius: '12px',
+        background: colours.background,
+        color: colours.color,
+        padding: full ? '0 14px' : '0 10px',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
+        justifyContent: 'space-between',
+        gap: '8px',
+        textAlign: 'left',
+        minWidth: 0,
+        minHeight: 0,
+        fontFamily: 'inherit',
+        cursor: disabled || destroyed ? 'default' : 'pointer',
+        opacity: disabled && !gameOver ? 0.75 : 1,
         WebkitTapHighlightColor: 'transparent',
         userSelect: 'none',
         WebkitUserSelect: 'none',
+        touchAction: 'manipulation',
       }}
     >
-      <DmgCtrlIcon color={color} />
+      <span style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
+        <span style={{ fontSize: full ? '16px' : '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: destroyed ? 'line-through' : undefined }}>
+          {destroyed && <DestroyedMark />}{name}
+        </span>
+        <span style={{ fontSize: '12px', color: colours.sub }}>{status}</span>
+      </span>
+      {full && <span style={{ fontSize: '20px', fontWeight: 300, color: colours.sub }}>{pts}</span>}
     </button>
   )
+}
 
-  const nameEl = (
-    <span style={{
-      flex: 1,
-      fontSize: 'clamp(0.7rem, 2.2vmin, 1.2rem)',
-      fontWeight: '300',
-      color,
-      letterSpacing: '0.04em',
-      lineHeight: 1.2,
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap',
-      minWidth: 0,
-      textAlign: align === 'right' ? 'right' : 'left',
-    }}>
-      {displayName}
-    </span>
-  )
-
+function ShipColumn({ side, ships, names, disabled, gameOver, onAdvance }: {
+  side: 'player' | 'opponent'
+  ships: ShipEntry[]
+  names: string[]
+  disabled: boolean
+  gameOver: boolean
+  onAdvance: (index: number, skip: boolean) => void
+}) {
+  const rows = shipRows(ships.map(s => s.pilot))
+  if (rows.length === 0) return <div style={{ flex: 1 }} />
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: '1vmin',
-      width: '100%',
-      justifyContent: align === 'left' ? 'flex-start' : 'flex-end',
-    }}>
-      {align === 'left' ? <>{iconEl}{nameEl}</> : <>{nameEl}{iconEl}</>}
+    <div data-testid={`${side}-pilot-list`} style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateRows: `repeat(${Math.max(rows.length, 1)}, minmax(0, 1fr))`, gap: '8px' }}>
+      {rows.map(row => (
+        <div key={row.join('-')} data-testid="ship-row" style={{ display: 'grid', gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))`, gap: '8px', minHeight: 0 }}>
+          {row.map(i => (
+            <ShipTile
+              key={i}
+              entry={ships[i]}
+              name={names[i] ?? ships[i].pilot.name}
+              testId={`${side}-ship-btn-${i}`}
+              full={row.length === 1}
+              disabled={disabled}
+              gameOver={gameOver}
+              onAdvance={skip => onAdvance(i, skip)}
+            />
+          ))}
+        </div>
+      ))}
     </div>
   )
 }
 
-function roundTrackerColor(remaining: number): string {
-  if (remaining <= 60) return 'var(--color-error)'
-  if (remaining <= 300) return 'var(--color-warning)'
-  return 'var(--color-accent)'
+// −/+ over a column stand in for its tiles, so those over the opponent's column score for you.
+function ScoreButtons({ scorer, onIncrement, onDecrement, disabled }: {
+  scorer: 'player' | 'opponent'
+  onIncrement: () => void
+  onDecrement: () => void
+  disabled: boolean
+}) {
+  const style: React.CSSProperties = { flex: 1, fontSize: '22px', padding: 0 }
+  const who = scorer === 'player' ? 'your' : "opponent's"
+  return (
+    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <span style={{ ...MUTED_CAPS, flex: 1 }}>{scorer === 'player' ? 'YOUR SCORE' : "OPP'S SCORE"}</span>
+      <button type="button" data-testid={`${scorer}-decrement`} aria-label={`Take 1 from ${who} score`} disabled={disabled} onClick={onDecrement} style={{ ...counterStyle(disabled), ...style }}>−</button>
+      <button type="button" data-testid={`${scorer}-increment`} aria-label={`Add 1 to ${who} score`} disabled={disabled} onClick={onIncrement} style={{ ...counterStyle(disabled), ...style }}>+</button>
+    </div>
+  )
 }
 
-const NAV_BTN: React.CSSProperties = { ...NAV_BTN_STYLE, zIndex: 10 }
-
-const COUNTER_BTN = (disabled: boolean): React.CSSProperties => ({
-  ...NAV_BTN_STYLE,
-  color: disabled ? 'var(--color-ui-border)' : 'var(--color-accent)',
-  border: `2px solid ${disabled ? 'var(--color-ui-border)' : 'var(--color-accent)'}`,
-  fontSize: '4vmin',
+const counterStyle = (disabled: boolean): React.CSSProperties => ({
+  height: '44px',
+  maxWidth: '64px',
+  border: 'none',
+  borderRadius: '12px',
+  background: 'var(--color-surface-raised)',
+  color: disabled ? 'var(--color-text-disabled)' : 'var(--color-text-primary)',
+  fontFamily: 'inherit',
   cursor: disabled ? 'default' : 'pointer',
-  boxShadow: disabled ? 'none' : '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
-  userSelect: 'none',
-  WebkitUserSelect: 'none',
-  opacity: disabled ? 0.4 : 1,
-  zIndex: 10,
 })
 
-export default function XwingGameScreenView({
-  gameStarted,
-  gameOver,
-  result,
-  timerRemaining,
-  timerExpired,
-  round,
-  phase,
-  onPhaseAdvance,
-  enableXwingPhases,
-  onStartGame,
-  onRoundAdvance,
-  playerScore,
-  opponentScore,
-  onPlayerIncrement,
-  onPlayerDecrement,
-  onOpponentIncrement,
-  onOpponentDecrement,
-  enableLongPress,
-  enableActionLog,
-  enableXwingAlwaysIncDec = false,
-  logEntries,
-  logOpen,
-  onLogToggle,
-  onLogUndo,
-  enableInitiativeBar,
-  initiative,
-  onInitiativeOpponent,
-  onInitiativePlayer,
-  onBack,
-  onHelp,
-  onSettings,
-  scenario,
-  scenarioScoringActive = false,
-  scenarioAlreadyScoredThisRound = false,
-  pendingPlayerScenario = null,
-  pendingOpponentScenario = null,
-  onPlayerScenarioSelect,
-  onOpponentScenarioSelect,
-  playerPilots,
-  opponentPilots,
-  playerShips,
-  opponentShips,
-  onPlayerShipAdvance,
-  onOpponentShipAdvance,
-}: Props) {
-  // Score scrubbers — active during game; floor is 0, and no ceiling, since scores can pass 50
-  const playerScrubber = useDragScrubber(
-    onPlayerIncrement,
-    onPlayerDecrement,
-    Infinity,
-    playerScore,
-    enableLongPress && gameStarted && !gameOver,
+function ScoreTile({ side, score, first }: { side: 'player' | 'opponent'; score: number; first: boolean }) {
+  return (
+    <div data-testid={`${side}-score-tile`} style={{ ...PANEL_BLOCK, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px', padding: '6px 0' }}>
+      <span style={CAPS}>{side === 'player' ? 'YOU' : 'OPP'}</span>
+      <span data-testid={`${side}-score`} style={{ fontSize: '30px', fontWeight: 300, lineHeight: 1 }}>{score}</span>
+      <span style={{ ...MUTED_CAPS, fontSize: '10px', minHeight: '12px' }}>{first ? 'FIRST' : ''}</span>
+    </div>
+  )
+}
+
+function choiceStyle(selected: boolean, disabled: boolean): React.CSSProperties {
+  return {
+    flex: 1,
+    height: '44px',
+    border: 'none',
+    borderRadius: '10px',
+    fontFamily: 'inherit',
+    fontSize: '15px',
+    background: selected ? 'var(--color-accent)' : 'var(--color-surface-raised)',
+    color: selected ? 'var(--color-on-accent)' : disabled ? 'var(--color-text-disabled)' : 'var(--color-text-primary)',
+    fontWeight: selected ? 600 : 400,
+    cursor: disabled ? 'default' : 'pointer',
+  }
+}
+
+function MissionPoints({ round, scenario, alreadyScored, pendingPlayer, pendingOpponent, onPlayer, onOpponent }: {
+  round: number
+  scenario?: string
+  alreadyScored: boolean
+  pendingPlayer: number | null
+  pendingOpponent: number | null
+  onPlayer?: (v: number) => void
+  onOpponent?: (v: number) => void
+}) {
+  const disabledPlayer = alreadyScored ? new Set([0, 2, 4]) : getDisabledPlayerValues(scenario, pendingOpponent)
+  const disabledOpp = alreadyScored ? new Set([0, 2, 4]) : getDisabledOpponentValues(scenario, pendingPlayer)
+  const row = (side: 'player' | 'opponent', selected: number | null, disabled: Set<number>, onSelect?: (v: number) => void) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <div style={{ width: '28px', ...MUTED_CAPS, fontSize: '10px' }}>{side === 'player' ? 'YOU' : 'OPP'}</div>
+      {[0, 2, 4].map(v => (
+        <button
+          key={v}
+          type="button"
+          data-testid={`${side}-scenario-${v}`}
+          aria-pressed={selected === v}
+          disabled={disabled.has(v)}
+          onClick={() => onSelect?.(v)}
+          style={choiceStyle(selected === v, disabled.has(v))}
+        >
+          {v}
+        </button>
+      ))}
+    </div>
+  )
+  return (
+    <div style={{ ...PANEL_BLOCK, display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px' }}>
+      <div style={{ ...MUTED_CAPS, textAlign: 'center' }}>{`MISSION POINTS · ROUND ${round}`}</div>
+      {row('player', pendingPlayer, disabledPlayer, onPlayer)}
+      {row('opponent', pendingOpponent, disabledOpp, onOpponent)}
+    </div>
+  )
+}
+
+function BigButton({ testId, title, subtitle, onClick }: { testId: string; title: string; subtitle?: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onClick}
+      style={{
+        flex: 1,
+        minHeight: '56px',
+        border: 'none',
+        borderRadius: '14px',
+        background: 'var(--color-accent)',
+        color: 'var(--color-on-accent)',
+        fontFamily: 'inherit',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '2px',
+        cursor: 'pointer',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      <span style={{ fontSize: '20px', fontWeight: 600 }}>{title}</span>
+      {subtitle && <span style={{ fontSize: '12px' }}>{subtitle}</span>}
+    </button>
+  )
+}
+
+const RESULT_TEXT = { win: 'Game won', loss: 'Game lost', draw: 'Draw' }
+const RESULT_COLOUR = { win: 'var(--color-success)', loss: 'var(--color-error)', draw: 'var(--color-text-primary)' }
+
+function reasonText(reason: GameOverReason | null, round: number): string | null {
+  if (reason === 'time') return `Time ran out in round ${round}`
+  if (reason === 'rounds') return `Round ${round} finished`
+  if (reason === 'extra') return `One more round played`
+  if (reason === 'score') return `50 points reached in round ${round}`
+  return null
+}
+
+function Breakdown({ player, opponent, result }: { player: ScoreBreakdown; opponent: ScoreBreakdown; result: 'win' | 'loss' | 'draw' }) {
+  const rows: [string, keyof ScoreBreakdown][] = [['Mission', 'mission'], ['Ships', 'ships'], ['Deficit', 'deficit']]
+  if (player.adjustments !== 0 || opponent.adjustments !== 0) rows.push(['−/+', 'adjustments'])
+  const cell: React.CSSProperties = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
+  return (
+    <table data-testid="score-breakdown" style={{ ...PANEL_BLOCK, width: '100%', borderSpacing: 0, padding: '4px 8px', fontSize: '12px', color: 'var(--color-text-body)' }}>
+      <thead>
+        <tr><th /><th style={{ ...cell, ...CAPS, fontWeight: 400 }}>YOU</th><th style={{ ...cell, ...CAPS, fontWeight: 400 }}>OPP</th></tr>
+      </thead>
+      <tbody>
+        {rows.map(([label, key]) => (
+          <tr key={key}>
+            <td>{label}</td>
+            <td data-testid={`breakdown-player-${key}`} style={cell}>{player[key]}</td>
+            <td data-testid={`breakdown-opponent-${key}`} style={cell}>{opponent[key]}</td>
+          </tr>
+        ))}
+        <tr style={{ fontWeight: 600 }}>
+          <td>Total</td>
+          <td data-testid="breakdown-player-total" style={{ ...cell, color: result === 'win' ? RESULT_COLOUR.win : result === 'loss' ? RESULT_COLOUR.loss : undefined }}>{player.total}</td>
+          <td data-testid="breakdown-opponent-total" style={{ ...cell, color: result === 'loss' ? RESULT_COLOUR.win : result === 'win' ? RESULT_COLOUR.loss : undefined }}>{opponent.total}</td>
+        </tr>
+      </tbody>
+    </table>
+  )
+}
+
+const NEXT_PHASE: Record<string, string> = { Planning: 'System', System: 'Activation', Activation: 'Engagement', Engagement: 'End' }
+
+// Newest first, under the round each entry belongs to. A 'round' entry starts its round.
+function LogDrawer({ open, entries, onClose, onUndo }: {
+  open: boolean
+  entries: HistoryEntry<{ round: number }>[]
+  onClose: () => void
+  onUndo: () => void
+}) {
+  const groups: { title: string; entry?: HistoryEntry<{ round: number }>; items: HistoryEntry<{ round: number }>[] }[] = []
+  for (const e of entries) {
+    if (e.type === 'round') groups.push({ title: e.message, entry: e, items: [] })
+    else if (groups.length === 0) groups.push({ title: 'Before the game', items: [e] })
+    else groups[groups.length - 1].items.push(e)
+  }
+  const newest = entries[entries.length - 1]
+  const undo = (
+    <button type="button" data-testid="log-undo-btn" onClick={onUndo} style={{ height: '44px', padding: '0 14px', border: 'none', borderRadius: '10px', background: 'var(--color-accent)', color: 'var(--color-on-accent)', fontFamily: 'inherit', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+      Undo
+    </button>
+  )
+  return (
+    <Sheet open={open} title="Log" onClose={onClose}>
+      {entries.length === 0 && <div style={{ color: 'var(--color-text-muted)' }}>No actions yet</div>}
+      {[...groups].reverse().map((g, gi) => (
+        <div key={g.entry?.id ?? `g${gi}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minHeight: '24px' }}>
+            <span style={{ ...MUTED_CAPS, flex: 1, textTransform: 'uppercase' }}><span>{g.title}</span>{gi === 0 && ' · newest first'}</span>
+            {g.entry && g.entry === newest && undo}
+          </div>
+          {[...g.items].reverse().map(e => (
+            <div key={e.id} data-testid="log-entry" style={{ display: 'flex', alignItems: 'center', gap: '10px', minHeight: '44px', padding: '4px 4px 4px 12px', boxSizing: 'border-box', borderRadius: '12px', background: e === newest ? 'var(--color-tonal)' : 'var(--color-surface)' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ fontSize: '14px' }}>{e.message}</span>
+                {e.detail && <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{e.detail}</span>}
+              </div>
+              {e === newest && undo}
+            </div>
+          ))}
+        </div>
+      ))}
+      {entries.length > 0 && (
+        <div style={{ fontSize: '12px', lineHeight: '16px', color: 'var(--color-text-muted)' }}>Undo takes back the newest entry. Repeat to step further back.</div>
+      )}
+    </Sheet>
+  )
+}
+
+export default function XwingGameScreenView(props: Props) {
+  const {
+    gameStarted, gameOver, gameOverReason, result, timerRemaining, timerMinutes, onTimerMinutesChange,
+    round, roundEndsGame, phase, onPhaseAdvance, enableXwingPhases, onStartGame, scoringOpen, onOpenScoring, onEndOfRound,
+    playerScore, opponentScore, onPlayerIncrement, onPlayerDecrement, onOpponentIncrement, onOpponentDecrement,
+    enableActionLog, enableXwingAlwaysIncDec = false, logEntries, logOpen, onLogToggle, onLogUndo,
+    initiative, onInitiativeOpponent, onInitiativePlayer, onBack, onHelp, onSettings,
+    scenario, scenarioScoringActive = false, scenarioAlreadyScoredThisRound = false,
+    pendingPlayerScenario = null, pendingOpponentScenario = null, onPlayerScenarioSelect, onOpponentScenarioSelect,
+    playerShips, opponentShips, playerNames, opponentNames, onPlayerShipAdvance, onOpponentShipAdvance,
+    onRematch, onOneMoreRound, playerBreakdown, opponentBreakdown,
+  } = props
+  const [openSheet, setOpenSheet] = useState<null | 'more' | 'timer'>(null)
+  const close = () => setOpenSheet(null)
+
+  const playing = gameStarted && !gameOver
+  const tilesDisabled = !playing
+  // Over your column: the opponent's score (your ships lost). Over theirs: yours.
+  // Mission scoring takes the round's end, so the buttons step aside unless they are always shown.
+  const showOverPlayerColumn = gameStarted && (enableXwingAlwaysIncDec || (playerShips.length === 0 && !scenarioScoringActive))
+  const showOverOpponentColumn = gameStarted && (enableXwingAlwaysIncDec || (opponentShips.length === 0 && !scenarioScoringActive))
+  const nextRoundLabel = roundEndsGame ? 'End game' : `Start round ${round + 1}`
+
+  const header = (side: 'player' | 'opponent') => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '44px', flexShrink: 0 }}>
+      {side === 'player' && <IconButton label="Back to setup" onClick={onBack}><BackIcon /></IconButton>}
+      <div style={{ ...CAPS, fontSize: '12px', flex: 1, textAlign: side === 'player' ? 'left' : 'right' }}>
+        {side === 'player' ? 'YOUR SHIPS' : "OPPONENT'S SHIPS"}
+      </div>
+      {side === 'opponent' && enableActionLog && (
+        <button type="button" data-testid="log-btn" aria-label="Log" onClick={onLogToggle} style={{ width: '44px', height: '44px', border: 'none', borderRadius: '12px', background: 'var(--color-surface-raised)', color: 'var(--color-text-body)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <LogIcon />
+        </button>
+      )}
+      {side === 'opponent' && <IconButton label="More: help and settings" onClick={() => setOpenSheet('more')}><DotsIcon /></IconButton>}
+    </div>
   )
 
-  const opponentScrubber = useDragScrubber(
-    onOpponentIncrement,
-    onOpponentDecrement,
-    Infinity,
-    opponentScore,
-    enableLongPress && gameStarted && !gameOver,
-  )
+  const centre = (() => {
+    if (!gameStarted) {
+      return (
+        <>
+          <div style={{ flex: 1 }} />
+          <Button variant="primary" onClick={onStartGame} style={{ minHeight: '56px' }}>
+            <span data-testid="start-game-btn">Start game</span>
+          </Button>
+        </>
+      )
+    }
+    if (gameOver && result) {
+      const reason = reasonText(gameOverReason, round)
+      return (
+        <>
+          <div data-testid="result-banner" style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontSize: '20px', fontWeight: 600, color: RESULT_COLOUR[result] }}>{RESULT_TEXT[result]}</span>
+            {reason && <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{reason}</span>}
+          </div>
+          <Breakdown player={playerBreakdown} opponent={opponentBreakdown} result={result} />
+          <div style={{ flex: 1 }} />
+          <Button variant="primary" onClick={onRematch}>Rematch</Button>
+          {onOneMoreRound && <Button onClick={onOneMoreRound}>One more round</Button>}
+          <Button onClick={onBack}>New setup</Button>
+        </>
+      )
+    }
+    const mission = scenarioScoringActive && (
+      <MissionPoints
+        round={round}
+        scenario={scenario}
+        alreadyScored={scenarioAlreadyScoredThisRound}
+        pendingPlayer={pendingPlayerScenario}
+        pendingOpponent={pendingOpponentScenario}
+        onPlayer={onPlayerScenarioSelect}
+        onOpponent={onOpponentScenarioSelect}
+      />
+    )
+    if (enableXwingPhases) {
+      const subtitle = phase === 'End' ? (roundEndsGame ? 'Tap to end the game' : `Tap to start round ${round + 1}`) : `Tap for ${NEXT_PHASE[phase]}`
+      return (
+        <>
+          {phase === 'Planning' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ ...MUTED_CAPS, textAlign: 'center', textTransform: 'uppercase' }}>Who has initiative?</div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button type="button" aria-pressed={initiative === 'player'} onClick={onInitiativePlayer} style={choiceStyle(initiative === 'player', false)}>You</button>
+                <button type="button" aria-pressed={initiative === 'opponent'} onClick={onInitiativeOpponent} style={choiceStyle(initiative === 'opponent', false)}>Opponent</button>
+              </div>
+            </div>
+          )}
+          {mission}
+          <BigButton testId="phase-btn" title={phase} subtitle={subtitle} onClick={onPhaseAdvance} />
+        </>
+      )
+    }
+    return (
+      <>
+        <SegmentedControl
+          label="First"
+          options={[{ value: 'player', label: 'You' }, { value: 'opponent', label: 'Opp' }]}
+          value={initiative}
+          onChange={v => (v === 'player' ? onInitiativePlayer() : onInitiativeOpponent())}
+        />
+        {scoringOpen
+          ? <>{mission}<BigButton testId="next-round-btn" title={nextRoundLabel} subtitle={`Round ${round} scored`} onClick={onEndOfRound} /></>
+          : <BigButton testId="round-btn" title={`Round ${round} of 12`} subtitle="Tap to score the round" onClick={onOpenScoring} />}
+      </>
+    )
+  })()
 
-  const dragIndicator =
-    playerScrubber.dragIndicator ??
-    opponentScrubber.dragIndicator
-
-  const disabledPlayerSet: Set<number> = scenarioAlreadyScoredThisRound
-    ? new Set([0, 2, 4])
-    : getDisabledPlayerValues(scenario, pendingOpponentScenario ?? null)
-  const disabledOppSet: Set<number> = scenarioAlreadyScoredThisRound
-    ? new Set([0, 2, 4])
-    : getDisabledOpponentValues(scenario, pendingPlayerScenario ?? null)
+  // Initiative shows as FIRST under a score once Planning is over (or at any time with phases off).
+  const showFirst = playing && (!enableXwingPhases || phase !== 'Planning')
 
   return (
     <AppScreenLayout>
-
-      {/* Back + title — top-left flex row; title hidden once game starts */}
-      <div style={{
-        position: 'absolute',
-        top: 'calc(env(safe-area-inset-top) + 2vw)',
-        left: 'calc(env(safe-area-inset-left) + 2vw)',
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: '1vw',
-        zIndex: 10,
-      }}>
-        <button
-          aria-label="Back"
-          onClick={onBack}
-          style={NAV_BTN}
-        >
-          <BackIcon />
-        </button>
-        {!gameStarted && (
-          <span style={{
-            color: 'var(--color-text-primary)',
-            fontWeight: '200',
-            fontSize: 'clamp(1.2rem, 4vw, 1.8rem)',
-            letterSpacing: '0.15em',
-            lineHeight: 0.8,
-            pointerEvents: 'none',
-          }}>
-            dmgCtrl
-          </span>
-        )}
-      </div>
-
-      {/* Help — top-right */}
-      <button
-        aria-label="Help"
-        onClick={onHelp}
-        style={{ ...NAV_BTN, position: 'absolute', top: 'calc(env(safe-area-inset-top) + 2vw)', right: 'calc(env(safe-area-inset-right) + 2vw)' }}
-      >
-        <HelpIcon />
-      </button>
-
-      {/* Settings — below help, top-right */}
-      {onSettings && (
-        <button
-          aria-label="Settings"
-          onClick={onSettings}
-          style={{ ...NAV_BTN, position: 'absolute', top: 'calc(env(safe-area-inset-top) + 9vw)', right: 'calc(env(safe-area-inset-right) + 2vw)' }}
-        >
-          <CogIcon />
-        </button>
-      )}
-
-      {/* Round tracker — continuous bar, top aligned with score buttons, only after game starts.
-          Alignment: left/right = outer edge of player/opponent score button pairs.
-          Derived: playerColCenter = 25vw - 2.5vmin, halfPairWidth = 15vmin → 25vw - 17.5vmin.
-          No container border — the bar is formed by each segment's own borders so there is
-          nothing for the tab to "show through". */}
-      {gameStarted && (
-        <div
-          data-testid="round-tracker"
-          style={{
-            position: 'absolute',
-            top: 'calc(env(safe-area-inset-top) + 2vw)',
-            left: 'calc(25vw - 17.5vmin)',
-            right: 'calc(25vw - 17.5vmin)',
-            // Height matches nav button outer size (5vw / 36px)
-            height: '5vw',
-            minHeight: '36px',
-            display: 'flex',
-            flexDirection: 'row',
-            // flex-start so the current segment (which is taller) hangs down from the top edge
-            alignItems: 'flex-start',
-            zIndex: 10,
-            borderRadius: '8px',
-            overflow: 'visible',
-            background: 'rgba(0,0,0,0.2)',
-            boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
-          }}
-        >
-          {Array.from({ length: 12 }, (_, i) => {
-            const roundNum = i + 1
-            const isCurrent = roundNum === round
-            const isNext = roundNum === round + 1
-            const isFirst = roundNum === 1
-            const isLast = roundNum === 12
-            const clickable = isNext && !timerExpired
-            const timerColor = roundTrackerColor(timerRemaining)
-
-            // Non-current: outer corners follow bar radius; inner corners are flat.
-            const radius = isFirst ? '8px 0 0 8px' : isLast ? '0 8px 8px 0' : '0'
-
-            // Current segment extends below the bar — bottom corners always rounded.
-            // top-left top-right bottom-right bottom-left
-            const currentRadius = isFirst ? '8px 0 8px 8px' : isLast ? '0 8px 8px 8px' : '0 0 8px 8px'
-
-            // Non-current segments form the bar via their own top/bottom (and edge) borders.
-            // borderColor is always set so tests can read element.style.borderColor.
-            // Individual widths control which sides are visible without a container border.
-            const segmentStyle: React.CSSProperties = isCurrent
-              ? {
-                  height: 'calc(100% + 10px)',
-                  borderWidth: '2px',
-                  borderStyle: 'solid',
-                  borderColor: timerColor,
-                  borderRadius: currentRadius,
-                }
-              : {
-                  height: '100%',
-                  borderStyle: 'solid',
-                  borderColor: 'var(--color-ui-border)',
-                  borderTopWidth: '2px',
-                  borderBottomWidth: '2px',
-                  borderLeftWidth: isFirst ? '2px' : '0',
-                  borderRightWidth: isLast ? '2px' : '0',
-                  borderRadius: radius,
-                }
-
-            return (
-              <button
-                key={roundNum}
-                aria-label={`Round ${roundNum}`}
-                onClick={clickable ? onRoundAdvance : undefined}
-                style={{
-                  position: 'relative',
-                  flex: 1,
-                  minWidth: 0,
-                  boxSizing: 'border-box',
-                  background: isCurrent ? 'var(--color-bg-dark)' : 'transparent',
-                  ...segmentStyle,
-                  color: isCurrent ? timerColor : 'var(--color-text-muted)',
-                  fontSize: 'clamp(0.6rem, 1.6vw, 1rem)',
-                  cursor: clickable ? 'pointer' : 'default',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  WebkitTapHighlightColor: 'transparent',
-                  padding: 0,
-                }}
-              >
-                {roundNum}
-              </button>
-            )
-          })}
+      <div style={{ flex: 1, minHeight: 0, boxSizing: 'border-box', padding: '12px', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) clamp(180px, 24vw, 240px) minmax(0, 1fr)', gap: '12px', color: 'var(--color-text-primary)' }}>
+        <div data-testid="player-column" style={{ display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
+          {header('player')}
+          {!gameStarted && <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', textAlign: 'center' }}>{PRE_GAME_HINT}</div>}
+          {showOverPlayerColumn && <ScoreButtons scorer="opponent" disabled={gameOver} onIncrement={() => onOpponentIncrement(1)} onDecrement={() => onOpponentDecrement(1)} />}
+          <ShipColumn side="player" ships={playerShips} names={playerNames} disabled={tilesDisabled} gameOver={gameOver} onAdvance={onPlayerShipAdvance} />
         </div>
-      )}
 
-      {/* Initiative bar — left column, between Back (top) and Log button (bottom) */}
-      {enableInitiativeBar && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(env(safe-area-inset-top) + 9vw)',
-          bottom: `calc(env(safe-area-inset-bottom) + ${enableActionLog ? 9 : 2}vw)`,
-          left: 'calc(env(safe-area-inset-left) + 2vw)',
-          width: '5vw',
-          minWidth: '36px',
-          ...BAR_CONTAINER_STYLE,
-          zIndex: 10,
-          padding: 0,
-          boxSizing: 'border-box',
-        }}>
-          <InitiativeToggle
-            initiative={initiative}
-            onSetOpponent={onInitiativeOpponent}
-            onSetPlayer={onInitiativePlayer}
-            interactive={!enableXwingPhases || !gameStarted || phase === 'Planning'}
-          />
-        </div>
-      )}
-
-      {/* Log — bottom-left */}
-      {enableActionLog && (
-        <>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', boxSizing: 'border-box', borderRadius: '16px', background: 'var(--color-sheet)', minHeight: 0, overflowY: 'auto', position: 'relative' }}>
           <button
-            data-testid="log-btn"
-            aria-label="Log"
-            onClick={onLogToggle}
-            style={{ ...NAV_BTN, position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom) + 2vw)', left: 'calc(env(safe-area-inset-left) + 2vw)' }}
+            type="button"
+            data-testid="round-timer-btn"
+            onClick={() => setOpenSheet('timer')}
+            style={{ height: '44px', flexShrink: 0, border: 'none', borderRadius: '12px', background: 'var(--color-surface)', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', fontFamily: 'inherit', cursor: 'pointer' }}
           >
-            <LogIcon />
+            <span style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>{enableXwingPhases ? `Round ${round} / 12` : 'Timer'}</span>
+            <TimerDisplay remaining={timerRemaining} testId="xwing-timer" style={{ fontSize: '18px', fontWeight: 300, letterSpacing: '0.06em' }} />
           </button>
-          {logOpen && (
-            <GameLogOverlay entries={logEntries} onUndo={onLogUndo} />
-          )}
-        </>
-      )}
-
-      {/* Main content — top-down; spacer clears nav/round-tracker; bounded row fills remaining height */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        boxSizing: 'border-box',
-        touchAction: 'none',
-      }}>
-        <div style={{ flexShrink: 0, height: 'calc(env(safe-area-inset-top) + 9vw)' }} />
-
-        <div style={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'row',
-          alignItems: 'stretch',
-          gap: '2vmin',
-          paddingLeft: 'calc(env(safe-area-inset-left) + 8vw)',
-          paddingRight: 'calc(env(safe-area-inset-right) + 8vw)',
-          paddingBottom: `calc(env(safe-area-inset-bottom) + ${gameStarted && scenarioScoringActive ? '2vw' : gameStarted ? '8vw' : '2vw'})`,
-          // Pin score row centre to the INIT label centre in the initiative bar (both pre-game and in-game).
-          // INIT label Y = 50vh + (safe_top−safe_bottom)/2 (it sits at top:50% inside the bar which
-          // spans env(safe-area-inset-top)+9vw → env(safe-area-inset-bottom)+9vw).
-          // Score row centre = topSpacer(safe_top+9vw) + paddingTop + buttonSlot(10vmin) + ½scoreRow(7vmin);
-          // solving for paddingTop gives:  33vmin − 9vw − safe_top/2 − safe_bottom/2
-          paddingTop: 'max(0px, calc(33vmin - 9vw - env(safe-area-inset-top) / 2 - env(safe-area-inset-bottom) / 2))',
-          boxSizing: 'border-box',
-        }}>
-
-          {/* ── Player column ── */}
-          <div style={{
-            flex: 1,
-            minHeight: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            position: 'relative',
-          }}>
-            {/* Inc/Dec overlay — vertically centred between round-tracker bottom and score row top.
-                Column top = safe_top+9vw+paddingTop (row paddingTop shifts the column element).
-                top (col coords) = −3.5vw + 5vmin + min(0, 4.5vw−16.5vmin+safe/4) — see derivation
-                in git history. Horizontally right-aligned: + RHS sits at the DmgCtrl icon edge. */}
-            {gameStarted && (enableXwingAlwaysIncDec || (!scenarioScoringActive && !(opponentShips && opponentShips.length > 0))) && (
-              <div style={{
-                position: 'absolute',
-                top: 'calc(-3.5vw + 5vmin + min(0px, 4.5vw - 16.5vmin + env(safe-area-inset-top) / 4 + env(safe-area-inset-bottom) / 4))',
-                left: 0,
-                right: 0,
-                height: '5vw',
-                minHeight: '36px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                paddingRight: 'calc(50% - 14vmin)',
-                gap: '2vmin',
-              }}>
-                <button
-                  data-testid="player-decrement"
-                  onClick={playerScrubber.handleClick('-')}
-                  onPointerDown={playerScrubber.handlePointerDown('-')}
-                  onPointerMove={playerScrubber.handlePointerMove}
-                  onPointerUp={playerScrubber.handlePointerUp}
-                  onPointerCancel={playerScrubber.handlePointerCancel}
-                  disabled={gameOver}
-                  style={COUNTER_BTN(gameOver)}
-                >−</button>
-                <button
-                  data-testid="player-increment"
-                  onClick={playerScrubber.handleClick('+')}
-                  onPointerDown={playerScrubber.handlePointerDown('+')}
-                  onPointerMove={playerScrubber.handlePointerMove}
-                  onPointerUp={playerScrubber.handlePointerUp}
-                  onPointerCancel={playerScrubber.handlePointerCancel}
-                  disabled={gameOver}
-                  style={COUNTER_BTN(gameOver)}
-                >+</button>
-              </div>
-            )}
-
-            {/* Button slot — fixed 10vmin; reserved for alignment (scenario buttons moved to centre column) */}
-            <div style={{ height: '10vmin', minHeight: '36px' }} />
-
-            {/* Score row — fixed height matches centre timer so all three centres align */}
-            <div style={{ height: '14vmin', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3vmin' }}>
-              <div style={{
-                fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
-                fontWeight: '300',
-                color: 'var(--color-text-muted)',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}>
-                You
-              </div>
-              <div
-                data-testid="player-score"
-                style={{
-                  fontSize: '14vmin',
-                  fontWeight: '300',
-                  color: 'var(--color-text-primary)',
-                  textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
-                  lineHeight: 1,
-                  width: '3ch',
-                  textAlign: 'center',
-                }}
-              >
-                {gameStarted ? playerScore : 0}
-              </div>
-            </div>
-            </div>
-
-            {/* Pilot area — ship buttons in-game, text list pre-game, spacer if no list; no scroll */}
-            {gameStarted && playerShips && playerShips.length > 0 ? (
-              <div data-testid="player-pilot-list" style={{
-                flex: 1,
-                minHeight: 0,
-                width: '100%',
-                boxSizing: 'border-box',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.5vmin',
-                paddingTop: '1vmin',
-                // Align icon RHS with score right edge = column_centre + ½score_row_width (≈14vmin)
-                paddingRight: 'calc(50% - 14vmin)',
-              }}>
-                {(() => {
-                  const names = displayPilots(playerShips.map(e => e.pilot))
-                  return playerShips.map((entry, i) =>
-                    entry.state !== 'destroyed' ? (
-                      <ShipButton key={i} entry={entry} index={i} onAdvance={onPlayerShipAdvance!} align="right" side="player" displayName={names[i].displayName} />
-                    ) : null
-                  )
-                })()}
-              </div>
-            ) : playerPilots && playerPilots.length > 0 ? (
-              <div data-testid="player-pilot-list" style={{
-                flex: 1,
-                minHeight: 0,
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.5vmin',
-                // paddingTop: push first ship down so ship 8 bottom aligns with log button bottom.
-                // Derivation: pilot_list_height = 43vmin − 2vw − (safe_top+safe_bottom)/2;
-                // paddingTop = pilot_list_height − 8×2.64vmin − 7×0.5vmin = 18vmin − 2vw − safe/2
-                paddingTop: 'max(0px, calc(13.5vmin - 1.5vw - env(safe-area-inset-top) / 2 - env(safe-area-inset-bottom) / 2))',
-                // paddingLeft: shifts text centre 3.5vmin right (= half of label+gap = (label+3vmin)/2)
-                // so the list centre aligns with the score number centre, not the column centre.
-                paddingLeft: '7vmin',
-              }}>
-                {displayPilots(playerPilots).map((p, i) => (
-                  <div key={i} style={{
-                    fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
-                    fontWeight: '300',
-                    color: 'var(--color-text-muted)',
-                    textAlign: 'center',
-                    letterSpacing: '0.04em',
-                    lineHeight: 1.2,
-                  }}>
-                    {p.displayName}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ flex: 1 }} />
-            )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px', flexShrink: 0 }}>
+            <ScoreTile side="player" score={playerScore} first={showFirst && initiative === 'player'} />
+            <ScoreTile side="opponent" score={opponentScore} first={showFirst && initiative === 'opponent'} />
           </div>
-
-          {/* ── Centre column: result banner / Start Game / Timer ── */}
-          <div style={{
-            width: '22vmin',
-            minHeight: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            flexShrink: 0,
-          }}>
-            {/* Button slot — phase button (aligns with outer inc/dec and scenario slots) */}
-            <div style={{ height: '10vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {enableXwingPhases && gameStarted && !gameOver && (
-                <button
-                  data-testid="phase-btn"
-                  onClick={onPhaseAdvance}
-                  style={{
-                    height: '10vmin',
-                    minHeight: '36px',
-                    padding: '0 4vmin',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--color-text-muted)',
-                    fontSize: 'clamp(0.8rem, 2.5vmin, 1.4rem)',
-                    fontWeight: '300',
-                    letterSpacing: '0.1em',
-                    textTransform: 'uppercase',
-                    cursor: 'pointer',
-                    WebkitTapHighlightColor: 'transparent',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {phase}
-                </button>
-              )}
-            </div>
-
-            {/* Timer/result/start — height matches score row (14vmin) so all three centres align */}
-            <div style={{
-              height: '14vmin',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              {gameStarted && gameOver ? (
-                <div
-                  data-testid="result-banner"
-                  style={{
-                    fontSize: 'clamp(1.2rem, 8vmin, 3.5rem)',
-                    fontWeight: '300',
-                    letterSpacing: '0.06em',
-                    color: result === 'win' ? 'var(--color-success)' : result === 'loss' ? 'var(--color-error)' : 'var(--color-text-muted)',
-                    whiteSpace: 'nowrap',
-                    textAlign: 'center',
-                    lineHeight: 1,
-                  }}
-                >
-                  {result === 'win' ? 'Game Won' : result === 'loss' ? 'Game Lost' : 'Draw'}
-                </div>
-              ) : gameStarted ? (
-                <TimerDisplay
-                  remaining={timerRemaining}
-                  testId="xwing-timer"
-                  style={{
-                    fontSize: 'clamp(1.2rem, 8vmin, 3.5rem)',
-                    fontWeight: '300',
-                    letterSpacing: '0.06em',
-                    textAlign: 'center',
-                    lineHeight: 1,
-                  }}
-                />
-              ) : (
-                <div
-                  data-testid="start-game-btn"
-                  onClick={onStartGame}
-                  style={{
-                    ...START_TEXT_STYLE,
-                    fontSize: '8vmin',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  Start Game
-                </div>
-              )}
-            </div>
-
-            {/* Scenario name slot — locked directly below timer, same 10vmin slot as phase above */}
-            <div style={{ height: '10vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {gameStarted && scenario && scenario !== 'None' && (
-                <div
-                  data-testid="scenario-name"
-                  style={{
-                    fontSize: 'clamp(0.8rem, 2.5vmin, 1.4rem)',
-                    fontWeight: '300',
-                    color: 'var(--color-text-muted)',
-                    letterSpacing: '0.04em',
-                    textAlign: 'center',
-                    whiteSpace: 'nowrap',
-                    lineHeight: 1.3,
-                  }}
-                >
-                  {scenario}
-                </div>
-              )}
-            </div>
-
-            {/* Spacer — pushes scenario grid to the bottom */}
-            <div style={{ flexGrow: 1 }} />
-
-            {/* Scenario scoring grid — 2×3, left col = player, right col = opponent.
-                Column width = 5vw (matches nav buttons). Gap widens to keep outer edges
-                level with the timer digit edges: timer ≈ 4ch+1em in 8vmin font. */}
-            {gameStarted && scenarioScoringActive && (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '5vw 5vw',
-                columnGap: 'max(2vmin, calc(4ch + 1em - 10vw))',
-                rowGap: '2vmin',
-                fontSize: 'clamp(1.2rem, 8vmin, 3.5rem)',
-                alignSelf: 'center',
-                paddingBottom: '2vmin',
-              }}>
-                {[0, 2, 4].map(v => (
-                  <Fragment key={v}>
-                    <button
-                      data-testid={`player-scenario-${v}`}
-                      onClick={() => onPlayerScenarioSelect?.(v)}
-                      disabled={disabledPlayerSet.has(v)}
-                      style={{
-                        ...SCENARIO_BTN(pendingPlayerScenario === v, disabledPlayerSet.has(v)),
-                        height: undefined,
-                        minHeight: '36px',
-                        aspectRatio: '1 / 1',
-                        fontSize: 'clamp(0.65rem, 2vmin, 1rem)',
-                      }}
-                    >
-                      {v}
-                    </button>
-                    <button
-                      data-testid={`opponent-scenario-${v}`}
-                      onClick={() => onOpponentScenarioSelect?.(v)}
-                      disabled={disabledOppSet.has(v)}
-                      style={{
-                        ...SCENARIO_BTN(pendingOpponentScenario === v, disabledOppSet.has(v)),
-                        height: undefined,
-                        minHeight: '36px',
-                        aspectRatio: '1 / 1',
-                        fontSize: 'clamp(0.65rem, 2vmin, 1rem)',
-                      }}
-                    >
-                      {v}
-                    </button>
-                  </Fragment>
-                ))}
-              </div>
-            )}
-
-          </div>
-
-          {/* ── Opponent column ── */}
-          <div style={{
-            flex: 1,
-            minHeight: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            position: 'relative',
-          }}>
-            {/* Inc/Dec overlay — same vertical formula as player; left-aligned so
-                − LHS sits at the opponent DmgCtrl icon edge. */}
-            {gameStarted && (enableXwingAlwaysIncDec || (!scenarioScoringActive && !(playerShips && playerShips.length > 0))) && (
-              <div style={{
-                position: 'absolute',
-                top: 'calc(-3.5vw + 5vmin + min(0px, 4.5vw - 16.5vmin + env(safe-area-inset-top) / 4 + env(safe-area-inset-bottom) / 4))',
-                left: 0,
-                right: 0,
-                height: '5vw',
-                minHeight: '36px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-start',
-                paddingLeft: 'calc(50% - 14vmin)',
-                gap: '2vmin',
-              }}>
-                <button
-                  data-testid="opponent-decrement"
-                  onClick={opponentScrubber.handleClick('-')}
-                  onPointerDown={opponentScrubber.handlePointerDown('-')}
-                  onPointerMove={opponentScrubber.handlePointerMove}
-                  onPointerUp={opponentScrubber.handlePointerUp}
-                  onPointerCancel={opponentScrubber.handlePointerCancel}
-                  disabled={gameOver}
-                  style={COUNTER_BTN(gameOver)}
-                >−</button>
-                <button
-                  data-testid="opponent-increment"
-                  onClick={opponentScrubber.handleClick('+')}
-                  onPointerDown={opponentScrubber.handlePointerDown('+')}
-                  onPointerMove={opponentScrubber.handlePointerMove}
-                  onPointerUp={opponentScrubber.handlePointerUp}
-                  onPointerCancel={opponentScrubber.handlePointerCancel}
-                  disabled={gameOver}
-                  style={COUNTER_BTN(gameOver)}
-                >+</button>
-              </div>
-            )}
-
-            {/* Button slot — reserved for alignment (scenario buttons moved to centre column) */}
-            <div style={{ height: '10vmin', minHeight: '36px' }} />
-
-            {/* Score row — fixed height matches centre timer so all three centres align */}
-            <div style={{ height: '14vmin', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3vmin' }}>
-              <div
-                data-testid="opponent-score"
-                style={{
-                  fontSize: '14vmin',
-                  fontWeight: '300',
-                  color: 'var(--color-text-primary)',
-                  textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
-                  lineHeight: 1,
-                  width: '3ch',
-                  textAlign: 'center',
-                }}
-              >
-                {gameStarted ? opponentScore : 0}
-              </div>
-              <div style={{
-                fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
-                fontWeight: '300',
-                color: 'var(--color-text-muted)',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}>
-                Opp
-              </div>
-            </div>
-            </div>
-
-            {/* Pilot area: ship buttons when in-game, text list pre-game, spacer if no list */}
-            {gameStarted && opponentShips && opponentShips.length > 0 ? (
-              <div data-testid="opponent-pilot-list" style={{
-                flex: 1,
-                minHeight: 0,
-                width: '100%',
-                boxSizing: 'border-box',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.5vmin',
-                paddingTop: '1vmin',
-                // Align icon LHS with score left edge = column_centre − ½score_row_width (≈14vmin)
-                paddingLeft: 'calc(50% - 14vmin)',
-              }}>
-                {(() => {
-                  const names = displayPilots(opponentShips.map(e => e.pilot))
-                  return opponentShips.map((entry, i) =>
-                    entry.state !== 'destroyed' ? (
-                      <ShipButton key={i} entry={entry} index={i} onAdvance={onOpponentShipAdvance!} align="left" side="opponent" displayName={names[i].displayName} />
-                    ) : null
-                  )
-                })()}
-              </div>
-            ) : opponentPilots && opponentPilots.length > 0 ? (
-              <div data-testid="opponent-pilot-list" style={{
-                flex: 1,
-                minHeight: 0,
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.5vmin',
-                paddingTop: 'max(0px, calc(13.5vmin - 1.5vw - env(safe-area-inset-top) / 2 - env(safe-area-inset-bottom) / 2))',
-                paddingRight: '7vmin',
-              }}>
-                {displayPilots(opponentPilots).map((p, i) => (
-                  <div key={i} style={{
-                    fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
-                    fontWeight: '300',
-                    color: 'var(--color-text-muted)',
-                    textAlign: 'center',
-                    letterSpacing: '0.04em',
-                    lineHeight: 1.2,
-                  }}>
-                    {p.displayName}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ flex: 1 }} />
-            )}
-          </div>
-
+          {playing && scenario && scenario !== 'None' && <div data-testid="scenario-name" style={{ ...MUTED_CAPS, textAlign: 'center' }}>{scenario}</div>}
+          {centre}
         </div>
 
-
+        <div data-testid="opponent-column" style={{ display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
+          {header('opponent')}
+          {showOverOpponentColumn && <ScoreButtons scorer="player" disabled={gameOver} onIncrement={() => onPlayerIncrement(1)} onDecrement={() => onPlayerDecrement(1)} />}
+          <ShipColumn side="opponent" ships={opponentShips} names={opponentNames} disabled={tilesDisabled} gameOver={gameOver} onAdvance={onOpponentShipAdvance} />
+        </div>
       </div>
 
+      <LogDrawer open={logOpen} entries={logEntries} onClose={onLogToggle} onUndo={onLogUndo} />
 
-      {/* Drag indicator — increment offsets right, decrement offsets left */}
-      {dragIndicator && (() => {
-        const isPlus = dragIndicator.type === '+'
-        return (
-          <div style={{
-            position: 'fixed',
-            left: Math.max(8, dragIndicator.clientX + (isPlus ? 55 : -100)),
-            top: Math.max(8, dragIndicator.clientY - 40),
-            zIndex: 200,
-            pointerEvents: 'none',
-          }}>
-            <span style={{
-              display: 'block',
-              lineHeight: 1,
-              fontSize: 'clamp(1.8rem, 9vmin, 2.8rem)',
-              fontWeight: '300',
-              color: 'var(--color-text-primary)',
-              textShadow: '0 0 24px rgba(var(--color-accent-rgb), 0.7), 0 0 12px rgba(0,0,0,1), -1px -1px 0 rgba(0,0,0,0.9), 1px -1px 0 rgba(0,0,0,0.9), -1px 1px 0 rgba(0,0,0,0.9), 1px 1px 0 rgba(0,0,0,0.9)',
-              letterSpacing: '0.04em',
-            }}>
-              {isPlus ? '+' : '−'}{dragIndicator.value}
-            </span>
-          </div>
-        )
-      })()}
+      <Sheet open={openSheet === 'more'} title="More" onClose={close}>
+        <Button onClick={() => { close(); onHelp() }}>Help</Button>
+        {onSettings && <Button onClick={() => { close(); onSettings() }}>Settings</Button>}
+      </Sheet>
 
+      <Sheet open={openSheet === 'timer'} title="Round and timer" onClose={close}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px' }}>
+          <span style={{ fontSize: '1rem' }}>{gameStarted ? `Round ${round} of 12` : 'Before the game'}</span>
+          <TimerDisplay remaining={timerRemaining} testId="sheet-timer" style={{ fontSize: '1.6rem', fontWeight: 300 }} />
+        </div>
+        {!gameStarted && (
+          <>
+            <Stepper label="Game length" value={timerMinutes} min={5} max={180} step={5} onChange={onTimerMinutesChange} />
+            <div style={{ fontSize: '13px', lineHeight: '19px', color: 'var(--color-text-muted)' }}>
+              Minutes, in 5-minute steps until Start game; then it’s fixed for this game. The next X-Wing game starts at the same length.
+            </div>
+          </>
+        )}
+        <Button onClick={close}>Done</Button>
+      </Sheet>
     </AppScreenLayout>
   )
 }

@@ -1,5 +1,5 @@
 import { useXwingSetup, XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
-import type { XwingScenario, XwingPlayerChoice } from '../hooks/useXwingSetup'
+import type { XwingMatchType, XwingScenario, XwingPlayerChoice } from '../hooks/useXwingSetup'
 import { useXwingLists } from '../hooks/useXwingLists'
 import type { XwingList } from '../hooks/useXwingLists'
 import { listPoints } from '../utils/xwingListInfo'
@@ -8,7 +8,7 @@ import type { ResolvedChoice } from './xwingSetupScreenView'
 import type { XwingPilot } from '../utils/parseXwsText'
 
 interface Props {
-  onStart: (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario, playerPilots: XwingPilot[], opponentPilots: XwingPilot[]) => void
+  onStart: (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario, playerPilots: XwingPilot[], opponentPilots: XwingPilot[], matchType: XwingMatchType) => void
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
@@ -45,7 +45,7 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, 
     if (!playerChoice || !opponentChoice) return
     const [pDeficit, pPilots] = deficitAndPilots(playerChoice, setup.playerDeficit)
     const [oDeficit, oPilots] = deficitAndPilots(opponentChoice, setup.opponentDeficit)
-    onStart(pDeficit, oDeficit, setup.scenario, pPilots, oPilots)
+    onStart(pDeficit, oDeficit, setup.scenario, pPilots, oPilots, setup.matchType)
   }
 
   return (
