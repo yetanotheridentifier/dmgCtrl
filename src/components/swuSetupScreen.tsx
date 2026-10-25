@@ -1,201 +1,125 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Base } from '../hooks/useBases'
-import { useSwuSetup, InitialSelection } from '../hooks/useSwuSetup'
+import { useSwuSetup, baseKey } from '../hooks/useSwuSetup'
 import { useBaseArt, getFirstGameImageUrl } from '../hooks/useBaseArt'
 import SwuSetupScreenView from './swuSetupScreenView'
+import type { SwudbImport } from './swuSetupScreenView'
 import InstallBanner from './installBanner'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useFavourites } from '../hooks/useFavourites'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swudbUrl'
 import { onFavouriteAdded, onFavouriteRemoved, onDeckImportSuccess, onDeckImportFailure } from '../services/analytics'
-import { isBaseValidForFormat, isSetValidForFormat, formatValidationError } from '../utils/formatFilter'
 import { SetupMode } from '../utils/playMode'
-import type { Format } from '../utils/formatFilter'
-
-export type SelectionMode = 'base-selector' | 'swudb-import' | 'favourites'
 
 interface Props {
-  onConfirm: (base: Base, mode: SetupMode, format: Format) => void
+  onConfirm: (base: Base, mode: SetupMode) => void
   onHelp: () => void
   onBack?: () => void
   onSettings?: () => void
-  initialSelection?: InitialSelection | null
 }
 
-function SwuSetupScreen({ onConfirm, onHelp, onBack, onSettings, initialSelection }: Props) {
-  const { useHyperspace, enableFavourites, enableCompetitiveMode } = useUserSettings()
+const NO_DECK: SwudbImport = { url: '', error: null, deckName: null, base: null, loading: false }
+
+function SwuSetupScreen({ onConfirm, onHelp, onBack, onSettings }: Props) {
+  const { useHyperspace } = useUserSettings()
   const { favourites, addFavourite, removeFavourite } = useFavourites()
-  const setup = useSwuSetup(onConfirm, initialSelection)
-  const art = useBaseArt(setup.selectedBase, useHyperspace)
+  const setup = useSwuSetup(onConfirm)
+  const art = useBaseArt(setup.base, useHyperspace)
   const { showBanner, platform, onInstall, onDismiss } = useInstallPrompt()
 
+  // Warm the cache with the art the game screen will show first.
   useEffect(() => {
-    const url = getFirstGameImageUrl(setup.selectedBase, useHyperspace)
+    const url = getFirstGameImageUrl(setup.base, useHyperspace)
     if (!url) return
     const img = new Image()
     img.src = url
-  }, [setup.selectedBase, useHyperspace])
+  }, [setup.base, useHyperspace])
 
-  const [selectionMode, setSelectionMode] = useState<SelectionMode>(() => {
-    const saved = localStorage.getItem('pref_selection_mode')
-    if (saved === 'swudb-import') return 'swudb-import'
-    if (saved === 'favourites' && enableFavourites && favourites.length > 0) return 'favourites'
-    return 'base-selector'
-  })
+  // Favourites are stored as records; a favourite no longer in the card data is left out.
+  const favouriteBases = useMemo(() => {
+    const byKey = new Map(setup.bases.map(b => [baseKey(b), b]))
+    return favourites.map(f => byKey.get(f.key)).filter((b): b is Base => b !== undefined)
+  }, [favourites, setup.bases])
 
-  const handleModeChange = (mode: SelectionMode) => {
-    if (mode === 'swudb-import') {
-      setup.handleSetChange('')
-      setSwudbDeckName(null)
-      setSwudbError(null)
-    } else if (mode === 'favourites' && (!setup.selectedKey || !favourites.some(f => f.key === setup.selectedKey))) {
-      setup.handleSetChange('')
-    }
-    setSelectionMode(mode)
-    localStorage.setItem('pref_selection_mode', mode)
-  }
-
-  useEffect(() => {
-    if (selectionMode === 'favourites' && (!enableFavourites || favourites.length === 0)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectionMode('base-selector')
-    }
-  }, [selectionMode, enableFavourites, favourites])
-
-  const [swudbUrl, setSwudbUrl] = useState('')
-  const [swudbError, setSwudbError] = useState<string | null>(null)
-  const [swudbDeckName, setSwudbDeckName] = useState<string | null>(null)
-  const [swudbLoading, setSwudbLoading] = useState(false)
+  const [swudb, setSwudb] = useState<SwudbImport>(NO_DECK)
 
   const handleSwudbChange = (text: string) => {
-    setSwudbUrl(text)
     const valid = isValidSwudbUrl(normaliseSwudbUrl(text))
-    setSwudbError(valid ? null : 'Invalid deck URL')
-    setSwudbDeckName(null)
+    setSwudb({ ...NO_DECK, url: text, error: valid ? null : 'Invalid deck URL' })
   }
 
-  const handleSwudbFocus = () => {
-    setSwudbError(null)
-  }
+  const handleSwudbFocus = () => setSwudb(s => ({ ...s, error: null }))
 
   const handleSwudbLoad = async () => {
-    const normalised = normaliseSwudbUrl(swudbUrl)
+    const normalised = normaliseSwudbUrl(swudb.url)
     if (!isValidSwudbUrl(normalised)) {
-      setSwudbError('Invalid deck URL')
+      setSwudb(s => ({ ...s, error: 'Invalid deck URL' }))
       return
     }
     const deckId = normalised.replace('https://swudb.com/deck/', '')
-    setSwudbLoading(true)
-    setSwudbError(null)
-    setSwudbDeckName(null)
+    setSwudb(s => ({ ...s, loading: true, error: null, deckName: null, base: null }))
     try {
-      const { deckName, baseKey } = await fetchSwudbDeck(deckId)
-      setSwudbDeckName(deckName)
-      const found = setup.selectBaseByKey(baseKey)
-      if (!found) {
-        setSwudbError('Base not recognised')
-        void onDeckImportFailure('base_not_recognised')
-      } else {
-        void onDeckImportSuccess(baseKey, baseKey.split('-')[0])
-      }
+      const { deckName, baseKey: key } = await fetchSwudbDeck(deckId)
+      const found = setup.bases.find(b => baseKey(b) === key) ?? null
+      setSwudb(s => ({ ...s, loading: false, deckName, base: found, error: found ? null : 'Base not recognised' }))
+      if (found) void onDeckImportSuccess(key, key.split('-')[0])
+      else void onDeckImportFailure('base_not_recognised')
     } catch {
-      setSwudbError('Deck not accessible')
+      setSwudb(s => ({ ...s, loading: false, error: 'Deck not accessible' }))
       void onDeckImportFailure('deck_not_accessible')
-    } finally {
-      setSwudbLoading(false)
     }
   }
 
-  // Derived: format error for a loaded SWUDB deck — re-evaluated whenever format or base changes,
-  // so switching to a valid format immediately clears the error without re-fetching.
-  const swudbFormatError = swudbDeckName !== null && setup.selectedBase && !swudbError
-    ? isBaseValidForFormat(setup.selectedFormat, setup.selectedBase)
-      ? null
-      : formatValidationError(setup.selectedFormat, setup.selectedBase)
-    : null
-
-  const validFavourites = favourites.filter(f => isSetValidForFormat(f.set, setup.selectedFormat))
-
-  const selectedBaseKey = setup.selectedBase
-    ? `${setup.selectedBase.set}-${setup.selectedBase.number}`
-    : null
-  const isFavourited = selectedBaseKey
-    ? favourites.some(f => f.key === selectedBaseKey)
-    : false
+  const currentKey = setup.base ? baseKey(setup.base) : null
+  const isFavourite = currentKey !== null && favourites.some(f => f.key === currentKey)
 
   const handleFavouriteToggle = () => {
-    if (!setup.selectedBase || !selectedBaseKey) return
-    if (isFavourited) {
-      removeFavourite(selectedBaseKey)
-      void onFavouriteRemoved(selectedBaseKey, setup.selectedBase.set)
+    const base = setup.base
+    if (!base || !currentKey) return
+    if (isFavourite) {
+      removeFavourite(currentKey)
+      void onFavouriteRemoved(currentKey, base.set)
     } else {
-      const aspect = setup.selectedBase.aspects.length === 0 ? 'None' : setup.selectedAspect
       addFavourite({
-        key: selectedBaseKey,
-        set: setup.selectedBase.set,
-        name: setup.selectedBase.name,
-        hp: setup.selectedBase.hp,
-        aspect,
-        cardNumber: parseInt(setup.selectedBase.number, 10),
+        key: currentKey,
+        set: base.set,
+        name: base.name,
+        hp: base.hp,
+        aspect: base.aspects[0] ?? 'None',
+        cardNumber: parseInt(base.number, 10),
       })
-      void onFavouriteAdded(selectedBaseKey, setup.selectedBase.set)
+      void onFavouriteAdded(currentKey, base.set)
     }
   }
-
-  const handleSubmit = () => setup.handleSubmit()
 
   return (
     <>
-    <SwuSetupScreenView
-      loading={setup.loading}
-      error={setup.error}
-      selectedFormat={setup.selectedFormat}
-      onFormatChange={setup.handleFormatChange}
-      enableCompetitiveMode={enableCompetitiveMode}
-      selectedSetupMode={setup.selectedMode}
-      onSetupModeChange={setup.handleModeChange}
-      availableSets={setup.validSets}
-      availableAspects={setup.availableAspects}
-      filteredBases={setup.filteredBases}
-      selectedSet={setup.selectedSet}
-      selectedAspect={setup.selectedAspect}
-      selectedKey={setup.selectedKey}
-      selectedBase={setup.selectedBase}
-      useHyperspace={useHyperspace}
-      artSrc={art.src}
-      artIsHyperspace={art.isHyperspace}
-      artAllFailed={art.allFailed}
-      artImageLoaded={art.imageLoaded}
-      artRotationDeg={art.rotationDeg}
-      onArtLoad={art.onLoad}
-      onArtError={art.onError}
-      onSetChange={setup.handleSetChange}
-      onAspectChange={setup.handleAspectChange}
-      onKeyChange={setup.handleKeyChange}
-      onSubmit={handleSubmit}
-      onHelp={onHelp}
-      onBack={onBack}
-      onSettings={onSettings}
-      selectionMode={selectionMode}
-      onModeChange={handleModeChange}
-      swudbUrl={swudbUrl}
-      swudbError={swudbError}
-      swudbFormatError={swudbFormatError}
-      swudbDeckName={swudbDeckName}
-      swudbLoading={swudbLoading}
-      onSwudbChange={handleSwudbChange}
-      onSwudbFocus={handleSwudbFocus}
-      onSwudbLoad={handleSwudbLoad}
-      enableFavourites={enableFavourites}
-      favourites={validFavourites}
-      isFavourited={isFavourited}
-      onFavouriteToggle={handleFavouriteToggle}
-      onFavouriteKeyChange={setup.selectBaseByKey}
-    />
-    {showBanner && platform && (
-      <InstallBanner platform={platform} onInstall={onInstall} onDismiss={onDismiss} />
-    )}
+      <SwuSetupScreenView
+        error={setup.error}
+        base={setup.base}
+        art={art}
+        useHyperspace={useHyperspace}
+        isFavourite={isFavourite}
+        onFavouriteToggle={handleFavouriteToggle}
+        matchType={setup.matchType}
+        onMatchTypeChange={setup.setMatchType}
+        onStart={setup.handleSubmit}
+        bases={setup.bases}
+        favouriteBases={favouriteBases}
+        recentBases={setup.recentBases}
+        onChooseBase={setup.chooseBase}
+        swudb={swudb}
+        onSwudbChange={handleSwudbChange}
+        onSwudbFocus={handleSwudbFocus}
+        onSwudbLoad={handleSwudbLoad}
+        onBack={onBack}
+        onHelp={onHelp}
+        onSettings={onSettings}
+      />
+      {showBanner && platform && (
+        <InstallBanner platform={platform} onInstall={onInstall} onDismiss={onDismiss} />
+      )}
     </>
   )
 }

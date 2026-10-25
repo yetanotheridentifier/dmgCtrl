@@ -8,7 +8,6 @@ import SwuTournamentScreen from './components/swuTournamentScreen'
 import HelpScreen from './components/helpScreen'
 import SettingsScreen from './components/settingsScreen'
 import { Base, useBases } from './hooks/useBases'
-import { InitialSelection } from './hooks/useSwuSetup'
 import type { XwingScenario } from './hooks/useXwingSetup'
 import type { XwingPilot } from './utils/parseXwsText'
 import { useTournament } from './hooks/useTournament'
@@ -31,8 +30,9 @@ function AppScreens() {
   const [backStack, setBackStack] = useState<Screen[]>([])
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
   const [selectedPlayMode, setSelectedPlayMode] = useState<PlayMode>('casual')
-  const [selectedFormat, setSelectedFormat] = useState<Format>('premier')
-  const [lastSelection, setLastSelection] = useState<InitialSelection | null>(null)
+  // Format is no longer chosen on setup; it moves to the tournament start sheet (#874). Until
+  // then every tournament plays Premier, the start sheet's default.
+  const selectedFormat: Format = 'premier'
   const [isInGame, setIsInGame] = useState(false)
   const [isInXwing, setIsInXwing] = useState(false)
   const [isInXwingSetup, setIsInXwingSetup] = useState(false)
@@ -114,16 +114,13 @@ function AppScreens() {
     }
   }
 
-  const handleConfirm = (base: Base, mode: SetupMode, format: Format) => {
+  const handleConfirm = (base: Base, mode: SetupMode) => {
+    setSelectedBase(base)
     if (mode === 'tournament') {
-      setSelectedBase(base)
-      setSelectedFormat(format)
       setScreen('tournament')
       return
     }
-    setSelectedBase(base)
     setSelectedPlayMode('casual')
-    setLastSelection({ set: base.set, aspect: base.aspects[0] ?? 'None', key: `${base.set}-${base.number}` })
     setIsInGame(true)
     setScreen('game')
   }
@@ -235,7 +232,6 @@ function AppScreens() {
         onHelp={handleHelp}
         onBack={() => setScreen('gameSelect')}
         onSettings={handleSettings}
-        initialSelection={lastSelection}
       />
     )
   }

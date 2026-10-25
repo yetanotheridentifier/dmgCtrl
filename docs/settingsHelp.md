@@ -25,12 +25,12 @@ Settings for the Star Wars: Unlimited game mode.
 
 **Enable Epic Actions** — Shows Epic Action buttons on the game screen for bases that have one.
 
-**Enable Competitive Mode** *(Beta)* — Adds a tournament mode selector to the SWU setup screen, enabling match timers and bracket tracking. When on, additional sub-settings appear:
+**Enable Competitive Mode** *(Beta)* — Shows the competitive sub-settings below. The SWU setup screen always offers Casual or Tournament, whatever this is set to. When on, these appear:
 - *Bo1 Timer* — match timer duration in minutes for Best-of-1 play
 - *Bo3 Timer* — match timer duration in minutes for Best-of-3 play
 - *Melee Player ID* — your Melee.gg player ID, used to link tournament rounds
 
-**Enable Favourites** — Lets you save a base as a favourite from the setup screen for quick access. Saved favourites are listed here and can be removed individually or cleared all at once.
+**Enable Favourites** — Lists your saved favourites here, where they can be removed individually or cleared all at once. The Favourite star on the SWU setup screen works whatever this is set to.
 
 ## X-Wing
 

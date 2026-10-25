@@ -14,6 +14,8 @@ interface ImagePreviewProps {
   rotationDeg: number
   useHyperspace: boolean
   fill?: 'width' | 'height'
+  // fill='height' only: centre the art in its space rather than pushing it to the right.
+  centred?: boolean
   onLoad: () => void
   onError: () => void
 }
@@ -82,7 +84,7 @@ const errorStyle: React.CSSProperties = {
   textShadow: '0 1px 4px rgba(0,0,0,0.9)',
 }
 
-function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotationDeg, useHyperspace, fill = 'width', onLoad, onError, overlay }: ImagePreviewProps) {
+function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotationDeg, useHyperspace, fill = 'width', centred = false, onLoad, onError, overlay }: ImagePreviewProps) {
   const imgRef = useRef<HTMLImageElement>(null)
 
   // Held in a ref, and updated before the effect below runs, so the check fires on a change of
@@ -135,7 +137,7 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', ...(fill === 'height' ? { height: '100%', maxWidth: '100%', aspectRatio: `${CARD_W} / ${CARD_H}`, marginLeft: 'auto' } : {}) }}>
+    <div style={{ display: 'flex', flexDirection: 'column', ...(fill === 'height' ? { height: '100%', maxWidth: '100%', aspectRatio: `${CARD_W} / ${CARD_H}`, marginLeft: 'auto', ...(centred ? { marginRight: 'auto' } : {}) } : {}) }}>
       <div style={imageWrapperStyle}>
         <img
           ref={imgRef}
