@@ -30,6 +30,8 @@ function AppScreens() {
   const [screen, setScreen] = useState<Screen>('loading')
   const [backStack, setBackStack] = useState<Screen[]>([])
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
+  // Two players: their base. Held for this session only, so a tournament resumed after a reload plays one-player.
+  const [selectedTheirBase, setSelectedTheirBase] = useState<Base | null>(null)
   const [selectedPlayMode, setSelectedPlayMode] = useState<PlayMode>('casual')
   const [isInGame, setIsInGame] = useState(false)
   const [isInXwing, setIsInXwing] = useState(false)
@@ -112,26 +114,27 @@ function AppScreens() {
     }
   }
 
-  // Setup passes their base too in 2 players. The game screen has no two-player view yet, so a
-  // 2-player game plays as a 1-player game with your base, and their base waits in setup.
-  const handleConfirm = (base: Base, mode: SetupMode) => {
+  // Setup passes their base too in 2 players, which opens the two-player game screen.
+  const handleConfirm = (base: Base, mode: SetupMode, theirBase?: Base) => {
     if (mode === 'tournament') {
       // Back to the tournament under way; a new one is started from the setup start sheet.
       if (tournament !== null) setScreen('tournament')
       return
     }
     setSelectedBase(base)
+    setSelectedTheirBase(theirBase ?? null)
     setSelectedPlayMode('casual')
     setIsInGame(true)
     setScreen('game')
   }
 
   // Start round 1 goes straight to the game: the tournament and its first match start together.
-  const handleStartTournament = (base: Base, { format, playMode, totalRounds }: TournamentSettings) => {
+  const handleStartTournament = (base: Base, { format, playMode, totalRounds }: TournamentSettings, theirBase?: Base) => {
     void onTournamentStarted(format, playMode, totalRounds)
     startTournament(base, format, playMode, totalRounds)
     startMatch()
     setSelectedBase(base)
+    setSelectedTheirBase(theirBase ?? null)
     setTournamentCurrentBase(base)
     setHasPlayedGameInCurrentMatch(false)
     setSelectedPlayMode(playMode)
@@ -292,6 +295,7 @@ function AppScreens() {
         <div style={screen === 'game' ? undefined : { display: 'none' }}>
           <SwuGameScreen
             base={gameBase}
+            theirBase={selectedTheirBase ?? undefined}
             playMode={selectedPlayMode}
             format={tournament?.format}
             isInTournament={tournament !== null}

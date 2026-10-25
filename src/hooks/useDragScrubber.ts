@@ -17,6 +17,8 @@ export function useDragScrubber(
   maxIncrement: number,
   maxDecrement: number,
   enabled = true,
+  // Turned round (the far half of a shared phone): up for its player is down the screen.
+  flipped = false,
 ) {
   const dragRef = useRef<{ type: '+' | '-'; startY: number; value: number; active: boolean } | null>(null)
   const [indicator, setIndicator] = useState<DragIndicator | null>(null)
@@ -38,7 +40,7 @@ export function useDragScrubber(
   const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
     const dr = dragRef.current
     if (!dr) return
-    const delta = dr.startY - e.clientY
+    const delta = (dr.startY - e.clientY) * (flipped ? -1 : 1)
     if (delta < DEAD_ZONE) {
       dr.value = 1
       dr.active = false
@@ -91,6 +93,7 @@ export function useCardDrag(
   maxIncrement: number,
   maxDecrement: number,
   enabled: boolean,
+  flipped = false,
 ) {
   const dragRef = useRef<{ startY: number; type: '+' | '-' | null; value: number } | null>(null)
   const [amount, setAmount] = useState<{ type: '+' | '-'; value: number } | null>(null)
@@ -110,7 +113,7 @@ export function useCardDrag(
   const onPointerMove = (e: React.PointerEvent<HTMLElement>) => {
     const dr = dragRef.current
     if (!dr) return
-    const delta = dr.startY - e.clientY
+    const delta = (dr.startY - e.clientY) * (flipped ? -1 : 1)
     if (Math.abs(delta) < DEAD_ZONE) {
       dr.type = null
       if (amount !== null) setAmount(null)

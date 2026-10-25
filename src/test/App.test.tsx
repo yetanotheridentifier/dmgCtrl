@@ -228,18 +228,34 @@ describe('App', () => {
     expect(setupMarker()).toBeInTheDocument()
   })
 
-  // Until the game screen has a two-player view, 2 players plays the game with your base.
-  it('2 players goes to the game with your base once their base is chosen', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await waitForSetup()
+  const goToTwoPlayerGame = async (user: ReturnType<typeof userEvent.setup>) => {
     await chooseBase(user, 'Catacombs of Cadera')
     await user.click(screen.getByRole('button', { name: '2 players' }))
     await user.click(within(screen.getByTestId('their-base-card')).getByRole('button', { name: /Choose their base/ }))
     await user.click(within(screen.getByRole('dialog', { name: 'Choose their base' })).getByRole('button', { name: /^Energy Conversion Lab/ }))
     await user.click(screen.getByRole('button', { name: 'Go to game' }))
-    await user.click(screen.getByText('Start'))
-    expect(screen.getByText('30 HP left')).toBeInTheDocument()
+  }
+
+  it('2 players goes to the two-player game with both bases', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await goToTwoPlayerGame(user)
+    await user.click(within(screen.getByRole('region', { name: 'Their half' })).getByTestId('game-card'))
+    expect(within(screen.getByRole('region', { name: 'Your half' })).getByText('30 HP left')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Their half' })).getByText('25 HP left')).toBeInTheDocument()
+  })
+
+  it('1 player after a 2-player game goes to the one-player game', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await goToTwoPlayerGame(user)
+    await user.click(screen.getByRole('button', { name: 'Back to setup' }))
+    await user.click(screen.getByRole('button', { name: '1 player' }))
+    await user.click(screen.getByRole('button', { name: 'Go to game' }))
+    expect(screen.queryByRole('region', { name: 'Their half' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('game-card')).toBeInTheDocument()
   })
 
   // --- Your base is kept ---

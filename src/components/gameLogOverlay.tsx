@@ -11,9 +11,11 @@ interface LogEntryLike {
 interface Props {
   entries: LogEntryLike[]
   onUndo: () => void
+  // Where it sits, in place of the left side of the screen (the SWU two-player screen puts it over your half).
+  position?: React.CSSProperties
 }
 
-function GameLogOverlay({ entries, onUndo }: Props) {
+function GameLogOverlay({ entries, onUndo, position }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -24,10 +26,12 @@ function GameLogOverlay({ entries, onUndo }: Props) {
       data-testid="log-overlay"
       style={{
         position: 'absolute',
-        top: 'calc(env(safe-area-inset-top) + 2vw)',
-        bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
-        left: 'calc(env(safe-area-inset-left) + 8vw)',
-        width: 'clamp(120px, 18vw, 240px)',
+        ...(position ?? {
+          top: 'calc(env(safe-area-inset-top) + 2vw)',
+          bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
+          left: 'calc(env(safe-area-inset-left) + 8vw)',
+          width: 'clamp(120px, 18vw, 240px)',
+        }),
         overflowY: 'auto',
         background: 'rgba(0,0,0,0.85)',
         border: '2px solid var(--color-ui-border)',

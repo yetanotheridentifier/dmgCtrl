@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 const STORAGE_KEY = 'user_settings'
 
-type ForceTokenDisplay = 'always-on' | 'lof-only' | 'always-off'
+export type ForceTokenDisplay = 'always-on' | 'lof-only' | 'always-off'
 export type StartScreen = 'gameSelect' | 'swu' | 'xwing'
 
 interface UserSettings {
