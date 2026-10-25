@@ -327,8 +327,8 @@ describe('App', () => {
     }
     const user = userEvent.setup()
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Tournament' })).toBeInTheDocument())
+    await openFromMore(user, 'Help')
     expect(screen.getByRole('heading', { level: 2, name: 'Tournament Mode' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
   })
@@ -342,10 +342,10 @@ describe('App', () => {
     }
     const user = userEvent.setup()
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Tournament' })).toBeInTheDocument())
+    await openFromMore(user, 'Help')
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByRole('button', { name: 'Start Match 1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start round 1' })).toBeInTheDocument()
   })
 
   it('Clicking help from settings screen shows settings-specific content', async () => {
@@ -488,7 +488,7 @@ describe('App analytics', () => {
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
     await user.click(screen.getByTestId('game-counter'))
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', false, expect.any(Number), 'casual', expect.any(String))
+    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', false, expect.any(Number), 'casual', undefined)
   })
 
   it('does not call onGameEnd when back is pressed from help screen', async () => {
@@ -610,26 +610,70 @@ describe('App lifecycle analytics', () => {
 
 describe('App tournament navigation', () => {
 
-  it('navigates to tournament screen when tournament mode is confirmed, with Competitive mode off', async () => {
-    mockUserSettings.enableCompetitiveMode = false
-    const user = userEvent.setup()
+  // The mock bases are all SOR, which is legal in Limited but not Premier.
+  async function startFromSetup(user: User) {
+    store.set('swu_setup', JSON.stringify({ baseKey: 'SOR-026', recentBaseKeys: [], matchType: 'tournament', format: 'limited' }))
     render(<App />)
     await waitForSetup()
-    await user.click(screen.getByRole('button', { name: 'Tournament' }))
-    await chooseBaseAndGo(user, 'Catacombs of Cadera')
-    expect(screen.getByRole('button', { name: 'Start Match 1' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Start tournament' }))
+    const sheet = screen.getByRole('dialog', { name: 'Start a tournament' })
+    await user.click(within(within(sheet).getByRole('group', { name: 'Match' })).getByRole('button', { name: 'Best of 1' }))
+    await user.click(within(sheet).getByRole('button', { name: 'Start round 1' }))
+  }
+
+  it('Start round 1 on the setup sheet starts the tournament and its first match, and goes straight to the game', async () => {
+    const user = userEvent.setup()
+    await startFromSetup(user)
+    expect(mockUseTournament.startTournament).toHaveBeenCalledWith(expect.objectContaining({ set: 'SOR', number: '026' }), 'limited', 'bo1', 5)
+    expect(mockUseTournament.startMatch).toHaveBeenCalledOnce()
+    expect(mockOnTournamentStarted).toHaveBeenCalledWith('limited', 'bo1', 5)
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
   })
 
-  // Format leaves setup for the tournament start sheet; until then a tournament plays Premier.
-  it('a tournament started from setup plays Premier, whatever format was stored before', async () => {
-    store.set('pref_format', 'eternal')
+  it('a tournament game records the tournament’s format on game_ended', async () => {
+    mockUserSettings.useHyperspace = false
+    mockUseTournament.tournament = {
+      base: mockBases[0], format: 'eternal', playMode: 'bo3', totalRounds: 5,
+      rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],
+    }
+    mockUseTournament.matchInProgress = true
     const user = userEvent.setup()
     render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    await user.click(screen.getByTestId('game-counter'))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', false, expect.any(Number), 'bo3', 'eternal')
+  })
+
+  it('Back from the tournament goes to setup, where Go to tournament returns to it', async () => {
+    mockUseTournament.tournament = {
+      base: mockBases[0], format: 'premier', playMode: 'bo3', totalRounds: 5,
+      rounds: [{ roundNumber: 1, playerScore: 2, opponentScore: 0, result: 'won', submitted: false }],
+    }
+    store.set('swu_setup', JSON.stringify({ baseKey: 'SOR-026', recentBaseKeys: [], matchType: 'tournament' }))
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start round 2' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Back' }))
     await waitForSetup()
-    await user.click(screen.getByRole('button', { name: 'Tournament' }))
-    await chooseBaseAndGo(user, 'Catacombs of Cadera')
-    await user.click(screen.getByRole('button', { name: 'Start Match 1' }))
-    expect(mockUseTournament.startTournament).toHaveBeenCalledWith(expect.objectContaining({ set: 'SOR', number: '026' }), 'premier', expect.anything(), expect.anything())
+    await user.click(screen.getByRole('button', { name: 'Go to tournament' }))
+    expect(screen.getByRole('button', { name: 'Start round 2' })).toBeInTheDocument()
+  })
+
+  it('Finish on a complete tournament returns to setup', async () => {
+    mockUseTournament.tournament = {
+      base: mockBases[0], format: 'premier', playMode: 'bo1', totalRounds: 1,
+      rounds: [{ roundNumber: 1, playerScore: 1, opponentScore: 0, result: 'won', submitted: false }],
+    }
+    mockUseTournament.isComplete = true
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Finish' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Finish' }))
+    expect(mockUseTournament.dropTournament).toHaveBeenCalledOnce()
+    await waitForSetup()
   })
 
   it('shows tournament screen (not setup) when a tournament is already active on load', async () => {
@@ -643,7 +687,7 @@ describe('App tournament navigation', () => {
       rounds: [],
     }
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Start Match 1' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start round 1' })).toBeInTheDocument())
   })
 
   it('game screen state is preserved when navigating game → tournament → game mid-match', async () => {
@@ -661,8 +705,8 @@ describe('App tournament navigation', () => {
     render(<App />)
 
     // Tournament screen loads; navigate to game
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
 
     // Game screen loads; start game and increment damage
     await waitFor(() => expect(screen.getByText('Start')).toBeInTheDocument())
@@ -673,10 +717,10 @@ describe('App tournament navigation', () => {
 
     // Navigate back to tournament
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
 
     // Return to game — damage must still be 1
-    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('1'))
   })
 
@@ -694,8 +738,8 @@ describe('App tournament navigation', () => {
     }
     mockUseTournament.matchInProgress = true
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
     // Navigation itself must not count as a game start
     expect(mockOnGameStart).not.toHaveBeenCalled()
     // Starting the game (round counter) must fire onGameStart
@@ -719,18 +763,17 @@ describe('App tournament navigation', () => {
     mockUseTournament.matchInProgress = true
     render(<App />)
     // Record game 1 win: navigate to game, click You → Confirm, then Back to tournament
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'YOU' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'YOU' }))
     await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    // Now on tournament screen with hasPlayedGameInCurrentMatch=true — change base overlay shows
-    await waitFor(() => expect(screen.getByTestId('change-base-overlay')).toBeInTheDocument())
-    await user.click(screen.getByTestId('change-base-overlay'))
-    await user.selectOptions(screen.getByTestId('change-base-aspect'), 'Cunning')
-    await user.selectOptions(screen.getByTestId('change-base-base'), 'SOR-022')
-    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    // Now on tournament screen with hasPlayedGameInCurrentMatch=true, so Change base is offered
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Change base' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Change base' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Choose your base' })).getByRole('button', { name: /^Energy Conversion Lab/ }))
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
     await user.click(screen.getByTestId('game-counter'))
     expect(mockOnGameStart).toHaveBeenLastCalledWith('SOR-022', 'SOR', false, 'bo3')
@@ -750,13 +793,13 @@ describe('App tournament navigation', () => {
     mockUseTournament.matchInProgress = true
     render(<App />)
     // Navigate to game screen and press Back immediately without recording any result
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    // Change base overlay must NOT appear — no game has been completed yet
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
-    expect(screen.queryByTestId('change-base-overlay')).not.toBeInTheDocument()
+    // Change base must not be offered: no game has been completed yet
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Change base' })).not.toBeInTheDocument()
   })
 
   it('fires onGameEnd when pressing Back from a tournament game', async () => {
@@ -772,13 +815,13 @@ describe('App tournament navigation', () => {
     }
     mockUseTournament.matchInProgress = true
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
     await user.click(screen.getByTestId('game-counter'))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await waitFor(() => expect(mockOnGameEnd).toHaveBeenCalled())
-    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', expect.any(Boolean), expect.any(Number), 'bo3', expect.any(String))
+    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', expect.any(Boolean), expect.any(Number), 'bo3', 'premier')
   })
 
 })

@@ -183,19 +183,8 @@ describe('isBaseValidForFormat', () => {
 // ---------- formatValidationError ----------
 
 describe('formatValidationError', () => {
-  it('includes set code for premier', () => {
-    expect(formatValidationError('premier', makeBase('SOR'))).toBe('Base not valid for Premier format (SOR)')
-  })
-
-  it('includes set code for limited', () => {
-    expect(formatValidationError('limited', makeBase('IBH'))).toBe('Base not valid for Limited format (IBH)')
-  })
-
-  it('includes set code for eternal', () => {
-    expect(formatValidationError('eternal', makeBase('SOR'))).toBe('Base not valid for Eternal format (SOR)')
-  })
-
-  it('includes set code for twin-suns', () => {
-    expect(formatValidationError('twin-suns', makeBase('SOR'))).toBe('Base not valid for Twin Suns format (SOR)')
+  it('names the base, its set and the format', () => {
+    expect(formatValidationError('premier', makeBase('SOR'))).toBe('SOR Base (SOR) isn’t legal in Premier.')
+    expect(formatValidationError('limited', makeBase('IBH'))).toBe('IBH Base (IBH) isn’t legal in Limited.')
   })
 })

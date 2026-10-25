@@ -48,5 +48,5 @@ export function isBaseValidForFormat(format: Format, base: Base): boolean {
 }
 
 export function formatValidationError(format: Format, base: Base): string {
-  return `Base not valid for ${FORMAT_LABELS[format]} format (${base.set})`
+  return `${base.name} (${base.set}) isn’t legal in ${FORMAT_LABELS[format]}.`
 }

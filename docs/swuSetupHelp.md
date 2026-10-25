@@ -43,7 +43,7 @@ Tap **Favourite** on the Your base card to save your base as a favourite: the st
 
 ### Match
 
-Choose **Casual** or **Tournament**; your choice is kept. With Casual, **Go to game** opens the game. With Tournament, **Go to tournament** opens the tournament screen, where best of 1 or 3 and the rounds are set.
+Choose **Casual** or **Tournament**; your choice is kept. With Casual, **Go to game** opens the game. With Tournament, **Start tournament** opens a sheet where you set the format, best of 1 or 3 and the rounds, then **Start round 1** goes straight to the game. While a tournament is under way the button reads **Go to tournament** and takes you back to it.
 
 The button is disabled until you have chosen a base.
 
@@ -83,11 +83,13 @@ Tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" ar
 
 ## Format
 
-Setup has no format choice: every base is listed, whatever its set. Tournaments are played under **Premier** rules.
+A casual game has no format: the base sheet lists every base, whatever its set.
+
+A tournament has one: **Premier**, **Eternal** or **Limited**, chosen on the Start tournament sheet and remembered for next time. While Tournament is chosen, the base sheet lists only the bases legal in that format, and an SWUDB deck whose base isn't legal says so.
 
 ## Competitive Play
 
-Choose **Tournament** under Match on the setup screen, then set best of 1 or best of 3 and the number of rounds on the tournament screen.
+Choose **Tournament** under Match on the setup screen, tap **Start tournament**, and set the format, best of 1 or best of 3 and the number of rounds on its sheet.
 
 | Option | Description |
 |---|---|

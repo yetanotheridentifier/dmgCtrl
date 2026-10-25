@@ -12,9 +12,9 @@ import type { XwingScenario } from './hooks/useXwingSetup'
 import type { XwingPilot } from './utils/parseXwsText'
 import { useTournament } from './hooks/useTournament'
 import { useUserSettings } from './hooks/useUserSettings'
-import { onAppStart, onAppInstall, onAppResume, onTournamentRoundCompleted } from './services/analytics'
+import { onAppStart, onAppInstall, onAppResume, onTournamentRoundCompleted, onTournamentStarted } from './services/analytics'
 import type { PlayMode, SetupMode } from './utils/playMode'
-import type { Format } from './utils/formatFilter'
+import type { TournamentSettings } from './hooks/useSwuSetup'
 
 // The X-Wing screens carry the XWA card table, so they load as their own chunk on entering X-Wing
 // rather than in the bundle every SWU player downloads. The service worker precaches the chunk, so
@@ -30,9 +30,6 @@ function AppScreens() {
   const [backStack, setBackStack] = useState<Screen[]>([])
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
   const [selectedPlayMode, setSelectedPlayMode] = useState<PlayMode>('casual')
-  // Format is no longer chosen on setup; it moves to the tournament start sheet (#874). Until
-  // then every tournament plays Premier, the start sheet's default.
-  const selectedFormat: Format = 'premier'
   const [isInGame, setIsInGame] = useState(false)
   const [isInXwing, setIsInXwing] = useState(false)
   const [isInXwingSetup, setIsInXwingSetup] = useState(false)
@@ -115,12 +112,26 @@ function AppScreens() {
   }
 
   const handleConfirm = (base: Base, mode: SetupMode) => {
-    setSelectedBase(base)
     if (mode === 'tournament') {
-      setScreen('tournament')
+      // Back to the tournament under way; a new one is started from the setup start sheet.
+      if (tournament !== null) setScreen('tournament')
       return
     }
+    setSelectedBase(base)
     setSelectedPlayMode('casual')
+    setIsInGame(true)
+    setScreen('game')
+  }
+
+  // Start round 1 goes straight to the game: the tournament and its first match start together.
+  const handleStartTournament = (base: Base, { format, playMode, totalRounds }: TournamentSettings) => {
+    void onTournamentStarted(format, playMode, totalRounds)
+    startTournament(base, format, playMode, totalRounds)
+    startMatch()
+    setSelectedBase(base)
+    setTournamentCurrentBase(base)
+    setHasPlayedGameInCurrentMatch(false)
+    setSelectedPlayMode(playMode)
     setIsInGame(true)
     setScreen('game')
   }
@@ -229,6 +240,8 @@ function AppScreens() {
     return (
       <SwuSetupScreen
         onConfirm={handleConfirm}
+        onStartTournament={handleStartTournament}
+        tournamentInProgress={tournament !== null}
         onHelp={handleHelp}
         onBack={() => setScreen('gameSelect')}
         onSettings={handleSettings}
@@ -239,7 +252,6 @@ function AppScreens() {
   // Keep game and X-Wing setup screens mounted while navigating to help/settings/tournament so game state is preserved.
   // Use tournament.base as fallback when selectedBase is null (e.g. app resumed into an active tournament).
   const gameBase = tournamentCurrentBase ?? selectedBase ?? tournament?.base ?? null
-  const tournamentBase = tournament?.base ?? selectedBase ?? null
 
   return (
     <>
@@ -276,7 +288,7 @@ function AppScreens() {
           <SwuGameScreen
             base={gameBase}
             playMode={selectedPlayMode}
-            format={selectedFormat}
+            format={tournament?.format}
             isInTournament={tournament !== null}
             onBack={handleBack}
             onHelp={handleHelp}
@@ -285,17 +297,14 @@ function AppScreens() {
           />
         </div>
       )}
-      {screen === 'tournament' && tournamentBase && (
+      {screen === 'tournament' && tournament && (
         <SwuTournamentScreen
-          base={tournamentBase}
-          format={selectedFormat}
           tournament={tournament}
           matchInProgress={matchInProgress}
           isComplete={isComplete}
           totals={totals}
           points={points}
           hasPlayedGameInCurrentMatch={hasPlayedGameInCurrentMatch}
-          startTournament={startTournament}
           startMatch={startMatch}
           dropTournament={dropTournament}
           onGoToGame={handleGoToGame}

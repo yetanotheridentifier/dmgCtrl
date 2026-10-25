@@ -170,13 +170,42 @@ describe('useSwuSetup: recent bases', () => {
 })
 
 describe('useSwuSetup: older stored preferences', () => {
-  it('ignores the stored format and drops it on the next save', () => {
+  it('takes up the stored format as the tournament format, then drops the old key on the next save', () => {
     store.set('pref_format', 'eternal')
     store.set('pref_selection_mode', 'swudb-import')
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.format).toBe('eternal')
     act(() => result.current.chooseBase(catacombs))
     expect(store.has('pref_format')).toBe(false)
     expect(store.has('pref_selection_mode')).toBe(false)
+    expect(JSON.parse(store.get('swu_setup')!).format).toBe('eternal')
+  })
+
+  it('an old Twin Suns format is not a tournament format: Premier instead', () => {
+    store.set('pref_format', 'twin-suns')
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.format).toBe('premier')
+  })
+})
+
+describe('useSwuSetup: tournament format', () => {
+  it('is Premier the first time', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.format).toBe('premier')
+  })
+
+  it('is kept across launches', () => {
+    const first = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => first.result.current.setFormat('limited'))
+    first.unmount()
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.format).toBe('limited')
+  })
+
+  it('an unreadable stored format reads as Premier', () => {
+    store.set('swu_setup', JSON.stringify({ recentBaseKeys: [], matchType: 'tournament', format: 'nonsense' }))
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.format).toBe('premier')
   })
 })
 

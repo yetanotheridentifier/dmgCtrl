@@ -1,22 +1,21 @@
 import { useState } from 'react'
 import { Base } from '../hooks/useBases'
-import { filterBases, baseKey } from '../hooks/useSwuSetup'
+import { baseKey, TOURNAMENT_FORMATS } from '../hooks/useSwuSetup'
+import type { TournamentFormat, TournamentSettings } from '../hooks/useSwuSetup'
 import type { useBaseArt } from '../hooks/useBaseArt'
 import AppScreenLayout from './layout/appScreenLayout'
 import ImagePreview from './imagePreview'
+import SwuBaseSheet from './swuBaseSheet'
+import { aspectIconSrc, baseAspect, baseMeta } from '../utils/baseAspect'
+import { sectionLabelStyle, mutedStyle } from '../styles/sectionLabel'
+import type { SwudbImportControls } from './swuBaseSheet'
 import { useOrientation } from '../hooks/useOrientation'
-import { BackIcon, CheckIcon, DotsIcon, PlusIcon, SearchIcon, StarIcon } from './icons'
-import { Button, IconButton, SegmentedControl, Sheet } from './shared/controls'
+import { BackIcon, DotsIcon, PlusIcon, StarIcon } from './icons'
+import { Button, IconButton, SegmentedControl, Sheet, Stepper } from './shared/controls'
 import type { SetupMode } from '../utils/playMode'
+import { FORMAT_LABELS, formatValidationError, isBaseValidForFormat } from '../utils/formatFilter'
 
-export interface SwudbImport {
-  url: string
-  error: string | null
-  deckName: string | null
-  // The deck's base, once loaded and found in the card data.
-  base: Base | null
-  loading: boolean
-}
+export type { SwudbImport } from './swuBaseSheet'
 
 interface Props {
   error: string | null
@@ -27,75 +26,87 @@ interface Props {
   onFavouriteToggle: () => void
   matchType: SetupMode
   onMatchTypeChange: (v: SetupMode) => void
+  // A tournament already under way: the primary goes back to it rather than starting another.
+  tournamentInProgress: boolean
+  format: TournamentFormat
+  onFormatChange: (f: TournamentFormat) => void
   onStart: () => void
-  bases: Base[]
+  onStartTournament: (settings: TournamentSettings) => void
+  // The bases the base sheet offers: in a tournament, those legal in its format.
+  sheetBases: Base[]
   favouriteBases: Base[]
   recentBases: Base[]
   onChooseBase: (b: Base) => void
-  swudb: SwudbImport
-  onSwudbChange: (text: string) => void
-  onSwudbFocus: () => void
-  onSwudbLoad: () => void
+  swudb: SwudbImportControls
   onBack?: () => void
   onHelp: () => void
   onSettings?: () => void
 }
 
-type OpenSheet = null | 'more' | 'base'
+type OpenSheet = null | 'more' | 'base' | 'tournament'
 
-const FILTER_ASPECTS = ['Vigilance', 'Command', 'Aggression', 'Cunning']
-const ICON_ASPECTS = [...FILTER_ASPECTS, 'Heroism', 'Villainy']
+const ROUNDS_MIN = 2
+const ROUNDS_MAX = 16
+const LIMITED_NOTE = 'In Limited you can change base between games of a match.'
 
-const TOURNAMENT_NOTE = 'Best of 1 or 3 and the rounds are set on the tournament screen.'
+const rowLabelStyle: React.CSSProperties = { flex: 1, fontSize: '0.95rem' }
 
-const aspectIconSrc = (aspect: string) => `${import.meta.env.BASE_URL}${aspect.toLowerCase()}.png`
+// Mounted only while its sheet is open, so Match and Rounds start from their defaults each time.
+function StartTournamentBody({ base, format, onFormatChange, onChangeBase, onCancel, onStart }: {
+  base: Base
+  format: TournamentFormat
+  onFormatChange: (f: TournamentFormat) => void
+  onChangeBase: () => void
+  onCancel: () => void
+  onStart: (settings: TournamentSettings) => void
+}) {
+  const [playMode, setPlayMode] = useState<'bo1' | 'bo3'>('bo3')
+  const [totalRounds, setTotalRounds] = useState(5)
+  const legal = isBaseValidForFormat(format, base)
 
-function baseAspect(base: Base): string | null {
-  return ICON_ASPECTS.find(a => base.aspects.includes(a)) ?? null
-}
-
-const baseMeta = (base: Base) => `${base.set} · ${base.hp} HP`
-
-const sectionLabelStyle = (color = 'var(--color-text-muted)'): React.CSSProperties => ({
-  fontSize: '0.75rem',
-  letterSpacing: '0.14em',
-  textTransform: 'uppercase',
-  color,
-})
-
-const mutedStyle: React.CSSProperties = { fontSize: '0.8rem', lineHeight: 1.45, color: 'var(--color-text-muted)' }
-
-function BaseTile({ base, selected, onClick }: { base: Base; selected: boolean; onClick: () => void }) {
-  const aspect = baseAspect(base)
   return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      style={{
-        minHeight: '52px',
-        minWidth: 0,
-        padding: '0 10px',
-        border: 'none',
-        borderRadius: '12px',
-        background: selected ? 'var(--color-tonal)' : 'var(--color-surface-raised)',
-        color: 'var(--color-text-primary)',
-        fontFamily: 'inherit',
-        textAlign: 'left',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        cursor: 'pointer',
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
-      {aspect && <img src={aspectIconSrc(aspect)} alt="" style={{ width: '24px', height: '24px', flexShrink: 0 }} />}
-      <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        <span style={{ fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{base.name}</span>
-        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{baseMeta(base)}</span>
-      </span>
-      {selected && <span style={{ width: '20px', height: '20px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-accent)' }}><CheckIcon /></span>}
-    </button>
+    <>
+      {/* Your base, or why it can't be used in this format: one line either way, so the sheet fits 390px high. */}
+      {legal ? <div style={mutedStyle}>{base.name}</div> : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div role="alert" style={{ flex: 1, fontSize: '0.85rem', lineHeight: 1.3, color: 'var(--color-error)' }}>{formatValidationError(format, base)}</div>
+          <Button onClick={onChangeBase} style={{ flexShrink: 0 }}>Change base</Button>
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <span style={rowLabelStyle}>Format</span>
+        <div style={{ width: '260px', maxWidth: '70%' }}>
+          <SegmentedControl
+            label="Format"
+            options={TOURNAMENT_FORMATS.map(f => ({ value: f, label: FORMAT_LABELS[f] }))}
+            value={format}
+            onChange={onFormatChange}
+          />
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <span style={rowLabelStyle}>Match</span>
+        <div style={{ width: '260px', maxWidth: '70%' }}>
+          <SegmentedControl
+            label="Match"
+            options={[{ value: 'bo1', label: 'Best of 1' }, { value: 'bo3', label: 'Best of 3' }]}
+            value={playMode}
+            onChange={setPlayMode}
+          />
+        </div>
+      </div>
+      <Stepper label="Rounds" value={totalRounds} min={ROUNDS_MIN} max={ROUNDS_MAX} onChange={setTotalRounds} />
+      <div style={mutedStyle}>
+        <span>Fixed once round 1 starts.</span>
+        {format === 'limited' && <> <span>{LIMITED_NOTE}</span></>}
+      </div>
+      <div style={{ marginTop: 'auto', paddingTop: '4px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
+        <Button onClick={onCancel}>Cancel</Button>
+        <Button variant="primary" disabled={!legal} onClick={() => onStart({ format, playMode, totalRounds })} style={{ minHeight: '52px', padding: '0 20px' }}>
+          Start round 1
+        </Button>
+      </div>
+    </>
   )
 }
 
@@ -108,155 +119,30 @@ export default function SwuSetupScreenView({
   onFavouriteToggle,
   matchType,
   onMatchTypeChange,
+  tournamentInProgress,
+  format,
+  onFormatChange,
   onStart,
-  bases,
+  onStartTournament,
+  sheetBases,
   favouriteBases,
   recentBases,
   onChooseBase,
   swudb,
-  onSwudbChange,
-  onSwudbFocus,
-  onSwudbLoad,
   onBack,
   onHelp,
   onSettings,
 }: Props) {
   const { isPortrait } = useOrientation()
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null)
-  const [query, setQuery] = useState('')
-  const [aspect, setAspect] = useState<string | null>(null)
-  const [importing, setImporting] = useState(false)
 
   const close = () => setOpenSheet(null)
   // Sheet actions close the sheet first, so it isn't left open behind the next screen.
   const closeThen = (fn?: () => void) => () => { close(); fn?.() }
-
-  // The base sheet opens afresh each time: no search, no filter, on the search view.
-  const openBaseSheet = () => {
-    setQuery('')
-    setAspect(null)
-    setImporting(false)
-    setOpenSheet('base')
-  }
+  const openBaseSheet = () => setOpenSheet('base')
 
   const choose = (b: Base) => { onChooseBase(b); close() }
   const currentKey = base ? baseKey(base) : null
-  const columns = isPortrait ? 2 : 3
-
-  const tileGrid = (label: string, list: Base[]) => (
-    <div role="group" aria-label={label} style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: '8px' }}>
-      {list.map(b => <BaseTile key={baseKey(b)} base={b} selected={baseKey(b) === currentKey} onClick={() => choose(b)} />)}
-    </div>
-  )
-
-  const section = (label: string, list: Base[]) => (
-    <>
-      <div style={sectionLabelStyle()}>{label}</div>
-      {tileGrid(label, list)}
-    </>
-  )
-
-  const searching = query.trim() !== '' || aspect !== null
-  const results = searching ? filterBases(bases, query, aspect) : []
-  const resultsLabel = [
-    `${results.length} ${results.length === 1 ? 'base' : 'bases'}`,
-    ...(aspect ? [aspect] : []),
-    ...(query.trim() ? [`“${query.trim()}”`] : []),
-  ].join(' · ')
-
-  const favouriteKeys = new Set(favouriteBases.map(baseKey))
-  const recentOnly = recentBases.filter(b => !favouriteKeys.has(baseKey(b)))
-
-  const pasteLink = <Button onClick={() => setImporting(true)} style={{ flexShrink: 0 }}>Paste SWUDB link</Button>
-
-  const searchView = (
-    <>
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: isPortrait ? 'wrap' : 'nowrap' }}>
-        <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 0 }}>
-          <span style={{ position: 'absolute', left: '14px', top: '13px', color: 'var(--color-text-muted)', display: 'flex' }}><SearchIcon /></span>
-          <input
-            type="search"
-            aria-label="Search bases"
-            placeholder="Search bases"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            style={{ width: '100%', height: '44px', boxSizing: 'border-box', border: 'none', borderRadius: '12px', background: 'var(--color-surface-raised)', color: 'var(--color-text-primary)', fontSize: '0.95rem', fontFamily: 'inherit', padding: '0 14px 0 42px', outline: 'none' }}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {FILTER_ASPECTS.map(a => (
-            <button
-              key={a}
-              type="button"
-              aria-label={a}
-              aria-pressed={aspect === a}
-              onClick={() => setAspect(aspect === a ? null : a)}
-              style={{ width: '44px', height: '44px', border: 'none', borderRadius: '12px', background: aspect === a ? 'var(--color-tonal)' : 'var(--color-surface)', opacity: aspect === a ? 1 : 0.75, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
-            >
-              <img src={aspectIconSrc(a)} alt="" style={{ width: '26px', height: '26px' }} />
-            </button>
-          ))}
-        </div>
-        {/* In landscape the link sits up here, so favourites and six recent bases fit at 390px high. */}
-        {!isPortrait && pasteLink}
-      </div>
-      {searching ? (
-        <>
-          <div style={sectionLabelStyle()}>{resultsLabel}</div>
-          {tileGrid('Results', results)}
-          {aspect && <div style={mutedStyle}>Tap an aspect again to clear it.</div>}
-        </>
-      ) : (
-        <>
-          {favouriteBases.length > 0 && section('Favourites', favouriteBases)}
-          {recentOnly.length > 0 && section('Recent', recentOnly)}
-          {favouriteBases.length === 0 && recentOnly.length === 0 && section('All bases', filterBases(bases, '', null))}
-        </>
-      )}
-      {isPortrait && (
-        <div style={{ marginTop: 'auto', paddingTop: '4px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ ...mutedStyle, flex: 1 }}>Building from a deck? Its base comes with the link.</div>
-          {pasteLink}
-        </div>
-      )}
-    </>
-  )
-
-  const canLoad = swudb.url !== '' && swudb.error === null && !swudb.loading
-
-  const importView = (
-    <>
-      <label htmlFor="swudb-link" style={sectionLabelStyle()}>SWUDB deck link</label>
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <input
-          id="swudb-link"
-          type="url"
-          placeholder="https://swudb.com/deck/…"
-          value={swudb.url}
-          onChange={e => onSwudbChange(e.target.value)}
-          onFocus={onSwudbFocus}
-          style={{ flex: 1, minWidth: 0, height: '44px', boxSizing: 'border-box', border: swudb.error ? '2px solid var(--color-error)' : 'none', borderRadius: '12px', background: 'var(--color-surface-raised)', color: 'var(--color-text-primary)', fontSize: '0.95rem', fontFamily: 'inherit', padding: '0 14px', outline: 'none' }}
-        />
-        <Button onClick={onSwudbLoad} disabled={!canLoad}>{swudb.loading ? '...' : 'Load'}</Button>
-      </div>
-      {swudb.error && <div role="alert" style={{ fontSize: '0.85rem', color: 'var(--color-error)' }}>{swudb.error}</div>}
-      {swudb.deckName !== null && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '12px', background: 'var(--color-surface)' }}>
-          {swudb.base && <span style={{ width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-success)' }}><CheckIcon /></span>}
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{swudb.deckName}</span>
-            {swudb.base && <span style={mutedStyle}>Deck found · its base:</span>}
-          </div>
-        </div>
-      )}
-      {swudb.base && tileGrid('Deck base', [swudb.base])}
-      <div style={mutedStyle}>The deck must be unlisted or public on swudb.com.</div>
-      <div style={{ marginTop: 'auto', paddingTop: '4px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
-        <Button onClick={() => setImporting(false)}>Search instead</Button>
-        {swudb.base && <Button variant="primary" onClick={() => choose(swudb.base!)} style={{ minHeight: '52px', padding: '0 24px' }}>Use this base</Button>}
-      </div>
-    </>
-  )
 
   const topBar = (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
@@ -369,13 +255,15 @@ export default function SwuSetupScreenView({
         value={matchType}
         onChange={onMatchTypeChange}
       />
-      {matchType === 'tournament' && <div style={mutedStyle}>{TOURNAMENT_NOTE}</div>}
     </div>
   )
 
+  // A new tournament is set up on its start sheet; one under way is a tap away.
+  const startsTournament = matchType === 'tournament' && !tournamentInProgress
+  const primaryLabel = matchType === 'casual' ? 'Go to game' : tournamentInProgress ? 'Go to tournament' : 'Start tournament'
   const primary = (
-    <Button variant="primary" onClick={onStart} disabled={!base} style={{ minHeight: '52px', flexShrink: 0 }}>
-      {matchType === 'tournament' ? 'Go to tournament' : 'Go to game'}
+    <Button variant="primary" onClick={startsTournament ? () => setOpenSheet('tournament') : onStart} disabled={!base} style={{ minHeight: '52px', flexShrink: 0 }}>
+      {primaryLabel}
     </Button>
   )
 
@@ -385,8 +273,27 @@ export default function SwuSetupScreenView({
         <Button onClick={closeThen(onHelp)}>Help</Button>
         {onSettings && <Button onClick={closeThen(onSettings)}>Settings</Button>}
       </Sheet>
-      <Sheet open={openSheet === 'base'} title="Choose your base" onClose={close} wide>
-        {importing ? importView : searchView}
+      <SwuBaseSheet
+        open={openSheet === 'base'}
+        onClose={close}
+        bases={sheetBases}
+        favouriteBases={favouriteBases}
+        recentBases={recentBases}
+        currentKey={currentKey}
+        onChoose={choose}
+        swudb={swudb}
+      />
+      <Sheet open={openSheet === 'tournament' && base !== null} title="Start a tournament" onClose={close}>
+        {base && (
+          <StartTournamentBody
+            base={base}
+            format={format}
+            onFormatChange={onFormatChange}
+            onChangeBase={openBaseSheet}
+            onCancel={close}
+            onStart={settings => { close(); onStartTournament(settings) }}
+          />
+        )}
       </Sheet>
     </>
   )

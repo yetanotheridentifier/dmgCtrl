@@ -11,9 +11,14 @@ import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swudbUrl'
 import { onFavouriteAdded, onFavouriteRemoved, onDeckImportSuccess, onDeckImportFailure } from '../services/analytics'
 import { SetupMode } from '../utils/playMode'
+import { formatValidationError, isBaseValidForFormat } from '../utils/formatFilter'
+import type { TournamentSettings } from '../hooks/useSwuSetup'
 
 interface Props {
+  // Casual: go to the game. Tournament: go back to the one under way.
   onConfirm: (base: Base, mode: SetupMode) => void
+  onStartTournament?: (base: Base, settings: TournamentSettings) => void
+  tournamentInProgress?: boolean
   onHelp: () => void
   onBack?: () => void
   onSettings?: () => void
@@ -21,10 +26,10 @@ interface Props {
 
 const NO_DECK: SwudbImport = { url: '', error: null, deckName: null, base: null, loading: false }
 
-function SwuSetupScreen({ onConfirm, onHelp, onBack, onSettings }: Props) {
+function SwuSetupScreen({ onConfirm, onStartTournament, tournamentInProgress = false, onHelp, onBack, onSettings }: Props) {
   const { useHyperspace } = useUserSettings()
   const { favourites, addFavourite, removeFavourite } = useFavourites()
-  const setup = useSwuSetup(onConfirm)
+  const setup = useSwuSetup(onConfirm, onStartTournament)
   const art = useBaseArt(setup.base, useHyperspace)
   const { showBanner, platform, onInstall, onDismiss } = useInstallPrompt()
 
@@ -36,11 +41,20 @@ function SwuSetupScreen({ onConfirm, onHelp, onBack, onSettings }: Props) {
     img.src = url
   }, [setup.base, useHyperspace])
 
+  // In a tournament the base sheet offers only the bases legal in its format.
+  const inTournament = setup.matchType === 'tournament'
+  const allowed = useMemo(
+    () => (b: Base) => !inTournament || isBaseValidForFormat(setup.format, b),
+    [inTournament, setup.format],
+  )
+
   // Favourites are stored as records; a favourite no longer in the card data is left out.
   const favouriteBases = useMemo(() => {
     const byKey = new Map(setup.bases.map(b => [baseKey(b), b]))
-    return favourites.map(f => byKey.get(f.key)).filter((b): b is Base => b !== undefined)
-  }, [favourites, setup.bases])
+    return favourites.map(f => byKey.get(f.key)).filter((b): b is Base => b !== undefined).filter(allowed)
+  }, [favourites, setup.bases, allowed])
+  const sheetBases = useMemo(() => setup.bases.filter(allowed), [setup.bases, allowed])
+  const recentBases = useMemo(() => setup.recentBases.filter(allowed), [setup.recentBases, allowed])
 
   const [swudb, setSwudb] = useState<SwudbImport>(NO_DECK)
 
@@ -70,6 +84,11 @@ function SwuSetupScreen({ onConfirm, onHelp, onBack, onSettings }: Props) {
       void onDeckImportFailure('deck_not_accessible')
     }
   }
+
+  // A deck's base that the tournament's format does not allow is reported rather than offered.
+  const swudbShown: SwudbImport = swudb.base && !allowed(swudb.base)
+    ? { ...swudb, base: null, error: formatValidationError(setup.format, swudb.base) }
+    : swudb
 
   const currentKey = setup.base ? baseKey(setup.base) : null
   const isFavourite = currentKey !== null && favourites.some(f => f.key === currentKey)
@@ -104,15 +123,16 @@ function SwuSetupScreen({ onConfirm, onHelp, onBack, onSettings }: Props) {
         onFavouriteToggle={handleFavouriteToggle}
         matchType={setup.matchType}
         onMatchTypeChange={setup.setMatchType}
+        tournamentInProgress={tournamentInProgress}
+        format={setup.format}
+        onFormatChange={setup.setFormat}
         onStart={setup.handleSubmit}
-        bases={setup.bases}
+        onStartTournament={setup.handleStartTournament}
+        sheetBases={sheetBases}
         favouriteBases={favouriteBases}
-        recentBases={setup.recentBases}
+        recentBases={recentBases}
         onChooseBase={setup.chooseBase}
-        swudb={swudb}
-        onSwudbChange={handleSwudbChange}
-        onSwudbFocus={handleSwudbFocus}
-        onSwudbLoad={handleSwudbLoad}
+        swudb={{ state: swudbShown, onChange: handleSwudbChange, onFocus: handleSwudbFocus, onLoad: handleSwudbLoad }}
         onBack={onBack}
         onHelp={onHelp}
         onSettings={onSettings}

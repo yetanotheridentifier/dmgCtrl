@@ -285,9 +285,14 @@ describe('onGameEnd', () => {
     expect(getLastBody().data.playMode).toBe('bo1')
   })
 
-  it('includes format in payload', async () => {
-    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual', 'limited')
+  it('includes format in payload for a tournament game', async () => {
+    await onGameEnd('SOR-026', 'SOR', false, 120, 'bo3', 'limited')
     expect(getLastBody().data.format).toBe('limited')
+  })
+
+  it('leaves format out for a casual game, which has none', async () => {
+    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual')
+    expect(getLastBody().data).not.toHaveProperty('format')
   })
 
   it("includes game: 'swu' in payload", async () => {

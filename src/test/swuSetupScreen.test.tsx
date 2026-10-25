@@ -129,7 +129,7 @@ const baseCard = () => screen.getByTestId('base-card')
 const sheet = () => screen.getByRole('dialog', { name: 'Choose your base' })
 const group = (name: string) => within(sheet()).getByRole('group', { name })
 const tile = (name: string, scope: HTMLElement = sheet()) => within(scope).getByRole('button', { name: new RegExp(`^${name}`) })
-const primary = (name: 'Go to game' | 'Go to tournament') => screen.getByRole('button', { name })
+const primary = (name: 'Go to game' | 'Go to tournament' | 'Start tournament') => screen.getByRole('button', { name })
 
 describe('SwuSetupScreen: header', () => {
   it('shows the dmgCtrl mark and the game title', () => {
@@ -287,29 +287,27 @@ describe('SwuSetupScreen: match', () => {
     expect(within(match).getByRole('button', { name: 'Tournament' })).toHaveAttribute('aria-pressed', 'false')
   })
 
-  it('Tournament makes the primary Go to tournament, with a note on where the rest is set', async () => {
+  it('Tournament makes the primary Start tournament', async () => {
     keep(jediTemple)
     renderSetup()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Tournament' }))
-    expect(primary('Go to tournament')).toBeEnabled()
+    expect(primary('Start tournament')).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'Go to game' })).not.toBeInTheDocument()
-    expect(screen.getByText('Best of 1 or 3 and the rounds are set on the tournament screen.')).toBeInTheDocument()
   })
 
-  it('Go to tournament is disabled until a base is chosen', async () => {
+  it('Start tournament is disabled until a base is chosen', async () => {
     renderSetup()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Tournament' }))
-    expect(primary('Go to tournament')).toBeDisabled()
+    expect(primary('Start tournament')).toBeDisabled()
   })
 
-  it('Go to tournament confirms with the tournament match', async () => {
+  it('with a tournament already under way, the primary is Go to tournament and goes back to it', async () => {
     const onConfirm = vi.fn()
-    keep(jediTemple)
-    renderSetup({ onConfirm })
-    const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'Tournament' }))
-    await user.click(primary('Go to tournament'))
+    keep(jediTemple, [], 'tournament')
+    renderSetup({ onConfirm, tournamentInProgress: true })
+    await userEvent.setup().click(primary('Go to tournament'))
     expect(onConfirm).toHaveBeenCalledWith(jediTemple, 'tournament')
+    expect(screen.queryByRole('dialog', { name: 'Start a tournament' })).not.toBeInTheDocument()
   })
 
   it('is kept for the next visit', async () => {
@@ -318,6 +316,184 @@ describe('SwuSetupScreen: match', () => {
     first.unmount()
     renderSetup()
     expect(screen.getByRole('button', { name: 'Tournament' })).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+describe('SwuSetupScreen: start a tournament', () => {
+  const startSheet = () => screen.getByRole('dialog', { name: 'Start a tournament' })
+  const inSheet = () => within(startSheet())
+  const option = (groupName: string, name: string) => within(inSheet().getByRole('group', { name: groupName })).getByRole('button', { name })
+  const startRound1 = () => inSheet().getByRole('button', { name: 'Start round 1' })
+
+  async function openStart(base: Base = jediTemple, extra: Record<string, unknown> = {}, props: Props = {}) {
+    store.set('swu_setup', JSON.stringify({ baseKey: `${base.set}-${base.number}`, recentBaseKeys: [], matchType: 'tournament', ...extra }))
+    const user = userEvent.setup()
+    const view = renderSetup(props)
+    await user.click(primary('Start tournament'))
+    return { user, view }
+  }
+
+  it('opens a sheet with your base, Format (Premier), Match (Best of 3) and 5 rounds', async () => {
+    await openStart()
+    expect(inSheet().getByText('Jedi Temple')).toBeInTheDocument()
+    expect(option('Format', 'Premier')).toHaveAttribute('aria-pressed', 'true')
+    expect(option('Format', 'Eternal')).toHaveAttribute('aria-pressed', 'false')
+    expect(option('Format', 'Limited')).toHaveAttribute('aria-pressed', 'false')
+    expect(within(inSheet().getByRole('group', { name: 'Format' })).getAllByRole('button')).toHaveLength(3)
+    expect(option('Match', 'Best of 3')).toHaveAttribute('aria-pressed', 'true')
+    expect(option('Match', 'Best of 1')).toHaveAttribute('aria-pressed', 'false')
+    expect(inSheet().getByText('5')).toBeInTheDocument()
+  })
+
+  it('says the choices are fixed once round 1 starts, and only Limited adds the base-change line', async () => {
+    const { user } = await openStart()
+    const limitedLine = 'In Limited you can change base between games of a match.'
+    expect(inSheet().getByText('Fixed once round 1 starts.')).toBeInTheDocument()
+    expect(inSheet().queryByText(limitedLine)).not.toBeInTheDocument()
+    await user.click(option('Format', 'Limited'))
+    expect(inSheet().getByText(limitedLine)).toBeInTheDocument()
+    await user.click(option('Format', 'Eternal'))
+    expect(inSheet().queryByText(limitedLine)).not.toBeInTheDocument()
+    expect(inSheet().queryByText(/X-Wing/)).not.toBeInTheDocument()
+  })
+
+  it('Rounds runs from 2 to 16', async () => {
+    const { user } = await openStart()
+    const fewer = inSheet().getByRole('button', { name: 'Decrease rounds' })
+    const more = inSheet().getByRole('button', { name: 'Increase rounds' })
+    for (let i = 0; i < 3; i++) await user.click(fewer)
+    expect(inSheet().getByText('2')).toBeInTheDocument()
+    expect(fewer).toBeDisabled()
+    for (let i = 0; i < 14; i++) await user.click(more)
+    expect(inSheet().getByText('16')).toBeInTheDocument()
+    expect(more).toBeDisabled()
+  })
+
+  it('Start round 1 starts the tournament with the choices made and closes the sheet', async () => {
+    const onStartTournament = vi.fn()
+    const { user } = await openStart(jediTemple, {}, { onStartTournament })
+    await user.click(option('Format', 'Eternal'))
+    await user.click(option('Match', 'Best of 1'))
+    await user.click(inSheet().getByRole('button', { name: 'Increase rounds' }))
+    await user.click(startRound1())
+    expect(onStartTournament).toHaveBeenCalledWith(jediTemple, { format: 'eternal', playMode: 'bo1', totalRounds: 6 })
+    expect(screen.queryByRole('dialog', { name: 'Start a tournament' })).not.toBeInTheDocument()
+  })
+
+  it('Cancel closes the sheet without starting', async () => {
+    const onStartTournament = vi.fn()
+    const { user } = await openStart(jediTemple, {}, { onStartTournament })
+    await user.click(inSheet().getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Start a tournament' })).not.toBeInTheDocument()
+    expect(onStartTournament).not.toHaveBeenCalled()
+  })
+
+  it('remembers the format, across launches too; Match and Rounds start from their defaults', async () => {
+    const { user, view } = await openStart()
+    await user.click(option('Format', 'Limited'))
+    await user.click(option('Match', 'Best of 1'))
+    await user.click(inSheet().getByRole('button', { name: 'Cancel' }))
+    view.unmount()
+    renderSetup()
+    await user.click(primary('Start tournament'))
+    expect(option('Format', 'Limited')).toHaveAttribute('aria-pressed', 'true')
+    expect(option('Match', 'Best of 3')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('picks up a format stored before setup kept its own', async () => {
+    store.set('pref_format', 'eternal')
+    await openStart()
+    expect(option('Format', 'Eternal')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('a base not legal in the format says so and Start round 1 waits until it is', async () => {
+    const { user } = await openStart(catacombs)
+    expect(inSheet().getByText('Catacombs of Cadera (SOR) isn’t legal in Premier.')).toBeInTheDocument()
+    expect(startRound1()).toBeDisabled()
+    await user.click(option('Format', 'Eternal'))
+    expect(inSheet().queryByText(/isn’t legal/)).not.toBeInTheDocument()
+    expect(startRound1()).toBeEnabled()
+  })
+
+  it('Limited rules out a Premier-only set', async () => {
+    const { user } = await openStart(echo)
+    expect(startRound1()).toBeEnabled()
+    await user.click(option('Format', 'Limited'))
+    expect(inSheet().getByText('Echo Caverns (IBH) isn’t legal in Limited.')).toBeInTheDocument()
+    expect(startRound1()).toBeDisabled()
+  })
+
+  it('Change base on the warning opens the base sheet', async () => {
+    const { user } = await openStart(catacombs)
+    await user.click(inSheet().getByRole('button', { name: 'Change base' }))
+    expect(screen.queryByRole('dialog', { name: 'Start a tournament' })).not.toBeInTheDocument()
+    expect(sheet()).toBeInTheDocument()
+  })
+})
+
+describe('SwuSetupScreen: base sheet in a tournament', () => {
+  const openSheet = async (format: string) => {
+    store.set('swu_setup', JSON.stringify({ recentBaseKeys: [], matchType: 'tournament', format }))
+    const user = userEvent.setup()
+    renderSetup()
+    await user.click(within(baseCard()).getByRole('button', { name: /^Choose your base/ }))
+    return user
+  }
+  const names = (label: string) => within(group(label)).getAllByRole('button').map(b => b.textContent ?? '')
+
+  it('lists only the bases legal in the format: Premier leaves out rotated sets', async () => {
+    await openSheet('premier')
+    const all = names('All bases')
+    expect(all.some(n => n.startsWith('Catacombs of Cadera'))).toBe(false)
+    expect(all.some(n => n.startsWith('Echo Caverns'))).toBe(true)
+  })
+
+  it('Limited leaves out sets outside the standard ones', async () => {
+    await openSheet('limited')
+    const all = names('All bases')
+    expect(all.some(n => n.startsWith('Echo Caverns'))).toBe(false)
+    expect(all.some(n => n.startsWith('Catacombs of Cadera'))).toBe(true)
+  })
+
+  it('Eternal lists every base', async () => {
+    await openSheet('eternal')
+    expect(names('All bases')).toHaveLength(mockBases.length)
+  })
+
+  it('the search keeps to legal bases', async () => {
+    const user = await openSheet('premier')
+    await user.type(within(sheet()).getByRole('searchbox', { name: 'Search bases' }), 'Ca')
+    const results = names('Results')
+    expect(results.some(n => n.startsWith('Catacombs of Cadera'))).toBe(false)
+    expect(results.some(n => n.startsWith('Echo Caverns'))).toBe(true)
+  })
+
+  it('favourites and recent bases keep to legal ones too', async () => {
+    mockFavourites.favourites = [fav(catacombs), fav(jediTemple)]
+    store.set('swu_setup', JSON.stringify({ recentBaseKeys: ['SOR-026', 'IBH-001'], matchType: 'tournament', format: 'premier' }))
+    const user = userEvent.setup()
+    renderSetup()
+    await user.click(within(baseCard()).getByRole('button', { name: /^Choose your base/ }))
+    expect(names('Favourites').map(n => n.split(' ')[0])).toEqual(['Jedi'])
+    expect(names('Recent').map(n => n.split(' ')[0])).toEqual(['Echo'])
+  })
+
+  it('a casual game lists every base whatever format is remembered', async () => {
+    store.set('swu_setup', JSON.stringify({ recentBaseKeys: [], matchType: 'casual', format: 'premier' }))
+    const user = userEvent.setup()
+    renderSetup()
+    await user.click(within(baseCard()).getByRole('button', { name: /^Choose your base/ }))
+    expect(names('All bases')).toHaveLength(mockBases.length)
+  })
+
+  it('SWUDB import says when the deck’s base is not legal, and offers no Use this base', async () => {
+    deckResponse = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Old deck', base: { defaultExpansionAbbreviation: 'SOR', defaultCardNumber: '026' } }) })
+    const user = await openSheet('premier')
+    await user.click(within(sheet()).getByRole('button', { name: 'Paste SWUDB link' }))
+    fireEvent.change(within(sheet()).getByLabelText('SWUDB deck link'), { target: { value: 'https://swudb.com/deck/AbCdEf123456' } })
+    await user.click(within(sheet()).getByRole('button', { name: 'Load' }))
+    await waitFor(() => expect(within(sheet()).getByRole('alert')).toHaveTextContent('Catacombs of Cadera (SOR) isn’t legal in Premier.'))
+    expect(within(sheet()).queryByRole('button', { name: 'Use this base' })).not.toBeInTheDocument()
   })
 })
 

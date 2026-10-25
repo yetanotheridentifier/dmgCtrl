@@ -2,16 +2,25 @@
 
 ## Tournament Mode
 
-The Tournament screen tracks your W/L/D record across multiple rounds of a structured event. Your progress is saved automatically — you can close the app between rounds and return exactly where you left off.
+The Tournament screen tracks your W–L–D record across the rounds of a structured event. Your progress is saved automatically: you can close the app between rounds, and opening it again brings you back to the tournament.
 
 ## Starting a Tournament
 
-Before your first match, configure:
+On the setup screen, choose your base and **Tournament** under Match, then tap **Start tournament**. A sheet opens with:
 
-- **Match**: **Best of 1** or **Best of 3** — must match your event format; cannot be changed once the tournament starts
-- **Rounds**: the total number of Swiss rounds in your event (2–16); cannot be changed once the tournament starts
+- **Format**: **Premier**, **Eternal** or **Limited**. Premier the first time; your last choice is remembered.
+- **Match**: **Best of 1** or **Best of 3** (Best of 3 to begin with), to match your event.
+- **Rounds**: the number of Swiss rounds in your event, 2 to 16 (5 to begin with).
 
-Tap **Start Match 1** to begin. You'll be taken to the game screen for your first game.
+All three are fixed once round 1 starts. Tap **Start round 1** to go straight to the game, or **Cancel** to go back to setup.
+
+Your base must be legal in the format. While Tournament is chosen, the base sheet lists only bases legal in your last format, and a deck loaded from an SWUDB link says so if its base is not. If the base you have chosen isn't legal in the format picked on the sheet, the sheet says so, offers **Change base**, and **Start round 1** waits until it is.
+
+| Format | Bases allowed |
+|---|---|
+| **Premier** | The two most recent rotations, plus sets that are always Premier legal |
+| **Eternal** | Every set |
+| **Limited** | Standard sets (Sealed, Draft and Chaos) |
 
 ## Match Mode
 
@@ -20,17 +29,15 @@ Tap **Start Match 1** to begin. You'll be taken to the game screen for your firs
 | **Best of 1** | Each round is a single game |
 | **Best of 3** | Each round is first to 2 wins; includes a match timer |
 
-## Results Table
+## Between Rounds
 
-After each round, a row is added to the results table:
+When a match ends, the game returns here. The header shows the game, format, match and number of rounds. On the left are your **record** (wins–losses–draws), your points, and your base. On the right is every round of the event:
 
-| Column | Meaning |
-|---|---|
-| **Round** | The round number |
-| **Result** | W (win), L (loss), D (draw), or — (in progress) |
-| **Score** | Games won–games lost in the round |
+- a played round shows **Won**, **Lost** or **Drawn** and the games score (yours–theirs);
+- the next round is outlined and marked **Next** (or **In progress** if you left a match part way through);
+- rounds still to come are dimmed. A long event scrolls within the list.
 
-Your running W–L–D record and point total are shown above the table.
+Tap **Start round N** to play the next round, or **Return to round N** to go back to a match you left. **Back** takes you to setup and keeps the tournament; **Go to tournament** there brings you back. Help and Settings are under **More** (the ⋯ button).
 
 ## Points
 
@@ -40,23 +47,21 @@ Your running W–L–D record and point total are shown above the table.
 | Draw | 1 |
 | Loss | 0 |
 
-## Dropping or Ending
+## Dropping or Finishing
 
-**Drop** — tap **Drop** then **Confirm** to leave the tournament early. Two taps are required to prevent accidental drops. This cannot be undone.
+**Drop** opens a sheet showing your record. **Keep playing** closes it; **Drop** leaves the tournament, clears your record and returns you to setup. This can't be undone.
 
-**End Tournament** — once all rounds are complete, **Drop** changes to **End Tournament**. A single tap ends the session and clears your data.
+Once every round is played the screen reads **Tournament complete**, with your final record. **Finish** clears the tournament and returns you to setup.
 
-After dropping or ending, you return to the setup screen.
+## Change Base (Limited, Best of 3)
 
-## Change Base (Limited Bo3 only)
-
-In a Limited Best of 3 event, you may switch your base between games within a round. After Game 1, a **Change Base** overlay appears on the card art — tap it, select an aspect and base, and your choice applies for Game 2 (and Game 3 if needed). The next round reverts to your registered base.
+In a Limited Best of 3 tournament you may switch your base between games of a match. After a game of the match is played and you go back to the tournament, **Change base** appears beside your base: it opens the base sheet on the bases of your base's set, and your choice applies for the rest of the match. The next round goes back to your registered base.
 
 ## Player Portal
 
-The **Player Portal** button opens your melee.gg profile page, where you can check pairings and submit results.
+The **Player portal** button opens your melee.gg profile page, where you can check pairings and submit results.
 
-To set it up, tap **Enter Player ID** — this opens Settings, where you can enter your Melee Player ID (the identifier shown in your melee.gg profile URL). Once entered, the button label changes to **Player Portal** and opens melee.gg directly in your browser.
+To set it up, tap **Enter player ID**: this opens Settings, where you can enter your Melee Player ID (the identifier shown in your melee.gg profile URL). Once entered, the button changes to **Player portal** and opens melee.gg directly in your browser.
 
 Your Player ID is saved once entered and remembered between sessions. You can update it at any time in Settings.
 
@@ -68,13 +73,13 @@ The timer starts when you tap **Start** at the beginning of the first game and r
 
 ## Settings
 
-Tap <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> (top-right of the tournament screen) to open Settings.
+Open **More** (the ⋯ button at the top right of the tournament screen), then **Settings**.
 
 The following settings are relevant to tournament play. All are saved automatically and persist between sessions.
 
 | Setting | Default | Description |
 |---|---|---|
-| **Melee Player ID** | (empty) | Your melee.gg player identifier, used for the Player Portal button. Enter it once and it is remembered. |
+| **Melee Player ID** | (empty) | Your melee.gg player identifier, used for the Player portal button. Enter it once and it is remembered. |
 | **Bo1 Timer** | 25 min | Match timer duration for Best of 1 rounds. Adjustable in 5-minute steps (5–90 min). |
 | **Bo3 Timer** | 55 min | Match timer duration for Best of 3 rounds. Adjustable in 5-minute steps (5–90 min). |
 
