@@ -113,14 +113,14 @@ describe('HelpScreen', () => {
     expect(screen.queryByRole('heading', { level: 2, name: 'During a Game' })).not.toBeInTheDocument()
   })
 
-  it('source="xwing" renders the Mission Points section', () => {
+  it('source="xwing" renders the Ships section', () => {
     render(<HelpScreen onBack={vi.fn()} source="xwing" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Mission Points' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Ships' })).toBeInTheDocument()
   })
 
-  it('source="xwing" renders the Round Tracker section', () => {
+  it('source="xwing" renders the Round and timer section', () => {
     render(<HelpScreen onBack={vi.fn()} source="xwing" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Round Tracker' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Round and timer' })).toBeInTheDocument()
   })
 
   it('source="xwing" does not render the Getting Started section', () => {
