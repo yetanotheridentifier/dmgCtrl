@@ -96,7 +96,6 @@ const mockUserSettings = vi.hoisted(() => ({
   enableWakeLock: true,
   enableCompetitiveMode: false,
   enableFavourites: false,
-  enableGameSelect: false,
   startScreen: 'swu',
   setUseHyperspace: vi.fn(),
   setEnableForceToken: vi.fn(),
