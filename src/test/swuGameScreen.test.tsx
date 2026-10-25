@@ -267,7 +267,7 @@ describe('SwuGameScreen', () => {
     render(<SwuGameScreen base={mockBase} playMode="casual" onBack={vi.fn()} onHelp={vi.fn()} />)
     await startGame(user)
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', false, expect.any(Number), 'casual', 'premier')
+    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', false, expect.any(Number), 'casual', undefined)
   })
 
   it('calls onGameEnd when a result is confirmed in bo1', async () => {

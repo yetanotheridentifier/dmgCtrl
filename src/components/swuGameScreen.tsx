@@ -14,6 +14,7 @@ import SwuGameScreenView from './swuGameScreenView'
 import RotatePrompt from './layout/rotatePrompt'
 import { onGameStart, onGameEnd, onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
 import type { PlayMode } from '../utils/playMode'
+import type { Format } from '../utils/formatFilter'
 
 interface SwuGameSnapshot {
   gameState: GameState
@@ -24,7 +25,8 @@ interface SwuGameSnapshot {
 interface Props {
   base: Base
   playMode?: PlayMode
-  format?: string
+  // A tournament's format; a casual game has none.
+  format?: Format
   isInTournament?: boolean
   onBack: (gamesCompleted: number) => void
   onHelp: () => void
@@ -32,7 +34,7 @@ interface Props {
   onMatchComplete?: (result: 'won' | 'lost' | 'drawn', playerScore: number, opponentScore: number) => void
 }
 
-function SwuGameScreen({ base, playMode = 'casual', format = 'premier', isInTournament = false, onBack, onHelp, onSettings, onMatchComplete }: Props) {
+function SwuGameScreen({ base, playMode = 'casual', format, isInTournament = false, onBack, onHelp, onSettings, onMatchComplete }: Props) {
   const { forceTokenDisplay, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress, enableActionLog, enableInitiativeBar, bo1TimerMinutes, bo3TimerMinutes } = useUserSettings()
   const match = useMatch(playMode)
   const art = useBaseArt(base, useHyperspace)

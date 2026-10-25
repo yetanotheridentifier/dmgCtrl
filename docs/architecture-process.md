@@ -179,7 +179,7 @@ Twenty-seven public functions enqueue events and trigger a flush. All are fire-a
 |---|---|---|
 | `onAppStart()` | `app_started` | `version` (from package.json) |
 | `onGameStart(baseKey, baseSet, hyperspace, playMode)` | `game_started` | `game` (`'swu'`), `baseKey`, `baseSet`, `hyperspace`, `playMode` (`'casual'` \| `'bo1'` \| `'bo3'`) |
-| `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds, playMode, format)` | `game_ended` | `game` (`'swu'`), `baseKey`, `baseSet`, `hyperspace`, `durationSeconds`, `playMode`, `format` |
+| `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds, playMode, format?)` | `game_ended` | `game` (`'swu'`), `baseKey`, `baseSet`, `hyperspace`, `durationSeconds`, `playMode`, and `format` (the tournament's) for a tournament game only; a casual game sends no `format` |
 | `onMatchCompleted(playMode, matchResult, playerScore, opponentScore)` | `match_completed` | `playMode`, `matchResult` (`'won'` \| `'lost'` \| `'drawn'`), `playerScore`, `opponentScore` |
 | `onAppInstall(platform)` | `app_installed` | `platform` (`'ios'` \| `'android'` \| `'other'`) |
 | `onAppResume()` | `app_resumed` | `sessionDurationSoFarSeconds` |
@@ -243,6 +243,7 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 | App mount (`useEffect`) | `onAppStart()` |
 | App mount, standalone mode, `pwa_install_tracked` flag not set | `onAppInstall()` |
 | `visibilitychange` → hidden then visible | `onAppResume()` |
+| Start round 1 on the setup start sheet (`handleStartTournament`) | `onTournamentStarted(format, playMode, totalRounds)` |
 | A tournament match is confirmed complete (`handleMatchComplete`) | `onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, format, playMode)` |
 
 **SwuSetupScreen (swuSetupScreen.tsx)**
@@ -259,9 +260,8 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 
 | Trigger | Call |
 |---|---|
-| First match started (`handleActionButton` when `!tournament`) | `onTournamentStarted(format, playMode, totalRounds)` |
-| Drop confirmed mid-tournament (`handleDropClick`, second click) | `onTournamentDropped(roundsCompleted, format, playMode)` |
-| End Tournament clicked (`handleDropClick` when `isComplete`) | `onTournamentEnded(totalRounds, won, lost, drawn, points, format, playMode)` |
+| Drop confirmed in the Drop sheet (`handleDrop`) | `onTournamentDropped(roundsCompleted, format, playMode)` |
+| Finish tapped on a complete tournament (`handleFinish`) | `onTournamentEnded(totalRounds, won, lost, drawn, points, format, playMode)` |
 
 **SettingsScreen (settingsScreen.tsx)**
 
