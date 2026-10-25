@@ -1,826 +1,425 @@
+import { useState } from 'react'
 import { Base } from '../hooks/useBases'
+import { filterBases, baseKey } from '../hooks/useSwuSetup'
+import type { useBaseArt } from '../hooks/useBaseArt'
 import AppScreenLayout from './layout/appScreenLayout'
 import ImagePreview from './imagePreview'
 import { useOrientation } from '../hooks/useOrientation'
-import { BackIcon, CogIcon, ForwardIcon, HelpIcon } from './icons'
-import { NAV_BTN_STYLE } from '../styles/navButton'
-import { SelectionMode } from './swuSetupScreen'
-import type { FavouriteBase } from '../hooks/useFavourites'
-import { Format, FORMATS, FORMAT_LABELS } from '../utils/formatFilter'
-import { SetupMode, SETUP_MODES, SETUP_MODE_LABELS } from '../utils/playMode'
+import { BackIcon, CheckIcon, DotsIcon, PlusIcon, SearchIcon, StarIcon } from './icons'
+import { Button, IconButton, SegmentedControl, Sheet } from './shared/controls'
+import type { SetupMode } from '../utils/playMode'
+
+export interface SwudbImport {
+  url: string
+  error: string | null
+  deckName: string | null
+  // The deck's base, once loaded and found in the card data.
+  base: Base | null
+  loading: boolean
+}
 
 interface Props {
-  loading: boolean
   error: string | null
-  selectedFormat: Format
-  onFormatChange: (format: Format) => void
-  enableCompetitiveMode: boolean
-  selectedSetupMode: SetupMode
-  onSetupModeChange: (mode: SetupMode) => void
-  availableSets: string[]
-  availableAspects: string[]
-  filteredBases: Base[]
-  selectedSet: string
-  selectedAspect: string
-  selectedKey: string
-  selectedBase: Base | null
+  base: Base | null
+  art: ReturnType<typeof useBaseArt>
   useHyperspace: boolean
-  artSrc: string | null
-  artIsHyperspace: boolean
-  artAllFailed: boolean
-  artImageLoaded: boolean
-  artRotationDeg: number
-  onArtLoad: () => void
-  onArtError: () => void
-  onSetChange: (set: string) => void
-  onAspectChange: (aspect: string) => void
-  onKeyChange: (key: string) => void
-  onSubmit: () => void
-  onHelp: () => void
-  onBack?: () => void
-  onSettings?: () => void
-  selectionMode: SelectionMode
-  onModeChange: (mode: SelectionMode) => void
-  swudbUrl: string
-  swudbError: string | null
-  swudbFormatError: string | null
-  swudbDeckName: string | null
-  swudbLoading: boolean
+  isFavourite: boolean
+  onFavouriteToggle: () => void
+  matchType: SetupMode
+  onMatchTypeChange: (v: SetupMode) => void
+  onStart: () => void
+  bases: Base[]
+  favouriteBases: Base[]
+  recentBases: Base[]
+  onChooseBase: (b: Base) => void
+  swudb: SwudbImport
   onSwudbChange: (text: string) => void
   onSwudbFocus: () => void
   onSwudbLoad: () => void
-  enableFavourites: boolean
-  favourites: FavouriteBase[]
-  isFavourited: boolean
-  onFavouriteToggle: () => void
-  onFavouriteKeyChange: (key: string) => boolean
+  onBack?: () => void
+  onHelp: () => void
+  onSettings?: () => void
 }
 
-const labelStyle = (small = false): React.CSSProperties => ({
-  color: 'var(--color-accent)',
-  fontWeight: '300',
-  fontSize: small ? 'clamp(0.8rem, 3vw, 1rem)' : 'clamp(0.9rem, 4vw, 1.2rem)',
-  letterSpacing: '0.12em',
+type OpenSheet = null | 'more' | 'base'
+
+const FILTER_ASPECTS = ['Vigilance', 'Command', 'Aggression', 'Cunning']
+const ICON_ASPECTS = [...FILTER_ASPECTS, 'Heroism', 'Villainy']
+
+const TOURNAMENT_NOTE = 'Best of 1 or 3 and the rounds are set on the tournament screen.'
+
+const aspectIconSrc = (aspect: string) => `${import.meta.env.BASE_URL}${aspect.toLowerCase()}.png`
+
+function baseAspect(base: Base): string | null {
+  return ICON_ASPECTS.find(a => base.aspects.includes(a)) ?? null
+}
+
+const baseMeta = (base: Base) => `${base.set} · ${base.hp} HP`
+
+const sectionLabelStyle = (color = 'var(--color-text-muted)'): React.CSSProperties => ({
+  fontSize: '0.75rem',
+  letterSpacing: '0.14em',
   textTransform: 'uppercase',
-  whiteSpace: 'nowrap',
-  flexShrink: 0,
+  color,
 })
 
-const selectStyle = (enabled: boolean, hasValue: boolean, small = false): React.CSSProperties => ({
-  flex: 1,
-  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
-  fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
-  ...(small && { height: 'max(44px, 8vh)' }),
-  fontWeight: '300',
-  background: 'transparent',
-  border: '2px solid var(--color-accent)',
-  borderRadius: '12px',
-  color: hasValue ? 'var(--color-text-primary)' : 'var(--color-text-disabled)',
-  outline: 'none',
-  boxSizing: 'border-box',
-  boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
-  WebkitAppearance: 'none',
-  cursor: enabled ? 'pointer' : 'not-allowed',
-  opacity: enabled ? 1 : 0.4,
-  width: '100%',
-})
+const mutedStyle: React.CSSProperties = { fontSize: '0.8rem', lineHeight: 1.45, color: 'var(--color-text-muted)' }
 
-const inputStyle = (hasValue: boolean, small = false): React.CSSProperties => ({
-  flex: 1,
-  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
-  fontSize: small ? 'clamp(1rem, 1.8vw, 1.2rem)' : 'clamp(1rem, 3vw, 1.2rem)',
-  ...(small && { height: 'max(44px, 8vh)' }),
-  fontWeight: '300',
-  background: 'transparent',
-  border: '2px solid var(--color-accent)',
-  borderRadius: '12px',
-  color: hasValue ? 'var(--color-text-primary)' : 'var(--color-text-disabled)',
-  outline: 'none',
-  boxSizing: 'border-box',
-  boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
-  width: '100%',
-  minWidth: 0,
-})
-
-const submitButtonStyle = (enabled: boolean, small = false): React.CSSProperties => ({
-  width: small ? '8vh' : '12vw',
-  minWidth: '44px',
-  minHeight: '44px',
-  flexShrink: 0,
-  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
-  fontSize: small ? 'clamp(1rem, 3vh, 1.8rem)' : 'clamp(1rem, 3vw, 1.8rem)',
-  fontWeight: '300',
-  background: 'transparent',
-  color: 'var(--color-text-primary)',
-  border: '2px solid var(--color-text-primary)',
-  borderRadius: '12px',
-  cursor: enabled ? 'pointer' : 'not-allowed',
-  boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',
-  WebkitTapHighlightColor: 'transparent',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  opacity: enabled ? 1 : 0.4,
-  boxSizing: 'border-box',
-})
-
-const starButtonStyle = (small = false): React.CSSProperties => ({
-  width: small ? '8vh' : '12vw',
-  minWidth: '44px',
-  minHeight: '44px',
-  flexShrink: 0,
-  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
-  fontSize: small ? 'clamp(1rem, 3vh, 1.8rem)' : 'clamp(1rem, 3vw, 1.8rem)',
-  fontWeight: '300',
-  background: 'transparent',
-  color: 'var(--color-accent)',
-  border: '2px solid var(--color-accent)',
-  borderRadius: '12px',
-  cursor: 'pointer',
-  WebkitTapHighlightColor: 'transparent',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  boxSizing: 'border-box',
-})
-
-function ModeSelector({ selectionMode, onModeChange, showFavourites = false, small = false }: {
-  selectionMode: SelectionMode
-  onModeChange: (mode: SelectionMode) => void
-  showFavourites?: boolean
-  small?: boolean
-}) {
+function BaseTile({ base, selected, onClick }: { base: Base; selected: boolean; onClick: () => void }) {
+  const aspect = baseAspect(base)
   return (
-    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-      <label style={labelStyle(small)}>Source:</label>
-      <select
-        value={selectionMode}
-        onChange={e => onModeChange(e.target.value as SelectionMode)}
-        data-testid="mode-select"
-        style={selectStyle(true, true, small)}
-      >
-        <option value="base-selector" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>Base Selector</option>
-        <option value="swudb-import" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>SWUDB Import</option>
-        {showFavourites && (
-          <option value="favourites" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>Favourites</option>
-        )}
-      </select>
-    </div>
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      style={{
+        minHeight: '52px',
+        minWidth: 0,
+        padding: '0 10px',
+        border: 'none',
+        borderRadius: '12px',
+        background: selected ? 'var(--color-tonal)' : 'var(--color-surface-raised)',
+        color: 'var(--color-text-primary)',
+        fontFamily: 'inherit',
+        textAlign: 'left',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        cursor: 'pointer',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      {aspect && <img src={aspectIconSrc(aspect)} alt="" style={{ width: '24px', height: '24px', flexShrink: 0 }} />}
+      <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <span style={{ fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{base.name}</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{baseMeta(base)}</span>
+      </span>
+      {selected && <span style={{ width: '20px', height: '20px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-accent)' }}><CheckIcon /></span>}
+    </button>
   )
 }
 
-function FormatSelector({ selectedFormat, onFormatChange, small = false }: {
-  selectedFormat: Format
-  onFormatChange: (format: Format) => void
-  small?: boolean
-}) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-      <label style={labelStyle(small)}>Format:</label>
-      <select
-        value={selectedFormat}
-        onChange={e => onFormatChange(e.target.value as Format)}
-        data-testid="format-select"
-        style={selectStyle(true, true, small)}
-      >
-        {FORMATS.map(f => (
-          <option key={f} value={f} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>
-            {FORMAT_LABELS[f]}
-          </option>
-        ))}
-      </select>
-    </div>
-  )
-}
-
-function SetupModeSelector({ selectedSetupMode, onSetupModeChange, small = false }: {
-  selectedSetupMode: SetupMode
-  onSetupModeChange: (mode: SetupMode) => void
-  small?: boolean
-}) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-      <label style={labelStyle(small)}>Match:</label>
-      <select
-        value={selectedSetupMode}
-        onChange={e => onSetupModeChange(e.target.value as SetupMode)}
-        data-testid="play-mode-select"
-        style={selectStyle(true, true, small)}
-      >
-        {SETUP_MODES.map(m => (
-          <option key={m} value={m} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>
-            {SETUP_MODE_LABELS[m]}
-          </option>
-        ))}
-      </select>
-    </div>
-  )
-}
-
-function SwuSetupScreenView({
-  loading,
+export default function SwuSetupScreenView({
   error,
-  selectedFormat,
-  onFormatChange,
-  enableCompetitiveMode,
-  selectedSetupMode,
-  onSetupModeChange,
-  availableSets,
-  availableAspects,
-  filteredBases,
-  selectedSet,
-  selectedAspect,
-  selectedKey,
-  selectedBase,
+  base,
+  art,
   useHyperspace,
-  artSrc,
-  artIsHyperspace,
-  artAllFailed,
-  artImageLoaded,
-  artRotationDeg,
-  onArtLoad,
-  onArtError,
-  onSetChange,
-  onAspectChange,
-  onKeyChange,
-  onSubmit,
-  onHelp,
-  onBack,
-  onSettings,
-  selectionMode,
-  onModeChange,
-  swudbUrl,
-  swudbError,
-  swudbFormatError,
-  swudbDeckName,
-  swudbLoading,
+  isFavourite,
+  onFavouriteToggle,
+  matchType,
+  onMatchTypeChange,
+  onStart,
+  bases,
+  favouriteBases,
+  recentBases,
+  onChooseBase,
+  swudb,
   onSwudbChange,
   onSwudbFocus,
   onSwudbLoad,
-  enableFavourites,
-  favourites,
-  isFavourited,
-  onFavouriteToggle,
-  onFavouriteKeyChange,
+  onBack,
+  onHelp,
+  onSettings,
 }: Props) {
   const { isPortrait } = useOrientation()
+  const [openSheet, setOpenSheet] = useState<OpenSheet>(null)
+  const [query, setQuery] = useState('')
+  const [aspect, setAspect] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
 
+  const close = () => setOpenSheet(null)
+  // Sheet actions close the sheet first, so it isn't left open behind the next screen.
+  const closeThen = (fn?: () => void) => () => { close(); fn?.() }
 
-  const loadButtonEnabled = swudbUrl !== '' && swudbError === null && !swudbLoading
-  const submitEnabled = !!selectedBase
-  const swudbSubmitEnabled = submitEnabled && swudbFormatError === null
-
-  const imagePreview = (selectedBase: Base) => (
-    <ImagePreview
-      base={selectedBase}
-      src={artSrc}
-      isHyperspace={artIsHyperspace}
-      allFailed={artAllFailed}
-      imageLoaded={artImageLoaded}
-      rotationDeg={artRotationDeg}
-      useHyperspace={useHyperspace}
-      onLoad={onArtLoad}
-      onError={onArtError}
-    />
-  )
-
-  const starToggle = (small = false) => (
-    <button
-      data-testid="favourite-toggle"
-      aria-pressed={isFavourited}
-      onClick={onFavouriteToggle}
-      aria-label={isFavourited ? 'Remove from favourites' : 'Add to favourites'}
-      style={starButtonStyle(small)}
-    >
-      {isFavourited ? '★' : '☆'}
-    </button>
-  )
-
-  const swudbImportContent = (small = false) => {
-    // Load button is sized to match star + submit + gap between them
-    const btnWidth = small
-      ? 'calc(max(44px, 8vh) * 2 + 2vw)'
-      : 'calc(max(44px, 12vw) * 2 + 2vw)'
-    return (
-      <>
-        {/* Row 1: URL input + Load button */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'row',
-          alignItems: 'flex-start',
-          gap: '2vw',
-        }}>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <input
-            type="text"
-            value={swudbUrl}
-            onChange={e => onSwudbChange(e.target.value)}
-            onFocus={onSwudbFocus}
-            placeholder="Paste SWUDB link"
-            style={{
-              ...inputStyle(swudbUrl !== '', small),
-              flex: 'none',
-              ...(swudbError ? {
-                border: '2px solid var(--color-error)',
-                borderBottom: 'none',
-                borderBottomLeftRadius: 0,
-                borderBottomRightRadius: 0,
-                boxShadow: 'none',
-              } : {
-                borderBottomLeftRadius: '12px',
-                borderBottomRightRadius: '12px',
-              }),
-            }}
-          />
-          {swudbError && (
-            <div style={{
-              borderLeft: '2px solid var(--color-error)',
-              borderRight: '2px solid var(--color-error)',
-              borderBottom: '2px solid var(--color-error)',
-              borderRadius: '0 0 12px 12px',
-              padding: small ? '0.4vh 1.5vw 0.5vh' : '0.5vh 2vw 0.7vh',
-            }}>
-              <p style={{
-                color: 'var(--color-error)',
-                fontWeight: '300',
-                fontSize: small ? 'clamp(0.55rem, 1.4vw, 0.7rem)' : 'clamp(0.6rem, 2vw, 0.8rem)',
-                margin: 0,
-                textAlign: 'center',
-                textShadow: '0 1px 4px rgba(0,0,0,0.9)',
-              }}>
-                {swudbError}
-              </p>
-            </div>
-          )}
-          </div>
-          <button
-            data-testid="swudb-load-button"
-            onClick={onSwudbLoad}
-            disabled={!loadButtonEnabled}
-            style={{
-              width: btnWidth,
-              minWidth: '44px',
-              flexShrink: 0,
-              padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
-              fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
-              fontWeight: '300',
-              background: 'transparent',
-              color: 'var(--color-text-primary)',
-              border: '2px solid var(--color-text-primary)',
-              borderRadius: '12px',
-              cursor: loadButtonEnabled ? 'pointer' : 'not-allowed',
-              opacity: loadButtonEnabled ? 1 : 0.4,
-              boxSizing: 'border-box',
-              WebkitTapHighlightColor: 'transparent',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              ...(small ? { height: 'max(44px, 8vh)' } : {}),
-            }}
-          >
-            {swudbLoading ? '...' : 'Load'}
-          </button>
-        </div>
-
-        {/* Row 2: deck name + star (optional) + > button */}
-        {swudbDeckName !== null && (
-          <>
-            <div style={{
-              display: 'flex',
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: '2vw',
-            }}>
-              <span style={{
-                flex: 1,
-                color: 'var(--color-text-primary)',
-                fontWeight: '300',
-                fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
-              }}>
-                {swudbDeckName}
-              </span>
-              {enableFavourites && selectedBase && starToggle(small)}
-              <button
-                onClick={onSubmit}
-                aria-label="Start game"
-                disabled={!swudbSubmitEnabled}
-                style={submitButtonStyle(swudbSubmitEnabled, small)}
-              >
-                <ForwardIcon />
-              </button>
-            </div>
-            {swudbFormatError && (
-              <p style={{
-                color: 'var(--color-error)',
-                fontWeight: '300',
-                fontSize: small ? 'clamp(0.55rem, 1.4vw, 0.7rem)' : 'clamp(0.6rem, 2vw, 0.8rem)',
-                margin: 0,
-                textAlign: 'center',
-                textShadow: '0 1px 4px rgba(0,0,0,0.9)',
-              }}>
-                {swudbFormatError}
-              </p>
-            )}
-          </>
-        )}
-      </>
-    )
+  // The base sheet opens afresh each time: no search, no filter, on the search view.
+  const openBaseSheet = () => {
+    setQuery('')
+    setAspect(null)
+    setImporting(false)
+    setOpenSheet('base')
   }
 
-  const baseSelectorContent = (small = false) => (
+  const choose = (b: Base) => { onChooseBase(b); close() }
+  const currentKey = base ? baseKey(base) : null
+  const columns = isPortrait ? 2 : 3
+
+  const tileGrid = (label: string, list: Base[]) => (
+    <div role="group" aria-label={label} style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: '8px' }}>
+      {list.map(b => <BaseTile key={baseKey(b)} base={b} selected={baseKey(b) === currentKey} onClick={() => choose(b)} />)}
+    </div>
+  )
+
+  const section = (label: string, list: Base[]) => (
     <>
-      {error && (
-        <p style={{
-          color: 'var(--color-error)',
-          fontWeight: '300',
-          fontSize: small ? 'clamp(0.55rem, 1.4vw, 0.7rem)' : 'clamp(0.6rem, 2vw, 0.8rem)',
-          margin: 0,
-          textAlign: 'center',
-          textShadow: '0 1px 4px rgba(0,0,0,0.9)',
-        }}>
-          {error}
-        </p>
-      )}
+      <div style={sectionLabelStyle()}>{label}</div>
+      {tileGrid(label, list)}
+    </>
+  )
 
-      {!loading && !error && (
-        <>
-          {/* Set + Aspect row */}
-          <div style={{
-            width: '100%',
-            display: 'flex',
-            flexDirection: 'row',
-            gap: '2vw',
-            alignItems: 'flex-end',
-          }}>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-              <label style={labelStyle(small)}>Set</label>
-              <select
-                value={selectedSet}
-                onChange={e => onSetChange(e.target.value)}
-                data-testid="set-select"
-                style={selectStyle(true, selectedSet !== '', small)}
-              >
-                <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Set</option>
-                {availableSets.map(set => (
-                  <option key={set} value={set} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>{set}</option>
-                ))}
-              </select>
-            </div>
+  const searching = query.trim() !== '' || aspect !== null
+  const results = searching ? filterBases(bases, query, aspect) : []
+  const resultsLabel = [
+    `${results.length} ${results.length === 1 ? 'base' : 'bases'}`,
+    ...(aspect ? [aspect] : []),
+    ...(query.trim() ? [`“${query.trim()}”`] : []),
+  ].join(' · ')
 
-            <div style={{ flex: 2, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-              <label style={labelStyle(small)}>Aspect</label>
-              <select
-                value={selectedAspect}
-                onChange={e => onAspectChange(e.target.value)}
-                data-testid="aspect-select"
-                disabled={!selectedSet}
-                style={selectStyle(!!selectedSet, selectedAspect !== '', small)}
-              >
-                <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Aspect</option>
-                {availableAspects.map(aspect => (
-                  <option key={aspect} value={aspect} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>{aspect}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+  const favouriteKeys = new Set(favouriteBases.map(baseKey))
+  const recentOnly = recentBases.filter(b => !favouriteKeys.has(baseKey(b)))
 
-          {/* Base + star (optional) + submit row */}
-          <div style={{
-            width: '100%',
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'stretch',
-            gap: '2vw',
-          }}>
-            <select
-              value={selectedKey}
-              onChange={e => onKeyChange(e.target.value)}
-              data-testid="base-select"
-              disabled={!selectedAspect}
-              style={selectStyle(!!selectedAspect, selectedKey !== '', small)}
-            >
-              <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Base</option>
-              {filteredBases.map(base => (
-                <option
-                  key={`${base.set}-${base.number}`}
-                  value={`${base.set}-${base.number}`}
-                  style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}
-                >
-                  {base.name} ({base.hp})
-                </option>
-              ))}
-            </select>
+  const pasteLink = <Button onClick={() => setImporting(true)} style={{ flexShrink: 0 }}>Paste SWUDB link</Button>
 
-            {enableFavourites && selectedBase && starToggle(small)}
-
+  const searchView = (
+    <>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: isPortrait ? 'wrap' : 'nowrap' }}>
+        <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 0 }}>
+          <span style={{ position: 'absolute', left: '14px', top: '13px', color: 'var(--color-text-muted)', display: 'flex' }}><SearchIcon /></span>
+          <input
+            type="search"
+            aria-label="Search bases"
+            placeholder="Search bases"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            style={{ width: '100%', height: '44px', boxSizing: 'border-box', border: 'none', borderRadius: '12px', background: 'var(--color-surface-raised)', color: 'var(--color-text-primary)', fontSize: '0.95rem', fontFamily: 'inherit', padding: '0 14px 0 42px', outline: 'none' }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {FILTER_ASPECTS.map(a => (
             <button
-              onClick={onSubmit}
-              aria-label="Start game"
-              disabled={!selectedBase}
-              style={submitButtonStyle(!!selectedBase, small)}
+              key={a}
+              type="button"
+              aria-label={a}
+              aria-pressed={aspect === a}
+              onClick={() => setAspect(aspect === a ? null : a)}
+              style={{ width: '44px', height: '44px', border: 'none', borderRadius: '12px', background: aspect === a ? 'var(--color-tonal)' : 'var(--color-surface)', opacity: aspect === a ? 1 : 0.75, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
             >
-              <ForwardIcon />
+              <img src={aspectIconSrc(a)} alt="" style={{ width: '26px', height: '26px' }} />
             </button>
-          </div>
+          ))}
+        </div>
+        {/* In landscape the link sits up here, so favourites and six recent bases fit at 390px high. */}
+        {!isPortrait && pasteLink}
+      </div>
+      {searching ? (
+        <>
+          <div style={sectionLabelStyle()}>{resultsLabel}</div>
+          {tileGrid('Results', results)}
+          {aspect && <div style={mutedStyle}>Tap an aspect again to clear it.</div>}
         </>
+      ) : (
+        <>
+          {favouriteBases.length > 0 && section('Favourites', favouriteBases)}
+          {recentOnly.length > 0 && section('Recent', recentOnly)}
+          {favouriteBases.length === 0 && recentOnly.length === 0 && section('All bases', filterBases(bases, '', null))}
+        </>
+      )}
+      {isPortrait && (
+        <div style={{ marginTop: 'auto', paddingTop: '4px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ ...mutedStyle, flex: 1 }}>Building from a deck? Its base comes with the link.</div>
+          {pasteLink}
+        </div>
       )}
     </>
   )
 
-  const favouritesContent = (small = false) => (
-    <div style={{
-      width: '100%',
-      display: 'flex',
-      flexDirection: 'row',
-      alignItems: 'stretch',
-      gap: '2vw',
-    }}>
-      <select
-        data-testid="favourites-select"
-        value={selectedKey}
-        onChange={e => onFavouriteKeyChange(e.target.value)}
-        style={selectStyle(true, selectedKey !== '', small)}
-      >
-        <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Select a favourite</option>
-        {favourites.map(fav => (
-          <option
-            key={fav.key}
-            value={fav.key}
-            style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}
-          >
-            {`${fav.set}: ${fav.name} (${fav.hp})`}
-          </option>
-        ))}
-      </select>
+  const canLoad = swudb.url !== '' && swudb.error === null && !swudb.loading
 
+  const importView = (
+    <>
+      <label htmlFor="swudb-link" style={sectionLabelStyle()}>SWUDB deck link</label>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <input
+          id="swudb-link"
+          type="url"
+          placeholder="https://swudb.com/deck/…"
+          value={swudb.url}
+          onChange={e => onSwudbChange(e.target.value)}
+          onFocus={onSwudbFocus}
+          style={{ flex: 1, minWidth: 0, height: '44px', boxSizing: 'border-box', border: swudb.error ? '2px solid var(--color-error)' : 'none', borderRadius: '12px', background: 'var(--color-surface-raised)', color: 'var(--color-text-primary)', fontSize: '0.95rem', fontFamily: 'inherit', padding: '0 14px', outline: 'none' }}
+        />
+        <Button onClick={onSwudbLoad} disabled={!canLoad}>{swudb.loading ? '...' : 'Load'}</Button>
+      </div>
+      {swudb.error && <div role="alert" style={{ fontSize: '0.85rem', color: 'var(--color-error)' }}>{swudb.error}</div>}
+      {swudb.deckName !== null && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '12px', background: 'var(--color-surface)' }}>
+          {swudb.base && <span style={{ width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-success)' }}><CheckIcon /></span>}
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{swudb.deckName}</span>
+            {swudb.base && <span style={mutedStyle}>Deck found · its base:</span>}
+          </div>
+        </div>
+      )}
+      {swudb.base && tileGrid('Deck base', [swudb.base])}
+      <div style={mutedStyle}>The deck must be unlisted or public on swudb.com.</div>
+      <div style={{ marginTop: 'auto', paddingTop: '4px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
+        <Button onClick={() => setImporting(false)}>Search instead</Button>
+        {swudb.base && <Button variant="primary" onClick={() => choose(swudb.base!)} style={{ minHeight: '52px', padding: '0 24px' }}>Use this base</Button>}
+      </div>
+    </>
+  )
 
-      <button
-        onClick={onSubmit}
-        aria-label="Start game"
-        disabled={!selectedBase}
-        style={submitButtonStyle(!!selectedBase, small)}
-      >
-        <ForwardIcon />
-      </button>
+  const topBar = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+      {onBack && <IconButton label="Back" onClick={onBack}><BackIcon /></IconButton>}
+      <img src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`} alt="" style={{ width: '30px', height: '30px', flexShrink: 0 }} />
+      <h1 style={{
+        flex: 1,
+        minWidth: 0,
+        margin: 0,
+        fontSize: isPortrait ? '17px' : '22px',
+        fontWeight: 300,
+        letterSpacing: isPortrait ? '0.06em' : '0.12em',
+        whiteSpace: 'nowrap',
+        color: 'var(--color-text-primary)',
+      }}>
+        Star Wars: Unlimited
+      </h1>
+      <IconButton label="More" onClick={() => setOpenSheet('more')}><DotsIcon /></IconButton>
     </div>
   )
 
-  if (!isPortrait) {
+  const aspect0 = base ? baseAspect(base) : null
+  // Under the art rather than over it: the art is the whole card, with its own text.
+  const baseInfo = base && (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+      {aspect0 && <img src={aspectIconSrc(aspect0)} alt="" style={{ width: '28px', height: '28px', flexShrink: 0 }} />}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+        <span style={{ fontSize: '1.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{base.name}</span>
+        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-body)' }}>{baseMeta(base)}</span>
+      </div>
+    </div>
+  )
+
+  const favouriteToggle = (
+    <button
+      type="button"
+      aria-pressed={isFavourite}
+      onClick={onFavouriteToggle}
+      style={{
+        height: '32px',
+        padding: '0 10px',
+        border: 'none',
+        borderRadius: '10px',
+        background: 'var(--color-tonal)',
+        color: isFavourite ? 'var(--color-epic)' : 'var(--color-tonal-text)',
+        fontFamily: 'inherit',
+        fontSize: '0.8rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        cursor: 'pointer',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      <StarIcon filled={isFavourite} />Favourite
+    </button>
+  )
+
+  const baseCard = (
+    <div data-testid="base-card" style={{ flex: isPortrait && !base ? 1 : undefined, minHeight: 0, minWidth: 0, background: 'var(--color-surface)', borderRadius: '16px', padding: '12px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', minHeight: '32px' }}>
+        <div style={sectionLabelStyle('var(--color-accent)')}>Your base</div>
+        {base && favouriteToggle}
+      </div>
+      {base ? (
+        <>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <ImagePreview
+              base={base}
+              src={art.src}
+              isHyperspace={art.isHyperspace}
+              allFailed={art.allFailed}
+              imageLoaded={art.imageLoaded}
+              rotationDeg={art.rotationDeg}
+              useHyperspace={useHyperspace}
+              fill={isPortrait ? 'width' : 'height'}
+              centred
+              onLoad={art.onLoad}
+              onError={art.onError}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {baseInfo}
+            <Button onClick={openBaseSheet} style={{ flexShrink: 0 }}>Change base</Button>
+          </div>
+        </>
+      ) : (
+        <>
+          {error && <div role="alert" style={{ fontSize: '0.85rem', color: 'var(--color-error)' }}>{error}</div>}
+          <button
+            type="button"
+            onClick={openBaseSheet}
+            style={{ flex: 1, minHeight: '120px', border: 'none', borderRadius: '12px', background: 'var(--color-tonal)', color: 'var(--color-tonal-text)', fontFamily: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
+          >
+            <span style={{ color: 'var(--color-accent)', display: 'flex' }}><PlusIcon /></span>
+            <span style={{ fontSize: '1.1rem', fontWeight: 500 }}>Choose your base</span>
+            <span style={{ fontSize: '0.8rem', color: 'var(--color-tonal-text)', opacity: 0.8 }}>Search by name, or paste an SWUDB deck link</span>
+          </button>
+        </>
+      )}
+    </div>
+  )
+
+  const matchSection = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div style={sectionLabelStyle()}>Match</div>
+      <SegmentedControl
+        label="Match"
+        options={[{ value: 'casual', label: 'Casual' }, { value: 'tournament', label: 'Tournament' }]}
+        value={matchType}
+        onChange={onMatchTypeChange}
+      />
+      {matchType === 'tournament' && <div style={mutedStyle}>{TOURNAMENT_NOTE}</div>}
+    </div>
+  )
+
+  const primary = (
+    <Button variant="primary" onClick={onStart} disabled={!base} style={{ minHeight: '52px', flexShrink: 0 }}>
+      {matchType === 'tournament' ? 'Go to tournament' : 'Go to game'}
+    </Button>
+  )
+
+  const sheets = (
+    <>
+      <Sheet open={openSheet === 'more'} title="More" onClose={close}>
+        <Button onClick={closeThen(onHelp)}>Help</Button>
+        {onSettings && <Button onClick={closeThen(onSettings)}>Settings</Button>}
+      </Sheet>
+      <Sheet open={openSheet === 'base'} title="Choose your base" onClose={close} wide>
+        {importing ? importView : searchView}
+      </Sheet>
+    </>
+  )
+
+  if (isPortrait) {
     return (
       <AppScreenLayout>
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          padding: '2vw 2vw 3vw',
-        }}>
-
-          {/* Title row */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexShrink: 0,
-          }}>
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-              {onBack && (
-                <button
-                  onClick={onBack}
-                  aria-label="Back"
-                  style={NAV_BTN_STYLE}
-                >
-                  <BackIcon />
-                </button>
-              )}
-              <h1 style={{
-                color: 'var(--color-text-primary)',
-                fontWeight: '200',
-                fontSize: 'clamp(1.2rem, 4vw, 1.8rem)',
-                letterSpacing: '0.15em',
-                margin: 0,
-                lineHeight: 0.8,
-              }}>
-                dmgCtrl
-              </h1>
-            </div>
-
-<div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-              {onSettings && (
-                <button
-                  onClick={onSettings}
-                  aria-label="⚙"
-                  style={NAV_BTN_STYLE}
-                >
-                  <CogIcon />
-                </button>
-              )}
-              <button
-                onClick={onHelp}
-                aria-label="Help"
-                style={NAV_BTN_STYLE}
-              >
-                <HelpIcon />
-              </button>
-            </div>
-          </div>
-
-          {/* Content row */}
-          <div style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'row',
-            minHeight: 0,
-            padding: '1.5vh 0 0',
-            gap: '3vw',
-          }}>
-
-            {/* Left column */}
-            <div style={{
-              flex: '0 0 55%',
-              display: 'flex',
-              flexDirection: 'column',
-              overflowY: 'auto',
-              gap: '1.5vh',
-              padding: '14px',
-            }}>
-              <div style={{ display: 'flex', flexDirection: 'row', gap: '2vw' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <FormatSelector selectedFormat={selectedFormat} onFormatChange={onFormatChange} small />
-                </div>
-                {enableCompetitiveMode && (
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <SetupModeSelector selectedSetupMode={selectedSetupMode} onSetupModeChange={onSetupModeChange} small />
-                  </div>
-                )}
-              </div>
-              <ModeSelector
-                selectionMode={selectionMode}
-                onModeChange={onModeChange}
-                showFavourites={enableFavourites && favourites.length > 0}
-                small
-              />
-
-              {selectionMode === 'favourites'
-                ? favouritesContent(true)
-                : selectionMode === 'swudb-import'
-                ? swudbImportContent(true)
-                : baseSelectorContent(true)
-              }
-
-            </div>
-
-            {/* Right column: preview */}
-            <div style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'flex-end',
-              paddingTop: '14px',
-            }}>
-              {selectedBase && (
-                <div style={{ width: '100%' }}>
-                  {imagePreview(selectedBase)}
-                </div>
-              )}
-            </div>
-
-          </div>
+        <div data-testid="swu-setup" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px 16px 24px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
+          {topBar}
+          {baseCard}
+          {base && <div style={{ flex: 1 }} />}
+          {matchSection}
+          {primary}
         </div>
+        {sheets}
       </AppScreenLayout>
     )
   }
 
   return (
     <AppScreenLayout>
-      <div style={{
-        position: 'relative',
-        zIndex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '2vw',
-        gap: '2vh',
-        overflowY: 'auto',
-        flex: 1,
-      }}>
-
-        {/* Title row */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}>
-          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '2vw' }}>
-            {onBack && (
-              <button
-                onClick={onBack}
-                aria-label="Back"
-                style={NAV_BTN_STYLE}
-              >
-                <BackIcon />
-              </button>
-            )}
-            <h1 style={{
-              color: 'var(--color-text-primary)',
-              fontWeight: '200',
-              fontSize: 'clamp(1.8rem, 8vw, 3rem)',
-              letterSpacing: '0.15em',
-              margin: 0,
-              lineHeight: 0.8,
-            }}>
-              dmgCtrl
-            </h1>
-          </div>
-
-<div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '2vw' }}>
-            {onSettings && (
-              <button
-                onClick={onSettings}
-                aria-label="⚙"
-                style={NAV_BTN_STYLE}
-              >
-                <CogIcon />
-              </button>
-            )}
-            <button
-              onClick={onHelp}
-              aria-label="Help"
-              style={NAV_BTN_STYLE}
-            >
-              <HelpIcon />
-            </button>
+      <div data-testid="swu-setup" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px', overflow: 'hidden', color: 'var(--color-text-primary)' }}>
+        {topBar}
+        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 400px) minmax(0, 1fr)', gap: '16px' }}>
+          {baseCard}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0 }}>
+            {matchSection}
+            <div style={{ flex: 1 }} />
+            {primary}
           </div>
         </div>
-
-        <div style={{ display: 'flex', flexDirection: 'row', gap: '2vw' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <FormatSelector selectedFormat={selectedFormat} onFormatChange={onFormatChange} />
-          </div>
-          {enableCompetitiveMode && (
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <SetupModeSelector selectedSetupMode={selectedSetupMode} onSetupModeChange={onSetupModeChange} />
-            </div>
-          )}
-        </div>
-        <ModeSelector
-          selectionMode={selectionMode}
-          onModeChange={onModeChange}
-          showFavourites={enableFavourites && favourites.length > 0}
-        />
-
-        {/* key forces a full DOM remount on mode change, preventing iOS Safari from
-            retaining GPU compositing tiles from removed box-shadow elements */}
-        <div key={selectionMode} data-testid="mode-content" style={{ display: 'contents' }}>
-          {selectionMode === 'favourites' ? (
-            <>
-              {favouritesContent(false)}
-              {selectedBase && (
-                <div style={{
-                  width: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1vh',
-                }}>
-                  {imagePreview(selectedBase)}
-                </div>
-              )}
-            </>
-          ) : selectionMode === 'swudb-import' ? (
-            <>
-              {swudbImportContent(false)}
-              {selectedBase && (
-                <div style={{
-                  width: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1vh',
-                }}>
-                  {imagePreview(selectedBase)}
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              {baseSelectorContent(false)}
-              {selectedBase && (
-                <div style={{
-                  width: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1vh',
-                }}>
-                  {imagePreview(selectedBase)}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
       </div>
+      {sheets}
     </AppScreenLayout>
   )
 }
-
-export default SwuSetupScreenView

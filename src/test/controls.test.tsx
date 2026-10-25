@@ -186,4 +186,12 @@ describe('Sheet', () => {
     rerender(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
     expect(screen.getByRole('dialog')).toHaveAttribute('data-placement', 'bottom')
   })
+
+  it('a wide sheet fills the screen in landscape and still comes from the bottom in portrait', () => {
+    const { rerender } = render(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-placement', 'full')
+    mockOrientation.isPortrait = true
+    rerender(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-placement', 'bottom')
+  })
 })

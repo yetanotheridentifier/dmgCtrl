@@ -187,11 +187,13 @@ interface SheetProps {
   title: string
   onClose: () => void
   children: ReactNode
+  // For a grid of choices too wide for the side: fills the screen in landscape.
+  wide?: boolean
 }
 
 // Choices open over the screen rather than replacing it: from the right in landscape, where height
 // is short, and from the bottom in portrait, where the thumb is.
-export function Sheet({ open, title, onClose, children }: SheetProps) {
+export function Sheet({ open, title, onClose, children, wide = false }: SheetProps) {
   const { isPortrait } = useOrientation()
   const titleId = useId()
 
@@ -204,9 +206,12 @@ export function Sheet({ open, title, onClose, children }: SheetProps) {
 
   if (!open) return null
 
-  const placement: React.CSSProperties = isPortrait
-    ? { left: 0, right: 0, bottom: 0, maxHeight: '85vh', borderRadius: '20px 20px 0 0' }
-    : { top: 0, right: 0, bottom: 0, width: 'min(420px, 90vw)', borderRadius: '20px 0 0 20px' }
+  const where = isPortrait ? 'bottom' : wide ? 'full' : 'side'
+  const placement: React.CSSProperties = {
+    bottom: { left: 0, right: 0, bottom: 0, maxHeight: '85vh', borderRadius: '20px 20px 0 0' },
+    full: { top: '10px', left: '10px', right: '10px', bottom: 0, borderRadius: '16px 16px 0 0' },
+    side: { top: 0, right: 0, bottom: 0, width: 'min(420px, 90vw)', borderRadius: '20px 0 0 20px' },
+  }[where]
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 30 }}>
@@ -215,7 +220,7 @@ export function Sheet({ open, title, onClose, children }: SheetProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        data-placement={isPortrait ? 'bottom' : 'side'}
+        data-placement={where}
         style={{
           position: 'absolute',
           ...placement,

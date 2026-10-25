@@ -1,158 +1,94 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useBases, Base } from './useBases'
-import { Format, getValidSets } from '../utils/formatFilter'
 import { SetupMode } from '../utils/playMode'
 
-const ASPECT_ORDER = ['Vigilance', 'Command', 'Aggression', 'Cunning', 'None']
+const STORAGE_KEY = 'swu_setup'
+const RECENT_LIMIT = 6
 
-export interface InitialSelection {
-  set: string
-  aspect: string
-  key: string
+// Older preferences that setup no longer reads: dropped on the next save.
+const RETIRED_KEYS = ['pref_format', 'pref_selection_mode', 'pref_play_mode']
+
+interface PersistedSetup {
+  // Your base rarely changes between games, so it is kept, across launches too.
+  baseKey?: string
+  // The last bases played (Go to game), most recent first.
+  recentBaseKeys: string[]
+  matchType: SetupMode
 }
 
-export function useSwuSetup(
-  onConfirm: (base: Base, mode: SetupMode, format: Format) => void,
-  initialSelection?: InitialSelection | null,
-) {
+export const baseKey = (b: Base): string => `${b.set}-${b.number}`
+
+function legacyMatchType(): SetupMode {
+  const saved = localStorage.getItem('pref_play_mode')
+  return saved === 'tournament' || saved === 'bo1' || saved === 'bo3' ? 'tournament' : 'casual'
+}
+
+function load(): PersistedSetup {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return { recentBaseKeys: [], matchType: legacyMatchType() }
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    return {
+      baseKey: typeof parsed.baseKey === 'string' ? parsed.baseKey : undefined,
+      recentBaseKeys: Array.isArray(parsed.recentBaseKeys) ? parsed.recentBaseKeys.filter((k): k is string => typeof k === 'string') : [],
+      matchType: parsed.matchType === 'tournament' ? 'tournament' : 'casual',
+    }
+  } catch {
+    return { recentBaseKeys: [], matchType: 'casual' }
+  }
+}
+
+function save(setup: PersistedSetup): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(setup))
+  RETIRED_KEYS.forEach(k => localStorage.removeItem(k))
+}
+
+// The base sheet's search: by name (ignoring case) and by one aspect, over every base, sorted by name.
+export function filterBases(bases: Base[], query: string, aspect: string | null): Base[] {
+  const q = query.trim().toLowerCase()
+  return bases
+    .filter(b => (q === '' || b.name.toLowerCase().includes(q)) && (aspect === null || b.aspects.includes(aspect)))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export function useSwuSetup(onConfirm: (base: Base, mode: SetupMode) => void) {
   const { bases, loading, error } = useBases()
+  const [persisted, setPersisted] = useState<PersistedSetup>(load)
 
-  const [selectedSet, setSelectedSet] = useState(initialSelection?.set ?? '')
-  const [selectedAspect, setSelectedAspect] = useState(initialSelection?.aspect ?? '')
-  const [selectedKey, setSelectedKey] = useState(initialSelection?.key ?? '')
-
-  const [selectedFormat, setSelectedFormat] = useState<Format>(() => {
-    const saved = localStorage.getItem('pref_format')
-    if (saved === 'limited' || saved === 'eternal' || saved === 'twin-suns') return saved
-    if (saved === 'sealed' || saved === 'draft' || saved === 'chaos') return 'limited'
-    return 'premier'
-  })
-
-  const [selectedMode, setSelectedMode] = useState<SetupMode>(() => {
-    const saved = localStorage.getItem('pref_play_mode')
-    if (saved === 'tournament') return 'tournament'
-    if (saved === 'bo1' || saved === 'bo3') return 'tournament'
-    return 'casual'
-  })
-
-  const availableSets = useMemo(() => {
-    return [...new Set(bases.map(b => b.set))].sort()
-  }, [bases])
-
-  const validSets = useMemo(() => {
-    return getValidSets(selectedFormat, availableSets)
-  }, [selectedFormat, availableSets])
-
-  const availableAspects = useMemo(() => {
-    if (!selectedSet) return []
-    const basesInSet = bases.filter(b => b.set === selectedSet)
-    const aspects = new Set<string>()
-    basesInSet.forEach(b => {
-      if (b.aspects.length === 0) {
-        aspects.add('None')
-      } else {
-        b.aspects.forEach(a => aspects.add(a))
-      }
+  const update = (patch: Partial<PersistedSetup>) => {
+    setPersisted(prev => {
+      const next = { ...prev, ...patch }
+      save(next)
+      return next
     })
-    return ASPECT_ORDER.filter(a => aspects.has(a))
-  }, [bases, selectedSet])
-
-  const filteredBases = useMemo(() => {
-    if (!selectedSet || !selectedAspect) return []
-    return bases.filter(b => {
-      if (b.set !== selectedSet) return false
-      if (selectedAspect === 'None') return b.aspects.length === 0
-      return b.aspects.includes(selectedAspect)
-    })
-  }, [bases, selectedSet, selectedAspect])
-
-  const selectedBase = filteredBases.find(
-    b => `${b.set}-${b.number}` === selectedKey
-  ) ?? null
-
-  // Auto-select aspect when only one option available
-  useEffect(() => {
-    if (availableAspects.length === 1) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectedAspect(availableAspects[0])
-      setSelectedKey('')
-    }
-  }, [availableAspects])
-
-  // Auto-select base when only one option available
-  useEffect(() => {
-    if (filteredBases.length === 1) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectedKey(`${filteredBases[0].set}-${filteredBases[0].number}`)
-    }
-  }, [filteredBases])
-
-  const handleModeChange = (mode: SetupMode) => {
-    setSelectedMode(mode)
-    localStorage.setItem('pref_play_mode', mode)
   }
 
-  const handleFormatChange = (format: Format) => {
-    setSelectedFormat(format)
-    localStorage.setItem('pref_format', format)
-    // Clear selection if the current set is no longer valid for the new format
-    if (selectedSet && !getValidSets(format, availableSets).includes(selectedSet)) {
-      setSelectedSet('')
-      setSelectedAspect('')
-      setSelectedKey('')
-    }
-  }
+  const byKey = useMemo(() => new Map(bases.map(b => [baseKey(b), b])), [bases])
 
-  const handleSetChange = (set: string) => {
-    setSelectedSet(set)
-    setSelectedAspect('')
-    setSelectedKey('')
-  }
+  // A kept base missing from the card data reads as no base, so the player chooses again.
+  const base = persisted.baseKey ? byKey.get(persisted.baseKey) ?? null : null
 
-  const handleAspectChange = (aspect: string) => {
-    setSelectedAspect(aspect)
-    setSelectedKey('')
-  }
-
-  const handleKeyChange = (key: string) => {
-    setSelectedKey(key)
-  }
-
+  const recentBases = useMemo(
+    () => persisted.recentBaseKeys.map(k => byKey.get(k)).filter((b): b is Base => b !== undefined),
+    [persisted.recentBaseKeys, byKey],
+  )
 
   const handleSubmit = () => {
-    if (!selectedBase) return
-    onConfirm(selectedBase, selectedMode, selectedFormat)
-  }
-
-  const selectBaseByKey = (key: string): boolean => {
-    const base = bases.find(b => `${b.set}-${b.number}` === key)
-    if (!base) return false
-    const aspect = base.aspects.length === 0 ? 'None' : base.aspects[0]
-    setSelectedSet(base.set)
-    setSelectedAspect(aspect)
-    setSelectedKey(key)
-    return true
+    if (!base) return
+    const key = baseKey(base)
+    update({ recentBaseKeys: [key, ...persisted.recentBaseKeys.filter(k => k !== key)].slice(0, RECENT_LIMIT) })
+    onConfirm(base, persisted.matchType)
   }
 
   return {
     loading,
     error,
-    selectedFormat,
-    selectedMode,
-    selectedSet,
-    selectedAspect,
-    selectedKey,
-    selectedBase,
-    availableSets,
-    validSets,
-    availableAspects,
-    filteredBases,
-    handleFormatChange,
-    handleModeChange,
-    handleSetChange,
-    handleAspectChange,
-    handleKeyChange,
+    bases,
+    base,
+    chooseBase: (b: Base) => update({ baseKey: baseKey(b) }),
+    recentBases,
+    matchType: persisted.matchType,
+    setMatchType: (m: SetupMode) => update({ matchType: m }),
     handleSubmit,
-    selectBaseByKey,
   }
 }
