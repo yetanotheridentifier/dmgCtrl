@@ -956,3 +956,254 @@ describe('SwuGameScreen: changing base between games (Limited best of 3)', () =>
     expect(screen.queryByRole('button', { name: 'Change base' })).not.toBeInTheDocument()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Two players: one phone flat between you
+// ---------------------------------------------------------------------------
+
+// Your base is Catacombs of Cadera (30 HP), theirs Energy Conversion Lab (25 HP).
+const render2p = (props: Props = {}) => renderGame({ theirBase: mockBaseWithEpicAction, ...props })
+const yourHalf = () => screen.getByRole('region', { name: 'Your half' })
+const theirHalf = () => screen.getByRole('region', { name: 'Their half' })
+const cardIn = (half: HTMLElement) => within(half).getByTestId('game-card')
+const damageIn = (half: HTMLElement) => within(half).getByTestId('damage')
+const hit = (half: HTMLElement, times = 1) => { for (let i = 0; i < times; i++) fireEvent.click(cardIn(half)) }
+const roundButton = () => screen.getByRole('button', { name: /^Round/ })
+
+describe('SwuGameScreen: two players, layout', () => {
+  it('splits the screen: your half the right way up, their half turned to face them', () => {
+    render2p()
+    expect(yourHalf()).not.toHaveStyle({ transform: 'rotate(180deg)' })
+    expect(theirHalf()).toHaveStyle({ transform: 'rotate(180deg)' })
+    expect(within(yourHalf()).getByRole('button', { name: /Catacombs of Cadera/ })).toBeInTheDocument()
+    expect(within(theirHalf()).getByRole('button', { name: /Energy Conversion Lab/ })).toBeInTheDocument()
+  })
+
+  it('stays the two-player layout in portrait and in landscape: the mode chooses it, not the orientation', () => {
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
+    const { unmount } = render(<SwuGameScreen base={mockBase} theirBase={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(theirHalf()).toBeInTheDocument()
+    expect(screen.queryByText(/rotate/i)).not.toBeInTheDocument()
+    unmount()
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
+    render2p()
+    expect(theirHalf()).toBeInTheDocument()
+  })
+
+  it('the middle strip holds Back, Log, Round, End game and More', () => {
+    render2p()
+    const strip = screen.getByRole('navigation', { name: 'Game' })
+    for (const name of ['Back to setup', 'Log', 'End game', 'More']) {
+      expect(within(strip).getByRole('button', { name })).toBeInTheDocument()
+    }
+    expect(within(strip).getByRole('button', { name: /^Round/ })).toBeInTheDocument()
+  })
+})
+
+describe('SwuGameScreen: two players, starting', () => {
+  it('before the game both cards say Start, and Round and End game are disabled', () => {
+    render2p()
+    expect(within(yourHalf()).getByTestId('game-counter')).toHaveTextContent('Start')
+    expect(within(theirHalf()).getByTestId('game-counter')).toHaveTextContent('Start')
+    expect(roundButton()).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'End game' })).toBeDisabled()
+  })
+
+  it('tapping their card starts the game', () => {
+    render2p()
+    hit(theirHalf())
+    expect(damageIn(theirHalf())).toHaveTextContent('0')
+    expect(damageIn(yourHalf())).toHaveTextContent('0')
+    expect(roundButton()).toBeEnabled()
+    expect(mockOnGameStart).toHaveBeenCalledTimes(1)
+  })
+
+  it('tapping your card starts the game', () => {
+    render2p()
+    hit(yourHalf())
+    expect(within(theirHalf()).getByTestId('game-counter')).toHaveTextContent('25 HP left')
+    expect(within(yourHalf()).getByTestId('game-counter')).toHaveTextContent('30 HP left')
+  })
+})
+
+describe('SwuGameScreen: two players, damage', () => {
+  it('each half counts its own damage', () => {
+    render2p()
+    hit(yourHalf())
+    hit(yourHalf(), 2)
+    hit(theirHalf())
+    expect(damageIn(yourHalf())).toHaveTextContent('2')
+    expect(damageIn(theirHalf())).toHaveTextContent('1')
+    expect(within(theirHalf()).getByTestId('game-counter')).toHaveTextContent('24 HP left')
+  })
+
+  it('dragging up on your card adds damage', () => {
+    render2p()
+    hit(yourHalf())
+    fireEvent.pointerDown(cardIn(yourHalf()), { clientY: 100, pointerId: 1 })
+    fireEvent.pointerMove(cardIn(yourHalf()), { clientY: 60, pointerId: 1 })
+    fireEvent.pointerUp(cardIn(yourHalf()), { clientY: 60, pointerId: 1 })
+    expect(damageIn(yourHalf())).toHaveTextContent('3')
+  })
+
+  // Their half is turned round, so up for them is down the screen.
+  it('dragging up on their card, from their side, adds damage', () => {
+    render2p()
+    hit(theirHalf())
+    fireEvent.pointerDown(cardIn(theirHalf()), { clientY: 100, pointerId: 2 })
+    fireEvent.pointerMove(cardIn(theirHalf()), { clientY: 140, pointerId: 2 })
+    fireEvent.pointerUp(cardIn(theirHalf()), { clientY: 140, pointerId: 2 })
+    expect(damageIn(theirHalf())).toHaveTextContent('3')
+    expect(damageIn(yourHalf())).toHaveTextContent('0')
+  })
+
+  it('the Damage −/+ buttons act on their own half', () => {
+    mockUserSettings.enableDamageButtons = true
+    render2p()
+    hit(yourHalf())
+    fireEvent.click(within(theirHalf()).getByRole('button', { name: /^Add 1 damage/ }))
+    fireEvent.click(within(theirHalf()).getByRole('button', { name: /^Add 1 damage/ }))
+    fireEvent.click(within(theirHalf()).getByRole('button', { name: /^Remove 1 damage/ }))
+    expect(damageIn(theirHalf())).toHaveTextContent('1')
+    expect(damageIn(yourHalf())).toHaveTextContent('0')
+  })
+
+  it('each half has its own epic action', () => {
+    render2p({ base: mockBaseWithEpicAction, theirBase: { ...mockBaseWithEpicAction, number: '028', name: 'Jedha City' } })
+    hit(yourHalf())
+    fireEvent.click(within(theirHalf()).getByRole('button', { name: 'Epic action: tap when used' }))
+    expect(within(theirHalf()).getByRole('button', { name: 'Epic action used' })).toBeInTheDocument()
+    expect(within(yourHalf()).getByRole('button', { name: 'Epic action: tap when used' })).toBeInTheDocument()
+  })
+})
+
+describe('SwuGameScreen: two players, initiative', () => {
+  const initiativeIn = (half: HTMLElement) => within(half).getByRole('radio')
+
+  it('neither holds it to begin with: both offer Take initiative', () => {
+    render2p()
+    expect(initiativeIn(yourHalf())).toHaveTextContent('TAKE INITIATIVE')
+    expect(initiativeIn(theirHalf())).toHaveTextContent('TAKE INITIATIVE')
+  })
+
+  it('taking it on one half takes it from the other', () => {
+    render2p()
+    fireEvent.click(initiativeIn(theirHalf()))
+    expect(initiativeIn(theirHalf())).toHaveAttribute('aria-checked', 'true')
+    expect(initiativeIn(theirHalf())).toHaveTextContent(/^INITIATIVE$/)
+    expect(initiativeIn(yourHalf())).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(initiativeIn(yourHalf()))
+    expect(initiativeIn(yourHalf())).toHaveAttribute('aria-checked', 'true')
+    expect(initiativeIn(theirHalf())).toHaveAttribute('aria-checked', 'false')
+    expect(initiativeIn(theirHalf())).toHaveTextContent('TAKE INITIATIVE')
+  })
+
+  it('is hidden when the Initiative setting is off', () => {
+    mockUserSettings.enableInitiativeBar = false
+    render2p()
+    expect(within(yourHalf()).queryByRole('radio')).not.toBeInTheDocument()
+    expect(within(theirHalf()).queryByRole('radio')).not.toBeInTheDocument()
+  })
+})
+
+describe('SwuGameScreen: two players, ending a game', () => {
+  const dragTo = (half: HTMLElement, amount: number, flipped: boolean) => {
+    // 15px dead zone, then 14px a step from 1: 15 + 14 * (amount - 1) + 1 lands on amount.
+    const d = 16 + 14 * (amount - 1)
+    fireEvent.pointerDown(cardIn(half), { clientY: 500, pointerId: 1 })
+    fireEvent.pointerMove(cardIn(half), { clientY: flipped ? 500 + d : 500 - d, pointerId: 1 })
+    fireEvent.pointerUp(cardIn(half), { clientY: flipped ? 500 + d : 500 - d, pointerId: 1 })
+  }
+
+  it('their base reaching 0 opens End game with Won chosen', () => {
+    render2p()
+    hit(yourHalf())
+    dragTo(theirHalf(), 25, true)
+    expect(damageIn(theirHalf())).toHaveTextContent('25')
+    expect(endGameSheet()).toHaveTextContent('Their base is destroyed')
+    expect(within(endGameSheet()).getByRole('button', { name: 'Won' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('your base reaching 0 opens End game with Lost chosen', () => {
+    render2p()
+    hit(yourHalf())
+    dragTo(yourHalf(), 30, false)
+    expect(endGameSheet()).toHaveTextContent('Your base is destroyed')
+    expect(within(endGameSheet()).getByRole('button', { name: 'Lost' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('Keep playing closes it', () => {
+    render2p()
+    hit(yourHalf())
+    dragTo(theirHalf(), 25, true)
+    fireEvent.click(within(endGameSheet()).getByRole('button', { name: 'Keep playing' }))
+    expect(screen.queryByRole('dialog', { name: /^End game/ })).not.toBeInTheDocument()
+  })
+
+  it('game over: each half shows its own result, with New setup and Rematch in the middle', () => {
+    render2p()
+    hit(yourHalf())
+    recordResult('Won')
+    expect(yourHalf()).toHaveTextContent('Game won')
+    expect(theirHalf()).toHaveTextContent('Game lost')
+    const strip = screen.getByRole('navigation', { name: 'Game over' })
+    expect(within(strip).getByRole('button', { name: 'New setup' })).toBeInTheDocument()
+    expect(within(strip).getByRole('button', { name: 'Rematch' })).toBeInTheDocument()
+  })
+
+  it('Rematch keeps both bases and resets both damage counters', () => {
+    render2p()
+    hit(yourHalf(), 3)
+    hit(theirHalf(), 2)
+    recordResult('Lost')
+    fireEvent.click(screen.getByRole('button', { name: 'Rematch' }))
+    expect(within(yourHalf()).getByRole('button', { name: /Catacombs of Cadera/ })).toBeInTheDocument()
+    expect(within(theirHalf()).getByRole('button', { name: /Energy Conversion Lab/ })).toBeInTheDocument()
+    expect(within(yourHalf()).getByTestId('game-counter')).toHaveTextContent('Start')
+    hit(theirHalf())
+    expect(damageIn(yourHalf())).toHaveTextContent('0')
+    expect(damageIn(theirHalf())).toHaveTextContent('0')
+  })
+
+  it('New setup goes back', () => {
+    const { onBack } = render2p()
+    hit(yourHalf())
+    recordResult('Won')
+    fireEvent.click(screen.getByRole('button', { name: 'New setup' }))
+    expect(onBack).toHaveBeenCalled()
+  })
+
+  it('a best of 3 records from your side', () => {
+    render2p({ playMode: 'bo3' })
+    hit(yourHalf())
+    recordResult('Won')
+    expect(within(yourHalf()).getByTestId('game-counter')).toHaveTextContent('Start game 2')
+    expect(within(theirHalf()).getByTestId('game-counter')).toHaveTextContent('Start game 2')
+  })
+})
+
+describe('SwuGameScreen: two players, log', () => {
+  it('entries name the base', () => {
+    render2p()
+    hit(yourHalf())
+    hit(theirHalf(), 3)
+    hit(yourHalf())
+    openLog()
+    const log = screen.getByTestId('log-overlay')
+    expect(log).toHaveTextContent('Their base: 1 damage')
+    expect(log).toHaveTextContent('Your base: 1 damage')
+  })
+
+  it('undo takes back the newest entry, on the half it was on', () => {
+    render2p()
+    hit(yourHalf())
+    hit(theirHalf(), 2)
+    hit(yourHalf())
+    openLog()
+    undo()
+    expect(damageIn(yourHalf())).toHaveTextContent('0')
+    expect(damageIn(theirHalf())).toHaveTextContent('2')
+    undo()
+    expect(damageIn(theirHalf())).toHaveTextContent('1')
+  })
+})
