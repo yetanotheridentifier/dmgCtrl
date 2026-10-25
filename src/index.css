@@ -20,6 +20,8 @@
   --color-force: #3b82f6;
   --color-epic: #f5c518;
   --color-epic-rgb: 245, 197, 24;
+  /* Their side in a two-player game, against the accent for yours. */
+  --color-opponent: #ff8a65;
   /* Filled surfaces for the shared controls (src/components/shared/controls.tsx). */
   --color-on-accent: #04121c;
   --color-surface: #141b29;

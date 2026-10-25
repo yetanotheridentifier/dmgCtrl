@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Base } from '../hooks/useBases'
-import { baseKey, TOURNAMENT_FORMATS } from '../hooks/useSwuSetup'
-import type { TournamentFormat, TournamentSettings } from '../hooks/useSwuSetup'
+import { baseKey, SWU_MODES, TOURNAMENT_FORMATS } from '../hooks/useSwuSetup'
+import type { SwuMode, TournamentFormat, TournamentSettings } from '../hooks/useSwuSetup'
 import type { useBaseArt } from '../hooks/useBaseArt'
 import AppScreenLayout from './layout/appScreenLayout'
 import ImagePreview from './imagePreview'
@@ -37,13 +37,25 @@ interface Props {
   favouriteBases: Base[]
   recentBases: Base[]
   onChooseBase: (b: Base) => void
+  mode: SwuMode
+  onModeChange: (m: SwuMode) => void
+  // Their base, shown in 2 players only.
+  theirBase: Base | null
+  theirArt: ReturnType<typeof useBaseArt>
+  theirBaseFromLastGame: boolean
+  onChooseTheirBase: (b: Base) => void
+  // Every base the mode needs is chosen.
+  ready: boolean
   swudb: SwudbImportControls
   onBack?: () => void
   onHelp: () => void
   onSettings?: () => void
 }
 
-type OpenSheet = null | 'more' | 'base' | 'tournament'
+type OpenSheet = null | 'more' | 'base' | 'theirBase' | 'tournament'
+
+// The controls column (Mode, Match, primary) keeps this width whatever the mode.
+const CONTROLS_WIDTH = '284px'
 
 const ROUNDS_MIN = 2
 const ROUNDS_MAX = 16
@@ -128,6 +140,13 @@ export default function SwuSetupScreenView({
   favouriteBases,
   recentBases,
   onChooseBase,
+  mode,
+  onModeChange,
+  theirBase,
+  theirArt,
+  theirBaseFromLastGame,
+  onChooseTheirBase,
+  ready,
   swudb,
   onBack,
   onHelp,
@@ -142,7 +161,9 @@ export default function SwuSetupScreenView({
   const openBaseSheet = () => setOpenSheet('base')
 
   const choose = (b: Base) => { onChooseBase(b); close() }
-  const currentKey = base ? baseKey(base) : null
+  const chooseTheirs = (b: Base) => { onChooseTheirBase(b); close() }
+  const twoPlayers = mode === '2p'
+  const missingTheirs = twoPlayers && theirBase === null
 
   const topBar = (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
@@ -164,17 +185,19 @@ export default function SwuSetupScreenView({
     </div>
   )
 
-  const aspect0 = base ? baseAspect(base) : null
   // Under the art rather than over it: the art is the whole card, with its own text.
-  const baseInfo = base && (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-      {aspect0 && <img src={aspectIconSrc(aspect0)} alt="" style={{ width: '28px', height: '28px', flexShrink: 0 }} />}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-        <span style={{ fontSize: '1.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{base.name}</span>
-        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-body)' }}>{baseMeta(base)}</span>
+  const baseInfo = (b: Base) => {
+    const aspect = baseAspect(b)
+    return (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+        {aspect && <img src={aspectIconSrc(aspect)} alt="" style={{ width: '28px', height: '28px', flexShrink: 0 }} />}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+          <span style={{ fontSize: '1.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
+          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-body)' }}>{baseMeta(b)}</span>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const favouriteToggle = (
     <button
@@ -201,48 +224,91 @@ export default function SwuSetupScreenView({
     </button>
   )
 
-  const baseCard = (
-    <div data-testid="base-card" style={{ flex: isPortrait && !base ? 1 : undefined, minHeight: 0, minWidth: 0, background: 'var(--color-surface)', borderRadius: '16px', padding: '12px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+  // In 2 players the cards share the space: in portrait each takes a share of the height, and in
+  // landscape Change base goes under the name, as the card is too narrow for both on one line.
+  const shareHeight = isPortrait && twoPlayers
+  const stackActions = !isPortrait && twoPlayers
+
+  const baseCardFor = ({ testId, who, b, baseArt, labelColor, headerExtra, onOpen, alert }: {
+    testId: string
+    who: 'your' | 'their'
+    b: Base | null
+    baseArt: ReturnType<typeof useBaseArt>
+    labelColor: string
+    headerExtra: React.ReactNode
+    onOpen: () => void
+    alert?: React.ReactNode
+  }) => (
+    <div data-testid={testId} style={{ flex: isPortrait && (!b || shareHeight) ? 1 : undefined, minHeight: 0, minWidth: 0, background: 'var(--color-surface)', borderRadius: '16px', padding: '12px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', minHeight: '32px' }}>
-        <div style={sectionLabelStyle('var(--color-accent)')}>Your base</div>
-        {base && favouriteToggle}
+        <div style={sectionLabelStyle(labelColor)}>{who === 'your' ? 'Your base' : 'Their base'}</div>
+        {b && headerExtra}
       </div>
-      {base ? (
+      {b ? (
         <>
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <ImagePreview
-              base={base}
-              src={art.src}
-              isHyperspace={art.isHyperspace}
-              allFailed={art.allFailed}
-              imageLoaded={art.imageLoaded}
-              rotationDeg={art.rotationDeg}
+              base={b}
+              src={baseArt.src}
+              isHyperspace={baseArt.isHyperspace}
+              allFailed={baseArt.allFailed}
+              imageLoaded={baseArt.imageLoaded}
+              rotationDeg={baseArt.rotationDeg}
               useHyperspace={useHyperspace}
-              fill={isPortrait ? 'width' : 'height'}
+              fill={isPortrait && !shareHeight ? 'width' : 'height'}
               centred
-              onLoad={art.onLoad}
-              onError={art.onError}
+              onLoad={baseArt.onLoad}
+              onError={baseArt.onError}
             />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {baseInfo}
-            <Button onClick={openBaseSheet} style={{ flexShrink: 0 }}>Change base</Button>
+          <div style={{ display: 'flex', flexDirection: stackActions ? 'column' : 'row', alignItems: stackActions ? 'stretch' : 'center', gap: stackActions ? '8px' : '12px' }}>
+            {baseInfo(b)}
+            <Button onClick={onOpen} style={{ flexShrink: 0 }}>Change base</Button>
           </div>
         </>
       ) : (
         <>
-          {error && <div role="alert" style={{ fontSize: '0.85rem', color: 'var(--color-error)' }}>{error}</div>}
+          {alert}
           <button
             type="button"
-            onClick={openBaseSheet}
+            onClick={onOpen}
             style={{ flex: 1, minHeight: '120px', border: 'none', borderRadius: '12px', background: 'var(--color-tonal)', color: 'var(--color-tonal-text)', fontFamily: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
           >
             <span style={{ color: 'var(--color-accent)', display: 'flex' }}><PlusIcon /></span>
-            <span style={{ fontSize: '1.1rem', fontWeight: 500 }}>Choose your base</span>
+            <span style={{ fontSize: '1.1rem', fontWeight: 500 }}>{who === 'your' ? 'Choose your base' : 'Choose their base'}</span>
             <span style={{ fontSize: '0.8rem', color: 'var(--color-tonal-text)', opacity: 0.8 }}>Search by name, or paste an SWUDB deck link</span>
           </button>
         </>
       )}
+    </div>
+  )
+
+  const baseCard = baseCardFor({
+    testId: 'base-card',
+    who: 'your',
+    b: base,
+    baseArt: art,
+    labelColor: 'var(--color-accent)',
+    headerExtra: favouriteToggle,
+    onOpen: openBaseSheet,
+    alert: error && <div role="alert" style={{ fontSize: '0.85rem', color: 'var(--color-error)' }}>{error}</div>,
+  })
+
+  // Their base has no Favourite toggle: favourites are your bases.
+  const theirBaseCard = twoPlayers && baseCardFor({
+    testId: 'their-base-card',
+    who: 'their',
+    b: theirBase,
+    baseArt: theirArt,
+    labelColor: 'var(--color-opponent)',
+    headerExtra: theirBaseFromLastGame && <div style={mutedStyle}>Same as last game</div>,
+    onOpen: () => setOpenSheet('theirBase'),
+  })
+
+  const modeSection = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div style={sectionLabelStyle()}>Mode</div>
+      <SegmentedControl label="Mode" options={SWU_MODES} value={mode} onChange={onModeChange} />
     </div>
   )
 
@@ -262,9 +328,12 @@ export default function SwuSetupScreenView({
   const startsTournament = matchType === 'tournament' && !tournamentInProgress
   const primaryLabel = matchType === 'casual' ? 'Go to game' : tournamentInProgress ? 'Go to tournament' : 'Start tournament'
   const primary = (
-    <Button variant="primary" onClick={startsTournament ? () => setOpenSheet('tournament') : onStart} disabled={!base} style={{ minHeight: '52px', flexShrink: 0 }}>
-      {primaryLabel}
-    </Button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
+      <Button variant="primary" onClick={startsTournament ? () => setOpenSheet('tournament') : onStart} disabled={!ready} style={{ minHeight: '52px' }}>
+        {primaryLabel}
+      </Button>
+      {base && missingTheirs && <div style={{ ...mutedStyle, textAlign: 'center' }}>Choose their base to start.</div>}
+    </div>
   )
 
   const sheets = (
@@ -279,8 +348,19 @@ export default function SwuSetupScreenView({
         bases={sheetBases}
         favouriteBases={favouriteBases}
         recentBases={recentBases}
-        currentKey={currentKey}
+        currentKey={base ? baseKey(base) : null}
         onChoose={choose}
+        swudb={swudb}
+      />
+      <SwuBaseSheet
+        title="Choose their base"
+        open={openSheet === 'theirBase'}
+        onClose={close}
+        bases={sheetBases}
+        favouriteBases={favouriteBases}
+        recentBases={recentBases}
+        currentKey={theirBase ? baseKey(theirBase) : null}
+        onChoose={chooseTheirs}
         swudb={swudb}
       />
       <Sheet open={openSheet === 'tournament' && base !== null} title="Start a tournament" onClose={close}>
@@ -304,7 +384,9 @@ export default function SwuSetupScreenView({
         <div data-testid="swu-setup" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px 16px 24px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
           {topBar}
           {baseCard}
-          {base && <div style={{ flex: 1 }} />}
+          {theirBaseCard}
+          {base && !twoPlayers && <div style={{ flex: 1 }} />}
+          {modeSection}
           {matchSection}
           {primary}
         </div>
@@ -317,9 +399,11 @@ export default function SwuSetupScreenView({
     <AppScreenLayout>
       <div data-testid="swu-setup" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px', overflow: 'hidden', color: 'var(--color-text-primary)' }}>
         {topBar}
-        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 400px) minmax(0, 1fr)', gap: '16px' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: `${twoPlayers ? 'minmax(0, 1fr) ' : ''}minmax(0, 1fr) ${CONTROLS_WIDTH}`, gap: '12px' }}>
           {baseCard}
+          {theirBaseCard}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0 }}>
+            {modeSection}
             {matchSection}
             <div style={{ flex: 1 }} />
             {primary}

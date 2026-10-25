@@ -8,13 +8,25 @@ dmgCtrl is a damage tracker for Star Wars Unlimited. For the best experience, in
 
 Open the app and the loading screen appears for a moment while base data is fetched from the internet. Once ready, the **Star Wars: Unlimited** setup screen opens.
 
-Setup has three things: **Your base**, **Match**, and the button that starts play.
+Setup has four things: **Mode**, **Your base** (and **Their base** with 2 players), **Match**, and the button that starts play.
+
+### Mode
+
+Choose **1 player** to track your base alone, or **2 players** to set up a base for each side. Your choice is kept for next time; the first time it is 1 player.
+
+With 2 players the game screen still tracks your base only for now: **Go to game** opens the same game as 1 player, and their base is kept in setup for next time.
 
 ### Your base
 
 The first time, the card reads **Choose your base**. Tap it to open the base sheet.
 
 Once chosen, your base is kept: it is there next game, and next time you open the app. The card shows its art, its aspect, name, set and HP. Tap **Change base** to pick another.
+
+### Their base
+
+With 2 players, a **Their base** card sits beside yours. The first time it reads **Choose their base**, and the start button waits with "Choose their base to start." Tap the card, or **Change base** once there is one, to open the same base sheet as yours. Their base has no Favourite, and it never joins your Recent bases.
+
+Their base is kept from your last 2-player game, and the card says **Same as last game** while it is unchanged.
 
 ### Choosing a base
 
@@ -45,7 +57,7 @@ Tap **Favourite** on the Your base card to save your base as a favourite: the st
 
 Choose **Casual** or **Tournament**; your choice is kept. With Casual, **Go to game** opens the game. With Tournament, **Start tournament** opens a sheet where you set the format, best of 1 or 3 and the rounds, then **Start round 1** goes straight to the game. While a tournament is under way the button reads **Go to tournament** and takes you back to it.
 
-The button is disabled until you have chosen a base.
+The button is disabled until you have chosen a base, and with 2 players until you have chosen theirs too. In a tournament, the base sheet lists only the bases legal in its format, for both of you.
 
 ### More
 

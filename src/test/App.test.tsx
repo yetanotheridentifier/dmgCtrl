@@ -228,6 +228,20 @@ describe('App', () => {
     expect(setupMarker()).toBeInTheDocument()
   })
 
+  // Until the game screen has a two-player view, 2 players plays the game with your base.
+  it('2 players goes to the game with your base once their base is chosen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await chooseBase(user, 'Catacombs of Cadera')
+    await user.click(screen.getByRole('button', { name: '2 players' }))
+    await user.click(within(screen.getByTestId('their-base-card')).getByRole('button', { name: /Choose their base/ }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Choose their base' })).getByRole('button', { name: /^Energy Conversion Lab/ }))
+    await user.click(screen.getByRole('button', { name: 'Go to game' }))
+    await user.click(screen.getByText('Start'))
+    expect(screen.getByText('30 HP left')).toBeInTheDocument()
+  })
+
   // --- Your base is kept ---
 
   it('Keeps your base after navigating back from game screen', async () => {
