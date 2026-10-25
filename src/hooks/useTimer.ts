@@ -15,14 +15,20 @@ export function useTimer(durationSeconds: number): UseTimerResult {
   const [isRunning, setIsRunning] = useState(false)
   const startedRef = useRef(false)
   const startTimeRef = useRef<number | null>(null)
+  // The length is fixed once started; until then it follows durationSeconds.
+  const startedDurationRef = useRef(durationSeconds)
+
+  useEffect(() => {
+    if (!startedRef.current) setRemaining(durationSeconds)
+  }, [durationSeconds])
 
   const recalculate = useCallback(() => {
     if (startTimeRef.current === null) return
     const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000)
-    const newRemaining = Math.max(0, durationSeconds - elapsed)
+    const newRemaining = Math.max(0, startedDurationRef.current - elapsed)
     setRemaining(newRemaining)
     if (newRemaining === 0) setIsRunning(false)
-  }, [durationSeconds])
+  }, [])
 
   useEffect(() => {
     if (!isRunning) return
@@ -40,6 +46,7 @@ export function useTimer(durationSeconds: number): UseTimerResult {
   const start = () => {
     if (startedRef.current) return
     startedRef.current = true
+    startedDurationRef.current = durationSeconds
     startTimeRef.current = Date.now()
     setIsRunning(true)
   }

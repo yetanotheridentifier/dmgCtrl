@@ -15,6 +15,7 @@ import { useUserSettings } from './hooks/useUserSettings'
 import { onAppStart, onAppInstall, onAppResume, onTournamentRoundCompleted, onTournamentStarted } from './services/analytics'
 import type { PlayMode, SetupMode } from './utils/playMode'
 import type { TournamentSettings } from './hooks/useSwuSetup'
+import { limitedBaseOptions } from './utils/formatFilter'
 
 // The X-Wing screens carry the XWA card table, so they load as their own chunk on entering X-Wing
 // rather than in the bundle every SWU player downloads. The service worker precaches the chunk, so
@@ -42,7 +43,7 @@ function AppScreens() {
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
   const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' | 'settings'>('setup')
   const [settingsDefaultTab, setSettingsDefaultTab] = useState<'general' | 'swu' | 'xwing'>('swu')
-  const { loading } = useBases()
+  const { loading, bases } = useBases()
   const { startScreen } = useUserSettings()
   const {
     tournament,
@@ -252,6 +253,8 @@ function AppScreens() {
   // Keep game and X-Wing setup screens mounted while navigating to help/settings/tournament so game state is preserved.
   // Use tournament.base as fallback when selectedBase is null (e.g. app resumed into an active tournament).
   const gameBase = tournamentCurrentBase ?? selectedBase ?? tournament?.base ?? null
+  // In Limited best of 3 the base can change between games, from the game screen's More menu.
+  const limitedBo3 = tournament !== null && tournament.format === 'limited' && tournament.playMode === 'bo3'
 
   return (
     <>
@@ -294,6 +297,8 @@ function AppScreens() {
             onHelp={handleHelp}
             onSettings={handleSettings}
             onMatchComplete={handleMatchComplete}
+            changeBaseOptions={limitedBo3 && tournament ? limitedBaseOptions(bases, tournament.base) : undefined}
+            onChangeBase={limitedBo3 ? setTournamentCurrentBase : undefined}
           />
         </div>
       )}

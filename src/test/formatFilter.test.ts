@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
-import { isSetValidForFormat, getValidSets, isBaseValidForFormat, formatValidationError } from '../utils/formatFilter'
+import { isSetValidForFormat, getValidSets, isBaseValidForFormat, formatValidationError, limitedBaseOptions } from '../utils/formatFilter'
 import { Base } from '../hooks/useBases'
 
 // ---------- helpers ----------
@@ -186,5 +186,14 @@ describe('formatValidationError', () => {
   it('names the base, its set and the format', () => {
     expect(formatValidationError('premier', makeBase('SOR'))).toBe('SOR Base (SOR) isn’t legal in Premier.')
     expect(formatValidationError('limited', makeBase('IBH'))).toBe('IBH Base (IBH) isn’t legal in Limited.')
+  })
+})
+
+// ---------- limitedBaseOptions ----------
+
+describe('limitedBaseOptions', () => {
+  it('offers only the bases of the registered base’s set', () => {
+    const bases = [makeBase('SOR'), makeBase('SHD'), makeBase('SOR'), makeBase('LOF')]
+    expect(limitedBaseOptions(bases, makeBase('SOR')).map(b => b.set)).toEqual(['SOR', 'SOR'])
   })
 })

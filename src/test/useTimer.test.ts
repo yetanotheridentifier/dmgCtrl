@@ -35,6 +35,24 @@ describe('useTimer', () => {
     })
   })
 
+  // The game length can be changed until the game starts; after that it is fixed.
+  describe('changing the duration', () => {
+    it('remaining follows a new duration before start', () => {
+      const { result, rerender } = renderHook(({ d }) => useTimer(d), { initialProps: { d: 1500 } })
+      rerender({ d: 1800 })
+      expect(result.current.remaining).toBe(1800)
+    })
+
+    it('remaining keeps counting from the started duration after start', () => {
+      const { result, rerender } = renderHook(({ d }) => useTimer(d), { initialProps: { d: 1500 } })
+      act(() => result.current.start())
+      act(() => { vi.advanceTimersByTime(10000) })
+      rerender({ d: 1800 })
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(result.current.remaining).toBe(1489)
+    })
+  })
+
   describe('start', () => {
     it('sets isRunning to true', () => {
       const { result } = renderHook(() => useTimer(1500))

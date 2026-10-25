@@ -182,7 +182,7 @@ describe('App', () => {
 
   it('Does not render the game screen on load', () => {
     render(<App />)
-    expect(screen.queryByText(/Remaining:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/HP left/)).not.toBeInTheDocument()
   })
 
   it('Setup screen does not show game screen elements on load', () => {
@@ -197,7 +197,7 @@ describe('App', () => {
     await waitForSetup()
     await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByText('Start'))
-    expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
+    expect(screen.getByText('30 HP left')).toBeInTheDocument()
   })
 
   it('Game screen reflects the selected base health', async () => {
@@ -206,7 +206,7 @@ describe('App', () => {
     await waitForSetup()
     await chooseBaseAndGo(user, 'Energy Conversion Lab')
     await user.click(screen.getByText('Start'))
-    expect(screen.getByText('Remaining: 25')).toBeInTheDocument()
+    expect(screen.getByText('25 HP left')).toBeInTheDocument()
   })
 
   it('Does not navigate to game screen if no base is selected', async () => {
@@ -216,7 +216,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Go to game' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Go to game' }))
     expect(setupMarker()).toBeInTheDocument()
-    expect(screen.queryByText(/Remaining:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/HP left/)).not.toBeInTheDocument()
   })
 
   it('Clicking back from game screen returns to setup screen', async () => {
@@ -248,7 +248,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await user.click(screen.getByRole('button', { name: 'Go to game' }))
     await user.click(screen.getByText('Start'))
-    expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
+    expect(screen.getByText('30 HP left')).toBeInTheDocument()
   })
 
   it('Keeps your base across launches', async () => {
@@ -285,7 +285,8 @@ describe('App', () => {
     render(<App />)
     await waitForSetup()
     await chooseBaseAndGo(user, 'Catacombs of Cadera')
-    expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    expect(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: 'Help' })).toBeInTheDocument()
   })
 
   it('Clicking help on game screen shows the help screen', async () => {
@@ -293,7 +294,7 @@ describe('App', () => {
     render(<App />)
     await waitForSetup()
     await chooseBaseAndGo(user, 'Catacombs of Cadera')
-    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await openFromMore(user, 'Help')
     expect(screen.getByRole('heading', { level: 2, name: 'During a Game' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
   })
@@ -313,9 +314,9 @@ describe('App', () => {
     await waitForSetup()
     await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByText('Start'))
-    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await openFromMore(user, 'Help')
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
+    expect(screen.getByText('30 HP left')).toBeInTheDocument()
   })
 
   it('Clicking help on tournament screen shows tournament help content', async () => {
@@ -403,7 +404,8 @@ describe('App', () => {
     render(<App />)
     await waitForSetup()
     await chooseBaseAndGo(user, 'Catacombs of Cadera')
-    expect(screen.getByRole('button', { name: '⚙' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    expect(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: 'Settings' })).toBeInTheDocument()
   })
 
   it('Clicking settings on game screen shows the settings screen', async () => {
@@ -411,7 +413,7 @@ describe('App', () => {
     render(<App />)
     await waitForSetup()
     await chooseBaseAndGo(user, 'Catacombs of Cadera')
-    await user.click(screen.getByRole('button', { name: '⚙' }))
+    await openFromMore(user, 'Settings')
     expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument()
   })
 
@@ -421,9 +423,9 @@ describe('App', () => {
     await waitForSetup()
     await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByText('Start'))
-    await user.click(screen.getByRole('button', { name: '⚙' }))
+    await openFromMore(user, 'Settings')
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
+    expect(screen.getByText('30 HP left')).toBeInTheDocument()
   })
 
   it('Clicking back from settings returns to setup after settings -> help -> back', async () => {
@@ -443,11 +445,11 @@ describe('App', () => {
     await waitForSetup()
     await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await user.click(screen.getByText('Start'))
-    await user.click(screen.getByRole('button', { name: '⚙' }))
+    await openFromMore(user, 'Settings')
     await user.click(screen.getByRole('button', { name: 'Help' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
+    expect(screen.getByText('30 HP left')).toBeInTheDocument()
   })
 
 })
@@ -712,7 +714,7 @@ describe('App tournament navigation', () => {
     await waitFor(() => expect(screen.getByText('Start')).toBeInTheDocument())
     await user.click(screen.getByText('Start'))
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('0'))
-    await user.click(screen.getByText('+'))
+    await user.click(screen.getByTestId('game-card'))
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('1'))
 
     // Navigate back to tournament
@@ -765,9 +767,11 @@ describe('App tournament navigation', () => {
     // Record game 1 win: navigate to game, click You → Confirm, then Back to tournament
     await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'YOU' })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'YOU' }))
-    await user.click(screen.getByRole('button', { name: 'WIN' }))
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    await user.click(screen.getByTestId('game-counter'))
+    await user.click(screen.getByRole('button', { name: 'End game' }))
+    await user.click(screen.getByRole('button', { name: 'Won' }))
+    await user.click(screen.getByRole('button', { name: 'Record win' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     // Now on tournament screen with hasPlayedGameInCurrentMatch=true, so Change base is offered
     await waitFor(() => expect(screen.getByRole('button', { name: 'Change base' })).toBeInTheDocument())
@@ -775,6 +779,35 @@ describe('App tournament navigation', () => {
     await user.click(within(screen.getByRole('dialog', { name: 'Choose your base' })).getByRole('button', { name: /^Energy Conversion Lab/ }))
     await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    await user.click(screen.getByTestId('game-counter'))
+    expect(mockOnGameStart).toHaveBeenLastCalledWith('SOR-022', 'SOR', false, 'bo3')
+  })
+
+  it('changes base between games from the game screen’s More menu in limited bo3', async () => {
+    mockUserSettings.useHyperspace = false
+    const user = userEvent.setup()
+    mockUseTournament.tournament = {
+      base: { set: 'SOR', number: '026', name: 'Catacombs of Cadera', subtitle: 'Jedha', hp: 30,
+        frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
+        hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
+      format: 'limited',
+      playMode: 'bo3',
+      totalRounds: 3,
+      rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],
+    }
+    mockUseTournament.matchInProgress = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    await user.click(screen.getByTestId('game-counter'))
+    await user.click(screen.getByRole('button', { name: 'End game' }))
+    await user.click(screen.getByRole('button', { name: 'Lost' }))
+    await user.click(screen.getByRole('button', { name: 'Record loss' }))
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    await user.click(screen.getByRole('button', { name: 'Change base' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Choose your base' })).getByRole('button', { name: /^Energy Conversion Lab/ }))
+    await waitFor(() => expect(screen.getByAltText('Energy Conversion Lab')).toBeInTheDocument())
     await user.click(screen.getByTestId('game-counter'))
     expect(mockOnGameStart).toHaveBeenLastCalledWith('SOR-022', 'SOR', false, 'bo3')
   })
