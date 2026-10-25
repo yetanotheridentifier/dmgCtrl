@@ -496,7 +496,7 @@ export default function XwingGameScreenView(props: Props) {
       return (
         <>
           <div data-testid="result-banner" style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ fontSize: '20px', fontWeight: 600, color: RESULT_COLOUR[result] }}>{RESULT_TEXT[result]}</span>
+            <span style={{ fontSize: '18px', fontWeight: 600, color: RESULT_COLOUR[result] }}>{RESULT_TEXT[result]}</span>
             {reason && <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{reason}</span>}
           </div>
           <Breakdown player={playerBreakdown} opponent={opponentBreakdown} result={result} />
@@ -574,10 +574,13 @@ export default function XwingGameScreenView(props: Props) {
             <span style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>{enableXwingPhases ? `Round ${round} / 12` : 'Timer'}</span>
             <TimerDisplay remaining={timerRemaining} testId="xwing-timer" style={{ fontSize: '18px', fontWeight: 300, letterSpacing: '0.06em' }} />
           </button>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px', flexShrink: 0 }}>
-            <ScoreTile side="player" score={playerScore} first={showFirst && initiative === 'player'} />
-            <ScoreTile side="opponent" score={opponentScore} first={showFirst && initiative === 'opponent'} />
-          </div>
+          {/* At game over the breakdown carries the totals, which leaves room for its choices. */}
+          {!gameOver && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px', flexShrink: 0 }}>
+              <ScoreTile side="player" score={playerScore} first={showFirst && initiative === 'player'} />
+              <ScoreTile side="opponent" score={opponentScore} first={showFirst && initiative === 'opponent'} />
+            </div>
+          )}
           {playing && scenario && scenario !== 'None' && <div data-testid="scenario-name" style={{ ...MUTED_CAPS, textAlign: 'center' }}>{scenario}</div>}
           {centre}
         </div>
