@@ -795,6 +795,166 @@ describe('SwuSetupScreen: SWUDB link', () => {
   })
 })
 
+describe('SwuSetupScreen: mode', () => {
+  const mode = () => screen.getByRole('group', { name: 'Mode' })
+
+  it('offers 1 player and 2 players, 1 player the first time', () => {
+    renderSetup()
+    expect(within(mode()).getAllByRole('button').map(b => b.textContent)).toEqual(['1 player', '2 players'])
+    expect(within(mode()).getByRole('button', { name: '1 player' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('1 player shows your base only', () => {
+    keep(jediTemple)
+    renderSetup()
+    expect(screen.queryByTestId('their-base-card')).not.toBeInTheDocument()
+  })
+
+  it('is kept for the next visit', async () => {
+    const first = renderSetup()
+    await userEvent.setup().click(screen.getByRole('button', { name: '2 players' }))
+    first.unmount()
+    renderSetup()
+    expect(within(mode()).getByRole('button', { name: '2 players' })).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+describe('SwuSetupScreen: their base', () => {
+  const theirCard = () => screen.getByTestId('their-base-card')
+  const theirSheet = () => screen.getByRole('dialog', { name: 'Choose their base' })
+  const key = (b: Base) => `${b.set}-${b.number}`
+
+  // Two players, with your base and theirs as an earlier visit left them.
+  function keep2p(base: Base | null, extra: Record<string, unknown> = {}) {
+    store.set('swu_setup', JSON.stringify({
+      ...(base ? { baseKey: key(base) } : {}),
+      recentBaseKeys: [],
+      matchType: 'casual',
+      mode: '2p',
+      ...extra,
+    }))
+  }
+
+  it('with no base for them, the card asks you to choose it and Go to game waits for it', () => {
+    keep2p(jediTemple)
+    renderSetup()
+    expect(within(baseCard()).getByText('Jedi Temple')).toBeInTheDocument()
+    expect(within(theirCard()).getByText('Their base')).toBeInTheDocument()
+    expect(within(theirCard()).getByRole('button', { name: /Choose their base/ })).toBeInTheDocument()
+    expect(primary('Go to game')).toBeDisabled()
+    expect(screen.getByText('Choose their base to start.')).toBeInTheDocument()
+  })
+
+  it('Choose their base opens the base sheet for them; a tile sets their base, not yours', async () => {
+    const user = userEvent.setup()
+    keep2p(jediTemple)
+    renderSetup()
+    await user.click(within(theirCard()).getByRole('button', { name: /Choose their base/ }))
+    await user.click(tile('Catacombs of Cadera', theirSheet()))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(within(theirCard()).getByText('Catacombs of Cadera')).toBeInTheDocument()
+    expect(within(baseCard()).getByText('Jedi Temple')).toBeInTheDocument()
+    expect(primary('Go to game')).toBeEnabled()
+    expect(screen.queryByText('Choose their base to start.')).not.toBeInTheDocument()
+  })
+
+  it('shows their base with its name, set and HP, a Change base and no Favourite toggle', () => {
+    keep2p(jediTemple, { theirBaseKey: key(catacombs) })
+    renderSetup()
+    expect(within(theirCard()).getByText('Catacombs of Cadera')).toBeInTheDocument()
+    expect(within(theirCard()).getByText('SOR · 30 HP')).toBeInTheDocument()
+    expect(within(theirCard()).getByRole('button', { name: 'Change base' })).toBeInTheDocument()
+    expect(within(theirCard()).queryByRole('button', { name: /Favourite/ })).not.toBeInTheDocument()
+  })
+
+  it('Change base on their card marks their base in the sheet', async () => {
+    const user = userEvent.setup()
+    keep2p(jediTemple, { theirBaseKey: key(catacombs) })
+    renderSetup()
+    await user.click(within(theirCard()).getByRole('button', { name: 'Change base' }))
+    await user.type(within(theirSheet()).getByRole('searchbox'), 'cadera')
+    expect(tile('Catacombs of Cadera', theirSheet())).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('Go to game passes both bases', async () => {
+    const onConfirm = vi.fn()
+    keep2p(jediTemple, { theirBaseKey: key(catacombs) })
+    renderSetup({ onConfirm })
+    await userEvent.setup().click(primary('Go to game'))
+    expect(onConfirm).toHaveBeenCalledWith(jediTemple, 'casual', catacombs)
+  })
+
+  it('their base is kept from the last 2-player game and says so', async () => {
+    const user = userEvent.setup()
+    keep2p(jediTemple, { theirBaseKey: key(catacombs) })
+    const first = renderSetup()
+    expect(within(theirCard()).queryByText('Same as last game')).not.toBeInTheDocument()
+    await user.click(primary('Go to game'))
+    first.unmount()
+    renderSetup()
+    expect(within(theirCard()).getByText('Catacombs of Cadera')).toBeInTheDocument()
+    expect(within(theirCard()).getByText('Same as last game')).toBeInTheDocument()
+  })
+
+  it('their base does not enter your recent bases', async () => {
+    const user = userEvent.setup()
+    keep2p(jediTemple, { theirBaseKey: key(catacombs) })
+    const first = renderSetup()
+    await user.click(primary('Go to game'))
+    first.unmount()
+    renderSetup()
+    await user.click(within(theirCard()).getByRole('button', { name: 'Change base' }))
+    expect(within(within(theirSheet()).getByRole('group', { name: 'Recent' })).getAllByRole('button').map(b => b.textContent)).toEqual([
+      expect.stringMatching(/^Jedi Temple/),
+    ])
+  })
+
+  it('outside a tournament the sheet lists every base for them', async () => {
+    const user = userEvent.setup()
+    keep2p(jediTemple, { format: 'premier' })
+    renderSetup()
+    await user.click(within(theirCard()).getByRole('button', { name: /Choose their base/ }))
+    await user.type(within(theirSheet()).getByRole('searchbox'), 'echo')
+    expect(tile('Echo Caverns', theirSheet())).toBeInTheDocument()
+  })
+
+  it('in a tournament the sheet lists only the bases legal in its format for them too', async () => {
+    const user = userEvent.setup()
+    keep2p(jediTemple, { matchType: 'tournament', format: 'premier' })
+    renderSetup()
+    await user.click(within(theirCard()).getByRole('button', { name: /Choose their base/ }))
+    await user.type(within(theirSheet()).getByRole('searchbox'), 'e')
+    const listed = within(within(theirSheet()).getByRole('group', { name: 'Results' })).getAllByRole('button').map(b => b.textContent ?? '')
+    expect(listed.some(n => n.startsWith('Jedi Temple'))).toBe(true)
+    expect(listed.some(n => n.startsWith('Echo Caverns'))).toBe(false)
+  })
+
+  it('Start tournament waits for their base too', async () => {
+    keep2p(jediTemple, { matchType: 'tournament' })
+    renderSetup()
+    expect(primary('Start tournament')).toBeDisabled()
+    expect(screen.getByText('Choose their base to start.')).toBeInTheDocument()
+  })
+
+  it('back to 1 player hides their base and Go to game is ready with yours alone', async () => {
+    keep2p(jediTemple)
+    renderSetup()
+    await userEvent.setup().click(screen.getByRole('button', { name: '1 player' }))
+    expect(screen.queryByTestId('their-base-card')).not.toBeInTheDocument()
+    expect(primary('Go to game')).toBeEnabled()
+  })
+
+  it('in portrait shows both cards, Mode, Match and the primary', () => {
+    makeMatchMediaMock(true)
+    keep2p(jediTemple, { theirBaseKey: key(catacombs) })
+    renderSetup()
+    expect(within(baseCard()).getByText('Jedi Temple')).toBeInTheDocument()
+    expect(within(theirCard()).getByText('Catacombs of Cadera')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Mode' })).toBeInTheDocument()
+    expect(primary('Go to game')).toBeEnabled()
+  })
+})
+
 describe('SwuSetupScreen: portrait', () => {
   it('shows the same card, Match and primary', () => {
     makeMatchMediaMock(true)

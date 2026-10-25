@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useSwuSetup, filterBases, baseKey } from '../hooks/useSwuSetup'
+import { useSwuSetup, filterBases, baseKey, SWU_MODES } from '../hooks/useSwuSetup'
 import { useBases, Base } from '../hooks/useBases'
 
 vi.mock('../hooks/useBases')
@@ -206,6 +206,147 @@ describe('useSwuSetup: tournament format', () => {
     store.set('swu_setup', JSON.stringify({ recentBaseKeys: [], matchType: 'tournament', format: 'nonsense' }))
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
     expect(result.current.format).toBe('premier')
+  })
+})
+
+describe('useSwuSetup: mode', () => {
+  it('is 1 player the first time', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.mode).toBe('1p')
+  })
+
+  it('offers 1 player and 2 players', () => {
+    expect(SWU_MODES.map(m => m.label)).toEqual(['1 player', '2 players'])
+  })
+
+  it('is kept across launches', () => {
+    const first = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => first.result.current.setMode('2p'))
+    first.unmount()
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.mode).toBe('2p')
+  })
+
+  it('an unreadable stored mode reads as 1 player', () => {
+    store.set('swu_setup', JSON.stringify({ recentBaseKeys: [], matchType: 'casual', mode: 'nonsense' }))
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.mode).toBe('1p')
+  })
+})
+
+describe('useSwuSetup: their base', () => {
+  const twoPlayers = () => {
+    const hook = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => hook.result.current.setMode('2p'))
+    return hook
+  }
+
+  it('has no base for them the first time', () => {
+    const { result } = twoPlayers()
+    expect(result.current.theirBase).toBeNull()
+  })
+
+  it('chooseTheirBase sets their base, leaving yours as it was', () => {
+    const { result } = twoPlayers()
+    act(() => result.current.chooseBase(jediTemple))
+    act(() => result.current.chooseTheirBase(catacombs))
+    expect(result.current.theirBase).toBe(catacombs)
+    expect(result.current.base).toBe(jediTemple)
+  })
+
+  it('is kept across launches', () => {
+    const first = twoPlayers()
+    act(() => first.result.current.chooseTheirBase(catacombs))
+    first.unmount()
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.theirBase).toBe(catacombs)
+  })
+
+  it('is from the last game once a 2-player game is played with it, not before', () => {
+    const { result } = twoPlayers()
+    act(() => result.current.chooseBase(jediTemple))
+    act(() => result.current.chooseTheirBase(catacombs))
+    expect(result.current.theirBaseFromLastGame).toBe(false)
+    act(() => result.current.handleSubmit())
+    expect(result.current.theirBaseFromLastGame).toBe(true)
+    act(() => result.current.chooseTheirBase(echo))
+    expect(result.current.theirBaseFromLastGame).toBe(false)
+  })
+
+  it('is kept from the last 2-player game across launches', () => {
+    const first = twoPlayers()
+    act(() => first.result.current.chooseBase(jediTemple))
+    act(() => first.result.current.chooseTheirBase(catacombs))
+    act(() => first.result.current.handleSubmit())
+    first.unmount()
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.theirBase).toBe(catacombs)
+    expect(result.current.theirBaseFromLastGame).toBe(true)
+  })
+
+  it('a 1-player game leaves their base as it was', () => {
+    const { result } = twoPlayers()
+    act(() => result.current.chooseBase(jediTemple))
+    act(() => result.current.chooseTheirBase(catacombs))
+    act(() => result.current.handleSubmit())
+    act(() => result.current.setMode('1p'))
+    act(() => result.current.handleSubmit())
+    act(() => result.current.setMode('2p'))
+    expect(result.current.theirBase).toBe(catacombs)
+    expect(result.current.theirBaseFromLastGame).toBe(true)
+  })
+
+  it('does not enter the recent bases', () => {
+    const { result } = twoPlayers()
+    act(() => result.current.chooseBase(jediTemple))
+    act(() => result.current.chooseTheirBase(catacombs))
+    act(() => result.current.handleSubmit())
+    expect(result.current.recentBases).toEqual([jediTemple])
+  })
+})
+
+describe('useSwuSetup: starting with 2 players', () => {
+  it('handleSubmit waits for their base', () => {
+    const onConfirm = vi.fn()
+    const { result } = renderHook(() => useSwuSetup(onConfirm))
+    act(() => result.current.setMode('2p'))
+    act(() => result.current.chooseBase(jediTemple))
+    act(() => result.current.handleSubmit())
+    expect(onConfirm).not.toHaveBeenCalled()
+    expect(result.current.recentBases).toEqual([])
+  })
+
+  it('handleSubmit passes their base too', () => {
+    const onConfirm = vi.fn()
+    const { result } = renderHook(() => useSwuSetup(onConfirm))
+    act(() => result.current.setMode('2p'))
+    act(() => result.current.chooseBase(jediTemple))
+    act(() => result.current.chooseTheirBase(catacombs))
+    act(() => result.current.handleSubmit())
+    expect(onConfirm).toHaveBeenCalledWith(jediTemple, 'casual', catacombs)
+  })
+
+  it('in 1 player, a kept base for them is not passed', () => {
+    const onConfirm = vi.fn()
+    const { result } = renderHook(() => useSwuSetup(onConfirm))
+    act(() => result.current.chooseBase(jediTemple))
+    act(() => result.current.chooseTheirBase(catacombs))
+    act(() => result.current.handleSubmit())
+    expect(onConfirm).toHaveBeenCalledWith(jediTemple, 'casual')
+  })
+
+  it('handleStartTournament waits for their base, then passes it', () => {
+    const onStart = vi.fn()
+    const settings = { format: 'premier' as const, playMode: 'bo3' as const, totalRounds: 5 }
+    const { result } = renderHook(() => useSwuSetup(vi.fn(), onStart))
+    act(() => result.current.setMode('2p'))
+    act(() => result.current.chooseBase(jediTemple))
+    act(() => result.current.handleStartTournament(settings))
+    expect(onStart).not.toHaveBeenCalled()
+    act(() => result.current.chooseTheirBase(catacombs))
+    act(() => result.current.handleStartTournament(settings))
+    expect(onStart).toHaveBeenCalledWith(jediTemple, settings, catacombs)
+    expect(result.current.theirBaseFromLastGame).toBe(true)
   })
 })
 
