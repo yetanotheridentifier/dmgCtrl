@@ -68,6 +68,18 @@ The Force button appears according to the **Force Token Display** setting (defau
 
 **Mystic Monastery** (LOF-022) can create the Force up to three times a game. Its Force button shows the uses left (**3 LEFT** at the start). Each tap gains the Force and uses one; tap again when you use the Force. After the third use the button is disabled.
 
+### Two players
+
+With **2 players** chosen in setup, one phone lies flat on the table between you. The screen is portrait and split in two: the bottom half is yours, the top half is theirs, turned round to face them. It stays that way whichever way the phone thinks it is turned, since a phone lying flat flips unreliably.
+
+Each half has its player's base as the damage control, exactly as in 1 player: tap for 1, drag up (from that player's side) to add several, drag down to remove. Each half counts its own damage, and both can be touched at once. At each player's edge sit their **epic action** or **Force** button and **Initiative**: tap **Take initiative** on your half to take it from the other player. With **Damage −/+ buttons** on, each half has its own − and +.
+
+The strip across the middle holds **Back**, **Log**, **Round**, **End game** and **More**, and in a best of 1 or 3 the timer with the games score. Before the game both cards say **Start**: tap either to begin. Round and End game wait for the game to start. The middle strip's text faces the bottom player.
+
+Log entries name the base ("Their base: 3 damage"), and the log opens over your half. Undo takes back the newest entry, on whichever half it was.
+
+**Ending a game:** when either base reaches 0 HP, End game opens by itself, worded for the bottom player: Won when their base is destroyed, Lost when yours is. Results are recorded from your side, in casual play, best of 1 and 3 and tournaments alike. After a casual game each half shows its own result (**Game won** or **Game lost**), and the middle strip offers **New setup** and **Rematch** (both bases kept, damage reset).
+
 ## Settings
 
 Settings is in the **More** menu on the setup and game screens.

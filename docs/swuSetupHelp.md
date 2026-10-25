@@ -14,7 +14,7 @@ Setup has four things: **Mode**, **Your base** (and **Their base** with 2 player
 
 Choose **1 player** to track your base alone, or **2 players** to set up a base for each side. Your choice is kept for next time; the first time it is 1 player.
 
-With 2 players the game screen still tracks your base only for now: **Go to game** opens the same game as 1 player, and their base is kept in setup for next time.
+With 2 players, **Go to game** opens the two-player game: one phone flat on the table between you, with a half each (see Help on the game screen).
 
 ### Your base
 
