@@ -81,3 +81,65 @@ export function useDragScrubber(
     handlePointerCancel: clearDrag,
   }
 }
+
+// One surface for both directions: a tap is +1, dragging up adds and dragging down removes, from 1
+// just past the dead zone, capped at what can be added or removed. Shares the buttons' dead zone and step.
+export function useCardDrag(
+  onTap: () => void,
+  onIncrement: (n: number) => void,
+  onDecrement: (n: number) => void,
+  maxIncrement: number,
+  maxDecrement: number,
+  enabled: boolean,
+) {
+  const dragRef = useRef<{ startY: number; type: '+' | '-' | null; value: number } | null>(null)
+  const [amount, setAmount] = useState<{ type: '+' | '-'; value: number } | null>(null)
+  const dragApplied = useRef(false)
+
+  const clearDrag = () => {
+    dragRef.current = null
+    setAmount(null)
+  }
+
+  const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
+    if (!enabled) return
+    if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId)
+    dragRef.current = { startY: e.clientY, type: null, value: 0 }
+  }
+
+  const onPointerMove = (e: React.PointerEvent<HTMLElement>) => {
+    const dr = dragRef.current
+    if (!dr) return
+    const delta = dr.startY - e.clientY
+    if (Math.abs(delta) < DEAD_ZONE) {
+      dr.type = null
+      if (amount !== null) setAmount(null)
+      return
+    }
+    const type = delta > 0 ? '+' : '-'
+    const max = type === '+' ? maxIncrement : maxDecrement
+    const value = Math.min(max, Math.round((Math.abs(delta) - DEAD_ZONE) / PX_PER_STEP) + 1)
+    dr.type = type
+    dr.value = value
+    setAmount(value > 0 ? { type, value } : null)
+  }
+
+  const onPointerUp = () => {
+    const dr = dragRef.current
+    if (dr?.type) {
+      dragApplied.current = true
+      if (dr.value > 0) (dr.type === '+' ? onIncrement : onDecrement)(dr.value)
+    }
+    clearDrag()
+  }
+
+  const onClick = () => {
+    if (dragApplied.current) {
+      dragApplied.current = false
+      return
+    }
+    onTap()
+  }
+
+  return { amount, onClick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel: clearDrag }
+}

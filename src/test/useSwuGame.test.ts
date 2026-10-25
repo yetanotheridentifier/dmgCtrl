@@ -98,23 +98,6 @@ describe('useSwuGame', () => {
     expect(result.current.forceActive).toBe(false)
   })
 
-  it('forceEnabled starts as false', () => {
-    const { result } = renderHook(() => useSwuGame(30))
-    expect(result.current.forceEnabled).toBe(false)
-  })
-
-  it('enableForce sets forceEnabled to true', () => {
-    const { result } = renderHook(() => useSwuGame(30))
-    act(() => result.current.enableForce())
-    expect(result.current.forceEnabled).toBe(true)
-  })
-
-  it('enableForce does not affect forceActive', () => {
-    const { result } = renderHook(() => useSwuGame(30))
-    act(() => result.current.enableForce())
-    expect(result.current.forceActive).toBe(false)
-  })
-
   // --- Mystic Monastery ---
 
   it('mysticUsesRemaining starts at 3', () => {
@@ -185,7 +168,6 @@ describe('useSwuGame', () => {
       damage: 1,
       epicActionUsed: false,
       forceActive: false,
-      forceEnabled: false,
       mysticUsesRemaining: 3,
       round: 0,
     })
@@ -196,7 +178,7 @@ describe('useSwuGame', () => {
     act(() => {
       result.current.incrementBy(5)
       result.current.markEpicActionUsed()
-      result.current.enableForce()
+      result.current.toggleForce()
       result.current.incrementRound()
     })
     const snap = result.current.snapshot()
@@ -205,7 +187,7 @@ describe('useSwuGame', () => {
     act(() => result.current.restoreState(snap))
     expect(result.current.count).toBe(5)
     expect(result.current.epicActionUsed).toBe(true)
-    expect(result.current.forceEnabled).toBe(true)
+    expect(result.current.forceActive).toBe(true)
     expect(result.current.round).toBe(1)
   })
 
@@ -225,7 +207,6 @@ describe('useSwuGame', () => {
     act(() => {
       result.current.incrementBy(10)
       result.current.markEpicActionUsed()
-      result.current.enableForce()
       result.current.toggleForce()
       result.current.gainForceViaMonastery()
       result.current.incrementRound()
@@ -234,7 +215,6 @@ describe('useSwuGame', () => {
     expect(result.current.count).toBe(0)
     expect(result.current.epicActionUsed).toBe(false)
     expect(result.current.forceActive).toBe(false)
-    expect(result.current.forceEnabled).toBe(false)
     expect(result.current.mysticUsesRemaining).toBe(3)
     expect(result.current.round).toBe(0)
   })

@@ -5,6 +5,7 @@ import type { TournamentState } from '../hooks/useTournament'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { onTournamentDropped, onTournamentEnded } from '../services/analytics'
 import { playerPortalUrl } from '../utils/meleeUrl'
+import { limitedBaseOptions } from '../utils/formatFilter'
 import SwuTournamentScreenView from './swuTournamentScreenView'
 
 interface Props {
@@ -53,8 +54,7 @@ export default function SwuTournamentScreen({
     && hasPlayedGameInCurrentMatch
     && !isComplete
 
-  // A Limited pool is one set: the base changes to another of that set.
-  const changeBaseOptions = bases.filter(b => b.set === tournament.base.set)
+  const changeBaseOptions = limitedBaseOptions(bases, tournament.base)
 
   const handleNext = () => {
     if (!matchInProgress) {

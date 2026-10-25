@@ -47,6 +47,11 @@ export function isBaseValidForFormat(format: Format, base: Base): boolean {
   return isSetValidForFormat(base.set, format)
 }
 
+// A Limited pool is one set: between games the base changes to another of that set.
+export function limitedBaseOptions(bases: Base[], registered: Base): Base[] {
+  return bases.filter(b => b.set === registered.set)
+}
+
 export function formatValidationError(format: Format, base: Base): string {
   return `${base.name} (${base.set}) isn’t legal in ${FORMAT_LABELS[format]}.`
 }

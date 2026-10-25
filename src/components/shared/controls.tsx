@@ -49,10 +49,12 @@ interface IconButtonProps {
   label: string
   children: ReactNode
   onClick?: () => void
+  // Size overrides, such as the SWU game's 60px margin column.
+  style?: React.CSSProperties
 }
 
 // Icon-only, so the label is what a screen reader announces. Kept to back, log, more and roll.
-export function IconButton({ label, children, onClick }: IconButtonProps) {
+export function IconButton({ label, children, onClick, style }: IconButtonProps) {
   return (
     <button
       type="button"
@@ -69,6 +71,7 @@ export function IconButton({ label, children, onClick }: IconButtonProps) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        ...style,
       }}
     >
       {children}

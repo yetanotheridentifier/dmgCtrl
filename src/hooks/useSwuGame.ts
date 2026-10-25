@@ -4,7 +4,6 @@ export type GameState = {
   damage: number
   epicActionUsed: boolean
   forceActive: boolean
-  forceEnabled: boolean
   mysticUsesRemaining: number
   round: number
 }
@@ -13,7 +12,6 @@ export function useSwuGame(maxHp: number) {
   const [count, setCount] = useState(0)
   const [epicActionUsed, setEpicActionUsed] = useState(false)
   const [forceActive, setForceActive] = useState(false)
-  const [forceEnabled, setForceEnabled] = useState(false)
   const [mysticUsesRemaining, setMysticUsesRemaining] = useState(3)
   const [round, setRound] = useState(0)
 
@@ -23,7 +21,6 @@ export function useSwuGame(maxHp: number) {
   const decrementBy = (n: number) => setCount(c => Math.max(0, c - n))
   const markEpicActionUsed = () => setEpicActionUsed(true)
   const toggleForce = () => setForceActive(v => !v)
-  const enableForce = () => setForceEnabled(true)
   const gainForceViaMonastery = () => {
     setMysticUsesRemaining(n => n - 1)
     setForceActive(true)
@@ -34,7 +31,6 @@ export function useSwuGame(maxHp: number) {
     damage: count,
     epicActionUsed,
     forceActive,
-    forceEnabled,
     mysticUsesRemaining,
     round,
   })
@@ -43,7 +39,6 @@ export function useSwuGame(maxHp: number) {
     setCount(s.damage)
     setEpicActionUsed(s.epicActionUsed)
     setForceActive(s.forceActive)
-    setForceEnabled(s.forceEnabled)
     setMysticUsesRemaining(s.mysticUsesRemaining)
     setRound(s.round)
   }
@@ -52,7 +47,6 @@ export function useSwuGame(maxHp: number) {
     setCount(0)
     setEpicActionUsed(false)
     setForceActive(false)
-    setForceEnabled(false)
     setMysticUsesRemaining(3)
     setRound(0)
   }
@@ -67,8 +61,6 @@ export function useSwuGame(maxHp: number) {
     markEpicActionUsed,
     forceActive,
     toggleForce,
-    forceEnabled,
-    enableForce,
     mysticUsesRemaining,
     gainForceViaMonastery,
     round,
