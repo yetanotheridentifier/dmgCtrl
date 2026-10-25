@@ -334,25 +334,29 @@ describe('useUserSettings', () => {
     expect(result.current.enableCompetitiveMode).toBe(true)
   })
 
-  it('defaults enableGameSelect to true when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableGameSelect).toBe(true)
-  })
+  // --- Retired keys ---
 
-  it('falls back to true for enableGameSelect when stored JSON is corrupt', () => {
+  it('loads stored settings that still carry the retired enableGameSelect key', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? 'not-valid-json{{{' : null
+      key === STORAGE_KEY
+        ? JSON.stringify({ enableGameSelect: false, useHyperspace: false, startScreen: 'xwing' })
+        : null
     )
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableGameSelect).toBe(true)
+    expect(result.current.useHyperspace).toBe(false)
+    expect(result.current.startScreen).toBe('xwing')
+    expect('enableGameSelect' in result.current).toBe(false)
   })
 
-  it('falls back to true for enableGameSelect when missing from stored JSON', () => {
+  it('drops the retired enableGameSelect key on the next save', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
+      key === STORAGE_KEY ? JSON.stringify({ enableGameSelect: false }) : null
     )
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableGameSelect).toBe(true)
+    act(() => result.current.setUseHyperspace(false))
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
+    expect(saved.useHyperspace).toBe(false)
+    expect('enableGameSelect' in saved).toBe(false)
   })
 
   it('defaults startScreen to gameSelect when storage is empty', () => {

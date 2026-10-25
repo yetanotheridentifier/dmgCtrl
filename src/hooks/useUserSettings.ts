@@ -16,7 +16,6 @@ interface UserSettings {
   enableActionLog: boolean
   enableInitiativeBar: boolean
   enableCompetitiveMode: boolean
-  enableGameSelect: boolean
   enableXwingPhases: boolean
   enableXwingAlwaysIncDec: boolean
   // SWU game: − and + in the margins beside the card, as well as tapping and dragging the card.
@@ -42,7 +41,6 @@ const DEFAULTS: UserSettings = {
   enableActionLog: true,
   enableInitiativeBar: true,
   enableCompetitiveMode: true,
-  enableGameSelect: true,
   enableXwingPhases: true,
   enableXwingAlwaysIncDec: false,
   enableDamageButtons: false,
@@ -80,7 +78,6 @@ function load(): UserSettings {
       enableActionLog: (parsed.enableActionLog as boolean) ?? DEFAULTS.enableActionLog,
       enableInitiativeBar: (parsed.enableInitiativeBar as boolean) ?? DEFAULTS.enableInitiativeBar,
       enableCompetitiveMode: (parsed.enableCompetitiveMode as boolean) ?? DEFAULTS.enableCompetitiveMode,
-      enableGameSelect: (parsed.enableGameSelect as boolean) ?? DEFAULTS.enableGameSelect,
       enableXwingPhases: (parsed.enableXwingPhases as boolean) ?? DEFAULTS.enableXwingPhases,
       enableXwingAlwaysIncDec: (parsed.enableXwingAlwaysIncDec as boolean) ?? DEFAULTS.enableXwingAlwaysIncDec,
       enableDamageButtons: (parsed.enableDamageButtons as boolean) ?? DEFAULTS.enableDamageButtons,
@@ -111,7 +108,6 @@ type UserSettingsValue = UserSettings & {
   setEnableActionLog: (v: boolean) => void
   setEnableInitiativeBar: (v: boolean) => void
   setEnableCompetitiveMode: (v: boolean) => void
-  setEnableGameSelect: (v: boolean) => void
   setEnableXwingPhases: (v: boolean) => void
   setEnableXwingAlwaysIncDec: (v: boolean) => void
   setEnableDamageButtons: (v: boolean) => void
@@ -145,7 +141,6 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     enableActionLog: settings.enableActionLog,
     enableInitiativeBar: settings.enableInitiativeBar,
     enableCompetitiveMode: settings.enableCompetitiveMode,
-    enableGameSelect: settings.enableGameSelect,
     enableXwingPhases: settings.enableXwingPhases,
     enableXwingAlwaysIncDec: settings.enableXwingAlwaysIncDec,
     enableDamageButtons: settings.enableDamageButtons,
@@ -163,7 +158,6 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     setEnableActionLog: (v) => update({ enableActionLog: v }),
     setEnableInitiativeBar: (v) => update({ enableInitiativeBar: v }),
     setEnableCompetitiveMode: (v) => update({ enableCompetitiveMode: v }),
-    setEnableGameSelect: (v) => update({ enableGameSelect: v }),
     setEnableXwingPhases: (v) => update({ enableXwingPhases: v }),
     setEnableXwingAlwaysIncDec: (v) => update({ enableXwingAlwaysIncDec: v }),
     setEnableDamageButtons: (v) => update({ enableDamageButtons: v }),
