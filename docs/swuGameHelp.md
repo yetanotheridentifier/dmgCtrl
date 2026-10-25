@@ -2,141 +2,86 @@
 
 ## During a Game
 
-The base card fills the screen, with the damage counter overlaid across the middle.
+Your phone stands in for your base. The card fills the screen from top to bottom, and the controls sit in the narrow margins either side of it. Nothing covers the card's top band (HP, name, aspect) or its text box; the damage goes in the open art between them.
 
-**Starting a game:** the counter shows **Start** until you tap it (or tap the round tracker). Tapping Start advances the round to 1, enables the **+** and **−** buttons, and shows the Remaining HP display.
+**Starting a game:** the card shows **Start**. Tap the card to begin round 1. Between games of a best of 3 it shows the last result and **Start game N**.
 
-- Tap **+** to add 1 damage
-- Tap **−** to remove 1 damage (won't go below zero)
-- **Remaining** shows your starting HP minus damage taken so far
+### Damage
 
-### Adding or removing multiple damage at once
+The card is the damage control:
 
-For larger hits or recovery, press and hold **+** or **−**, then drag upward:
+- **Tap the card** to add 1 damage
+- **Drag up** on the card to add several, **drag down** to remove several. The amount shows on the card while you drag and is applied when you let go. It grows by 1 for roughly every 14px you move, and stops at what your base can take (up) or the damage it has (down)
 
-1. **Press and hold** the button — keep your finger down
-2. **Drag upward** — a number appears showing how many damage points will be applied
-3. **Release** — all the damage is applied at once
+The big number is the damage taken; **HP left** under it is your base's HP minus that damage.
 
-The number increases by 1 for roughly every 14px of upward movement, starting from 2. It is capped at the remaining capacity: the `+` button won't exceed the base's remaining HP, and `−` won't go below zero.
+With **Damage −/+ buttons** on, **−** sits at the foot of the left margin and **+** at the foot of the right. Tap for 1, or press, hold and drag upward on either for several.
 
-### Action Log
+### Left margin
 
-When **Enable Action Log** is on in Settings, a log button appears in the bottom-left corner of the game screen.
+From the top:
 
-- Tap it to open the action log — a scrollable panel listing all game events
-- The most recent action shows an **Undo** button — tap it to revert to the state before that action
-- Round entries cannot be undone
-- Tap the log button again to close it
+- **Back** returns to setup (or to the tournament). In casual play the damage resets
+- The **epic action** button, on a base with an epic action: greyed until the game starts, then gold. Tap it once you've used the epic action: it greys out with **USED**, and an **EPIC ACTION USED** token covers the card's text box, as the physical token does
+- The **Force** button, on a base that creates the Force (see below)
+- The **initiative bar**: **OPP** at the top, **YOU** at the bottom. Tap the side that has the initiative; it fills in. The bar is outlined until someone takes it. Initiative doesn't reset between rounds
 
-### Initiative Bar
+### Right margin
 
-When **Enable Initiative Bar** is on in Settings, a narrow vertical bar appears on the left side of the game screen.
+- **Log** opens the action log, a list of everything that happened this game. The newest entry has **Undo**, which takes it back; repeat to step further back. Tap Log again to close it
+- **More** holds **Help** and **Settings**, and between games of a Limited best of 3, **Change base**
+- In a best of 1 or 3: the **timer**, and the **Games** chip with the score so far (you first)
+- **Round** (once the game has started): the current round. Tap it for the next round
+- **End game** (see below)
 
-- Tap the **top half** (OPP) to record that your opponent has initiative
-- Tap the **bottom half** (YOU) to record that you have initiative
-- Tapping the same side again has no effect — once set, initiative stays with that player until you tap the other side
+### Ending a game
 
-Initiative is set at the start of each game (usually by a roll-off or a Chance Cube). It doesn't reset automatically between rounds.
+Tap **End game**, choose **Won**, **Lost** or **Draw**, and tap **Record**. **Keep playing** closes the sheet without recording. When your base reaches 0 HP, End game opens by itself with Lost chosen.
 
-### Round Tracker
+**Undo** in the log takes back a recorded result, restoring the damage and round.
 
-When **Enable Action Log** is on in Settings, a round counter button appears in the bottom-right corner.
+**Casual:** the result is shown with the round it ended in and the damage taken. **Rematch** starts again on the same base with the damage reset; **New setup** goes back to setup.
 
-- Tap it to start the game (when at 0) or advance to the next round
-- The counter starts at 0 and advances to Round 1 when you tap **Start** or the round tracker
-- Round changes appear in the action log
+**Best of 1 or 3:** the result advances the Games chip and the damage resets. The next game starts from the card. When the match is decided it goes to the tournament.
 
-### Competitive Mode (Best of 1 / Best of 3)
+**Draws**, including an intentional draw agreed before game 1, are recorded through End game, which is there before game 1 of a tournament match for that reason. A draw ends the match.
 
-When **Competitive Mode** is enabled in Settings and you select **Best of 1** or **Best of 3** on the setup screen, a score panel appears in the right column — **OPP** at the top, win marker circles, a **DRAW / timer** in the middle, more marker circles, and **YOU** at the bottom.
-
-**Recording a result:**
-- Tap **YOU** to record a win — a **WIN** button appears; tap **WIN** to confirm
-- Tap **OPP** to record a loss — a **LOSE** button appears; tap **LOSE** to confirm
-- After confirming: the score advances, damage resets to 0, and a "Game N Won/Lost" entry is added to the log
-- Tap anywhere else to cancel without recording
-
-**If your base reaches 0 HP** in a competitive game, the **LOSE** button appears automatically — tap it to confirm.
-
-**Between games (Best of 3):**
-- After a result is confirmed, the counter shows **Start Game N** — tap it to begin the next game
-- The "Game N Won/Lost" result is shown below the Start button for reference
-- Tap the **Undo** button on the game result log entry to reverse the result (restores score, damage, and the previous log entries); only available before you start the next game
-
-**Match over:**
-- After the match is decided, **Match Won**, **Match Lost**, or **Match Drawn** is shown on screen
-- The Start button and round tracker are hidden; the OPP/YOU buttons and timer are disabled
-
-To return to base selection, tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> in the top-left corner. In **Casual** play this resets the damage counter to zero, ready for a new game. In **Competitive** play it records the final result if the match is over, or abandons the match if it is still in progress.
+**Changing base (Limited best of 3):** between games, **More › Change base** lists the bases of your set. The next game is played on the one you choose.
 
 ### Timer
 
-The timer in the score panel counts down from the configured match duration (default: 25 minutes for Best of 1, 55 minutes for Best of 3). It starts when you tap **Start** at the beginning of the first game and runs continuously until the match ends.
+Casual games have no timer. In a best of 1 or 3 the timer starts with game 1 and runs until the match ends. It turns amber under five minutes and red under one.
 
-**Timer states:**
-- **Before the first game:** the timer area shows **DRAW** — tap it to record an intentional draw (see below)
-- **During play:** the timer counts down; it turns red when less than one minute remains
-- **When time expires (0:00):** the timer area shows **DRAW** again
+Tap the timer to open **Round and timer**. Before game 1, it also sets the **game length**, in 5-minute steps from 5 to 90 minutes. The length is remembered separately for best of 1 (25 minutes at first) and best of 3 (55 minutes at first), and is fixed once game 1 starts.
 
-**Recording a draw:**
-
-Draws can occur in two situations: an intentional draw agreed before the first game starts, or when time expires and neither player has a decisive lead. After time expires, complete the current round, then record the result using **YOU**, **OPP**, or **DRAW**.
-
-- Tap **DRAW** → the button highlights with a coloured border
-- Tap **DRAW** again to record the draw — the match ends immediately; **Match Drawn** is shown if scores are level, or **Match Won/Lost** if one player has more game wins
-- Tap anywhere else to cancel without recording
-
-When time expires mid-game, **YOU** and **OPP** are still available — recording a win or loss at that point also closes the match.
-
-**Configuring the timer duration:**
-
-Go to <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings → Enable Competitive Mode (must be on) to see the **Bo1 Timer** and **Bo3 Timer** steppers. Tap **+** or **−** to adjust in 5-minute increments (5–90 minutes).
+When time is called and you record a win or a loss, the match ends there.
 
 ### The Force
 
-The Force token button appears based on your **Force Token Display** setting (default: LOF bases only).
+The Force button appears according to the **Force Token Display** setting (default: LOF bases only): on Legends of the Force bases whose ability creates the Force, on every base with **Always on**, and never with **Always off**.
 
-- On **Legends of the Force** bases whose ability creates a Force token, the button starts **fully blue and ready** — tap it to gain the Force (available once the game has started)
-- On **other bases** (when **Always on** is selected), a dimmed Force icon appears — tap it once to enable it, then tap again to gain the Force
-- Tap the blue **"The Force is With You"** overlay or the greyed Force icon to dismiss it and restore the button, ready to gain the Force again
-
-The gain-Force button is disabled until the game has started (i.e. the round counter has been tapped at least once). The enable tap on non-Force bases is not gated and can be done at any time.
+- It is greyed until the game starts
+- Tap it to gain the Force: the button fills blue
+- Tap it again when you use the Force
 
 #### Mystic Monastery
 
-**Mystic Monastery** (LOF-022) can generate the Force up to three times per game as an action. A numbered button appears, which shows how many uses remain.
-- Tap the numbered button to gain the Force — the count decrements and the Force overlay appears
-- The numbered button is disabled until the game has started, and greys out while the Force overlay is active; dismiss the overlay first before using it again
-- With **Always on**, a regular Force icon also appears for gaining the Force by other means
-
-### Epic Action
-
-Some bases have a special **Epic Action** — a once-per-game ability. When your base has one, an epic action button appears in the top-left corner.
-
-- The epic action button is disabled until the game has started (round counter tapped at least once)
-- Once the game has started, the button is **highlighted in yellow**, showing the epic action is available
-- Tap it to mark it as used — the button dims and a gold token overlay appears over the lower portion of the card, covering the epic action text (mirroring the physical token used in the tabletop game)
-- When the **action log is enabled**, use the Undo button in the action log to revert the mark
-- When the **action log is disabled**, tap the overlay to dismiss it
-
-If both the Force token and the epic action token are active at the same time, they sit side by side across the bottom of the card rather than overlapping.
+**Mystic Monastery** (LOF-022) can create the Force up to three times a game. Its Force button shows the uses left (**3 LEFT** at the start). Each tap gains the Force and uses one; tap again when you use the Force. After the third use the button is disabled.
 
 ## Settings
 
-Tap the <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> button (top-right of the setup screen or game screen) to open the Settings screen.
+Settings is in the **More** menu on the setup and game screens.
 
 Your preferences are saved automatically and persist between sessions.
 
 | Setting | Default | Description |
 |---|---|---|
 | **Use Hyperspace Art** | On | When enabled, the Hyperspace variant is used by default on the game screen for any base that has one. If the Hyperspace image can't be loaded, the app falls back to the standard art. |
-| **Force Token Display** | LOF bases only | Controls when the Force token button is shown. **Always on** shows it for every base. **LOF bases only** shows it automatically for Legends of the Force bases (and hides it for others unless the Force is granted mid-game via a card). **Always off** hides the Force button entirely. |
-| **Enable Epic Actions** | On | Shows the Epic Action button on the game screen. Turn off if you prefer not to track epic actions. |
-| **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
-| **Enable Action Log** | On | Shows a scrollable log of game actions with an Undo button for the most recent action. Also enables the round tracker button. |
-| **Enable Initiative Bar** | On | Shows a vertical initiative tracker on the left side of the game screen. Tap OPP or YOU to record who has initiative. |
+| **Force Token Display** | LOF bases only | Controls when the Force button is shown. **Always on** shows it for every base. **LOF bases only** shows it for Legends of the Force bases that create the Force. **Always off** hides it. |
+| **Enable Initiative Bar** | On | Shows the initiative bar in the game screen's left margin. |
 | **Enable Favourites** | On | Reveals a star button on the setup screen to save bases as favourites, and adds a Favourites input mode for quick reselection. Saved bases are kept even when this setting is off. |
+
+The SWU game screen always shows epic actions and the log, and always keeps the screen on.
 
 ## Rules
 
@@ -147,7 +92,7 @@ The full Comprehensive Rules for Star Wars Unlimited are available on the offici
 ## Troubleshooting
 
 **The wrong base is showing:**
-Tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> on the game screen to return to the setup screen and make a new selection.
+Tap Back on the game screen to return to the setup screen and make a new selection.
 
 **Card art isn't loading:**
 This can happen if the image server is temporarily unavailable. The app will show the base name and game text in place of the card art, all game functions still work normally.

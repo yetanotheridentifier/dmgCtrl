@@ -97,7 +97,7 @@ Choose **Tournament** under Match on the setup screen, tap **Start tournament**,
 | **Best of 1** | Single-game match. Records a win, loss, or draw. Includes a match timer (default 25 min). |
 | **Best of 3** | First to 2 game wins. Records each game result and tracks the overall match score. Includes a match timer (default 55 min). |
 
-In a tournament game, the score panel appears on the right side of the game screen showing your score (You) and your opponent's score (Opp), plus the match timer. See the game help for full details on how scoring and the timer work.
+In a tournament game, the right margin of the game screen shows the match timer and the games score so far. See the game help for how results, draws and the timer work.
 
 ## Rules
 
