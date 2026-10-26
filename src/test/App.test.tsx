@@ -1099,11 +1099,11 @@ describe('App game select', () => {
     fireEvent.change(screen.getByTestId('lists-textarea'), { target: { value: JSON.stringify({
       name: 'Round Trip',
       pilots: [
-        { name: 'pilota', ship: 'shipa', points: 16 },
-        { name: 'pilotb', ship: 'shipb', points: 15 },
-        { name: 'pilotc', ship: 'shipc', points: 15 },
+        { name: 'wedgeantilles', ship: 't65xwing', points: 14 },
+        { name: 'lukeskywalker', ship: 't65xwing', points: 14 },
+        { name: 'dashrendar', ship: 'yt2400lightfreighter', points: 19 },
       ],
-      points: 46,
+      points: 47,
     }) } })
     await user.click(screen.getByRole('button', { name: 'Check' }))
     await user.click(screen.getByRole('button', { name: 'Save list' }))
