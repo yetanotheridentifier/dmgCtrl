@@ -1,3 +1,4 @@
+import type { Base } from '../hooks/useBases'
 import type { MatchResult } from '../hooks/useMatch'
 
 // Styles and words the one-player and two-player SWU game screens share (components: swuGamePieces.tsx).
@@ -7,6 +8,9 @@ export const CARD_NATURAL_HEIGHT = 1120
 export const CARD_ASPECT_RATIO = CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT
 
 export const RESULT_WORD: Record<MatchResult, string> = { won: 'won', lost: 'lost', drawn: 'drawn' }
+
+// Whether a base has an epic action to mark: its text can be a passive ability instead.
+export const hasEpicAction = (base: Base) => /epic action/i.test(base.epicAction)
 
 // A size on the card: n hundredths of its height, given one hundredth as `unit`.
 export const scaled = (unit: string, n: number) => `calc(${n} * ${unit})`

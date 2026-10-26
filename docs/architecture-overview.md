@@ -115,6 +115,8 @@ App
 │   ├── GameLogOverlay    (view — scrollable log panel of the SWU game screens (X-Wing has its own log drawer); auto-scrolls to latest entry; undo button on last undoable entry; round-type entries get a blue gradient with flat bottom corners and a top separator border, applied to all round entries including the first)
 │   ├── SwuGameScreenView (view, 1 player: left margin, card, right margin; the card is the damage control via useCardDrag; End game, Game over, More, Round and timer and base sheets from shared/controls.tsx)
 │   └── SwuGame2pView     (view, 2 players: SplitScreenLayout with a half each, their half turned round, and the shared strip between; built from the same pieces in swuGamePieces.tsx)
+├── SwuTwinSunsGame       (container, Twin Suns for 3 or 4 players on one device: the pure model in utils/twinSuns.ts, its undo log, the counter being claimed, End game's confirmation)
+│   └── SwuTwinSunsGameView (view: each base in its seat, the top row turned round, the bar facing you; BaseCard from swuGamePieces.tsx with the counters' tokens, epic action button, Destroyed cover and place over it)
 ├── useTournament         (hook, called by App: tournament state: rounds, results, totals; persisted to localStorage)
 ├── SwuTournamentScreen   (container: between rounds)
 │   └── SwuTournamentScreenView (view: shared controls, with header with Back and More, record, your base, every round, Start round N, Drop sheet, Player portal, Finish; portrait and landscape layouts)

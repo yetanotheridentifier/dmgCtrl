@@ -15,6 +15,7 @@ import SwuGameScreenView from './swuGameScreenView'
 import type { SwuGameViewProps } from './swuGameScreenView'
 import SwuGame2pView from './swuGame2pView'
 import type { SwuSide } from './swuGame2pView'
+import { hasEpicAction } from './swuGameStyles'
 import type { LastGame } from './swuGamePieces'
 import RotatePrompt from './layout/rotatePrompt'
 import { onGameStart, onGameEnd, onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
@@ -57,7 +58,7 @@ function baseControls(base: Base, forceTokenDisplay: ForceTokenDisplay) {
   return {
     showForce: forceShown && !isMysticMonastery && (forceTokenDisplay === 'always-on' || isForceBase),
     showMysticMonastery: forceShown && isMysticMonastery,
-    showEpicAction: /epic action/i.test(base.epicAction),
+    showEpicAction: hasEpicAction(base),
   }
 }
 

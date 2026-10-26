@@ -30,9 +30,7 @@ With Twin Suns, the bases sit in a 2×2 grid that is the seating round the table
 
 Tap any base to change it. An opponent's base sheet is titled **Opponent's base**: it lists the bases **Used for other players before** in place of your favourites and recent bases, and has **Remove base**, which empties that cell and moves nothing else. Opponents' bases have no Favourite and never join your Recent bases.
 
-**Go to game** needs at least 3 bases, yours and two opponents'; a fourth is optional. The line under Match says how many are playing, or how many more bases are needed. The bases and their cells are kept for your next Twin Suns game.
-
-For now, Go to game opens the game for your base alone.
+**Go to game** needs at least 3 bases, yours and two opponents'; a fourth is optional. The line under Match says how many are playing, or how many more bases are needed. The bases and their cells are kept for your next Twin Suns game. Go to game opens the Twin Suns game (see Game).
 
 ### Choosing a base
 
@@ -154,6 +152,23 @@ The strip across the middle holds **Back**, **Log**, **Round**, **End game** and
 Log entries name the base ("Their base: 3 damage"), and the log opens over your half. Undo takes back the newest entry, on whichever half it was.
 
 **Ending a game:** when either base reaches 0 HP, End game opens by itself, worded for the bottom player: Won when their base is destroyed, Lost when yours is. Results are recorded from your side, in casual play, best of 1 and 3 and tournaments alike. After a casual game each half shows its own result (**Game won** or **Game lost**), and the middle strip offers **New setup** and **Rematch** (both bases kept, damage reset).
+
+### Twin Suns
+
+With **Twin Suns** chosen in setup, one phone or tablet lies flat in landscape with two players along each long side. Each base sits in its setup cell; the top row is turned round to face the players across, and so is the bar, which faces you (top left). With 4 players the bar runs between the side-by-side bases; with 3 it sits between the two bases on one side and the single base is centred on the other. Hold the device in landscape: in portrait it asks you to turn it.
+
+The game starts at round 1 as the screen opens. Each card is its player's damage control: tap for 1, drag up (from that player's side) to add several, drag down to remove. A base with an epic action has a round yellow button on its text box: tap it when used, and the **Epic action used** plate covers the text box. Tap the plate to take it back.
+
+The bar holds **Back**, **Log** and **More**, the three counters, **Round** and **End game**. The counters are always shown in Twin Suns, whatever the Initiative setting (that setting applies to 1 and 2 players):
+
+- **Plan** and **Blast**: tap one, then the base of the player who claimed it (the bases light up; **Cancel** backs out). Its token sits on that base and the button shows as taken until **Round**, which returns both and moves the round on. **Blast** also deals 1 damage to every other base still in the game.
+- **Initiative**: tap **Initiative** in the bar, or the token on the base that holds it, then the base that takes it. It stays there across rounds.
+
+**A base destroyed:** a base reaching 0 shows **Destroyed** over its card, and the bar asks who destroyed it. Tap that player's base to heal it 5 ("+5 healed"), or **No one** to skip the heal. **Undo the damage** takes back the last hit instead. A destroyed base is out: its card stays covered and takes no input. The bar then shows **Last phase**, and **Finish game** replaces Round; the counters still work until then.
+
+**Game over:** **Finish game**, or **End game** then **End game now** at any point, ends the game. Each base shows its place over its card, facing its player: **1st · Won**, then 2nd and 3rd with their HP left. A tie for most HP left is a draw between those players (**1st · Draw**). The bar lists the result, with **Rematch** (same bases and seats, damage reset) and **New setup**. The result is recorded from your side, as in 1 and 2 players.
+
+Log entries name the base, the log opens over your base, and Undo takes back the newest entry, a whole Blast included.
 
 ### Troubleshooting
 
