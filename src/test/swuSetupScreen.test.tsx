@@ -793,9 +793,9 @@ describe('SwuSetupScreen: SWUDB link', () => {
 describe('SwuSetupScreen: mode', () => {
   const mode = () => screen.getByRole('group', { name: 'Mode' })
 
-  it('offers 1 player and 2 players, 1 player the first time', () => {
+  it('offers 1 player, 2 players and Twin Suns, 1 player the first time', () => {
     renderSetup()
-    expect(within(mode()).getAllByRole('button').map(b => b.textContent)).toEqual(['1 player', '2 players'])
+    expect(within(mode()).getAllByRole('button').map(b => b.textContent)).toEqual(['1 player', '2 players', 'Twin Suns'])
     expect(within(mode()).getByRole('button', { name: '1 player' })).toHaveAttribute('aria-pressed', 'true')
   })
 
@@ -945,6 +945,200 @@ describe('SwuSetupScreen: their base', () => {
     expect(within(baseCard()).getByText('Jedi Temple')).toBeInTheDocument()
     expect(within(theirCard()).getByText('Catacombs of Cadera')).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Mode' })).toBeInTheDocument()
+    expect(primary('Go to game')).toBeEnabled()
+  })
+})
+
+describe('SwuSetupScreen: Twin Suns', () => {
+  const key = (b: Base) => `${b.set}-${b.number}`
+  const grid = () => screen.getByRole('group', { name: 'Bases' })
+  const opponentSheet = () => screen.getByRole('dialog', { name: 'Opponent’s base' })
+  const seatButton = (name: string | RegExp) => within(grid()).getByRole('button', { name })
+
+  // Twin Suns, with your base and the seats as an earlier visit left them.
+  function keepTwinSuns(base: Base | null, seats: (Base | null)[] = [null, null, null], extra: Record<string, unknown> = {}) {
+    store.set('swu_setup', JSON.stringify({
+      ...(base ? { baseKey: key(base) } : {}),
+      recentBaseKeys: [],
+      matchType: 'casual',
+      mode: 'twin-suns',
+      seatKeys: seats.map(b => b ? key(b) : null),
+      ...extra,
+    }))
+  }
+
+  it('is the third Mode', async () => {
+    keep(jediTemple)
+    renderSetup()
+    const mode = screen.getByRole('group', { name: 'Mode' })
+    expect(within(mode).getAllByRole('button').map(b => b.textContent)).toEqual(['1 player', '2 players', 'Twin Suns'])
+    await userEvent.setup().click(within(mode).getByRole('button', { name: 'Twin Suns' }))
+    expect(grid()).toBeInTheDocument()
+    expect(screen.queryByTestId('base-card')).not.toBeInTheDocument()
+  })
+
+  it('the grid has your base top left and Add base in the other three cells', () => {
+    keepTwinSuns(jediTemple)
+    renderSetup()
+    expect(within(grid()).getAllByRole('button', { name: /^(Your base|Add base)/ }).map(b => b.getAttribute('aria-label'))).toEqual([
+      'Your base: Jedi Temple',
+      'Add base, top right',
+      'Add base, bottom left',
+      'Add base, bottom right',
+    ])
+    expect(within(grid()).getByText('Jedi Temple')).toBeInTheDocument()
+    expect(within(grid()).getByText('LOF · 28 HP')).toBeInTheDocument()
+    expect(within(grid()).getAllByText('Add base')).toHaveLength(3)
+  })
+
+  it('with only your base, Go to game is disabled and the hint says what Twin Suns needs', () => {
+    keepTwinSuns(jediTemple)
+    renderSetup()
+    expect(primary('Go to game')).toBeDisabled()
+    expect(screen.getByText('Twin Suns is for 3 or 4 players on this device. Add a base where each opponent sits; at least 2.')).toBeInTheDocument()
+  })
+
+  it('with one opponent, the hint says one more base is needed', () => {
+    keepTwinSuns(jediTemple, [catacombs, null, null])
+    renderSetup()
+    expect(primary('Go to game')).toBeDisabled()
+    expect(screen.getByText('2 players. Add 1 more base to play.')).toBeInTheDocument()
+  })
+
+  it('with three bases Go to game is ready and the hint offers a fourth', () => {
+    keepTwinSuns(jediTemple, [null, catacombs, echo])
+    renderSetup()
+    expect(primary('Go to game')).toBeEnabled()
+    expect(screen.getByText('3 players. Add a fourth, or go.')).toBeInTheDocument()
+  })
+
+  it('with four bases the hint says each keeps its place', () => {
+    keepTwinSuns(jediTemple, [catacombs, echo, coaxium])
+    renderSetup()
+    expect(primary('Go to game')).toBeEnabled()
+    expect(screen.getByText('4 players. Tap a base to change or remove it; it keeps its place.')).toBeInTheDocument()
+  })
+
+  it('without your base, the top left cell asks for it and Go to game waits', () => {
+    keepTwinSuns(null, [catacombs, echo, coaxium])
+    renderSetup()
+    expect(seatButton('Choose your base')).toBeInTheDocument()
+    expect(primary('Go to game')).toBeDisabled()
+    expect(screen.getByText('Choose your base to start.')).toBeInTheDocument()
+  })
+
+  it('Add base opens the opponent sheet, and the base goes in that cell', async () => {
+    const user = userEvent.setup()
+    keepTwinSuns(jediTemple)
+    renderSetup()
+    await user.click(seatButton('Add base, bottom left'))
+    expect(within(opponentSheet()).queryByRole('button', { name: 'Remove base' })).not.toBeInTheDocument()
+    await user.type(within(opponentSheet()).getByRole('searchbox'), 'cadera')
+    await user.click(tile('Catacombs of Cadera', opponentSheet()))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(seatButton('Opponent, bottom left: Catacombs of Cadera')).toBeInTheDocument()
+    expect(seatButton('Add base, top right')).toBeInTheDocument()
+    expect(seatButton('Add base, bottom right')).toBeInTheDocument()
+  })
+
+  it('tapping an opponent opens the sheet with its base marked; a new base keeps the cell', async () => {
+    const user = userEvent.setup()
+    keepTwinSuns(jediTemple, [catacombs, echo, null])
+    renderSetup()
+    await user.click(seatButton('Opponent, top right: Catacombs of Cadera'))
+    await user.type(within(opponentSheet()).getByRole('searchbox'), 'cadera')
+    expect(tile('Catacombs of Cadera', opponentSheet())).toHaveAttribute('aria-pressed', 'true')
+    await user.clear(within(opponentSheet()).getByRole('searchbox'))
+    await user.type(within(opponentSheet()).getByRole('searchbox'), 'coaxium')
+    await user.click(tile('Coaxium Mine', opponentSheet()))
+    expect(seatButton('Opponent, top right: Coaxium Mine')).toBeInTheDocument()
+    expect(seatButton('Opponent, bottom left: Echo Caverns')).toBeInTheDocument()
+  })
+
+  it('Remove base returns that cell to Add base and moves nothing else', async () => {
+    const user = userEvent.setup()
+    keepTwinSuns(jediTemple, [catacombs, echo, coaxium])
+    renderSetup()
+    await user.click(seatButton('Opponent, top right: Catacombs of Cadera'))
+    await user.click(within(opponentSheet()).getByRole('button', { name: 'Remove base' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(seatButton('Add base, top right')).toBeInTheDocument()
+    expect(seatButton('Opponent, bottom left: Echo Caverns')).toBeInTheDocument()
+    expect(seatButton('Opponent, bottom right: Coaxium Mine')).toBeInTheDocument()
+  })
+
+  it('tapping your base opens your own base sheet', async () => {
+    const user = userEvent.setup()
+    keepTwinSuns(jediTemple)
+    renderSetup()
+    await user.click(seatButton('Your base: Jedi Temple'))
+    await user.click(tile('Echo Caverns'))
+    expect(seatButton('Your base: Echo Caverns')).toBeInTheDocument()
+  })
+
+  it('your base carries the Favourite star; opponents have none', async () => {
+    const user = userEvent.setup()
+    keepTwinSuns(jediTemple, [catacombs, null, null])
+    renderSetup()
+    const star = within(grid()).getByRole('button', { name: 'Favourite' })
+    expect(star).toHaveAttribute('aria-pressed', 'false')
+    expect(within(grid()).getAllByRole('button', { name: 'Favourite' })).toHaveLength(1)
+    await user.click(star)
+    expect(mockFavourites.addFavourite).toHaveBeenCalledWith(expect.objectContaining({ key: 'LOF-021' }))
+  })
+
+  it('the opponent sheet lists bases used for other players, not your favourites or your recent bases', async () => {
+    const user = userEvent.setup()
+    mockFavourites.favourites = [fav(starlightTemple)]
+    keepTwinSuns(jediTemple, [null, null, null], {
+      recentBaseKeys: [key(templeOfDestruction)],
+      otherRecentBaseKeys: [key(echo), key(coaxium)],
+    })
+    renderSetup()
+    await user.click(seatButton('Add base, top right'))
+    const used = within(opponentSheet()).getByRole('group', { name: 'Used for other players before' })
+    expect(within(used).getAllByRole('button').map(b => b.textContent)).toEqual([
+      expect.stringMatching(/^Echo Caverns/),
+      expect.stringMatching(/^Coaxium Mine/),
+    ])
+    expect(within(opponentSheet()).queryByRole('group', { name: 'Favourites' })).not.toBeInTheDocument()
+    expect(within(opponentSheet()).queryByRole('group', { name: 'Recent' })).not.toBeInTheDocument()
+  })
+
+  it("Go to game passes your base and every cell; opponents' bases stay out of your recent bases", async () => {
+    const user = userEvent.setup()
+    const onConfirm = vi.fn()
+    keepTwinSuns(jediTemple, [catacombs, null, echo])
+    const first = renderSetup({ onConfirm })
+    await user.click(primary('Go to game'))
+    expect(onConfirm).toHaveBeenCalledWith(jediTemple, 'casual', undefined, [catacombs, null, echo])
+    first.unmount()
+    renderSetup()
+    await user.click(seatButton('Your base: Jedi Temple'))
+    expect(within(group('Recent')).getAllByRole('button').map(b => b.textContent)).toEqual([expect.stringMatching(/^Jedi Temple/)])
+  })
+
+  it('keeps the bases in their cells for the next visit', async () => {
+    const user = userEvent.setup()
+    keepTwinSuns(jediTemple)
+    const first = renderSetup()
+    await user.click(seatButton('Add base, bottom right'))
+    await user.type(within(opponentSheet()).getByRole('searchbox'), 'echo')
+    await user.click(tile('Echo Caverns', opponentSheet()))
+    first.unmount()
+    renderSetup()
+    expect(seatButton('Opponent, bottom right: Echo Caverns')).toBeInTheDocument()
+    expect(seatButton('Add base, top right')).toBeInTheDocument()
+  })
+
+  it('in portrait shows the grid, Mode, Match, the hint and the primary', () => {
+    makeMatchMediaMock(true)
+    keepTwinSuns(jediTemple, [catacombs, null, echo])
+    renderSetup()
+    expect(seatButton('Your base: Jedi Temple')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Mode' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Match' })).toBeInTheDocument()
+    expect(screen.getByText('3 players. Add a fourth, or go.')).toBeInTheDocument()
     expect(primary('Go to game')).toBeEnabled()
   })
 })

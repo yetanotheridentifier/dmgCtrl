@@ -215,8 +215,16 @@ describe('useSwuSetup: mode', () => {
     expect(result.current.mode).toBe('1p')
   })
 
-  it('offers 1 player and 2 players', () => {
-    expect(SWU_MODES.map(m => m.label)).toEqual(['1 player', '2 players'])
+  it('offers 1 player, 2 players and Twin Suns', () => {
+    expect(SWU_MODES.map(m => m.label)).toEqual(['1 player', '2 players', 'Twin Suns'])
+  })
+
+  it('Twin Suns is kept across launches', () => {
+    const first = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => first.result.current.setMode('twin-suns'))
+    first.unmount()
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.mode).toBe('twin-suns')
   })
 
   it('is kept across launches', () => {
@@ -347,6 +355,135 @@ describe('useSwuSetup: starting with 2 players', () => {
     act(() => result.current.handleStartTournament(settings))
     expect(onStart).toHaveBeenCalledWith(jediTemple, settings, catacombs)
     expect(result.current.theirBaseFromLastGame).toBe(true)
+  })
+})
+
+describe('useSwuSetup: Twin Suns seating', () => {
+  const twinSuns = (onConfirm = vi.fn()) => {
+    const hook = renderHook(() => useSwuSetup(onConfirm))
+    act(() => hook.result.current.setMode('twin-suns'))
+    act(() => hook.result.current.chooseBase(jediTemple))
+    return hook
+  }
+
+  it('has three empty seats the first time, after yours', () => {
+    const { result } = twinSuns()
+    expect(result.current.seats).toEqual([null, null, null])
+  })
+
+  it('a base goes in whichever seat it is added to', () => {
+    const { result } = twinSuns()
+    act(() => result.current.chooseSeatBase(2, catacombs))
+    expect(result.current.seats).toEqual([null, null, catacombs])
+    act(() => result.current.chooseSeatBase(0, echo))
+    expect(result.current.seats).toEqual([echo, null, catacombs])
+    expect(result.current.base).toBe(jediTemple)
+  })
+
+  it('changing a base keeps its seat, and every other base stays where it is', () => {
+    const { result } = twinSuns()
+    act(() => result.current.chooseSeatBase(0, catacombs))
+    act(() => result.current.chooseSeatBase(1, echo))
+    act(() => result.current.chooseSeatBase(2, coaxium))
+    act(() => result.current.chooseSeatBase(1, energyLab))
+    expect(result.current.seats).toEqual([catacombs, energyLab, coaxium])
+  })
+
+  it('removing a base empties its seat and moves nothing else', () => {
+    const { result } = twinSuns()
+    act(() => result.current.chooseSeatBase(0, catacombs))
+    act(() => result.current.chooseSeatBase(1, echo))
+    act(() => result.current.chooseSeatBase(2, coaxium))
+    act(() => result.current.removeSeatBase(0))
+    expect(result.current.seats).toEqual([null, echo, coaxium])
+  })
+
+  it('needs your base and at least 2 more: 3 bases in all', () => {
+    const onConfirm = vi.fn()
+    const { result } = twinSuns(onConfirm)
+    act(() => result.current.chooseSeatBase(1, catacombs))
+    expect(result.current.ready).toBe(false)
+    act(() => result.current.handleSubmit())
+    expect(onConfirm).not.toHaveBeenCalled()
+    act(() => result.current.chooseSeatBase(2, echo))
+    expect(result.current.ready).toBe(true)
+  })
+
+  it('is not ready without your base, however many seats are filled', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.setMode('twin-suns'))
+    act(() => result.current.chooseSeatBase(0, catacombs))
+    act(() => result.current.chooseSeatBase(1, echo))
+    act(() => result.current.chooseSeatBase(2, coaxium))
+    expect(result.current.ready).toBe(false)
+  })
+
+  it('handleSubmit passes every seat, empty ones too, in their places', () => {
+    const onConfirm = vi.fn()
+    const { result } = twinSuns(onConfirm)
+    act(() => result.current.chooseSeatBase(0, catacombs))
+    act(() => result.current.chooseSeatBase(2, echo))
+    act(() => result.current.handleSubmit())
+    expect(onConfirm).toHaveBeenCalledWith(jediTemple, 'casual', undefined, [catacombs, null, echo])
+  })
+
+  it('keeps the bases and their seats across launches', () => {
+    const first = twinSuns()
+    act(() => first.result.current.chooseSeatBase(1, catacombs))
+    act(() => first.result.current.chooseSeatBase(2, echo))
+    act(() => first.result.current.handleSubmit())
+    first.unmount()
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.mode).toBe('twin-suns')
+    expect(result.current.seats).toEqual([null, catacombs, echo])
+  })
+
+  it('a seat whose base is no longer in the card data reads as empty', () => {
+    store.set('swu_setup', JSON.stringify({ recentBaseKeys: [], matchType: 'casual', mode: 'twin-suns', seatKeys: ['XXX-999', 'SOR-026', null] }))
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.seats).toEqual([null, catacombs, null])
+  })
+
+  it('unreadable stored seats read as three empty seats', () => {
+    store.set('swu_setup', JSON.stringify({ recentBaseKeys: [], matchType: 'casual', mode: 'twin-suns', seatKeys: 'nonsense' }))
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.seats).toEqual([null, null, null])
+  })
+
+  it("opponents' bases stay out of your recent bases", () => {
+    const { result } = twinSuns()
+    act(() => result.current.chooseSeatBase(0, catacombs))
+    act(() => result.current.chooseSeatBase(1, echo))
+    act(() => result.current.handleSubmit())
+    expect(result.current.recentBases).toEqual([jediTemple])
+  })
+
+  it("opponents' bases are the bases used for other players, most recent first, each once", () => {
+    const { result } = twinSuns()
+    act(() => result.current.chooseSeatBase(0, catacombs))
+    act(() => result.current.chooseSeatBase(1, echo))
+    act(() => result.current.handleSubmit())
+    act(() => result.current.chooseSeatBase(2, coaxium))
+    act(() => result.current.handleSubmit())
+    expect(result.current.otherPlayersBases).toEqual([catacombs, echo, coaxium])
+    expect(result.current.otherPlayersBases).not.toContain(jediTemple)
+  })
+
+  it('their base in a 2-player game is a base used for another player too', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.setMode('2p'))
+    act(() => result.current.chooseBase(jediTemple))
+    act(() => result.current.chooseTheirBase(catacombs))
+    act(() => result.current.handleSubmit())
+    expect(result.current.otherPlayersBases).toEqual([catacombs])
+  })
+
+  it('a 1-player game adds nothing to the bases used for other players', () => {
+    const { result } = twinSuns()
+    act(() => result.current.chooseSeatBase(0, catacombs))
+    act(() => result.current.setMode('1p'))
+    act(() => result.current.handleSubmit())
+    expect(result.current.otherPlayersBases).toEqual([])
   })
 })
 

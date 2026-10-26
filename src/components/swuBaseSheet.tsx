@@ -30,6 +30,8 @@ interface Props {
   bases: Base[]
   favouriteBases: Base[]
   recentBases: Base[]
+  // What the recent bases are: your own, or those used for other players.
+  recentLabel?: string
   currentKey: string | null
   onChoose: (b: Base) => void
   // Without it the sheet is search only.
@@ -71,7 +73,7 @@ function BaseTile({ base, selected, onClick }: { base: Base; selected: boolean; 
 }
 
 // Mounted only while the sheet is open, so it opens afresh each time: no search, no filter, on the search view.
-function BaseSheetBody({ bases, favouriteBases, recentBases, currentKey, onChoose, swudb }: Omit<Props, 'open' | 'onClose'>) {
+function BaseSheetBody({ bases, favouriteBases, recentBases, recentLabel = 'Recent', currentKey, onChoose, swudb }: Omit<Props, 'open' | 'onClose'>) {
   const { isPortrait } = useOrientation()
   const [query, setQuery] = useState('')
   const [aspect, setAspect] = useState<string | null>(null)
@@ -144,7 +146,7 @@ function BaseSheetBody({ bases, favouriteBases, recentBases, currentKey, onChoos
       ) : (
         <>
           {favouriteBases.length > 0 && section('Favourites', favouriteBases)}
-          {recentOnly.length > 0 && section('Recent', recentOnly)}
+          {recentOnly.length > 0 && section(recentLabel, recentOnly)}
           {favouriteBases.length === 0 && recentOnly.length === 0 && section('All bases', filterBases(bases, '', null))}
         </>
       )}
@@ -198,10 +200,11 @@ function BaseSheetBody({ bases, favouriteBases, recentBases, currentKey, onChoos
 }
 
 // The base sheet: favourites, recent bases and a search over every base, and an SWUDB deck link.
-// The same sheet chooses their base in 2 players, under its own title.
-export default function SwuBaseSheet({ open, onClose, title = 'Choose your base', ...body }: Props & { title?: string }) {
+// The same sheet chooses their base in 2 players and opponents' bases in Twin Suns, under its own
+// title, with an optional header action (Remove base).
+export default function SwuBaseSheet({ open, onClose, title = 'Choose your base', action, ...body }: Props & { title?: string; action?: React.ReactNode }) {
   return (
-    <Sheet open={open} title={title} onClose={onClose} wide>
+    <Sheet open={open} title={title} onClose={onClose} wide action={action}>
       <BaseSheetBody {...body} />
     </Sheet>
   )

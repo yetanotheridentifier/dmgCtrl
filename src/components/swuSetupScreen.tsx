@@ -13,8 +13,9 @@ import { formatValidationError, isBaseValidForFormat } from '../utils/formatFilt
 import type { TournamentSettings } from '../hooks/useSwuSetup'
 
 interface Props {
-  // Casual: go to the game. Tournament: go back to the one under way. Their base comes only in 2 players.
-  onConfirm: (base: Base, mode: SetupMode, theirBase?: Base) => void
+  // Casual: go to the game. Tournament: go back to the one under way. Their base comes only in 2 players,
+  // and the seats (opponents' bases by TWIN_SUNS_SEATS, null for an empty one) only in Twin Suns.
+  onConfirm: (base: Base, mode: SetupMode, theirBase?: Base, seats?: (Base | null)[]) => void
   onStartTournament?: (base: Base, settings: TournamentSettings, theirBase?: Base) => void
   tournamentInProgress?: boolean
   onHelp: () => void
@@ -53,6 +54,7 @@ function SwuSetupScreen({ onConfirm, onStartTournament, tournamentInProgress = f
   }, [favourites, setup.bases, allowed])
   const sheetBases = useMemo(() => setup.bases.filter(allowed), [setup.bases, allowed])
   const recentBases = useMemo(() => setup.recentBases.filter(allowed), [setup.recentBases, allowed])
+  const otherPlayersBases = useMemo(() => setup.otherPlayersBases.filter(allowed), [setup.otherPlayersBases, allowed])
 
   const [swudb, setSwudb] = useState<SwudbImport>(NO_DECK)
 
@@ -135,6 +137,10 @@ function SwuSetupScreen({ onConfirm, onStartTournament, tournamentInProgress = f
         theirArt={theirArt}
         theirBaseFromLastGame={setup.theirBaseFromLastGame}
         onChooseTheirBase={setup.chooseTheirBase}
+        seats={setup.seats}
+        onChooseSeatBase={setup.chooseSeatBase}
+        onRemoveSeatBase={setup.removeSeatBase}
+        otherPlayersBases={otherPlayersBases}
         ready={setup.ready}
         swudb={{ state: swudbShown, onChange: handleSwudbChange, onFocus: handleSwudbFocus, onLoad: handleSwudbLoad }}
         onBack={onBack}
