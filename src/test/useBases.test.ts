@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { renderHook, waitFor, act } from '@testing-library/react'
 import { useBases } from '../hooks/useBases'
 
 const mockOnBasesLoadFailed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
@@ -354,6 +354,66 @@ describe('useBases', () => {
     expect(result.current.bases[0].name).toBe('Command Center')
   })
 
+  // --- Card data on hand at once: the splash shows only when there is none ---
+
+  const cachedAt = (lastChecked: number) => ({
+    lastChecked,
+    data: [{ set: 'SOR', number: '023', name: 'Command Center', subtitle: 'Death Star',
+      hp: 30, frontArt: 'cached-url', frontArtLowRes: null,
+      hyperspaceArtHiRes: null, hyperspaceArt: null, epicAction: '', aspects: ['Command'], rarity: 'Common' }],
+  })
+
+  const stubCache = (entry: object) => vi.stubGlobal('localStorage', {
+    getItem: vi.fn().mockReturnValue(JSON.stringify(entry)),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+    clear: vi.fn(),
+  })
+
+  it('has fresh cached data on its first render, without loading', () => {
+    stubCache(cachedAt(Date.now()))
+    const { result } = renderHook(() => useBases())
+    expect(result.current.loading).toBe(false)
+    expect(result.current.bases[0].name).toBe('Command Center')
+  })
+
+  it('serves stale cached data on its first render, and refreshes it in the background', async () => {
+    stubCache(cachedAt(Date.now() - 8 * 24 * 60 * 60 * 1000))
+    const { result } = renderHook(() => useBases())
+    expect(result.current.loading).toBe(false)
+    expect(result.current.bases[0].frontArt).toBe('cached-url')
+    await waitFor(() => expect(result.current.bases.some(b => b.name === 'Energy Conversion Lab')).toBe(true))
+  })
+
+  it('is loading on its first render when there is no cached data', () => {
+    const { result } = renderHook(() => useBases())
+    expect(result.current.loading).toBe(true)
+    expect(result.current.bases).toEqual([])
+  })
+
+  it('two hooks mounted together share one fetch', async () => {
+    const first = renderHook(() => useBases())
+    const second = renderHook(() => useBases())
+    await waitFor(() => expect(first.result.current.loading).toBe(false))
+    await waitFor(() => expect(second.result.current.loading).toBe(false))
+    const swuDbCalls = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('worker.dmgctrl.app'))
+    expect(swuDbCalls).toHaveLength(1)
+    expect(second.result.current.bases.length).toBe(first.result.current.bases.length)
+  })
+
+  it('retry fetches again after a failure, and clears the error once it succeeds', async () => {
+    const working = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(() => Promise.reject(new Error('Network error')))
+    const { result } = renderHook(() => useBases())
+    await waitFor(() => expect(result.current.error).not.toBeNull())
+    vi.mocked(fetch).mockImplementation(working)
+    act(() => result.current.retry())
+    expect(result.current.loading).toBe(true)
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.error).toBeNull()
+    expect(result.current.bases.length).toBeGreaterThan(0)
+  })
+
   it('Sets error only when fetch fails and no cache exists at all', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')))
     const { result } = renderHook(() => useBases())
@@ -388,9 +448,9 @@ describe('useBases analytics', () => {
       clear: vi.fn(),
     })
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')))
-    const { result } = renderHook(() => useBases())
-    await waitFor(() => expect(result.current.loading).toBe(false))
-    expect(mockOnBasesLoadStale).toHaveBeenCalledOnce()
+    renderHook(() => useBases())
+    // The stale data is served at once, so the refresh fails after loading has already finished.
+    await waitFor(() => expect(mockOnBasesLoadStale).toHaveBeenCalledOnce())
     expect(mockOnBasesLoadFailed).not.toHaveBeenCalled()
   })
 

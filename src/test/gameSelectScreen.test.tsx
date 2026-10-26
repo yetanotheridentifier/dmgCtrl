@@ -3,80 +3,61 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import GameSelectScreen from '../components/gameSelectScreen'
 
+const show = (props: Partial<React.ComponentProps<typeof GameSelectScreen>> = {}) =>
+  render(<GameSelectScreen lastGame={null} onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} {...props} />)
+
 describe('GameSelectScreen', () => {
 
-  // ── Title ─────────────────────────────────────────────────────────────────
-
-  it('renders the dmgCtrl app icon', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
-    expect(screen.getByAltText('dmgCtrl')).toBeInTheDocument()
+  it('is headed dmgCtrl, with the app icon', () => {
+    show()
+    expect(screen.getByRole('heading', { level: 1, name: 'dmgCtrl' })).toBeInTheDocument()
+    expect(screen.getByTestId('app-icon')).toBeInTheDocument()
   })
 
-  it('renders the dmgCtrl title', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
-    expect(screen.getByText('dmgCtrl')).toBeInTheDocument()
-  })
-
-  // ── Game buttons ──────────────────────────────────────────────────────────
-
-  it('renders the Star Wars Unlimited logo', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
+  it('shows a tile for each game, with its logo', () => {
+    show()
+    expect(screen.getByRole('button', { name: 'Star Wars: Unlimited' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'X-Wing' })).toBeInTheDocument()
     expect(screen.getByAltText('Star Wars Unlimited')).toBeInTheDocument()
-  })
-
-  it('renders the Star Wars X-Wing logo', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
     expect(screen.getByAltText('Star Wars X-Wing')).toBeInTheDocument()
   })
 
-  it('Star Wars Unlimited button is enabled', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /star wars unlimited/i })).not.toBeDisabled()
+  it('marks no tile Last played before a game has been played', () => {
+    show()
+    expect(screen.queryByText(/last played/i)).not.toBeInTheDocument()
   })
 
-  it('Star Wars X-Wing button is enabled', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /star wars x-wing/i })).not.toBeDisabled()
+  it('marks the game played last', () => {
+    show({ lastGame: 'xwing' })
+    expect(screen.getByRole('button', { name: 'X-Wing, last played' })).toHaveTextContent(/last played/i)
+    expect(screen.getByRole('button', { name: 'Star Wars: Unlimited' })).not.toHaveTextContent(/last played/i)
   })
 
-  // ── Interactions ──────────────────────────────────────────────────────────
-
-  it('calls onSelectSwu when Star Wars Unlimited button is clicked', async () => {
+  it('opens each game from its tile', async () => {
     const onSelectSwu = vi.fn()
-    const user = userEvent.setup()
-    render(<GameSelectScreen onSelectSwu={onSelectSwu} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
-    await user.click(screen.getByRole('button', { name: /star wars unlimited/i }))
-    expect(onSelectSwu).toHaveBeenCalledOnce()
-  })
-
-  it('calls onSelectXwing when Star Wars X-Wing button is clicked', async () => {
     const onSelectXwing = vi.fn()
-    const user = userEvent.setup()
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={onSelectXwing} onSettings={vi.fn()} />)
-    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    show({ onSelectSwu, onSelectXwing, lastGame: 'swu' })
+    await userEvent.click(screen.getByRole('button', { name: 'Star Wars: Unlimited, last played' }))
+    await userEvent.click(screen.getByRole('button', { name: 'X-Wing' }))
+    expect(onSelectSwu).toHaveBeenCalledOnce()
     expect(onSelectXwing).toHaveBeenCalledOnce()
   })
 
-  // ── Settings button ───────────────────────────────────────────────────────
-
-  it('renders a settings button', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument()
-  })
-
-  it('calls onSettings when settings button is clicked', async () => {
+  it('has Help and Settings as worded buttons in the header', async () => {
+    const onHelp = vi.fn()
     const onSettings = vi.fn()
-    const user = userEvent.setup()
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={onSettings} />)
-    await user.click(screen.getByRole('button', { name: /settings/i }))
+    show({ onHelp, onSettings })
+    await userEvent.click(screen.getByRole('button', { name: 'Help' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.getByRole('button', { name: 'Help' })).toHaveTextContent('Help')
+    expect(screen.getByRole('button', { name: 'Settings' })).toHaveTextContent('Settings')
+    expect(onHelp).toHaveBeenCalledOnce()
     expect(onSettings).toHaveBeenCalledOnce()
   })
 
-  // ── No help button ────────────────────────────────────────────────────────
-
-  it('does not render a help button', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
-    expect(screen.queryByRole('button', { name: /help/i })).not.toBeInTheDocument()
+  it('shows the install banner it is given, under the tiles', () => {
+    show({ banner: <div data-testid="banner" /> })
+    expect(screen.getByTestId('banner')).toBeInTheDocument()
   })
 
 })

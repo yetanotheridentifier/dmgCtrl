@@ -56,8 +56,8 @@ describe('useUserSettings', () => {
     expect(render().result.current.enableDamageButtons).toBe(false)
   })
 
-  it('defaults startScreen to gameSelect when storage is empty', () => {
-    expect(render().result.current.startScreen).toBe('gameSelect')
+  it('defaults startScreen to Last game played when storage is empty', () => {
+    expect(render().result.current.startScreen).toBe('lastGame')
   })
 
   // --- Phase tracker: off for a new install, kept for an existing one ---
@@ -191,7 +191,7 @@ describe('useUserSettings', () => {
     const { result } = render()
     expect(result.current.useHyperspace).toBe(true)
     expect(result.current.forceTokenDisplay).toBe('lof-only')
-    expect(result.current.startScreen).toBe('gameSelect')
+    expect(result.current.startScreen).toBe('lastGame')
   })
 
   it('falls back to defaults for a missing key in otherwise valid stored JSON', () => {
@@ -199,7 +199,46 @@ describe('useUserSettings', () => {
     const { result } = render()
     expect(result.current.useHyperspace).toBe(false)
     expect(result.current.forceTokenDisplay).toBe('lof-only')
-    expect(result.current.startScreen).toBe('gameSelect')
+    expect(result.current.startScreen).toBe('lastGame')
+  })
+
+  // --- Start screen: Last game played, and the one-off migration of Game select ---
+
+  it('loads a stored Last game played', () => {
+    stored({ version: 2, startScreen: 'lastGame' })
+    expect(render().result.current.startScreen).toBe('lastGame')
+  })
+
+  it('migrates a Game select stored before Last game played existed to Last game played', () => {
+    stored({ useHyperspace: false, startScreen: 'gameSelect' })
+    const { result } = render()
+    expect(result.current.startScreen).toBe('lastGame')
+    expect(result.current.useHyperspace).toBe(false)
+  })
+
+  it('saves the migration at once, so it happens only once', () => {
+    stored({ startScreen: 'gameSelect' })
+    render()
+    expect(lastSaved()).toMatchObject({ version: 2, startScreen: 'lastGame' })
+  })
+
+  it('keeps a Game select chosen since the migration', () => {
+    stored({ version: 2, startScreen: 'gameSelect' })
+    expect(render().result.current.startScreen).toBe('gameSelect')
+  })
+
+  it('leaves a stored SWU or X-Wing start screen alone', () => {
+    stored({ startScreen: 'swu' })
+    expect(render().result.current.startScreen).toBe('swu')
+    stored({ startScreen: 'xwing' })
+    expect(render().result.current.startScreen).toBe('xwing')
+  })
+
+  it('saves the settings version with every change, so a later Game select is kept', () => {
+    stored({ version: 2, startScreen: 'lastGame' })
+    const { result } = render()
+    act(() => result.current.setStartScreen('gameSelect'))
+    expect(lastSaved()).toMatchObject({ version: 2, startScreen: 'gameSelect' })
   })
 
   // --- Retired keys: the feature is always on, or nothing used it ---

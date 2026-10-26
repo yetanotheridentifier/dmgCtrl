@@ -117,13 +117,48 @@ describe('SettingsScreen: General', () => {
     expect(within(section('General')).getByRole('button', { name: 'Start screen: X-Wing' })).toBeInTheDocument()
   })
 
-  it('Start screen opens a sheet of Game select, Star Wars: Unlimited and X-Wing, the current one marked', async () => {
+  it('Start screen opens a sheet of Last game played, Game select, Star Wars: Unlimited and X-Wing, the current one marked', async () => {
     show()
     await userEvent.click(screen.getByRole('button', { name: 'Start screen: Game select' }))
     const sheet = screen.getByRole('dialog', { name: 'Start screen' })
+    const names = within(sheet).getAllByRole('button').map(b => b.getAttribute('aria-pressed') === null ? null : b.textContent).filter(Boolean)
+    expect(names[0]).toMatch(/^Last game played/)
+    expect(names.slice(1)).toEqual(['Game select', 'Star Wars: Unlimited', 'X-Wing'])
     expect(within(sheet).getByRole('button', { name: 'Game select' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(sheet).getByRole('button', { name: /^Last game played/ })).toHaveAttribute('aria-pressed', 'false')
     expect(within(sheet).getByRole('button', { name: 'Star Wars: Unlimited' })).toHaveAttribute('aria-pressed', 'false')
     expect(within(sheet).getByRole('button', { name: 'X-Wing' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('Start screen shows Last game played as its label', () => {
+    mockUserSettings.startScreen = 'lastGame'
+    show()
+    expect(screen.getByRole('button', { name: 'Start screen: Last game played' })).toBeInTheDocument()
+  })
+
+  it('Last game played says which setup it opens', async () => {
+    localStorage.setItem('last_game', 'xwing')
+    mockUserSettings.startScreen = 'lastGame'
+    show()
+    await userEvent.click(screen.getByRole('button', { name: 'Start screen: Last game played' }))
+    expect(within(screen.getByRole('dialog', { name: 'Start screen' })).getByRole('button', { name: /^Last game played/ }))
+      .toHaveTextContent('Opens X-Wing setup, the game you played last')
+    localStorage.removeItem('last_game')
+  })
+
+  it('Last game played says it opens game select until a game is played', async () => {
+    localStorage.removeItem('last_game')
+    show()
+    await userEvent.click(screen.getByRole('button', { name: 'Start screen: Game select' }))
+    expect(within(screen.getByRole('dialog', { name: 'Start screen' })).getByRole('button', { name: /^Last game played/ }))
+      .toHaveTextContent('Opens game select until you play a game')
+  })
+
+  it('choosing Last game played saves it', async () => {
+    show()
+    await userEvent.click(screen.getByRole('button', { name: 'Start screen: Game select' }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Start screen' })).getByRole('button', { name: /^Last game played/ }))
+    expect(mockUserSettings.setStartScreen).toHaveBeenCalledWith('lastGame')
   })
 
   it('choosing a start screen saves it, reports it and closes the sheet', async () => {

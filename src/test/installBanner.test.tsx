@@ -1,54 +1,58 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import InstallBanner from '../components/installBanner'
 
+const show = (platform: 'ios' | 'android', props: Partial<React.ComponentProps<typeof InstallBanner>> = {}) =>
+  render(<InstallBanner platform={platform} onInstall={vi.fn()} onDismiss={vi.fn()} {...props} />)
+
 describe('InstallBanner', () => {
 
-  // ── iOS layout ────────────────────────────────────────────────────────────
-
-  it('shows Add to Home Screen instruction for iOS', () => {
-    render(<InstallBanner platform="ios" onInstall={vi.fn()} onDismiss={vi.fn()} />)
-    expect(screen.getByText(/add to home screen/i)).toBeInTheDocument()
+  it('is a region named Install dmgCtrl', () => {
+    show('android')
+    expect(screen.getByRole('region', { name: 'Install dmgCtrl' })).toBeInTheDocument()
   })
 
-  it('shows share icon for iOS', () => {
-    render(<InstallBanner platform="ios" onInstall={vi.fn()} onDismiss={vi.fn()} />)
+  // ── iPhone ────────────────────────────────────────────────────────────────
+
+  it('iPhone: shows the Safari steps in one list, in order', () => {
+    show('ios')
+    expect(screen.getByText('Install dmgCtrl from Safari')).toBeInTheDocument()
+    const steps = within(screen.getByRole('list')).getAllByRole('listitem').map(li => li.textContent)
+    expect(steps).toEqual(['Tap', 'Share', 'View More', 'Add to Home Screen'])
     expect(screen.getByTestId('share-icon')).toBeInTheDocument()
   })
 
-  it('does not show an Install button for iOS', () => {
-    render(<InstallBanner platform="ios" onInstall={vi.fn()} onDismiss={vi.fn()} />)
-    expect(screen.queryByRole('button', { name: /install/i })).not.toBeInTheDocument()
+  it('iPhone: has no Install button, only Not now', () => {
+    show('ios')
+    expect(screen.queryByRole('button', { name: 'Install' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument()
   })
 
-  // ── Android layout ────────────────────────────────────────────────────────
+  // ── Android ───────────────────────────────────────────────────────────────
 
-  it('shows Install button for Android', () => {
-    render(<InstallBanner platform="android" onInstall={vi.fn()} onDismiss={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /install/i })).toBeInTheDocument()
-  })
-
-  it('does not show share icon for Android', () => {
-    render(<InstallBanner platform="android" onInstall={vi.fn()} onDismiss={vi.fn()} />)
+  it('Android: says what installing gives, with Not now and Install', () => {
+    show('android')
+    expect(screen.getByText('Install dmgCtrl')).toBeInTheDocument()
+    expect(screen.getByText(/works offline/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Install' })).toBeInTheDocument()
     expect(screen.queryByTestId('share-icon')).not.toBeInTheDocument()
   })
 
   // ── Interactions ──────────────────────────────────────────────────────────
 
-  it('calls onDismiss when dismiss button is clicked', async () => {
+  it('Not now calls onDismiss', async () => {
     const onDismiss = vi.fn()
-    const user = userEvent.setup()
-    render(<InstallBanner platform="ios" onInstall={vi.fn()} onDismiss={onDismiss} />)
-    await user.click(screen.getByRole('button', { name: /dismiss/i }))
+    show('ios', { onDismiss })
+    await userEvent.click(screen.getByRole('button', { name: 'Not now' }))
     expect(onDismiss).toHaveBeenCalledOnce()
   })
 
-  it('calls onInstall when Install button is clicked on Android', async () => {
+  it('Install calls onInstall on Android', async () => {
     const onInstall = vi.fn()
-    const user = userEvent.setup()
-    render(<InstallBanner platform="android" onInstall={onInstall} onDismiss={vi.fn()} />)
-    await user.click(screen.getByRole('button', { name: /install/i }))
+    show('android', { onInstall })
+    await userEvent.click(screen.getByRole('button', { name: 'Install' }))
     expect(onInstall).toHaveBeenCalledOnce()
   })
 

@@ -84,8 +84,10 @@ const mockBases = vi.hoisted(() => [
   },
 ])
 
+const mockRetry = vi.hoisted(() => vi.fn())
+const READY = { bases: mockBases, loading: false, error: null, retry: mockRetry }
 vi.mock('../hooks/useBases', () => ({
-  useBases: vi.fn().mockReturnValue({ bases: mockBases, loading: false, error: null }),
+  useBases: vi.fn(),
 }))
 
 
@@ -146,10 +148,14 @@ beforeEach(() => {
   mockUseTournament.completeMatch.mockReset()
   mockUseTournament.dropTournament.mockReset()
   mockUserSettings.startScreen = 'swu'
+  mockRetry.mockReset()
+  vi.mocked(useBases).mockReturnValue(READY)
+  window.history.replaceState(null, '', '/')
 })
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  window.history.replaceState(null, '', '/')
 })
 
 // useBases is mocked so data is always ready; waitFor handles any async React batching.
@@ -159,10 +165,10 @@ async function waitForSetup() {
 
 describe('App', () => {
 
-  it('Shows loading screen on initial load', () => {
-    vi.mocked(useBases).mockReturnValueOnce({ bases: [], loading: true, error: null })
+  it('Opens SWU setup at once when SWU has its card data', () => {
     render(<App />)
-    expect(screen.getByText('LOADING')).toBeInTheDocument()
+    expect(setupMarker()).toBeInTheDocument()
+    expect(screen.queryByText('Getting SWU card data')).not.toBeInTheDocument()
   })
 
   it('Transitions to setup screen after loading', async () => {
@@ -878,7 +884,7 @@ describe('App game select', () => {
   it('transitions to game select screen after loading when startScreen is gameSelect', async () => {
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars unlimited/i })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: /^star wars: unlimited/i })).toBeInTheDocument())
   })
 
   // The setup screen is ready once its scenario select shows.
@@ -899,8 +905,8 @@ describe('App game select', () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars unlimited/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /star wars unlimited/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^star wars: unlimited/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /^star wars: unlimited/i }))
     await waitForSetup()
     expect(screen.getByTestId('base-card')).toBeInTheDocument()
   })
@@ -909,8 +915,8 @@ describe('App game select', () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /^x-wing/i }))
     await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
   })
 
@@ -918,11 +924,11 @@ describe('App game select', () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /^x-wing/i }))
     await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /back/i }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: /^x-wing/i })).toBeInTheDocument())
   })
 
   it('back from xwing setup returns to game select when startScreen is xwing', async () => {
@@ -931,15 +937,15 @@ describe('App game select', () => {
     render(<App />)
     await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /back/i }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: /^x-wing/i })).toBeInTheDocument())
   })
 
   it('clicking Start Game on xwing setup navigates to xwing game screen', async () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /^x-wing/i }))
     await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
     await chooseNoList(user, 'player')
     await chooseNoList(user, 'opponent')
@@ -951,8 +957,8 @@ describe('App game select', () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /^x-wing/i }))
     await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
     await chooseNoList(user, 'player')
     await chooseNoList(user, 'opponent')
@@ -967,15 +973,15 @@ describe('App game select', () => {
     render(<App />)
     await waitForSetup()
     await user.click(screen.getByRole('button', { name: /back/i }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars unlimited/i })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: /^star wars: unlimited/i })).toBeInTheDocument())
   })
 
   it('clicking help on xwing setup screen shows xwing setup help content', async () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /^x-wing/i }))
     await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
     await openFromMore(user, 'Help')
     await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Match Type' })).toBeInTheDocument())
@@ -985,8 +991,8 @@ describe('App game select', () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /^x-wing/i }))
     await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
     await openFromMore(user, 'Help')
     await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Match Type' })).toBeInTheDocument())
@@ -999,8 +1005,8 @@ describe('App game select', () => {
   async function openXwingSetup(user: ReturnType<typeof userEvent.setup>) {
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /^x-wing/i }))
     await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
   }
 
@@ -1108,8 +1114,8 @@ describe('App game select', () => {
     await openXwingSetup(user)
     await chooseNoList(user, 'player')
     await user.click(screen.getByRole('button', { name: /back/i }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /^x-wing/i }))
     await waitFor(() => expect(within(screen.getByTestId('player-card')).getByRole('button', { name: 'Choose a list' })).toBeVisible())
   })
 
@@ -1129,21 +1135,206 @@ describe('App game select', () => {
     await user.click(screen.getByRole('button', { name: /settings/i }))
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^x-wing/i })).toBeInTheDocument()
   })
 
   it('back from settings opened on X-Wing setup returns to X-Wing setup', async () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /^x-wing/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'More' }))
     await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: 'Settings' }))
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByRole('heading', { name: 'X-Wing' })).toBeInTheDocument()
+  })
+
+})
+describe('App start', () => {
+
+  const xwingSetupShown = () => screen.getByRole('button', { name: /^Scenario: / })
+  const gameSelectShown = () => screen.getByRole('button', { name: /^x-wing/i })
+  const iosUserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+  const originalUserAgent = navigator.userAgent
+
+  afterEach(() => {
+    Object.defineProperty(window.navigator, 'userAgent', { value: originalUserAgent, configurable: true })
+  })
+
+  // ── Launch order ──────────────────────────────────────────────────────────
+
+  it('Last game played opens the setup of the game played last', async () => {
+    mockUserSettings.startScreen = 'lastGame'
+    store.set('last_game', 'xwing')
+    render(<App />)
+    await waitFor(() => expect(xwingSetupShown()).toBeInTheDocument())
+  })
+
+  it('Last game played opens game select when no game has been played', async () => {
+    mockUserSettings.startScreen = 'lastGame'
+    render(<App />)
+    await waitFor(() => expect(gameSelectShown()).toBeInTheDocument())
+  })
+
+  it('/xwing opens X-Wing setup whatever the start screen says', async () => {
+    window.history.replaceState(null, '', '/xwing/')
+    mockUserSettings.startScreen = 'swu'
+    render(<App />)
+    await waitFor(() => expect(xwingSetupShown()).toBeInTheDocument())
+  })
+
+  it('/swu opens SWU setup whatever the start screen says', async () => {
+    window.history.replaceState(null, '', '/swu')
+    mockUserSettings.startScreen = 'lastGame'
+    store.set('last_game', 'xwing')
+    render(<App />)
+    await waitForSetup()
+  })
+
+  it('a tournament in progress opens ahead of /xwing', async () => {
+    window.history.replaceState(null, '', '/xwing')
+    mockUseTournament.tournament = {
+      base: mockBases[0], format: 'premier', playMode: 'bo3', totalRounds: 5, rounds: [],
+    }
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start round 1' })).toBeInTheDocument())
+  })
+
+  // ── The last game record ──────────────────────────────────────────────────
+
+  it('opening a game’s setup records it as the last game played', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.startScreen = 'gameSelect'
+    render(<App />)
+    await waitFor(() => expect(gameSelectShown()).toBeInTheDocument())
+    expect(store.get('last_game')).toBeUndefined()
+    await user.click(screen.getByRole('button', { name: /^x-wing/i }))
+    await waitFor(() => expect(xwingSetupShown()).toBeInTheDocument())
+    expect(store.get('last_game')).toBe('xwing')
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    await user.click(screen.getByRole('button', { name: /^star wars: unlimited/i }))
+    await waitForSetup()
+    expect(store.get('last_game')).toBe('swu')
+  })
+
+  it('game select marks the game played last', async () => {
+    mockUserSettings.startScreen = 'gameSelect'
+    store.set('last_game', 'swu')
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Star Wars: Unlimited, last played' })).toBeInTheDocument())
+  })
+
+  it('Help on game select opens the help for starting the app', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.startScreen = 'gameSelect'
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Game select' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(gameSelectShown()).toBeInTheDocument()
+  })
+
+  // ── Splash: only while SWU needs card data it does not have ───────────────
+
+  it('SWU setup waits on the splash while card data loads', () => {
+    vi.mocked(useBases).mockReturnValue({ ...READY, bases: [], loading: true })
+    render(<App />)
+    expect(screen.getByText('Getting SWU card data')).toBeInTheDocument()
+    expect(screen.queryByTestId('base-card')).not.toBeInTheDocument()
+  })
+
+  it('SWU setup opens once the card data arrives', async () => {
+    vi.mocked(useBases).mockReturnValue({ ...READY, bases: [], loading: true })
+    const { rerender } = render(<App />)
+    vi.mocked(useBases).mockReturnValue(READY)
+    rerender(<App />)
+    await waitForSetup()
+  })
+
+  it('X-Wing never waits for SWU card data', async () => {
+    vi.mocked(useBases).mockReturnValue({ ...READY, bases: [], loading: true })
+    mockUserSettings.startScreen = 'xwing'
+    render(<App />)
+    expect(screen.queryByText('Getting SWU card data')).not.toBeInTheDocument()
+    await waitFor(() => expect(xwingSetupShown()).toBeInTheDocument())
+  })
+
+  it('game select never waits for SWU card data', () => {
+    vi.mocked(useBases).mockReturnValue({ ...READY, bases: [], loading: true })
+    mockUserSettings.startScreen = 'gameSelect'
+    render(<App />)
+    expect(screen.queryByText('Getting SWU card data')).not.toBeInTheDocument()
+    expect(gameSelectShown()).toBeInTheDocument()
+  })
+
+  // ── Offline with no card data ─────────────────────────────────────────────
+
+  const offline = () => vi.mocked(useBases).mockReturnValue({ ...READY, bases: [], loading: false, error: 'Could not load bases.' })
+
+  it('SWU offline with no card data shows the offline screen', () => {
+    offline()
+    render(<App />)
+    expect(screen.getByRole('heading', { name: 'SWU needs a connection the first time' })).toBeInTheDocument()
+  })
+
+  it('Try again fetches the card data again', async () => {
+    offline()
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(mockRetry).toHaveBeenCalledOnce()
+  })
+
+  it('Play X-Wing opens X-Wing setup', async () => {
+    offline()
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: 'Play X-Wing' }))
+    await waitFor(() => expect(xwingSetupShown()).toBeInTheDocument())
+  })
+
+  it('Back on the offline screen returns to game select', async () => {
+    offline()
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: 'Back to game select' }))
+    expect(gameSelectShown()).toBeInTheDocument()
+  })
+
+  // ── Install banner: game select and setup screens, never a game ───────────
+
+  const bannerShown = () => screen.queryByRole('region', { name: 'Install dmgCtrl' })
+
+  it('shows the install banner on game select and SWU setup, not on the game screen', async () => {
+    const user = userEvent.setup()
+    Object.defineProperty(window.navigator, 'userAgent', { value: iosUserAgent, configurable: true })
+    store.set('app_launches', '2')
+    mockUserSettings.startScreen = 'gameSelect'
+    render(<App />)
+    expect(bannerShown()).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^star wars: unlimited/i }))
+    await waitForSetup()
+    expect(bannerShown()).toBeInTheDocument()
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toBeInTheDocument())
+    expect(bannerShown()).not.toBeInTheDocument()
+  })
+
+  it('shows the install banner on X-Wing setup', async () => {
+    Object.defineProperty(window.navigator, 'userAgent', { value: iosUserAgent, configurable: true })
+    store.set('app_launches', '2')
+    mockUserSettings.startScreen = 'xwing'
+    render(<App />)
+    await waitFor(() => expect(xwingSetupShown()).toBeInTheDocument())
+    expect(bannerShown()).toBeInTheDocument()
+  })
+
+  it('does not show the install banner on the first launch', () => {
+    Object.defineProperty(window.navigator, 'userAgent', { value: iosUserAgent, configurable: true })
+    store.set('app_launches', '1')
+    mockUserSettings.startScreen = 'gameSelect'
+    render(<App />)
+    expect(bannerShown()).not.toBeInTheDocument()
   })
 
 })
