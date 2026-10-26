@@ -118,7 +118,7 @@ App
 ├── SwuTournamentScreen   (container: between rounds)
 │   └── SwuTournamentScreenView (view: shared controls, with header with Back and More, record, your base, every round, Start round N, Drop sheet, Player portal, Finish; portrait and landscape layouts)
 │       └── SwuBaseSheet  (view: the base sheet, for a Limited base change between games)
-├── HelpScreen         (standalone screen — renders swuSetupHelp.md, swuGameHelp.md, swuTournamentHelp.md, xwingGameHelp.md, xwingSetupHelp.md, xwingListsHelp.md, or settingsHelp.md based on source prop: 'setup', 'game', 'tournament', 'xwing', 'xwingSetup', 'xwingLists', or 'settings' (no screen opens 'settings' now that Settings has no Help button); title row: back button + icon + "Help" h1)
+├── HelpScreen         (standalone screen — one page per game, swuHelp.md or xwingHelp.md, or the app page appHelp.md from game select; opens at the section for the screen it came from: 'setup', 'game', 'tournament', 'xwingSetup', 'xwingLists', 'xwing' or 'gameSelect'; header: Back + page title; section links and scrolling content)
 └── SettingsScreen     (container — reads and writes useUserSettings; reports each choice with onSettingChanged)
     ├── useUserSettings   (hook — persistent user preferences)
     └── SettingsScreenView (view — one page from the shared controls, no tabs, no Help: Back and "Settings"; groups General (Start screen SelectButton opening a Sheet of OptionRows), Star Wars: Unlimited (Hyperspace art, Force tokens SegmentedControl, Melee player ID, Damage −/+ buttons, Initiative) and X-Wing (Phase tracker, Score −/+ buttons, Squad lists Button); switches are a local SwitchRow; landscape: General and X-Wing left, SWU right; portrait: stacked, with a line under each X-Wing switch)

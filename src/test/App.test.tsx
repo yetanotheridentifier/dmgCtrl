@@ -104,6 +104,12 @@ vi.mock('../hooks/useUserSettings', () => ({
 // SWU setup is showing once its title does.
 const setupMarker = () => screen.getByRole('heading', { level: 1, name: 'Star Wars: Unlimited' })
 
+// Help shows a page (its title) opened at a section (the pressed section link).
+function expectHelpAt(title: string, section: string) {
+  expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument()
+  expect(within(screen.getByRole('navigation', { name: 'Sections' })).getByRole('button', { pressed: true })).toHaveTextContent(section)
+}
+
 type User = ReturnType<typeof userEvent.setup>
 
 async function openFromMore(user: User, name: string) {
@@ -303,7 +309,7 @@ describe('App', () => {
     render(<App />)
     await waitForSetup()
     await openFromMore(user, 'Help')
-    expect(screen.getByText('Getting Started')).toBeInTheDocument()
+    expectHelpAt('SWU help', 'Setup')
   })
 
   it('Help button is visible on game screen', async () => {
@@ -321,8 +327,7 @@ describe('App', () => {
     await waitForSetup()
     await chooseBaseAndGo(user, 'Catacombs of Cadera')
     await openFromMore(user, 'Help')
-    expect(screen.getByRole('heading', { level: 2, name: 'During a Game' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
+    expectHelpAt('SWU help', 'Game')
   })
 
   it('Clicking back from help returns to setup when help was opened from setup', async () => {
@@ -356,8 +361,7 @@ describe('App', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Tournament' })).toBeInTheDocument())
     await openFromMore(user, 'Help')
-    expect(screen.getByRole('heading', { level: 2, name: 'Tournament Mode' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
+    expectHelpAt('SWU help', 'Tournament')
   })
 
   it('Clicking back from tournament help returns to tournament screen', async () => {
@@ -984,7 +988,7 @@ describe('App game select', () => {
     await user.click(screen.getByRole('button', { name: /^x-wing/i }))
     await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
     await openFromMore(user, 'Help')
-    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Match Type' })).toBeInTheDocument())
+    await waitFor(() => expectHelpAt('X-Wing help', 'Setup'))
   })
 
   it('back from xwing setup help returns to xwing setup screen', async () => {
@@ -995,7 +999,7 @@ describe('App game select', () => {
     await user.click(screen.getByRole('button', { name: /^x-wing/i }))
     await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
     await openFromMore(user, 'Help')
-    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Match Type' })).toBeInTheDocument())
+    await waitFor(() => expectHelpAt('X-Wing help', 'Setup'))
     await user.click(screen.getByRole('button', { name: /back/i }))
     await waitFor(() => expect(xwingSetupMarker()).toBeInTheDocument())
   })
@@ -1030,8 +1034,7 @@ describe('App game select', () => {
     await openXwingSetup(user)
     await openFromMore(user, 'Squad lists')
     await user.click(screen.getByRole('button', { name: 'Help' }))
-    expect(screen.getByRole('heading', { level: 2, name: 'Creating a List' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { level: 2, name: 'Match Type' })).not.toBeInTheDocument()
+    expectHelpAt('X-Wing help', 'Squad lists')
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
   })
@@ -1232,7 +1235,7 @@ describe('App start', () => {
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await user.click(screen.getByRole('button', { name: 'Help' }))
-    expect(screen.getByRole('heading', { level: 2, name: 'Game select' })).toBeInTheDocument()
+    expectHelpAt('Help', 'Starting the app')
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(gameSelectShown()).toBeInTheDocument()
   })

@@ -36,7 +36,7 @@ src/
     xwingListsScreenView.tsx X-Wing Squad Lists screen view — header (Back, "Squad Lists" h1, Help); `lists-layout` holds a **Saved lists** panel then a **New list** panel (side by side in landscape, stacked in portrait). Saved lists: one row per list with its name and `listMeta()` line (faction omitted when absent); tapping the row toggles its `PilotList`; **Rename** opens an inline input (blank disables save; a name used by another list shows "Another list already has that name."); **Delete** and **Clear All** each need a second tap to confirm; "No saved lists" when empty. New list: `TextareaField` + Check button; once valid, a name input + Edit button, the points/faction line, a `PilotList` preview and a Save button (disabled while the name is blank); saving under an existing name shows `Overwrite '{name}'?` with ✓/✕ first. View-level state: expanded row, rename draft/error, pending delete, Clear All confirm, overwrite prompt
     xwingGameScreen.tsx     X-Wing game screen container: receives `playerDeficit`, `opponentDeficit`, `scenario`, `matchType` and both pilot lists from App. `XwingGameSnapshot` holds scores, round, phase, gameOver, both ship rosters, `scoringOpen` (phases off: the round's scoring is open), `extraRound` (One more round) and `gameOverReason`, so undo restores all of it. Ships start from the lists (shown before the game) and advance alive → half → destroyed, awarding `halfPoints` then `remainingPoints` (all points on a long-press); the last ship of a squad brings its deficit in the same increment. Log entries use the numbered display names from `displayPilots` with a `detail` line ("+6 to you"). A round's end (`handleEndOfRound`, from the End phase or Start round) ends the game through `finishGame` at round 12, after the timer expired, after One more round, or when `reachesTarget` holds with the round's pending mission points. `canPlayOneMoreRound`: Casual, ended on time or by rounds, and neither side all destroyed. Rematch resets to before the game with the same lists. Score breakdowns (mission, ships against the other side, deficit, −/+ adjustments, total) are computed here for game over
     xwingGameScreenView.tsx X-Wing game screen view: a grid of your column | centre panel | opponent's column. Column headers carry Back, or Log and More. `ShipTile` is a whole-tile button (pointer events: tap, or long-press of 400ms within 10px), coloured by state, with the dmgCtrl mark when destroyed; `ShipColumn` lays rows out with `shipRows`. `ScoreButtons` over a column score that column's ships. The centre panel: round-and-timer button, `ScoreTile`s (FIRST under the side with initiative), then by state: Start game; the phase button (initiative choice in Planning, `MissionPoints` in End); phases off, the First `SegmentedControl` and the round button or the scoring with Start round; game over, the result, `Breakdown` and Rematch, One more round, New setup. `LogDrawer` is a `Sheet` grouping entries under their 'round' entry, newest first, with Undo on the newest. Sheets: More (Help, Settings) and Round and timer (game length `Stepper` before the game). `getDisabledPlayerValues` / `getDisabledOpponentValues` disable impossible mission point pairs (Chance Engagement uses `VALID_CHANCE_PAIRS`)
-    helpScreen.tsx       Help screen (renders swuSetupHelp.md, swuGameHelp.md, swuTournamentHelp.md, xwingGameHelp.md, xwingSetupHelp.md, xwingListsHelp.md, settingsHelp.md or startHelp.md based on source prop ('setup', 'game', 'tournament', 'xwing', 'xwingSetup', 'xwingLists', 'settings' or 'gameSelect'); title row: back button + icon + "Help" h1)
+    helpScreen.tsx       Help screen: one of three pages (swuHelp.md, xwingHelp.md, appHelp.md), opened at a section, chosen by the source prop (see Help screen under Feature Architecture)
     swuCardDataScreens.tsx  `SwuSplash` (app icon and name, an indeterminate progress bar, "Getting SWU card data"; the bar stands still with reduced motion) and `SwuOffline` ("SWU needs a connection the first time", Try again, Play X-Wing, Back to game select), shown by App in place of SWU setup while it has no card data
     gameSelectScreen.tsx Game select screen: header: app icon + `dmgCtrl` h1 on the left, Help and Settings as worded secondary `Button`s on the right; two tiles (`Star Wars: Unlimited`, `X-Wing`) side by side in landscape and stacked in portrait, filling the space left; the tile of `lastGame` is filled tonal and labelled LAST PLAYED (its accessible name ends ", last played"); the `banner` prop renders under the tiles
     installBanner.tsx    Install banner: one row (`section` "Install dmgCtrl"): app icon; Android: "Install dmgCtrl", what installing gives, Not now and Install (the deferred `beforeinstallprompt` prompt); iPhone: "Install dmgCtrl from Safari" and the steps as one list (Tap the three dots › Share › View More › Add to Home Screen), wrapping in portrait, and Not now; positioned by its screen (App floats it at the foot of the setup screens)
@@ -149,12 +149,9 @@ docs/
   architecture-overview.md      System overview, goals, tech stack, component tree, glossary
   architecture-implementation.md This document — folder structure, state, data layer, UI, feature details
   architecture-process.md       Workflow, CI/CD, analytics, testing strategy, future improvements
-  swuSetupHelp.md               Setup screen user guide (imported as HTML string via custom Vite plugin)
-  swuGameHelp.md                Game screen user guide (imported as HTML string via custom Vite plugin)
-  swuTournamentHelp.md          Tournament screen user guide (imported as HTML string via custom Vite plugin)
-  xwingGameHelp.md              X-Wing game screen user guide (imported as HTML string via custom Vite plugin)
-  xwingSetupHelp.md             X-Wing setup screen user guide (imported as HTML string via custom Vite plugin)
-  xwingListsHelp.md             X-Wing Squad Lists screen user guide (imported as HTML string via custom Vite plugin)
+  swuHelp.md                    SWU help page (imported as HTML string via custom Vite plugin; each ## is a section)
+  xwingHelp.md                  X-Wing help page (as above)
+  appHelp.md                    App help page: starting the app, install, About (as above)
   project-overview.md           Product vision, planned features, AI assistant notes
 
 public/
@@ -195,7 +192,7 @@ All other state is owned at the component level:
 | State | Owner | How it flows |
 |---|---|---|
 | Current screen (`gameSelect` / `xwingSetup` / `xwing` / `setup` / `game` / `tournament` / `help` / `settings`) | `App` | Passed as callback props (`onConfirm`, `onBack`, `onHelp`, `onSettings`); the first screen is `launchScreen()` (see App startup); back from X-Wing game returns to `'xwingSetup'`; back from X-Wing or SWU setup navigates to `'gameSelect'` |
-| Help source (`'setup'` / `'game'` / `'tournament'` / `'xwing'` / `'xwingSetup'` / `'xwingLists'` / `'gameSelect'`) | `App` | Determines which markdown file `HelpScreen` renders; set by `handleHelp` based on the current screen before navigating to `'help'`. Settings has no Help button, so `App` never passes `HelpScreen`'s `'settings'` source |
+| Help source (`'setup'` / `'game'` / `'tournament'` / `'xwing'` / `'xwingSetup'` / `'xwingLists'` / `'gameSelect'`) | `App` | Determines which help page `HelpScreen` shows and the section it opens at; set by `handleHelp` based on the current screen before navigating to `'help'`. Settings has no Help button |
 | Back stack (for help/settings back-navigation) | `App` | A `Screen[]` stack; pushed when navigating to help or settings, popped on back — supports any depth of overlay navigation |
 | `useBases()` card data state (for the splash and offline screens) | `App` | With no bases on `'setup'`, `loading` shows `SwuSplash` and `error` shows `SwuOffline`, whose Try again calls `retry` |
 | Game start time | `App` (`useRef`) | Recorded at the start of `handleConfirm`; used by `handleBack` to compute `durationSeconds` for `onGameEnd` |
@@ -233,7 +230,7 @@ All other state is owned at the component level:
 2. `App` settles its first screen in a `useState` initialiser with `launchScreen()` (`src/utils/appStart.ts`): a tournament in progress → `'tournament'`; the address names a game (`gameFromPath`) → its setup; `startScreen` `'lastGame'` (default) → the setup of `readLastGame()`, or `'gameSelect'` before either is played; `'swu'` / `'xwing'` → that setup; `'gameSelect'` → `'gameSelect'`
 3. An effect on `screen` records the last game (`last_game`) whenever `'setup'` or `'xwingSetup'` opens
 4. On `'setup'` with no card data, `App` renders `SwuSplash` while `useBases()` is loading, or `SwuOffline` once it has failed (Try again calls `retry()`, Play X-Wing enters X-Wing setup, Back goes to game select). No other screen waits
-5. `GameSelectScreen` shows a tile per game (the last played marked), Help (the `'gameSelect'` help source, `docs/startHelp.md`) and Settings; Back from either setup returns to `'gameSelect'`
+5. `GameSelectScreen` shows a tile per game (the last played marked), Help (the `'gameSelect'` help source: `docs/appHelp.md`) and Settings; Back from either setup returns to `'gameSelect'`
 6. `App` renders the install banner from `useInstallPrompt()` on `'gameSelect'` (in the game select layout, under the tiles), `'setup'` and `'xwingSetup'` (fixed at the foot), never on a game screen
 
 ### Example flow: Setup → Game
@@ -519,7 +516,7 @@ The app is designed for **landscape orientation**. `useOrientation` is used in f
 
 - **Setup screen** (`SwuSetupScreenView`) — renders a two-column layout in landscape (selectors left, card preview right) and a single-column scrollable layout in portrait.
 - **Game screen** (`SwuGameScreen`) — renders the full-screen card layout in landscape and a rotation prompt in portrait.
-- **Help screen** (`HelpScreen`) — uses `vmin` to compute JS-based font sizes for the title row; `isPortrait` is used as a React `key` to force DOM remount on rotation, flushing any cached computed styles.
+- **Help screen** (`HelpScreen`) — section links in a column beside the content in landscape, in a row above it in portrait.
 - **Settings screen** (`SettingsScreenView`) — fixed px sizes from the shared controls; `isPortrait` chooses the two-column or stacked layout.
 - **Tournament screen** (`SwuTournamentScreenView`) — portrait: single-column layout (config → base art preview → W/L/D totals → action buttons → round table); landscape: two flex columns (left: config rows + card preview filling remaining height; right: W/L/D totals + action buttons + scrollable round table).
 
@@ -671,7 +668,7 @@ Each player's list and the scenario are chosen on `XwingSetupScreen` before the 
 ### X-Wing Squad Lists screen
 
 - Reached from the X-Wing setup header (**Squad lists**) or Settings › X-Wing › **Squad lists**; both call `App`'s `handleXwingLists`, which pushes the current screen onto `backStack` and sets `screen = 'xwingLists'`; Back uses `handleOverlayBack`, so it returns to setup or settings
-- Help opens `xwingListsHelp.md` (`helpSource = 'xwingLists'`)
+- Help opens `xwingHelp.md` at Squad lists (`helpSource = 'xwingLists'`)
 - Not kept mounted; it shares the lists store with the setup screen through `XwingListsProvider`, so a list saved here is offered on setup as soon as you go Back
 
 ### X-Wing game screen
@@ -699,6 +696,15 @@ The settings screen is reached from **More** on the setup, game and tournament s
 - **Start screen** (`startScreen`: Last game played, Game select, Star Wars: Unlimited or X-Wing; default 'lastGame') controls where the app opens when no tournament is in progress and the address names no game (see App startup). Back from SWU setup or X-Wing always returns to game select regardless of this setting
 - Timer lengths are not in Settings: each game sets its own on the timer before the game starts. The wake lock, the log, epic actions, the tournament selector, favourites and long-press have no setting
 - Landscape: General and X-Wing in the left column, SWU in the right; portrait: the three groups stacked. Neither scrolls at 844×390 or 390×844
+
+### Help screen
+
+There are three help pages, each a markdown file in `docs/` imported as HTML by the Vite markdown plugin: `swuHelp.md` (Setup, Game, Tournament, Rules), `xwingHelp.md` (Setup, Squad lists, Game, Tournament, Rules) and `appHelp.md` (Starting the app, Install, About, including the disclaimer for both games). A page's `#` is its title and each `##` is a section; `###` and below are headings inside a section. A new `##` appears in the section links with no code change.
+
+- Each game's More menu opens that game's page; game select's Help opens the app page. Settings has no Help button
+- `HelpScreen` takes the help source and opens at its section: `setup`, `game` and `tournament` open SWU at Setup, Game and Tournament; `xwingSetup`, `xwingLists` and `xwing` open X-Wing at Setup, Squad lists and Game; `gameSelect` opens the app page at Starting the app
+- Header: Back `IconButton` and the page title. Section links are `OptionRow`s, the current one pressed: a column beside the content in landscape, a row across the top in portrait (scrolling sideways when it does not fit). Tapping one scrolls the content to that section
+- The content is one scrolling column; the current section follows the scroll. At the end of the content, a short last section that cannot reach the top stays current when it was the one tapped
 
 ### Tournament screen
 
