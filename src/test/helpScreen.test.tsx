@@ -1,74 +1,94 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { readdirSync, readFileSync } from 'fs'
+import { join } from 'path'
 import HelpScreen from '../components/helpScreen'
+import { makeMatchMediaMock } from './setup'
+
+type Source = Parameters<typeof HelpScreen>[0]['source']
+
+const sectionLinks = () => within(screen.getByRole('navigation', { name: 'Sections' })).getAllByRole('button')
+const currentSection = () => sectionLinks().filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent)
 
 describe('HelpScreen', () => {
 
-  // --- Rendering ---
+  // --- Which page and section opens from each screen ---
 
-  it('Renders a Help heading', () => {
-    render(<HelpScreen onBack={vi.fn()} source="setup" />)
-    expect(screen.getByRole('heading', { name: /help/i })).toBeInTheDocument()
+  it.each<[Source, string, string]>([
+    ['setup', 'SWU help', 'Setup'],
+    ['game', 'SWU help', 'Game'],
+    ['tournament', 'SWU help', 'Tournament'],
+    ['xwingSetup', 'X-Wing help', 'Setup'],
+    ['xwingLists', 'X-Wing help', 'Squad lists'],
+    ['xwing', 'X-Wing help', 'Game'],
+    ['gameSelect', 'Help', 'Starting the app'],
+  ])('opened from %s: the %s page at %s', (source, title, section) => {
+    render(<HelpScreen onBack={vi.fn()} source={source} />)
+    expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument()
+    expect(currentSection()).toEqual([section])
   })
 
-  it('Markdown h1 title is not duplicated in the scrollable content', () => {
-    render(<HelpScreen onBack={vi.fn()} source="setup" />)
-    // The JSX header provides the h1; the markdown h1 should be stripped before rendering
+  it.each<[Source, string[]]>([
+    ['game', ['Setup', 'Game', 'Tournament', 'Rules']],
+    ['xwing', ['Setup', 'Squad lists', 'Game', 'Tournament', 'Rules']],
+    ['gameSelect', ['Starting the app', 'Install', 'About']],
+  ])('the page opened from %s has the sections %j, each a heading in the content', (source, sections) => {
+    render(<HelpScreen onBack={vi.fn()} source={source} />)
+    expect(sectionLinks().map(b => b.textContent)).toEqual(sections)
+    const content = screen.getByTestId('help-content')
+    expect(within(content).getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(sections)
+  })
+
+  it('has one h1: the markdown title is not repeated in the content', () => {
+    render(<HelpScreen onBack={vi.fn()} source="game" />)
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
   })
 
-  it('Renders the About section heading', () => {
-    render(<HelpScreen onBack={vi.fn()} source="setup" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'About' })).toBeInTheDocument()
-  })
-
-  it('Renders the Getting Started section heading', () => {
-    render(<HelpScreen onBack={vi.fn()} source="setup" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Getting Started' })).toBeInTheDocument()
-  })
-
-  it('Renders the During a Game section heading', () => {
+  it('a section link marks that section as the current one', async () => {
+    const user = userEvent.setup()
     render(<HelpScreen onBack={vi.fn()} source="game" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'During a Game' })).toBeInTheDocument()
+    await user.click(within(screen.getByRole('navigation', { name: 'Sections' })).getByRole('button', { name: 'Rules' }))
+    expect(currentSection()).toEqual(['Rules'])
   })
 
-  it('Renders the Settings section heading', () => {
-    render(<HelpScreen onBack={vi.fn()} source="setup" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Settings' })).toBeInTheDocument()
+  // --- Content ---
+
+  it('the game pages carry no settings table: each setting explains itself', () => {
+    for (const source of ['game', 'xwing'] as const) {
+      const { unmount } = render(<HelpScreen onBack={vi.fn()} source={source} />)
+      expect(screen.queryByRole('heading', { name: 'Settings' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('table', { name: /setting/i })).not.toBeInTheDocument()
+      expect(screen.getByTestId('help-content').textContent).not.toMatch(/\| Setting \|/)
+      unmount()
+    }
   })
 
-  it('Renders the Format section heading', () => {
-    render(<HelpScreen onBack={vi.fn()} source="setup" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Format' })).toBeInTheDocument()
+  it('the app page holds the disclaimer for both games', () => {
+    render(<HelpScreen onBack={vi.fn()} source="gameSelect" />)
+    const text = screen.getByTestId('help-content').textContent ?? ''
+    expect(text).toMatch(/unofficial fan site/)
+    expect(text).toMatch(/Fantasy Flight Games/)
+    expect(text).toMatch(/Atomic Mass Games/)
   })
 
-  it('Renders the Troubleshooting section heading', () => {
-    render(<HelpScreen onBack={vi.fn()} source="setup" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Troubleshooting' })).toBeInTheDocument()
+  // --- Layout ---
+
+  it('the content scrolls', () => {
+    render(<HelpScreen onBack={vi.fn()} source="game" />)
+    expect(screen.getByTestId('help-content')).toHaveStyle({ overflowY: 'auto' })
   })
 
-  it('Renders the app icon in the header', () => {
-    render(<HelpScreen onBack={vi.fn()} source="setup" />)
-    expect(screen.getByAltText('dmgCtrl')).toBeInTheDocument()
+  it('section links are a column in landscape and a row across the top in portrait', () => {
+    const { unmount } = render(<HelpScreen onBack={vi.fn()} source="game" />)
+    expect(screen.getByRole('navigation', { name: 'Sections' })).toHaveStyle({ flexDirection: 'column' })
+    unmount()
+    makeMatchMediaMock(true)
+    render(<HelpScreen onBack={vi.fn()} source="game" />)
+    expect(screen.getByRole('navigation', { name: 'Sections' })).toHaveStyle({ flexDirection: 'row' })
   })
 
-  it('Renders a back button', () => {
-    render(<HelpScreen onBack={vi.fn()} source="setup" />)
-    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
-  })
-
-  // --- Scrolling ---
-
-  it('Content area permits scrolling', () => {
-    render(<HelpScreen onBack={vi.fn()} source="setup" />)
-    const content = screen.getByTestId('help-content')
-    expect(content).toHaveStyle({ overflowY: 'auto' })
-  })
-
-  // --- Navigation ---
-
-  it('Calls onBack when back button is clicked', async () => {
+  it('Back calls onBack', async () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
     render(<HelpScreen onBack={onBack} source="setup" />)
@@ -76,71 +96,14 @@ describe('HelpScreen', () => {
     expect(onBack).toHaveBeenCalledOnce()
   })
 
-  // --- Source-specific content (setup vs game) ---
+  // --- Files ---
 
-  it('source="setup" does not render the During a Game section', () => {
-    render(<HelpScreen onBack={vi.fn()} source="setup" />)
-    expect(screen.queryByRole('heading', { level: 2, name: 'During a Game' })).not.toBeInTheDocument()
-  })
-
-  it('source="setup" renders the Getting Started section', () => {
-    render(<HelpScreen onBack={vi.fn()} source="setup" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Getting Started' })).toBeInTheDocument()
-  })
-
-  it('source="game" does not render the Getting Started section', () => {
-    render(<HelpScreen onBack={vi.fn()} source="game" />)
-    expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
-  })
-
-  it('source="game" renders the During a Game section', () => {
-    render(<HelpScreen onBack={vi.fn()} source="game" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'During a Game' })).toBeInTheDocument()
-  })
-
-  it('source="tournament" renders the Tournament section heading', () => {
-    render(<HelpScreen onBack={vi.fn()} source="tournament" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Tournament Mode' })).toBeInTheDocument()
-  })
-
-  it('source="tournament" does not render the Getting Started section', () => {
-    render(<HelpScreen onBack={vi.fn()} source="tournament" />)
-    expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
-  })
-
-  it('source="tournament" does not render the During a Game section', () => {
-    render(<HelpScreen onBack={vi.fn()} source="tournament" />)
-    expect(screen.queryByRole('heading', { level: 2, name: 'During a Game' })).not.toBeInTheDocument()
-  })
-
-  it('source="xwing" renders the Ships section', () => {
-    render(<HelpScreen onBack={vi.fn()} source="xwing" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Ships' })).toBeInTheDocument()
-  })
-
-  it('source="xwing" renders the Round and timer section', () => {
-    render(<HelpScreen onBack={vi.fn()} source="xwing" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Round and timer' })).toBeInTheDocument()
-  })
-
-  it('source="xwing" does not render the Getting Started section', () => {
-    render(<HelpScreen onBack={vi.fn()} source="xwing" />)
-    expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
-  })
-
-  it('source="xwing" does not render the During a Game section', () => {
-    render(<HelpScreen onBack={vi.fn()} source="xwing" />)
-    expect(screen.queryByRole('heading', { level: 2, name: 'During a Game' })).not.toBeInTheDocument()
-  })
-
-  it('source="settings" renders the General section heading', () => {
-    render(<HelpScreen onBack={vi.fn()} source="settings" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'General' })).toBeInTheDocument()
-  })
-
-  it('source="settings" does not render the Getting Started section', () => {
-    render(<HelpScreen onBack={vi.fn()} source="settings" />)
-    expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
+  it('only the three help pages exist and are imported', () => {
+    const docs = join(__dirname, '../../docs')
+    expect(readdirSync(docs).filter(f => f.endsWith('Help.md')).sort()).toEqual(['appHelp.md', 'swuHelp.md', 'xwingHelp.md'])
+    const source = readFileSync(join(__dirname, '../components/helpScreen.tsx'), 'utf-8')
+    const imported = [...source.matchAll(/docs\/(\w+Help)\.md/g)].map(m => m[1]).sort()
+    expect(imported).toEqual(['appHelp', 'swuHelp', 'xwingHelp'])
   })
 
 })
