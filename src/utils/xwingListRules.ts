@@ -57,13 +57,39 @@ export function pilotProblems(pilots: XwingPilot[]): string[] {
   return problems
 }
 
-// Every reason the list can't be saved, ships and points first.
+// Every reason an imported list can't be saved: pilots the table doesn't know, then ships, then
+// points at today's costs (an unknown pilot counts at the points it arrived with), then uniques and limits.
 export function listProblems(pilots: XwingPilot[]): string[] {
-  const problems: string[] = []
+  const problems = pilots.flatMap((p, i) => {
+    if (xwaPilots[p.name]) return []
+    const guess = suggestPilot(p.name, p.ship)
+    return [`Ship ${i + 1}: no pilot called ${p.name}.${guess ? ` Did you mean ${pilotName(guess)}?` : ''}`]
+  })
   if (pilots.length < SHIPS_MIN || pilots.length > SHIPS_MAX) problems.push(`${SHIPS_MIN} to ${SHIPS_MAX} ships: this list has ${pilots.length}.`)
-  const total = listPoints(pilots)
-  if (total < POINTS_MIN || total > POINTS_MAX) problems.push(`${total} pts: lists are ${POINTS_MIN}–${POINTS_MAX}.`)
+  const total = listPoints(atCurrentCost(pilots))
+  if (total < POINTS_MIN || total > POINTS_MAX) problems.push(`${total} pts at today's costs: lists are ${POINTS_MIN}–${POINTS_MAX}.`)
   return [...problems, ...pilotProblems(pilots)]
+}
+
+// The known pilot id nearest an unknown one, if any is close: a typo, or an id missing the ship
+// suffix that tells two cards of one pilot apart. A pilot on the same ship wins a tie.
+function suggestPilot(id: string, ship: string): string | undefined {
+  let best: { id: string; score: number } | undefined
+  for (const [known, pilot] of Object.entries(xwaPilots)) {
+    const score = Math.min(editDistance(id, known), editDistance(id, known.split('-')[0])) - (pilot.ship === ship ? 0.5 : 0)
+    if (!best || score < best.score) best = { id: known, score }
+  }
+  return best && best.score <= Math.max(1, Math.floor(id.length / 4)) ? best.id : undefined
+}
+
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i]
+    for (let j = 1; j <= b.length; j++) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+    prev = row
+  }
+  return prev[b.length]
 }
 
 // The builder's one line under the total: what stands between the list and Save.

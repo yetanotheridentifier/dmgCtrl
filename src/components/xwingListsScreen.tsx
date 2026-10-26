@@ -7,12 +7,14 @@ import { BackIcon, HelpIcon } from './icons'
 import { Button, IconButton } from './shared/controls'
 import { FactionIcon } from './factionIcon'
 import XwingListBuilder from './xwingListBuilder'
+import type { BuilderStart } from './xwingListBuilder'
 import { XwingSaveListSheet } from './xwingSaveListSheet'
+import { xwaPilots } from '../data/xwaCards'
 import { parseXwsText } from '../utils/parseXwsText'
 import type { XwingPilot } from '../utils/parseXwsText'
 import { displayPilots } from '../utils/displayPilots'
 import { listDetail, pilotSummary } from '../utils/xwingListInfo'
-import { pilotProblems } from '../utils/xwingListRules'
+import { atCurrentCost, listProblems } from '../utils/xwingListRules'
 
 interface Props {
   onBack: () => void
@@ -21,20 +23,17 @@ interface Props {
   startWith?: 'import'
 }
 
-type Mode = { kind: 'lists' } | { kind: 'import' } | { kind: 'build'; editing?: XwingList }
+type Mode = { kind: 'lists' } | { kind: 'import' } | { kind: 'build'; editing?: XwingList; start?: BuilderStart }
 
 type Checked =
-  | { ok: false; error: string }
+  | { ok: false }
   | { ok: true; pilots: XwingPilot[]; faction: string | undefined; name: string | undefined; problems: string[] }
 
-function importErrorMessage(code: string): string {
-  switch (code) {
-    case 'too-few-ships': return 'List must contain at least 3 ships.'
-    case 'too-many-ships': return 'List must contain no more than 8 ships.'
-    case 'invalid-total': return 'Points total must be between 46 and 50.'
-    case 'invalid-format': return "Couldn't read list: check you've pasted the XWS export."
-    default: return 'Invalid list.'
-  }
+// The pasted list at today's costs, and every reason it can't be saved.
+function checkXws(text: string): Checked {
+  const result = parseXwsText(text)
+  if (!result.ok) return { ok: false }
+  return { ok: true, pilots: atCurrentCost(result.pilots), faction: result.faction, name: result.name, problems: listProblems(result.pilots) }
 }
 
 const mutedStyle: React.CSSProperties = { fontSize: '0.8rem', color: 'var(--color-text-muted)' }
@@ -48,15 +47,18 @@ export default function XwingListsScreen({ onBack, onHelp, startWith }: Props) {
   const { isPortrait } = useOrientation()
   const { lists, saveList, renameList, removeList } = useXwingLists()
   const [mode, setMode] = useState<Mode>(startWith === 'import' ? { kind: 'import' } : { kind: 'lists' })
-  const toLists = () => setMode({ kind: 'lists' })
+  // The paste outlives a trip to the builder to fix it, and is dropped on the way back to the lists.
+  const [importText, setImportText] = useState('')
+  const toLists = () => { setImportText(''); setMode({ kind: 'lists' }) }
 
   if (mode.kind === 'build') {
     return (
       <XwingListBuilder
         editing={mode.editing}
-        onBack={toLists}
+        start={mode.start}
+        onBack={mode.start ? () => setMode({ kind: 'import' }) : toLists}
         onSaved={toLists}
-        onImport={mode.editing ? undefined : () => setMode({ kind: 'import' })}
+        onImport={mode.editing || mode.start ? undefined : () => setMode({ kind: 'import' })}
       />
     )
   }
@@ -66,8 +68,11 @@ export default function XwingListsScreen({ onBack, onHelp, startWith }: Props) {
       <ImportXws
         isPortrait={isPortrait}
         lists={lists}
+        text={importText}
+        onText={setImportText}
         onBack={startWith === 'import' ? onBack : toLists}
         onSave={(name, pilots, faction) => { saveList(name, pilots, faction); toLists() }}
+        onFix={start => setMode({ kind: 'build', start })}
       />
     )
   }
@@ -168,28 +173,30 @@ function ListCard({ list, lists, onEdit, onRename, onDelete }: {
   )
 }
 
-function ImportXws({ isPortrait, lists, onBack, onSave }: {
+function ImportXws({ isPortrait, lists, text, onText, onBack, onSave, onFix }: {
   isPortrait: boolean
   lists: XwingList[]
+  text: string
+  onText: (text: string) => void
   onBack: () => void
   onSave: (name: string, pilots: XwingPilot[], faction: string | undefined) => void
+  onFix: (start: BuilderStart) => void
 }) {
-  const [text, setText] = useState('')
-  const [checked, setChecked] = useState<Checked | null>(null)
+  // Back from fixing it in the builder, the paste is checked again.
+  const [checked, setChecked] = useState<Checked | null>(() => (text ? checkXws(text) : null))
   const [saving, setSaving] = useState(false)
 
-  const check = () => {
-    const result = parseXwsText(text)
-    setChecked(result.ok
-      ? { ok: true, pilots: result.pilots, faction: result.faction, name: result.name, problems: pilotProblems(result.pilots) }
-      : { ok: false, error: result.error })
-  }
   const canSave = checked?.ok === true && checked.problems.length === 0
+  const canFix = checked?.ok === true && checked.problems.length > 0
+  const fix = () => {
+    if (!checked?.ok) return
+    onFix({ pilots: checked.pilots.filter(p => xwaPilots[p.name]), faction: checked.faction, name: checked.name })
+  }
 
   const result = checked === null ? (
     <div style={mutedStyle}>Paste a list and check it.</div>
   ) : !checked.ok ? (
-    <div role="alert" data-testid="lists-error" style={{ fontSize: '0.9rem', color: 'var(--color-error)' }}>{importErrorMessage(checked.error)}</div>
+    <div role="alert" data-testid="lists-error" style={{ fontSize: '0.9rem', color: 'var(--color-error)' }}>Couldn't read list: check you've pasted the XWS export.</div>
   ) : checked.problems.length > 0 ? (
     <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <div style={{ fontSize: '1.05rem' }}>{checked.name ?? 'This list'} can't be saved yet</div>
@@ -238,7 +245,7 @@ function ImportXws({ isPortrait, lists, onBack, onSave }: {
               aria-label="XWS text"
               placeholder="Paste XWS JSON"
               value={text}
-              onChange={e => setText(e.target.value)}
+              onChange={e => onText(e.target.value)}
               style={{
                 flex: 1, minHeight: isPortrait ? '30vh' : 0, resize: 'none', boxSizing: 'border-box', border: '2px solid var(--color-surface-raised)', borderRadius: '12px',
                 background: 'var(--color-bg-deep)', color: 'var(--color-text-body)', fontFamily: "Consolas, 'Courier New', monospace", fontSize: '16px',
@@ -246,13 +253,16 @@ function ImportXws({ isPortrait, lists, onBack, onSave }: {
               }}
             />
             <div style={{ display: 'flex', gap: '8px' }}>
-              <Button onClick={() => { setText(''); setChecked(null) }} style={{ flex: 1 }}>Clear</Button>
-              <Button onClick={check} style={{ flex: 1 }}>Check</Button>
+              <Button onClick={() => { onText(''); setChecked(null) }} style={{ flex: 1 }}>Clear</Button>
+              <Button onClick={() => setChecked(checkXws(text))} style={{ flex: 1 }}>Check</Button>
             </div>
           </div>
           <div style={{ width: isPortrait ? undefined : '340px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
             <div style={{ ...panelStyle, flex: isPortrait ? undefined : 1, overflowY: 'auto', minHeight: 0 }}>{result}</div>
-            <Button variant="primary" disabled={!canSave} onClick={() => setSaving(true)} style={{ minHeight: '52px', flexShrink: 0 }}>Save list</Button>
+            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+              {canFix && <Button onClick={fix} style={{ flex: 1, minHeight: '52px' }}>Fix in builder</Button>}
+              <Button variant="primary" disabled={!canSave} onClick={() => setSaving(true)} style={{ flex: 1, minHeight: '52px' }}>Save list</Button>
+            </div>
           </div>
         </div>
       </div>

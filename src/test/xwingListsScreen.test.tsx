@@ -15,11 +15,37 @@ const VALID_XWS = JSON.stringify({
   points: 50,
 })
 
+// Wedge 14, Luke 14, Dash Rendar 19: 47 points.
 const UNNAMED_XWS = JSON.stringify({
   pilots: [
-    { name: 'pilota', ship: 'shipa', points: 16 },
-    { name: 'pilotb', ship: 'shipb', points: 15 },
-    { name: 'pilotc', ship: 'shipc', points: 15 },
+    { name: 'wedgeantilles', ship: 't65xwing', points: 14 },
+    { name: 'lukeskywalker', ship: 't65xwing', points: 14 },
+    { name: 'dashrendar', ship: 'yt2400lightfreighter', points: 19 },
+  ],
+  points: 47,
+})
+
+// The design's example: a misspelt Biggs, and 57 points at today's costs (the file says 50).
+const REBEL_BEEF_XWS = JSON.stringify({
+  name: 'Rebel beef',
+  faction: 'rebelalliance',
+  pilots: [
+    { name: 'wedgeantilles', ship: 't65xwing', points: 12 },
+    { name: 'lukeskywalker', ship: 't65xwing', points: 12 },
+    { name: 'bigsdarklighter', ship: 't65xwing', points: 10 },
+    { name: 'dashrendar', ship: 'yt2400lightfreighter', points: 16 },
+  ],
+  points: 50,
+})
+
+// Saved at older costs: 46 in the file, 50 today (Asajj 15, Boba 18, Bossk 17).
+const STALE_XWS = JSON.stringify({
+  name: 'Old scum',
+  faction: 'scumandvillainy',
+  pilots: [
+    { name: 'asajjventress', ship: 'lancerclasspursuitcraft', points: 14 },
+    { name: 'bobafett-armedanddangerous', ship: 'firesprayclasspatrolcraft', points: 16 },
+    { name: 'bossk', ship: 'yv666lightfreighter', points: 16 },
   ],
   points: 46,
 })
@@ -281,6 +307,86 @@ describe('XwingListsScreen', () => {
     expect(result).toHaveTextContent('"Howlrunner" is unique: only one per list.')
     expect(result).toHaveTextContent('Soontir Fel is unique: only one per list.')
     expect(screen.getByRole('button', { name: 'Save list' })).toBeDisabled()
+  })
+
+  it('names a pilot it does not know with a suggestion, and totals the list at today\'s costs', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await openImport(user)
+    await pasteAndCheck(user, REBEL_BEEF_XWS)
+    const result = screen.getByRole('alert')
+    expect(result).toHaveTextContent("Rebel beef can't be saved yet")
+    expect(result).toHaveTextContent('2 problems')
+    expect(result).toHaveTextContent('Ship 3: no pilot called bigsdarklighter. Did you mean Biggs Darklighter?')
+    expect(result).toHaveTextContent("57 pts at today's costs: lists are 46–50.")
+    expect(screen.getByRole('button', { name: 'Save list' })).toBeDisabled()
+  })
+
+  it('a list that is legal at today\'s costs saves at today\'s costs', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await openImport(user)
+    await pasteAndCheck(user, STALE_XWS)
+    expect(screen.getByTestId('lists-new-meta')).toHaveTextContent('50 pts · 3 ships · Scum and Villainy')
+    await user.click(screen.getByRole('button', { name: 'Save list' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Save list' })).getByRole('button', { name: 'Save list' }))
+    expect(mockXwingLists.saveList).toHaveBeenCalledWith('Old scum', [
+      { name: 'asajjventress', ship: 'lancerclasspursuitcraft', points: 15 },
+      { name: 'bobafett-armedanddangerous', ship: 'firesprayclasspatrolcraft', points: 18 },
+      { name: 'bossk', ship: 'yv666lightfreighter', points: 17 },
+    ], 'scumandvillainy')
+  })
+
+  it('a list too short to judge is still read, and its ship count is a problem', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await openImport(user)
+    await pasteAndCheck(user, JSON.stringify({ pilots: [{ name: 'wedgeantilles', ship: 't65xwing', points: 14 }], points: 14 }))
+    expect(screen.getByRole('alert')).toHaveTextContent('3 to 8 ships: this list has 1.')
+    expect(screen.getByRole('button', { name: 'Fix in builder' })).toBeInTheDocument()
+  })
+
+  it('Fix in builder is offered only for a list that read but cannot be saved', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await openImport(user)
+    expect(screen.queryByRole('button', { name: 'Fix in builder' })).not.toBeInTheDocument()
+    await pasteAndCheck(user, 'not json')
+    expect(screen.queryByRole('button', { name: 'Fix in builder' })).not.toBeInTheDocument()
+    await pasteAndCheck(user, VALID_XWS)
+    expect(screen.queryByRole('button', { name: 'Fix in builder' })).not.toBeInTheDocument()
+  })
+
+  it('Fix in builder opens a new list on the known pilots and faction, and Back returns to the paste', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await openImport(user)
+    await pasteAndCheck(user, REBEL_BEEF_XWS)
+    await user.click(screen.getByRole('button', { name: 'Fix in builder' }))
+    expect(screen.getByRole('heading', { name: 'Rebel Alliance' })).toBeInTheDocument()
+    expect(screen.getByText('New list')).toBeInTheDocument()
+    const list = screen.getByTestId('builder-list')
+    expect(within(list).getByText('• Wedge Antilles')).toBeInTheDocument()
+    expect(within(list).getByText('• Dash Rendar')).toBeInTheDocument()
+    expect(within(list).queryByText(/bigsdarklighter/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('builder-status')).toHaveTextContent('47/ 50 pts· 3 ships (3–8)')
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByTestId('lists-textarea')).toHaveValue(REBEL_BEEF_XWS)
+    expect(screen.getByRole('alert')).toHaveTextContent('2 problems')
+  })
+
+  it('a list fixed in the builder saves under the imported name and returns to the lists', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await openImport(user)
+    await pasteAndCheck(user, REBEL_BEEF_XWS)
+    await user.click(screen.getByRole('button', { name: 'Fix in builder' }))
+    await user.click(screen.getByRole('button', { name: 'Save list' }))
+    const sheet = screen.getByRole('dialog', { name: 'Save list' })
+    expect(within(sheet).getByRole('textbox', { name: 'Name' })).toHaveValue('Rebel beef')
+    await user.click(within(sheet).getByRole('button', { name: 'Save list' }))
+    expect(mockXwingLists.saveList).toHaveBeenCalledWith('Rebel beef', expect.any(Array), 'rebelalliance')
+    expect(screen.getByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
   })
 
   it('a valid paste shows the pilots and points, and Clear empties the box', async () => {

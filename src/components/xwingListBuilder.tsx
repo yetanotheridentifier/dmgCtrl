@@ -19,6 +19,8 @@ export type BuilderSide = 'player' | 'opponent'
 interface Props {
   // The saved list to edit; a new list starts by choosing a faction.
   editing?: XwingList
+  // A new list that starts with pilots (an import being fixed), saved under its name by default.
+  start?: BuilderStart
   // Who a new list is for, when it's built from setup's list sheet.
   side?: BuilderSide
   onBack: () => void
@@ -27,10 +29,17 @@ interface Props {
   onImport?: () => void
 }
 
+export interface BuilderStart {
+  pilots: XwingPilot[]
+  faction?: string
+  name?: string
+}
+
 const FOR: Record<BuilderSide, string> = { player: 'for you', opponent: 'for your opponent' }
 
-// A list saved before factions were kept takes its faction from its first known pilot.
-const factionOf = (list: XwingList) => list.faction ?? list.pilots.map(p => xwaPilots[p.name]?.faction).find(Boolean)
+// A list without a faction (saved before factions were kept, or an XWS file without one) takes it
+// from its first known pilot.
+const factionOf = (list: { faction?: string; pilots: XwingPilot[] }) => list.faction ?? list.pilots.map(p => xwaPilots[p.name]?.faction).find(Boolean)
 
 const rowStyle = (selected = false): React.CSSProperties => ({
   flexShrink: 0,
@@ -81,13 +90,14 @@ function listRows(pilots: XwingPilot[]): ListRow[] {
   return rows
 }
 
-export default function XwingListBuilder({ editing, side, onBack, onSaved, onImport }: Props) {
+export default function XwingListBuilder({ editing, start, side, onBack, onSaved, onImport }: Props) {
   const { isPortrait } = useOrientation()
   const { lists, saveList } = useXwingLists()
-  const [faction, setFaction] = useState<string | undefined>(() => (editing ? factionOf(editing) : undefined))
-  const [pilots, setPilots] = useState<XwingPilot[]>(() => (editing ? atCurrentCost(editing.pilots) : []))
+  const initial = editing ?? start
+  const [faction, setFaction] = useState<string | undefined>(() => (initial ? factionOf(initial) : undefined))
+  const [pilots, setPilots] = useState<XwingPilot[]>(() => (initial ? atCurrentCost(initial.pilots) : []))
   const ships = faction ? factionShips(faction) : []
-  const [ship, setShip] = useState<string | undefined>(() => editing?.pilots[0]?.ship)
+  const [ship, setShip] = useState<string | undefined>(() => initial?.pilots[0]?.ship)
   const shownShip = ships.find(s => s.ship === ship) ?? ships[0]
   const [search, setSearch] = useState('')
   const [swapIndex, setSwapIndex] = useState<number | null>(null)
@@ -283,7 +293,7 @@ export default function XwingListBuilder({ editing, side, onBack, onSaved, onImp
       pilots={pilots}
       faction={faction}
       lists={lists}
-      initialName={editing?.name ?? ''}
+      initialName={initial?.name ?? ''}
       editing={editing}
       onClose={() => setSaving(false)}
       onSave={save}

@@ -66,7 +66,7 @@ The save sheet shows the list's points, ships, faction and pilots, with a **Name
 
 ### Importing a list
 
-Export your squad from any squad builder as XWS and copy the JSON text. Tap **Import XWS**, paste it into the box and tap **Check**. A list that cannot be read, or that breaks a rule above, shows each problem and cannot be saved; otherwise its pilots, points and faction are shown and **Save list** opens the same save sheet. **Clear** empties the box.
+Export your squad from any squad builder as XWS and copy the JSON text. Tap **Import XWS**, paste it into the box and tap **Check**. Points are counted at today's costs, whatever the squad builder said when the list was exported, and an imported list is saved at today's costs. A list that cannot be read shows an error. A list that breaks a rule above shows each problem and cannot be saved: a pilot the app doesn't know is named by its place in the list, with the nearest pilot it does know ("Ship 3: no pilot called bigsdarklighter. Did you mean Biggs Darklighter?"). **Fix in builder** then opens the list builder on the pilots it knows and the list's faction, as a new list named after the import; **Back** returns to the paste. A legal list shows its pilots, points and faction, and **Save list** opens the same save sheet. **Clear** empties the box.
 
 ### Saved lists
 

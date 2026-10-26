@@ -73,8 +73,35 @@ describe('xwingListRules', () => {
   it('names the ship count and points when they are out of range', () => {
     expect(listProblems([p('soontirfel'), p('howlrunner')])).toEqual([
       '3 to 8 ships: this list has 2.',
-      '21 pts: lists are 46–50.',
+      "21 pts at today's costs: lists are 46–50.",
     ])
+  })
+
+  it("totals the list at today's costs, not the points it arrived with", () => {
+    const list = [p('soontirfel'), p('howlrunner'), p('maulermithel'), p('isbjingoist'), p('academypilot'), p('academypilot')]
+    const stale = list.map(x => ({ ...x, points: x.points + 1 }))
+    expect(stale.reduce((s, x) => s + x.points, 0)).toBe(53)
+    expect(listProblems(stale)).toEqual([])
+    const cheap = list.map(x => ({ ...x, points: 1 }))
+    cheap.push({ ...p('wampa'), points: 0 }, { ...p('isbjingoist'), points: 0 })
+    expect(listProblems(cheap)).toEqual(["61 pts at today's costs: lists are 46–50."])
+  })
+
+  it('names a pilot the table does not know, by ship, and suggests the nearest one', () => {
+    const typo = { name: 'bigsdarklighter', ship: 't65xwing', points: 10 }
+    expect(listProblems([p('wedgeantilles'), p('lukeskywalker'), typo, p('dashrendar')])[0])
+      .toBe('Ship 3: no pilot called bigsdarklighter. Did you mean Biggs Darklighter?')
+  })
+
+  it('suggests a pilot whose id carries a ship suffix the paste left off', () => {
+    const bare = { name: 'dextiree', ship: 'btla4ywing', points: 9 }
+    expect(listProblems([bare, p('lukeskywalker'), p('wedgeantilles')])[0])
+      .toBe('Ship 1: no pilot called dextiree. Did you mean Dex Tiree (BoY)?')
+  })
+
+  it('names an unknown pilot with no suggestion when nothing is close', () => {
+    const junk = { name: 'qqqqqqqqqqqq', ship: 'shipz', points: 16 }
+    expect(listProblems([p('wedgeantilles'), junk, p('lukeskywalker')])[0]).toBe('Ship 2: no pilot called qqqqqqqqqqqq.')
   })
 
   // --- The builder's status line ---

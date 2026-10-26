@@ -327,6 +327,29 @@ describe('XwingListBuilder', () => {
     expect(onSaved).toHaveBeenCalledWith('swarm')
   })
 
+  // --- Starting from an imported list ---
+
+  it('a starting list opens as a new list on its pilots at today\'s costs, and saves under its name', async () => {
+    const user = userEvent.setup()
+    const start = { name: 'Fixed swarm', faction: 'galacticempire', pilots: SWARM.pilots }
+    const { onSaved } = renderBuilder({ start })
+    expect(screen.getByRole('heading', { name: 'Galactic Empire' })).toBeInTheDocument()
+    expect(screen.getByText('New list')).toBeInTheDocument()
+    expect(status()).toHaveTextContent('49/ 50 pts· 7 ships (3–8)')
+    expect(saveButton()).toHaveTextContent('Save list')
+    await user.click(saveButton())
+    const sheet = screen.getByRole('dialog', { name: 'Save list' })
+    expect(within(sheet).getByRole('textbox', { name: 'Name' })).toHaveValue('Fixed swarm')
+    await user.click(within(sheet).getByRole('button', { name: 'Save list' }))
+    expect(mockXwingLists.saveList).toHaveBeenCalledWith('Fixed swarm', expect.arrayContaining([p('howlrunner')]), 'galacticempire')
+    expect(onSaved).toHaveBeenCalledWith('new-id')
+  })
+
+  it('a starting list with no faction takes it from its pilots', () => {
+    renderBuilder({ start: { pilots: SWARM.pilots } })
+    expect(screen.getByRole('heading', { name: 'Galactic Empire' })).toBeInTheDocument()
+  })
+
   it('the faction of an older list saved without one comes from its pilots', () => {
     renderBuilder({ editing: { ...SWARM, faction: undefined } })
     expect(screen.getByRole('heading', { name: 'Galactic Empire' })).toBeInTheDocument()

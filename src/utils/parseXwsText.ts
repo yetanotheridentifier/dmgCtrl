@@ -1,5 +1,3 @@
-import { POINTS_MAX, POINTS_MIN, SHIPS_MAX, SHIPS_MIN } from './xwingListRules'
-
 export interface XwingPilot {
   name: string
   ship: string
@@ -7,9 +5,11 @@ export interface XwingPilot {
 }
 
 export type ParseResult =
-  | { ok: true; pilots: XwingPilot[]; total: number; name: string | undefined; faction: string | undefined }
-  | { ok: false; error: 'invalid-format' | 'too-few-ships' | 'too-many-ships' | 'invalid-total' }
+  | { ok: true; pilots: XwingPilot[]; name: string | undefined; faction: string | undefined }
+  | { ok: false; error: 'invalid-format' }
 
+// Reads an XWS export's pilots, name and faction. Whether the list is legal (ships, points at
+// today's costs, known pilots) is listProblems' call, so a list that breaks a rule still reads.
 export function parseXwsText(text: string): ParseResult {
   let parsed: unknown
   try {
@@ -24,7 +24,7 @@ export function parseXwsText(text: string): ParseResult {
 
   const obj = parsed as Record<string, unknown>
 
-  if (!Array.isArray(obj.pilots) || typeof obj.points !== 'number') {
+  if (!Array.isArray(obj.pilots)) {
     return { ok: false, error: 'invalid-format' }
   }
 
@@ -42,13 +42,7 @@ export function parseXwsText(text: string): ParseResult {
     pilots.push({ name: e.name as string, ship: e.ship as string, points: e.points as number })
   }
 
-  if (pilots.length < SHIPS_MIN) return { ok: false, error: 'too-few-ships' }
-  if (pilots.length > SHIPS_MAX) return { ok: false, error: 'too-many-ships' }
-
-  const total = obj.points as number
-  if (total < POINTS_MIN || total > POINTS_MAX) return { ok: false, error: 'invalid-total' }
-
   const name = typeof obj.name === 'string' ? obj.name : undefined
   const faction = typeof obj.faction === 'string' ? obj.faction : undefined
-  return { ok: true, pilots, total, name, faction }
+  return { ok: true, pilots, name, faction }
 }
