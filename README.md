@@ -110,12 +110,9 @@ Start at [sealed/docs/README.md](sealed/docs/README.md), which maps one file per
 | [docs/architecture-implementation.md](docs/architecture-implementation.md) | Folder structure, state management, data layer, UI system, feature details, performance |
 | [docs/architecture-process.md](docs/architecture-process.md) | Workflow, CI/CD, analytics, testing strategy, future improvements |
 | [docs/project-overview.md](docs/project-overview.md) | Product vision, planned features, known issues, notes for AI assistants |
-| [docs/swuSetupHelp.md](docs/swuSetupHelp.md) | SWU setup screen help (shown via the ? button on the setup screen) |
-| [docs/swuGameHelp.md](docs/swuGameHelp.md) | SWU game screen help (shown via the ? button on the game screen) |
-| [docs/swuTournamentHelp.md](docs/swuTournamentHelp.md) | SWU tournament screen help (shown via the ? button on the tournament screen) |
-| [docs/xwingSetupHelp.md](docs/xwingSetupHelp.md) | X-Wing setup screen help (shown via the ? button on the X-Wing setup screen) |
-| [docs/xwingGameHelp.md](docs/xwingGameHelp.md) | X-Wing game screen help (shown via the ? button on the X-Wing game screen) |
-| [docs/settingsHelp.md](docs/settingsHelp.md) | Settings screen help (shown via the ? button on the settings screen) |
+| [docs/swuHelp.md](docs/swuHelp.md) | SWU help page: Setup, Game, Tournament, Rules (Help in the More menu on the SWU screens) |
+| [docs/xwingHelp.md](docs/xwingHelp.md) | X-Wing help page: Setup, Squad lists, Game, Tournament, Rules (Help on the X-Wing screens) |
+| [docs/appHelp.md](docs/appHelp.md) | App help page: starting the app, install, About (Help on game select) |
 
 ---
 
