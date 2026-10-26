@@ -3,7 +3,8 @@
 // refuses to run against jsdom's TextEncoder ("this JavaScript environment is broken").
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { ConfigEnv, UserConfig } from 'vite'
-import configFn, { PWA_MANIFEST } from '../../vite.config'
+import { getManifest } from 'workbox-build'
+import configFn, { PWA_MANIFEST, PWA_WORKBOX } from '../../vite.config'
 
 /**
  * `vite-plugin-mkcert` fetches the mkcert release list from the GitHub API when Vite resolves
@@ -86,6 +87,44 @@ describe('root vite config', () => {
   it('keeps one install, started at the root, with a shortcut to each game', () => {
     expect(PWA_MANIFEST.start_url).toBe('.')
     expect(PWA_MANIFEST.shortcuts?.map(s => [s.short_name, s.url])).toEqual([['SWU', 'swu/'], ['X-Wing', 'xwing/']])
+  })
+
+  /**
+   * Offline, a screen shows only the images the service worker precached. `public/` is copied
+   * to the build as it is, so running Workbox's own manifest step over it with the app's
+   * patterns lists exactly the `public/` files the installed app holds.
+   */
+  describe('offline images', () => {
+    const precached = async (globPatterns: string[]) => {
+      const { manifestEntries, size } = await getManifest({ globDirectory: 'public', globPatterns })
+      return { urls: (manifestEntries ?? []).map(e => e.url).sort(), size }
+    }
+
+    it('precaches every image in public/', async () => {
+      const all = await precached(['**/*'])
+      const images = all.urls.filter(url => /\.(png|svg)$/.test(url))
+      expect(images.length).toBeGreaterThan(0)
+      const { urls } = await precached(PWA_WORKBOX.globPatterns ?? [])
+      expect(urls).toEqual(expect.arrayContaining(images))
+    })
+
+    it('precaches the splash, game select and SWU game images by name', async () => {
+      const { urls } = await precached(PWA_WORKBOX.globPatterns ?? [])
+      expect(urls).toEqual(expect.arrayContaining([
+        'dmgCtrl-icon-transparent-192.png',
+        'Star-Wars-Unlimited-logo-white.png',
+        'Star-Wars-X-wing-logo.png',
+        'aggression.png', 'command.png', 'cunning.png', 'heroism.png', 'vigilance.png', 'villainy.png',
+        'dmgCtrl-force-token.png',
+        'dmgctrl-icon-192-white.svg',
+      ]))
+    })
+
+    /** Every install downloads the precache in full, so an image added here costs every player. */
+    it('keeps the public/ images under 500 KB', async () => {
+      const { size } = await precached(PWA_WORKBOX.globPatterns ?? [])
+      expect(size).toBeLessThan(500_000)
+    })
   })
 
   /** Gating one plugin must not disturb the others. */

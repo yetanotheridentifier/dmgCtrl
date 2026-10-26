@@ -177,7 +177,9 @@ public/
   dmgctrl-icon-192-white.svg        White starburst logo SVG (192×192); used on the epic action button and as watermark in the epic action overlay
   Star-Wars-Unlimited-logo-white.png Star Wars Unlimited logo (white); used as the SWU game button image on the game select screen
   Star-Wars-X-wing-logo.png         Star Wars X-Wing logo; used as the X-Wing game button image on the game select screen
-  ...                       PWA manifest, icons
+  aggression.png ... villainy.png   SWU aspect icons (aggression, command, cunning, heroism, vigilance, villainy)
+                                    Every .png and .svg here is precached by the service worker, so it shows offline
+                                    (a test keeps the total under 500 KB)
 
 .github/
   workflows/
