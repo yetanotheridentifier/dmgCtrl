@@ -67,7 +67,7 @@ Your Player ID is saved once entered and remembered between sessions. You can up
 
 ## Match Timer
 
-When playing Best of 3, a match timer runs on the game screen (default: 55 minutes). For Best of 1, the default is 25 minutes. Both durations are adjustable in Settings.
+When playing Best of 3, a match timer runs on the game screen (default: 55 minutes). For Best of 1, the default is 25 minutes. Set the length on the game's timer before the match starts; each is remembered for next time.
 
 The timer starts when you tap **Start** at the beginning of the first game and runs continuously until the match ends. For full timer details, see the game help screen.
 
@@ -75,15 +75,7 @@ The timer starts when you tap **Start** at the beginning of the first game and r
 
 Open **More** (the ⋯ button at the top right of the tournament screen), then **Settings**.
 
-The following settings are relevant to tournament play. All are saved automatically and persist between sessions.
-
-| Setting | Default | Description |
-|---|---|---|
-| **Melee Player ID** | (empty) | Your melee.gg player identifier, used for the Player portal button. Enter it once and it is remembered. |
-| **Bo1 Timer** | 25 min | Match timer duration for Best of 1 rounds. Adjustable in 5-minute steps (5–90 min). |
-| **Bo3 Timer** | 55 min | Match timer duration for Best of 3 rounds. Adjustable in 5-minute steps (5–90 min). |
-
-These settings are only visible when **Enable Competitive Mode** is on.
+**Melee player ID**, in the Star Wars: Unlimited group, is the one relevant to tournament play: your melee.gg player identifier, used for the Player portal button. Enter it once and it is remembered.
 
 ---
 

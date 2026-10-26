@@ -192,7 +192,6 @@ Twenty-seven public functions enqueue events and trigger a flush. All are fire-a
 | `onForceUsed(baseKey, baseSet)` | `force_used` | `baseKey`, `baseSet` |
 | `onFavouriteAdded(baseKey, baseSet)` | `favourite_added` | `baseKey`, `baseSet` |
 | `onFavouriteRemoved(baseKey, baseSet)` | `favourite_removed` | `baseKey`, `baseSet` |
-| `onFavouritesCleared()` | `favourites_cleared` | — |
 | `onSettingChanged(setting, value)` | `setting_changed` | `setting` (string), `value` (unknown — boolean for current settings, typed loosely to accommodate future multi-choice settings) |
 | `onDeckImportSuccess(baseKey, baseSet)` | `deck_import_success` | `baseKey`, `baseSet` |
 | `onDeckImportFailure(reason)` | `deck_import_failure` | `reason` (`'deck_not_accessible'` \| `'base_not_recognised'`) |
@@ -267,9 +266,7 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 
 | Trigger | Call |
 |---|---|
-| Any settings toggle changed | `onSettingChanged(settingName, newValue)` |
-| Remove clicked on an individual favourite | `onFavouriteRemoved(baseKey, baseSet)` |
-| Clear All confirmed | `onFavouritesCleared()` |
+| Any setting changed but the Melee player ID | `onSettingChanged(settingName, newValue)` |
 
 **SwuGameScreen (swuGameScreen.tsx)**
 

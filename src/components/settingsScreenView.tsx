@@ -18,8 +18,9 @@ const FORCE_TOKENS: { value: ForceTokenDisplay; label: string }[] = [
   { value: 'always-off', label: 'Off' },
 ]
 
-// The width of a control beside its label in landscape, so the right-hand controls line up.
-const CONTROL_WIDTH = '260px'
+// The width of a control beside its label in landscape, so the right-hand controls line up. It
+// gives way to a long label on a narrow screen.
+const CONTROL_WIDTH = '280px'
 
 const labelStyle: React.CSSProperties = { fontSize: '15px', color: 'var(--color-text-primary)' }
 const noteStyle: React.CSSProperties = { fontSize: '12px', lineHeight: '16px', color: 'var(--color-text-muted)' }
@@ -61,19 +62,17 @@ function SwitchRow({ label, note, checked, onChange }: { label: string; note?: s
 
 // A labelled control: beside its label in landscape, under it in portrait where the width is short.
 function FieldRow({ label, htmlFor, stacked, children }: { label: string; htmlFor?: string; stacked: boolean; children: ReactNode }) {
-  const text = htmlFor ? <label htmlFor={htmlFor} style={{ ...labelStyle, flex: 1 }}>{label}</label> : <span style={{ ...labelStyle, flex: 1 }}>{label}</span>
-  if (stacked) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {text}
-        {children}
-      </div>
-    )
-  }
+  const style: React.CSSProperties = { ...labelStyle, flex: 1, whiteSpace: 'nowrap' }
+  const text = htmlFor ? <label htmlFor={htmlFor} style={style}>{label}</label> : <span style={style}>{label}</span>
+  // The control is a row of its own, so a control that fills its width (flex: 1) keeps its height.
+  const control = <div style={{ display: 'flex', minWidth: 0, ...(stacked ? {} : { flex: `0 1 ${CONTROL_WIDTH}` }) }}>{children}</div>
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minHeight: '44px' }}>
+    <div style={stacked
+      ? { display: 'flex', flexDirection: 'column', gap: '8px' }
+      : { display: 'flex', alignItems: 'center', gap: '12px', minHeight: '44px' }}
+    >
       {text}
-      <div style={{ width: CONTROL_WIDTH, flexShrink: 0, display: 'flex' }}>{children}</div>
+      {control}
     </div>
   )
 }
@@ -185,7 +184,8 @@ export default function SettingsScreenView(props: Props) {
           {xwing}
         </>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
+        // SWU's column is a little wider, so Force tokens' three choices fit on one line each.
+        <div style={{ display: 'grid', gridTemplateColumns: '5fr 6fr', gap: '16px', alignItems: 'start' }}>
           <div data-testid="settings-left" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {general}
             {xwing}
