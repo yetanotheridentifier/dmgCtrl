@@ -22,7 +22,6 @@ const mockXwingLists = vi.hoisted(() => ({
   saveList: vi.fn(),
   renameList: vi.fn(),
   removeList: vi.fn(),
-  clearLists: vi.fn(),
 }))
 vi.mock('../hooks/useXwingLists', () => ({
   useXwingLists: () => mockXwingLists,

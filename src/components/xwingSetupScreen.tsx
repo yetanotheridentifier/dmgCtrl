@@ -4,7 +4,9 @@ import { useXwingLists } from '../hooks/useXwingLists'
 import type { XwingList } from '../hooks/useXwingLists'
 import { listPoints } from '../utils/xwingListInfo'
 import XwingSetupScreenView from './xwingSetupScreenView'
-import type { ResolvedChoice } from './xwingSetupScreenView'
+import type { ResolvedChoice, Side } from './xwingSetupScreenView'
+import XwingListBuilder from './xwingListBuilder'
+import { useState } from 'react'
 import type { XwingPilot } from '../utils/parseXwsText'
 import type { XwingTournamentList } from '../hooks/useXwingTournament'
 
@@ -14,6 +16,8 @@ interface Props {
   onHelp: () => void
   onSettings?: () => void
   onLists?: () => void
+  // Squad Lists opened at the paste box.
+  onImport?: () => void
   tournamentInProgress?: boolean
   onStartTournament?: (totalRounds: number, scenario: XwingScenario, player: XwingTournamentList, opponent: XwingTournamentList) => void
   onGoToTournament?: () => void
@@ -37,9 +41,23 @@ function tournamentList(choice: ResolvedChoice, manualDeficit: number): XwingTou
   return { name: choice.kind === 'list' ? choice.list.name : 'No list', pilots, deficit }
 }
 
-export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, onLists, tournamentInProgress = false, onStartTournament, onGoToTournament }: Props) {
+export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, onLists, onImport, tournamentInProgress = false, onStartTournament, onGoToTournament }: Props) {
   const setup = useXwingSetup()
   const { lists } = useXwingLists()
+  // The side a list is being built for, from its list sheet's Build a list.
+  const [building, setBuilding] = useState<Side | null>(null)
+
+  if (building !== null) {
+    const choose = building === 'player' ? setup.setPlayerChoice : setup.setOpponentChoice
+    return (
+      <XwingListBuilder
+        side={building}
+        onBack={() => setBuilding(null)}
+        onSaved={listId => { choose({ kind: 'list', listId }); setBuilding(null) }}
+        onImport={onImport && (() => { setBuilding(null); onImport() })}
+      />
+    )
+  }
 
   const playerChoice = resolve(setup.playerChoice, lists)
   const opponentChoice = resolve(setup.opponentChoice, lists)
@@ -86,6 +104,8 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, 
       onHelp={onHelp}
       onSettings={onSettings}
       onLists={onLists}
+      onImport={onImport}
+      onBuild={setBuilding}
     />
   )
 }

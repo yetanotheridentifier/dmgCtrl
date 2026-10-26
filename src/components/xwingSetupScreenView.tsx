@@ -7,11 +7,12 @@ import type { XwingMatchType, XwingScenario, XwingPlayerChoice } from '../hooks/
 import { XWING_SCENARIOS } from '../hooks/useXwingSetup'
 import type { XwingList } from '../hooks/useXwingLists'
 import { listMeta, pilotSummary } from '../utils/xwingListInfo'
+import { FactionIcon } from './factionIcon'
 
 // A player's choice with its list looked up, so the view never sees a dangling list id.
 export type ResolvedChoice = { kind: 'none' } | { kind: 'list'; list: XwingList }
 
-type Side = 'player' | 'opponent'
+export type Side = 'player' | 'opponent'
 type OpenSheet = null | 'more' | 'scenario' | 'tournament' | Side
 
 interface Props {
@@ -41,6 +42,9 @@ interface Props {
   onHelp: () => void
   onSettings?: () => void
   onLists?: () => void
+  onImport?: () => void
+  // Opens the list builder; the list it saves comes back chosen for that side.
+  onBuild?: (side: Side) => void
 }
 
 const NO_SHIPS_NOTE = 'No ships to tap in the game'
@@ -81,6 +85,8 @@ export default function XwingSetupScreenView({
   onHelp,
   onSettings,
   onLists,
+  onImport,
+  onBuild,
 }: Props) {
   const { isPortrait } = useOrientation()
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null)
@@ -107,6 +113,7 @@ export default function XwingSetupScreenView({
         {offerLast && (
           <OptionRow
             title={lastOpponentList.name}
+            icon={<FactionIcon faction={lastOpponentList.faction} size={18} />}
             detail={`Same as last game · ${listMeta(lastOpponentList.pilots, lastOpponentList.faction)}`}
             suggested
             onClick={() => onOpponentChoose({ kind: 'list', listId: lastOpponentList.id })}
@@ -117,7 +124,10 @@ export default function XwingSetupScreenView({
         )}
         {choice?.kind === 'list' && (
           <>
-            <div data-testid={t('chosen-name')} style={{ fontSize: '1.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{choice.list.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+              <FactionIcon faction={choice.list.faction} />
+              <div data-testid={t('chosen-name')} style={{ fontSize: '1.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{choice.list.name}</div>
+            </div>
             <div style={mutedStyle}>{listMeta(choice.list.pilots, choice.list.faction)}</div>
             <div style={{ fontSize: '0.8rem', lineHeight: 1.5, color: 'var(--color-text-body)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
               {pilotSummary(choice.list.pilots)}
@@ -147,12 +157,16 @@ export default function XwingSetupScreenView({
             key={list.id}
             testId={t(`list-option-${list.id}`)}
             title={list.name}
+            icon={<FactionIcon faction={list.faction} size={18} />}
             detail={listMeta(list.pilots, list.faction)}
             selected={choice?.kind === 'list' && choice.list.id === list.id}
             onClick={() => pick({ kind: 'list', listId: list.id })}
           />
         ))}
-        {onLists && <Button onClick={closeThen(onLists)}>Import XWS</Button>}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {onBuild && <Button onClick={closeThen(() => onBuild(side))} style={{ flex: 1 }}>Build a list</Button>}
+          {onImport && <Button onClick={closeThen(onImport)} style={{ flex: 1 }}>Import XWS</Button>}
+        </div>
         <OptionRow
           testId={t('no-list-btn')}
           title="No list"

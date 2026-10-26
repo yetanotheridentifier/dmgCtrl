@@ -17,6 +17,9 @@ const FACTION_NAMES: Record<string, string> = {
   separatistalliance: 'Separatist Alliance',
 }
 
+// XWS faction ids in the order the builder offers them.
+export const FACTIONS = Object.keys(FACTION_NAMES)
+
 export function factionName(xws: string | undefined): string | undefined {
   if (xws === undefined) return undefined
   return FACTION_NAMES[xws] ?? xws
@@ -26,6 +29,11 @@ export function factionName(xws: string | undefined): string | undefined {
 export function listMeta(pilots: XwingPilot[], faction: string | undefined): string {
   const fName = factionName(faction)
   return fName ? `${listPoints(pilots)} pts · ${fName}` : `${listPoints(pilots)} pts`
+}
+
+// The fuller "49 pts · 7 ships · Rebel Alliance" line on Squad Lists and the save sheet.
+export function listDetail(pilots: XwingPilot[], faction: string | undefined): string {
+  return [`${listPoints(pilots)} pts`, `${pilots.length} ships`, factionName(faction)].filter(Boolean).join(' · ')
 }
 
 // The pilots line on a setup card: display names in list order, a repeated pilot counted where it

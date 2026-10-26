@@ -1095,6 +1095,7 @@ describe('App game select', () => {
     const user = userEvent.setup()
     await openXwingSetup(user)
     await openFromMore(user, 'Squad lists')
+    await user.click(await screen.findByRole('button', { name: 'Import XWS' }))
     fireEvent.change(screen.getByTestId('lists-textarea'), { target: { value: JSON.stringify({
       name: 'Round Trip',
       pilots: [
@@ -1104,12 +1105,23 @@ describe('App game select', () => {
       ],
       points: 46,
     }) } })
-    await user.click(screen.getByTestId('lists-check-btn'))
-    await user.click(screen.getByTestId('lists-save-btn'))
+    await user.click(screen.getByRole('button', { name: 'Check' }))
+    await user.click(screen.getByRole('button', { name: 'Save list' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Save list' })).getByRole('button', { name: 'Save list' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await waitFor(() => expect(xwingSetupMarker()).toBeVisible())
     await user.click(within(screen.getByTestId('player-card')).getByRole('button', { name: 'Choose a list' }))
     expect(within(screen.getByRole('dialog', { name: 'Your list' })).getByText('Round Trip')).toBeVisible()
+  })
+
+  it("a list sheet's Import XWS opens Squad Lists at the paste box, and Back returns to setup", async () => {
+    const user = userEvent.setup()
+    await openXwingSetup(user)
+    await user.click(within(screen.getByTestId('player-card')).getByRole('button', { name: 'Choose a list' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Your list' })).getByRole('button', { name: 'Import XWS' }))
+    expect(await screen.findByTestId('lists-textarea')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(xwingSetupMarker()).toBeVisible())
   })
 
   it('xwing setup choices survive a visit to Squad Lists', async () => {

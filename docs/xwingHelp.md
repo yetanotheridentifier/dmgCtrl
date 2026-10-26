@@ -24,11 +24,12 @@ Tap the scenario to choose it from a list, or the **dice button** to pick one at
 
 ### Choosing lists
 
-Each player has a card. Tap it to choose that player's list from a sheet of your saved squads, each shown with its points total and faction.
+Each player has a card. Tap it to choose that player's list from a sheet of your saved squads, each shown with its faction symbol, points total and faction.
 
 - **Your list** is remembered, so next time it is already chosen. Tap **Change list** to pick another.
 - **Your opponent** is chosen each game. Their card says **Choose opponent's list** and offers last game's opponent in one tap; **Choose another list** opens the sheet.
-- **Import XWS** in the sheet opens **Squad Lists** (see Squad lists), where you paste a squad from YASB and save it. Tap **Back** to return; your choices so far are kept and the new list is ready to pick.
+- **Build a list** in the sheet opens the list builder (see Squad lists) for that player. When you save, you come back to setup with the new list already chosen for them. **Back** returns to setup without saving.
+- **Import XWS** in the sheet opens the paste box on **Squad Lists** (see Squad lists). Tap **Back** to return; your choices so far are kept and the new list is ready to pick.
 - **No list** comes last, as a fallback: there are no ships to tap on the game screen, so you set the player's mission point deficit (0–4) with the stepper on their card. The deficit is added to the opponent's score if all of that player's ships are destroyed.
 
 A chosen list shows its points, faction and pilots so you can check it before starting. Its deficit is worked out for you as `50 − total points` (0 for a 50-point list) and isn't shown.
@@ -41,28 +42,41 @@ Your choices, the scenario and the deficits are kept while you visit Squad Lists
 
 ## Squad lists
 
-Squad Lists is where you create and manage your saved squads, which are offered for each player on setup. Open it with **Squad lists** in setup's More menu, with **Import XWS** when choosing a player's list, or with **Squad lists** in the X-Wing group of Settings. **Back** returns you to where you came from.
+Squad Lists is where you build, import and manage your saved squads, which are offered for each player on setup. Open it with **Squad lists** in setup's More menu, with **Import XWS** when choosing a player's list, or with **Squad lists** in the X-Wing group of Settings. **Back** returns you to where you came from.
 
-### Creating a list
+A list can be saved only when it is legal for scoring: 3 to 8 ships, 46 to 50 points, no unique pilot twice (a character counts once whichever of their cards it is), and no pilot over its per-list limit. Lists are pilot points only: upgrades are not part of the total.
 
-1. Export your squad from YASB (Yet Another Squad Builder) as XWS and copy the JSON text.
-2. Paste it into the box under **New list** and tap the **tick button** to check it. If the list cannot be read, an error explains why so you can correct the text.
-3. Once the list is valid, its pilots, points total and faction are shown. The name is filled in from the XWS export; change it if you like. Tap **Edit** to go back to the pasted text.
-4. Tap the **tick button** next to **Save list**. The save button stays disabled until the list has a name.
+### Building a list
 
-If another saved list already has that name, you are asked to confirm the overwrite first.
+Tap **New list** (or **Build a list** on setup).
 
-A valid list must contain between 3 and 8 ships and cost between 46 and 50 points.
+1. Choose a faction. Each shows how many ships it has. The faction is fixed for the list.
+2. Pick a ship on the left (a **Ship** button in portrait), then tap a pilot to add it. Pilots show their current points, cheapest first, and the search box narrows that ship's pilots.
+3. The total against 50 and the ship count sit at the top, with what is still needed to save, such as "3 more points to save (46–50)".
+4. **Your list** shows what you have added. A unique pilot (marked •) has its own row with ✕ to remove it; tap the row to swap that pilot for the next one you choose, in the same place (**Cancel** stops the swap). Repeats of a generic pilot share one row with **−** and **+**.
+5. Tap **Save list** once it is enabled.
+
+While building, a unique pilot already in the list is greyed out, a generic pilot at its per-list limit shows "2 of 2, the limit" and its **+** is disabled, and at 8 ships every pilot is disabled with the reason shown.
+
+**Back** with nothing added returns to the faction choice; after that it leaves the builder without saving.
+
+### Saving
+
+The save sheet shows the list's points, ships, faction and pilots, with a **Name** box. Left blank, the list is saved as "*Faction* list *N*" (the lowest number not already used). A name another saved list already has turns **Save list** into **Overwrite**, naming the list it replaces; change the name to keep both.
+
+### Importing a list
+
+Export your squad from any squad builder as XWS and copy the JSON text. Tap **Import XWS**, paste it into the box and tap **Check**. A list that cannot be read, or that breaks a rule above, shows each problem and cannot be saved; otherwise its pilots, points and faction are shown and **Save list** opens the same save sheet. **Clear** empties the box.
 
 ### Saved lists
 
-Each saved list shows its name, points total and faction (when the XWS export included one). Tap a list to show or hide its pilots.
+Each saved list shows its faction symbol, name, points, ship count, faction and pilots.
 
-- **Rename**: edit the name in place, then tap the tick to save or ✕ to cancel. A name already used by another list is not accepted.
-- **Delete**: tap **Delete**, then **Delete** again to confirm (or **Cancel**).
-- **Clear All**: removes every saved list, after a confirmation step.
+- **Edit**: opens the list in the builder at today's points, showing what it cost when saved. **Save changes** keeps the name and updates the list in place; change the name to save a copy instead.
+- **Rename**: edit the name in place, then **Save name** or **Cancel**. A name already used by another list is not accepted.
+- **Delete**: asks you to confirm, naming the list.
 
-Points totals are the pilot costs from the XWS export when the list was created. They do not update when pilot points change.
+Points totals on Squad Lists and setup are the costs the list was saved with. They do not update when pilot points change until you edit and save the list. A tournament keeps its own copy of each list, so editing or deleting a saved list does not change a tournament under way.
 
 ## Game
 
