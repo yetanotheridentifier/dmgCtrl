@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useOrientation } from '../hooks/useOrientation'
 import AppScreenLayout from './layout/appScreenLayout'
 import { BackIcon, DiceIcon, DotsIcon } from './icons'
-import { Button, IconButton, OptionRow, SegmentedControl, SelectButton, Sheet, Stepper } from './shared/controls'
+import { Button, IconButton, OptionRow, SegmentedControl, SelectButton, SetupHeaderMark, Sheet, Stepper } from './shared/controls'
 import type { XwingMatchType, XwingScenario, XwingPlayerChoice } from '../hooks/useXwingSetup'
 import { XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
 import type { XwingList } from '../hooks/useXwingLists'
@@ -163,6 +163,7 @@ export default function XwingSetupScreenView({
   const topBar = (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
       <IconButton label="Back" onClick={onBack}><BackIcon /></IconButton>
+      <SetupHeaderMark />
       <h1 style={{ flex: 1, margin: 0, fontSize: '1.4rem', fontWeight: 300, letterSpacing: '0.12em', color: 'var(--color-text-primary)' }}>X-Wing</h1>
       <IconButton label="More" onClick={() => setOpenSheet('more')}><DotsIcon /></IconButton>
     </div>

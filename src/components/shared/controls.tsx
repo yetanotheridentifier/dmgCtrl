@@ -53,6 +53,11 @@ interface IconButtonProps {
   style?: React.CSSProperties
 }
 
+// The dmgCtrl mark before the game title in a setup header. Decorative: the title names the screen.
+export function SetupHeaderMark() {
+  return <img src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`} alt="" style={{ width: '30px', height: '30px', flexShrink: 0 }} />
+}
+
 // Icon-only, so the label is what a screen reader announces. Kept to back, log, more and roll.
 export function IconButton({ label, children, onClick, style }: IconButtonProps) {
   return (

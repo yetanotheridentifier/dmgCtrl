@@ -77,6 +77,25 @@ describe('XwingSetupScreen', () => {
 
   // --- Top bar ---
 
+  it.each([false, true])('shows the 30 px dmgCtrl mark before the X-Wing title (portrait: %s)', (isPortrait) => {
+    makeMatchMediaMock(isPortrait)
+    const { container } = renderSetup()
+    const mark = container.querySelector<HTMLImageElement>('img[src$="dmgCtrl-icon-transparent-192.png"]')
+    expect(mark).not.toBeNull()
+    expect(mark!.style.width).toBe('30px')
+    expect(mark!.style.height).toBe('30px')
+    const title = screen.getByRole('heading', { level: 1, name: 'X-Wing' })
+    expect(mark!.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keeps the dmgCtrl mark in the header behind the list sheet', async () => {
+    const user = userEvent.setup()
+    const { container } = renderSetup()
+    await openListSheet(user, 'player')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(container.querySelector('img[src$="dmgCtrl-icon-transparent-192.png"]')).not.toBeNull()
+  })
+
   it('calls onBack from the back button', async () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
