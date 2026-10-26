@@ -260,6 +260,41 @@ describe('App', () => {
     expect(screen.getByTestId('game-card')).toBeInTheDocument()
   })
 
+  // Twin Suns, as setup left it: yours top left, an opponent top right and bottom right.
+  const keepTwinSuns = () => store.set('swu_setup', JSON.stringify({
+    baseKey: 'SOR-026',
+    recentBaseKeys: [],
+    matchType: 'casual',
+    mode: 'twin-suns',
+    seatKeys: ['SOR-022', null, 'SOR-026'],
+  }))
+
+  it('Twin Suns goes to the Twin Suns game with every base in its seat', async () => {
+    const user = userEvent.setup()
+    keepTwinSuns()
+    render(<App />)
+    await waitForSetup()
+    await user.click(screen.getByRole('button', { name: 'Go to game' }))
+    expect(within(screen.getByRole('region', { name: 'Top left' })).getByRole('button', { name: /^Catacombs of Cadera, your base/ })).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Top right' })).getByRole('button', { name: /^Energy Conversion Lab: tap/ })).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Bottom right' })).getByRole('button', { name: /^Catacombs of Cadera: tap/ })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Bottom left' })).not.toBeInTheDocument()
+  })
+
+  it('Back from the Twin Suns game returns to setup, and 1 player then opens the one-player game', async () => {
+    const user = userEvent.setup()
+    keepTwinSuns()
+    render(<App />)
+    await waitForSetup()
+    await user.click(screen.getByRole('button', { name: 'Go to game' }))
+    await user.click(screen.getByRole('button', { name: 'Back to setup' }))
+    expect(setupMarker()).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '1 player' }))
+    await user.click(screen.getByRole('button', { name: 'Go to game' }))
+    expect(screen.queryByRole('region', { name: 'Top left' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('game-card')).toBeInTheDocument()
+  })
+
   // --- Your base is kept ---
 
   it('Keeps your base after navigating back from game screen', async () => {

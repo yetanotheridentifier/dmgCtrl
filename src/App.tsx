@@ -6,6 +6,7 @@ import { useInstallPrompt } from './hooks/useInstallPrompt'
 import { gameFromPath, launchScreen, readLastGame, recordLastGame } from './utils/appStart'
 import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
+import SwuTwinSunsGame from './components/swuTwinSunsGame'
 import { XwingListsProvider } from './hooks/useXwingLists'
 import SwuTournamentScreen from './components/swuTournamentScreen'
 import HelpScreen, { type HelpSource } from './components/helpScreen'
@@ -61,6 +62,8 @@ function AppScreens() {
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
   // Two players: their base. Held for this session only, so a tournament resumed after a reload plays one-player.
   const [selectedTheirBase, setSelectedTheirBase] = useState<Base | null>(null)
+  // Twin Suns: the opponents' bases by seat, while a Twin Suns game is open.
+  const [twinSunsSeats, setTwinSunsSeats] = useState<(Base | null)[] | null>(null)
   const [selectedPlayMode, setSelectedPlayMode] = useState<PlayMode>('casual')
   const [isInGame, setIsInGame] = useState(false)
   const [isInXwing, setIsInXwing] = useState(false)
@@ -127,9 +130,9 @@ function AppScreens() {
     setScreen('gameSelect')
   }
 
-  // Setup passes their base too in 2 players, which opens the two-player game screen. In Twin Suns it
-  // also passes the opponents' seats, not used yet: the game opens with your base alone.
-  const handleConfirm = (base: Base, mode: SetupMode, theirBase?: Base) => {
+  // Setup passes their base too in 2 players, which opens the two-player game screen; in Twin Suns, the
+  // opponents' seats, which open the Twin Suns game. Setup keeps the seats, so a reload loses nothing.
+  const handleConfirm = (base: Base, mode: SetupMode, theirBase?: Base, seats?: (Base | null)[]) => {
     if (mode === 'tournament') {
       // Back to the tournament under way; a new one is started from the setup start sheet.
       if (tournament !== null) setScreen('tournament')
@@ -137,6 +140,7 @@ function AppScreens() {
     }
     setSelectedBase(base)
     setSelectedTheirBase(theirBase ?? null)
+    setTwinSunsSeats(seats ?? null)
     setSelectedPlayMode('casual')
     setIsInGame(true)
     setScreen('game')
@@ -149,6 +153,7 @@ function AppScreens() {
     startMatch()
     setSelectedBase(base)
     setSelectedTheirBase(theirBase ?? null)
+    setTwinSunsSeats(null)
     setTournamentCurrentBase(base)
     setHasPlayedGameInCurrentMatch(false)
     setSelectedPlayMode(playMode)
@@ -386,7 +391,18 @@ function AppScreens() {
           />
         )}
       </Suspense>
-      {isInGame && gameBase && (
+      {isInGame && twinSunsSeats && selectedBase && (
+        <div style={screen === 'game' ? undefined : { display: 'none' }}>
+          <SwuTwinSunsGame
+            base={selectedBase}
+            seats={twinSunsSeats}
+            onBack={() => { setIsInGame(false); setTwinSunsSeats(null); setScreen('setup') }}
+            onHelp={handleHelp}
+            onSettings={handleSettings}
+          />
+        </div>
+      )}
+      {isInGame && !twinSunsSeats && gameBase && (
         <div style={screen === 'game' ? undefined : { display: 'none' }}>
           <SwuGameScreen
             base={gameBase}

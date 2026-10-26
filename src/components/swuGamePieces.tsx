@@ -42,14 +42,15 @@ const RECORD_LABEL: Record<MatchResult, string> = { won: 'Record win', lost: 'Re
 const SHADOW = '0 2px 8px rgba(0,0,0,0.9), 0 0 16px rgba(0,0,0,0.6)'
 
 // The dmgCtrl mark, drawn in the button's own colour.
-function MarkIcon() {
+export function MarkIcon({ size = '22px' }: { size?: string }) {
   return (
     <span
       aria-hidden="true"
       style={{
         display: 'block',
-        width: '22px',
-        height: '22px',
+        flexShrink: 0,
+        width: size,
+        height: size,
         background: 'currentColor',
         WebkitMask: `url(${ICON_URL}) center / contain no-repeat`,
         mask: `url(${ICON_URL}) center / contain no-repeat`,

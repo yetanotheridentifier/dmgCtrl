@@ -100,6 +100,24 @@ export function LogIcon() {
   )
 }
 
+// Twin Suns counters: the initiative's flag and Plan's cards.
+export function FlagIcon({ size = '26px' }: { size?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 21V4M5 4h11l-2 4 2 4H5"/>
+    </svg>
+  )
+}
+
+export function PlanIcon({ size = '26px' }: { size?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="7" y="3" width="12" height="16" rx="2"/>
+      <path d="M4 7v12a2 2 0 0 0 2 2h9"/>
+    </svg>
+  )
+}
+
 export function EditIcon() {
   return (
     <svg width="65%" height="65%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
