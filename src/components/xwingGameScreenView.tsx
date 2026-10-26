@@ -9,6 +9,8 @@ import { halfPoints, type ShipEntry } from '../utils/shipRoster'
 import { shipRows } from '../utils/shipRows'
 import { resolveXwsName } from '../utils/resolveXwsName'
 import { shipNames } from '../utils/xwaNames'
+import { xwaPilots } from '../data/xwaCards'
+import { FactionIcon } from './factionIcon'
 
 export type GameOverReason = 'score' | 'time' | 'rounds' | 'extra'
 
@@ -106,10 +108,13 @@ const CAPS: React.CSSProperties = { fontSize: '11px', letterSpacing: '0.14em', c
 const MUTED_CAPS: React.CSSProperties = { fontSize: '11px', letterSpacing: '0.1em', color: 'var(--color-text-muted)' }
 const PANEL_BLOCK: React.CSSProperties = { borderRadius: '12px', background: 'var(--color-surface)' }
 
-// The dmgCtrl mark, in outline: a destroyed ship shows it in place of its name's lead.
+// The symbol before a ship's name: its faction's, or the dmgCtrl mark once it is destroyed.
+const NAME_LEAD: React.CSSProperties = { verticalAlign: '-2px', marginRight: '6px' }
+
+// The dmgCtrl mark, in outline: a destroyed ship shows it in place of its faction symbol.
 function DestroyedMark() {
   return (
-    <svg width="14" height="14" viewBox="19 21 146 146" fill="none" stroke="currentColor" strokeWidth="14" strokeLinejoin="round" role="img" aria-label="Destroyed" style={{ verticalAlign: '-2px', marginRight: '6px', flexShrink: 0 }}>
+    <svg width="14" height="14" viewBox="19 21 146 146" fill="none" stroke="currentColor" strokeWidth="14" strokeLinejoin="round" role="img" aria-label="Destroyed" style={NAME_LEAD}>
       <path d="M96 26L103.2 77.2L141.3 42.7L113.8 86.1L138.3 88.9L116.2 99.9L156.9 131.3L109.2 111.8L110.8 136.5L96 116.6L72.3 162.3L83.2 111.8L59.3 117.6L76.3 99.9L27.3 108.4L78.7 86.1L51.2 42.7L89.4 77.2Z" />
     </svg>
   )
@@ -194,7 +199,7 @@ function ShipTile({ entry, name, testId, full, disabled, gameOver, onAdvance }: 
     >
       <span style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
         <span style={{ fontSize: full ? '16px' : '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: destroyed ? 'line-through' : undefined }}>
-          {destroyed && <DestroyedMark />}{name}
+          {destroyed ? <DestroyedMark /> : <FactionIcon faction={xwaPilots[entry.pilot.name]?.faction} size={14} style={NAME_LEAD} />}{name}
         </span>
         <span style={{ fontSize: '12px', color: colours.sub }}>{status}</span>
       </span>

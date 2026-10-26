@@ -84,10 +84,10 @@ The game screen has three columns: **your ships** on the left, the centre panel,
 
 ### Ships
 
-Every ship in each list has a tile. Tap a ship to damage it; tap again or long-press to destroy.
+Every ship in each list has a tile, with its faction symbol before the pilot's name. Tap a ship to damage it; tap again or long-press to destroy.
 
 - **Damaged** shows half its points scored, such as "Half · 2 of 5", and gives the other player half the ship's points (rounded down)
-- **Destroyed** gives the rest of the points, strikes the name through and shows the dmgCtrl mark; the tile stays in place
+- **Destroyed** gives the rest of the points, strikes the name through and shows the dmgCtrl mark in place of the faction symbol; the tile stays in place
 - Before the game the tiles are shown but can't be tapped; at game over the ships still flying show **Survived**
 - When the last ship of a squad is destroyed, that player's mission point deficit (if any) goes to the other player with it
 

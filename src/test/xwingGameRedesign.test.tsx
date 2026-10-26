@@ -97,6 +97,29 @@ describe('ship tiles', () => {
     expect(screen.getByTestId('player-score')).toHaveTextContent('12')
   })
 
+  it('shows each ship\'s faction symbol before its name, from the pilot', () => {
+    renderGame({ opponentPilots: [{ name: 'lukeskywalker', ship: 't65xwing', points: 6 }] })
+    expect(within(screen.getByTestId('player-ship-btn-0')).getByRole('img', { name: 'Galactic Empire' })).toBeInTheDocument()
+    expect(within(screen.getByTestId('player-ship-btn-2')).getByRole('img', { name: 'Galactic Empire' })).toBeInTheDocument()
+    expect(within(screen.getByTestId('opponent-ship-btn-0')).getByRole('img', { name: 'Rebel Alliance' })).toBeInTheDocument()
+  })
+
+  it('shows no symbol for a pilot it does not know', () => {
+    renderGame({ opponentPilots: [{ name: 'notarealpilot', ship: 't65xwing', points: 6 }] })
+    expect(within(screen.getByTestId('opponent-ship-btn-0')).queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('a destroyed ship shows the dmgCtrl mark in place of its faction symbol', async () => {
+    const { user } = await start()
+    const tile = screen.getByTestId('opponent-ship-btn-0')
+    await user.click(tile)
+    expect(within(tile).getByRole('img', { name: 'Galactic Empire' })).toBeInTheDocument()
+    await user.click(tile)
+    const destroyed = screen.getByTestId('opponent-ship-btn-0')
+    expect(within(destroyed).getByRole('img', { name: 'Destroyed' })).toBeInTheDocument()
+    expect(within(destroyed).getAllByRole('img')).toHaveLength(1)
+  })
+
   it('lays out the ships by the row rule', () => {
     const seven = [...MINE, { name: 'maulermithel', ship: 'tielnfighter', points: 8 }, { name: 'majorvynder', ship: 'tielnfighter', points: 10 }, { name: 'countdown', ship: 'tielnfighter', points: 7 }, ACADEMY]
     renderGame({ playerPilots: seven })
