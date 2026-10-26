@@ -12,6 +12,7 @@ import RotatePrompt from './layout/rotatePrompt'
 import { onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced } from '../services/analytics'
 import type { XwingMatchType, XwingScenario } from '../hooks/useXwingSetup'
 import type { XwingPilot } from '../utils/parseXwsText'
+import type { XwingRoundResult } from '../hooks/useXwingTournament'
 import { type ShipEntry, initShips, halfPoints, remainingPoints } from '../utils/shipRoster'
 import { displayPilots } from '../utils/displayPilots'
 
@@ -42,7 +43,11 @@ interface Props {
   matchType?: XwingMatchType
   playerPilots?: XwingPilot[]
   opponentPilots?: XwingPilot[]
+  // A tournament game: game over goes back to the tournament with the result and the scores.
+  onRoundComplete?: (result: XwingRoundResult, playerScore: number, opponentScore: number) => void
 }
+
+const ROUND_RESULT = { win: 'won', loss: 'lost', draw: 'drawn' } as const
 
 // Points scored against a side's ships: half for a damaged ship, all for a destroyed one.
 const shipPointsAgainst = (ships: ShipEntry[]) =>
@@ -50,7 +55,7 @@ const shipPointsAgainst = (ships: ShipEntry[]) =>
 
 const allDestroyed = (ships: ShipEntry[]) => ships.length > 0 && ships.every(s => s.state === 'destroyed')
 
-export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario = 'None', matchType = 'Casual', playerPilots = [], opponentPilots = [] }: Props) {
+export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario = 'None', matchType = 'Casual', playerPilots = [], opponentPilots = [], onRoundComplete }: Props) {
   const { enableXwingPhases, enableXwingAlwaysIncDec, xwingTimerMinutes, setXwingTimerMinutes } = useUserSettings()
   const { isPortrait } = useOrientation()
 
@@ -307,6 +312,12 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
     onBack()
   }
 
+  const handleBackToTournament = () => {
+    if (!game.result) return
+    reportGameEnded()
+    onRoundComplete?.(ROUND_RESULT[game.result], game.combinedPlayer, game.combinedOpponent)
+  }
+
   const handleRematch = () => {
     reportGameEnded()
     gameStartedRef.current = false
@@ -390,6 +401,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
       onOpponentShipAdvance={(i, skip) => handleShipAdvance('opponent', i, skip)}
       onRematch={handleRematch}
       onOneMoreRound={canPlayOneMoreRound ? handleOneMoreRound : undefined}
+      onBackToTournament={onRoundComplete ? handleBackToTournament : undefined}
       playerBreakdown={breakdown(opponentShips, game.playerScore, game.playerScenarioScore, opponentDeficit)}
       opponentBreakdown={breakdown(playerShips, game.opponentScore, game.opponentScenarioScore, playerDeficit)}
     />

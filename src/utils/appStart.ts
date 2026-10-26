@@ -1,7 +1,7 @@
 import type { StartScreen } from '../hooks/useUserSettings'
 
 export type Game = 'swu' | 'xwing'
-export type LaunchScreen = 'tournament' | 'setup' | 'xwingSetup' | 'gameSelect'
+export type LaunchScreen = 'tournament' | 'xwingTournament' | 'setup' | 'xwingSetup' | 'gameSelect'
 
 const GAMES: Game[] = ['swu', 'xwing']
 const LAST_GAME_KEY = 'last_game'
@@ -19,14 +19,16 @@ export function gameFromPath(pathname: string, base: string): Game | null {
 
 interface LaunchInputs {
   tournamentInProgress: boolean
+  xwingTournamentInProgress?: boolean
   route: Game | null
   startScreen: StartScreen
   lastGame: Game | null
 }
 
 // Where the app opens: the first of these that applies.
-export function launchScreen({ tournamentInProgress, route, startScreen, lastGame }: LaunchInputs): LaunchScreen {
+export function launchScreen({ tournamentInProgress, xwingTournamentInProgress = false, route, startScreen, lastGame }: LaunchInputs): LaunchScreen {
   if (tournamentInProgress) return 'tournament'
+  if (xwingTournamentInProgress) return 'xwingTournament'
   if (route) return SETUP[route]
   if (startScreen === 'lastGame') return lastGame ? SETUP[lastGame] : 'gameSelect'
   if (startScreen === 'swu' || startScreen === 'xwing') return SETUP[startScreen]

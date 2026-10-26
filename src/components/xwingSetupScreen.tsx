@@ -6,6 +6,7 @@ import { listPoints } from '../utils/xwingListInfo'
 import XwingSetupScreenView from './xwingSetupScreenView'
 import type { ResolvedChoice } from './xwingSetupScreenView'
 import type { XwingPilot } from '../utils/parseXwsText'
+import type { XwingTournamentList } from '../hooks/useXwingTournament'
 
 interface Props {
   onStart: (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario, playerPilots: XwingPilot[], opponentPilots: XwingPilot[], matchType: XwingMatchType) => void
@@ -13,6 +14,9 @@ interface Props {
   onHelp: () => void
   onSettings?: () => void
   onLists?: () => void
+  tournamentInProgress?: boolean
+  onStartTournament?: (totalRounds: number, scenario: XwingScenario, player: XwingTournamentList, opponent: XwingTournamentList) => void
+  onGoToTournament?: () => void
 }
 
 // A chosen list deleted on Squad Lists resolves to no choice, so the player picks again.
@@ -27,7 +31,13 @@ function deficitAndPilots(choice: ResolvedChoice, manualDeficit: number): [numbe
   return [Math.max(0, 50 - listPoints(choice.list.pilots)), choice.list.pilots]
 }
 
-export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, onLists }: Props) {
+// A tournament keeps a copy of each list, so it survives the list being deleted from Squad lists.
+function tournamentList(choice: ResolvedChoice, manualDeficit: number): XwingTournamentList {
+  const [deficit, pilots] = deficitAndPilots(choice, manualDeficit)
+  return { name: choice.kind === 'list' ? choice.list.name : 'No list', pilots, deficit }
+}
+
+export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, onLists, tournamentInProgress = false, onStartTournament, onGoToTournament }: Props) {
   const setup = useXwingSetup()
   const { lists } = useXwingLists()
 
@@ -46,6 +56,11 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, 
     const [pDeficit, pPilots] = deficitAndPilots(playerChoice, setup.playerDeficit)
     const [oDeficit, oPilots] = deficitAndPilots(opponentChoice, setup.opponentDeficit)
     onStart(pDeficit, oDeficit, setup.scenario, pPilots, oPilots, setup.matchType)
+  }
+
+  const handleStartTournament = () => {
+    if (!playerChoice || !opponentChoice) return
+    onStartTournament?.(setup.rounds, setup.scenario, tournamentList(playerChoice, setup.playerDeficit), tournamentList(opponentChoice, setup.opponentDeficit))
   }
 
   return (
@@ -69,6 +84,9 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, 
       onOpponentDeficitChange={setup.setOpponentDeficit}
       canStart={playerChoice !== null && opponentChoice !== null}
       onStart={handleStart}
+      tournamentInProgress={tournamentInProgress}
+      onStartTournament={handleStartTournament}
+      onGoToTournament={onGoToTournament}
       onBack={onBack}
       onHelp={onHelp}
       onSettings={onSettings}

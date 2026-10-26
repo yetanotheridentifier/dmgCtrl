@@ -12,7 +12,7 @@ import { listMeta, pilotSummary } from '../utils/xwingListInfo'
 export type ResolvedChoice = { kind: 'none' } | { kind: 'list'; list: XwingList }
 
 type Side = 'player' | 'opponent'
-type OpenSheet = null | 'more' | 'scenario' | Side
+type OpenSheet = null | 'more' | 'scenario' | 'tournament' | Side
 
 interface Props {
   matchType: XwingMatchType
@@ -34,6 +34,9 @@ interface Props {
   onOpponentDeficitChange: (v: number) => void
   canStart: boolean
   onStart: () => void
+  tournamentInProgress?: boolean
+  onStartTournament?: () => void
+  onGoToTournament?: () => void
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
@@ -73,6 +76,9 @@ export default function XwingSetupScreenView({
   onOpponentDeficitChange,
   canStart,
   onStart,
+  tournamentInProgress = false,
+  onStartTournament,
+  onGoToTournament,
   onBack,
   onHelp,
   onSettings,
@@ -178,10 +184,6 @@ export default function XwingSetupScreenView({
     />
   )
 
-  const roundsControl = matchType === 'Tournament' && (
-    <Stepper label="Rounds" value={rounds} min={2} max={10} onChange={onRoundsChange} />
-  )
-
   const scenarioControls = (
     <div style={{ display: 'flex', gap: '8px', flex: 1, minWidth: 0 }}>
       <SelectButton label="Scenario" value={scenario} onClick={() => setOpenSheet('scenario')} />
@@ -189,8 +191,15 @@ export default function XwingSetupScreenView({
     </div>
   )
 
+  // A new tournament is set up on its start sheet; one under way is a tap away.
+  const tournament = matchType === 'Tournament'
+  const primary = tournament && tournamentInProgress
+    ? { label: 'Go to tournament', onClick: () => onGoToTournament?.(), disabled: false }
+    : tournament
+      ? { label: 'Start tournament', onClick: () => setOpenSheet('tournament'), disabled: !canStart }
+      : { label: 'Go to game', onClick: onStart, disabled: !canStart }
   const goToGame = (
-    <Button variant="primary" onClick={onStart} disabled={!canStart} style={{ minHeight: '52px', flexShrink: 0 }}>Go to game</Button>
+    <Button variant="primary" onClick={primary.onClick} disabled={primary.disabled} style={{ minHeight: '52px', flexShrink: 0 }}>{primary.label}</Button>
   )
 
   const sheets = (
@@ -207,6 +216,15 @@ export default function XwingSetupScreenView({
       </Sheet>
       {renderListSheet('player')}
       {renderListSheet('opponent')}
+      <Sheet open={openSheet === 'tournament'} title="Start a tournament" onClose={close}>
+        <div style={mutedStyle}>{playerChoice?.kind === 'list' ? playerChoice.list.name : 'No list'}</div>
+        <Stepper label="Rounds" value={rounds} min={2} max={10} onChange={onRoundsChange} />
+        <div style={mutedStyle}>Fixed once round 1 starts.</div>
+        <div style={{ marginTop: 'auto', paddingTop: '4px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <Button onClick={close}>Cancel</Button>
+          <Button variant="primary" onClick={closeThen(onStartTournament)} style={{ minHeight: '52px', padding: '0 20px' }}>Start round 1</Button>
+        </div>
+      </Sheet>
     </>
   )
 
@@ -220,7 +238,6 @@ export default function XwingSetupScreenView({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={sectionLabelStyle}>Match</div>
             {matchControl}
-            {roundsControl}
             <div style={{ display: 'flex' }}>{scenarioControls}</div>
           </div>
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column' }}>{goToGame}</div>
@@ -240,7 +257,6 @@ export default function XwingSetupScreenView({
         </div>
         <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div style={{ width: '220px' }}>{matchControl}</div>
-          {roundsControl}
           {scenarioControls}
           {goToGame}
         </div>

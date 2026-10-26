@@ -7,7 +7,7 @@ Setup has the **Match type**, the **Scenario**, a list for each player, and **Go
 ### Match type
 
 - **Casual**: a standard pick-up game with no round limit.
-- **Tournament**: shows the **Rounds** stepper (see Tournament).
+- **Tournament**: the button at the foot reads **Start tournament**, or **Go to tournament** while one is under way (see Tournament).
 
 ### Scenario
 
@@ -126,13 +126,39 @@ The game ends when a round ends with a player on 50 or more, at the end of round
 - **One more round**: in a Casual game that ended on time or after round 12, while both sides have ships left. The game goes on for one round with the timer at 0:00, and ends again at that round's end
 - **New setup**: back to setup
 
+In a tournament game, **Back to tournament** takes the place of all three and records the round (see Tournament).
+
 ### Log
 
 **Log** opens the drawer over your opponent's side: newest first, under the round it happened in. **Undo** takes back the newest entry; repeat to step further back. Undoing a game's end resumes the timer.
 
 ## Tournament
 
-Choose **Tournament** under Match type on setup and set the number of **Rounds** (2 to 10). A tournament game is played as a casual one, except that **One more round** is not offered at game over.
+A tournament keeps your record across its rounds. Each round is one game.
+
+### Starting
+
+Choose **Tournament** under Match type on setup, choose your list and round 1's opponent, and tap **Start tournament**. A sheet asks for the number of **Rounds** (2 to 10), which is fixed once round 1 starts. **Start round 1** goes straight to the game.
+
+Your list is fixed for the whole tournament, and the scenario chosen on setup is played in every round. The opponent is chosen each round.
+
+### Playing a round
+
+A tournament game is played as a casual one. At game over the only way on is **Back to tournament**, which records the round from the game's scores: a win or a loss (a draw if the scores are level), and the score. **Back** during a game also returns to the tournament without recording anything: **Return to round N** goes back to the game as you left it. If the app was closed during a round, it starts that round's game again.
+
+### Between rounds
+
+The tournament screen shows:
+
+- your **record** (wins and losses) and the **margin**, the total of the score differences of every round played
+- your list for the tournament
+- every round: those played with their result, score and the opponent's list, the next one outlined
+
+**Start round N** opens a sheet of your saved lists for the opponent, with **Import XWS** and **No list**; choosing one starts the game. **Drop** asks first, then clears the tournament and returns to setup.
+
+Once every round is played the screen reads **Tournament complete**, and **Finish** clears it and returns to setup.
+
+The tournament is saved as you go: close the app between rounds and it opens at the tournament next time. **Back** goes to setup, where **Go to tournament** returns to it.
 
 ## Rules
 
