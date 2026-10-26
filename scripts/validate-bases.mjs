@@ -3,138 +3,102 @@
  *
  * Prerequisites:
  *   - Dev server is running (npm run dev OR npm run dev:https)
+ *   - Playwright + Chromium installed:
+ *       npm install --legacy-peer-deps
+ *       npx playwright install chromium
  *
  * Usage:
- *   node scripts/validate-bases.mjs [URL]
+ *   node scripts/validate-bases.mjs [URL] [--set=CODE] [--headless]
  *
  * Examples:
  *   node scripts/validate-bases.mjs
- *   node scripts/validate-bases.mjs https://localhost:5173/dmgCtrl/
- *   node scripts/validate-bases.mjs https://192.168.1.100:5173/dmgCtrl/
+ *   node scripts/validate-bases.mjs https://127.0.0.1:5173/
+ *   node scripts/validate-bases.mjs https://192.168.1.100:5173/ --set=LAW
  *
  * The script opens a visible Chromium window emulating an iPhone in landscape,
- * iterates through every set / aspect / base combination, navigates to the game
- * screen for each, waits for the card image to load, then pauses for visual
- * inspection before returning to setup. Progress is logged to the terminal.
+ * reads every base from the card data the app has loaded (swu_bases_cache), and
+ * for each one, in set order: chooses it in the base sheet (search by name, tap
+ * the tile), goes to the game screen, waits for the card image to load, pauses
+ * for visual inspection, then returns to setup. `--set=CODE` checks one set.
+ * Progress is logged to the terminal; bases the sheet does not offer, and bases
+ * whose image did not load on the game screen, are listed at the end.
  */
 
-import { chromium, devices } from 'playwright'
+import {
+  parseArgs, launch, openSetup, readBases, baseLabel, chooseBase, goToGame, waitForGameImage, backToSetup,
+} from './qa-helpers.mjs'
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-// Accept URL as first CLI argument.
-// Default uses 127.0.0.1 rather than localhost — on Windows, localhost can
-// resolve to IPv6 (::1) while Vite binds to IPv4, causing a silent failure.
-const DEV_URL = process.argv[2] ?? 'http://127.0.0.1:5173/dmgCtrl/'
+const args = parseArgs()
+const SET = args.flags.find(f => f.startsWith('--set='))?.slice('--set='.length).toUpperCase() ?? null
 
 // Time (ms) to hold on the game screen after the card image has settled,
 // so you can visually inspect the rendering.
 const VISUAL_PAUSE_MS = 1000
 
+// How long to wait for the card image on the game screen.
+const IMAGE_TIMEOUT_MS = 10000
+
 // Brief settling pause after returning to the setup screen.
 const BACK_PAUSE_MS = 300
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const SELECTORS = {
-  setSelect:    '[data-testid="set-select"]',
-  aspectSelect: '[data-testid="aspect-select"]',
-  baseSelect:   '[data-testid="base-select"]',
-  startGame:    '[aria-label="Start game"]',
-  back:         '[aria-label="Back"]',
-}
-
-async function waitForOptions(page, selector) {
-  await page.waitForSelector(`${selector}:not([disabled])`)
-  await page.waitForFunction(
-    (sel) => document.querySelector(`${sel} option:not([disabled])`) !== null,
-    selector
-  )
-}
-
-async function getOptions(page, selector) {
-  return page.locator(`${selector} option:not([disabled])`).allTextContents()
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-const browser = await chromium.launch({ headless: false, devtools: true })
-
-// Emulate iPhone 15 Pro in landscape orientation.
-// Ignore HTTPS certificate errors so the script works with the mkcert-backed
-// dev:https server without needing to import the mkcert CA into Chromium's
-// own certificate store.
-const context = await browser.newContext({
-  ...devices['iPhone 15 Pro landscape'],
-  ignoreHTTPSErrors: DEV_URL.startsWith('https://'),
-})
+const { browser, context } = await launch({ ...args, devtools: true })
 const page = await context.newPage()
+await openSetup(page, browser, args.url)
 
-console.log(`Connecting to ${DEV_URL} ...`)
-try {
-  await page.goto(DEV_URL, { waitUntil: 'domcontentloaded', timeout: 15000 })
-} catch (err) {
-  console.error(`\nCould not reach ${DEV_URL}: ${err.message}`)
-  console.error('Is the dev server running?\n')
+const bases = (await readBases(page))
+  .filter(b => SET === null || b.set === SET)
+  .sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number))
+
+if (bases.length === 0) {
+  console.error(`\nNo bases in the card data${SET ? ` for set ${SET}` : ''}.`)
   await browser.close()
   process.exit(1)
 }
 
-// Wait for loading screen to clear
-try {
-  await page.waitForSelector(SELECTORS.setSelect, { timeout: 15000 })
-} catch (err) {
-  console.error(`\nSetup screen did not appear: ${err.message}`)
-  console.error('Ensure the app is on the Setup screen in landscape orientation.\n')
-  await browser.close()
-  process.exit(1)
-}
+console.log(`Setup ready. Checking ${bases.length} bases...\n`)
 
-console.log('Setup screen ready. Starting validation...\n')
-
-const sets = await getOptions(page, SELECTORS.setSelect)
+const notOffered = []
+const noImage = []
 let count = 0
 
-for (const set of sets) {
-  await page.selectOption(SELECTORS.setSelect, { label: set })
-  await waitForOptions(page, SELECTORS.aspectSelect)
-  const aspects = await getOptions(page, SELECTORS.aspectSelect)
+for (const base of bases) {
+  count++
+  console.log(`[${count}/${bases.length}] ${baseLabel(base)}`)
 
-  for (const aspect of aspects) {
-    await page.selectOption(SELECTORS.aspectSelect, { label: aspect })
-    await waitForOptions(page, SELECTORS.baseSelect)
-    const baseLabels = await getOptions(page, SELECTORS.baseSelect)
-
-    for (const baseLabel of baseLabels) {
-      count++
-      // baseLabel format: "Name — XHP" — strip HP for cleaner console output
-      const baseName = baseLabel.split(' — ')[0]
-      console.log(`[${count}] ${set} / ${aspect} / ${baseName}`)
-
-      await page.selectOption(SELECTORS.baseSelect, { label: baseLabel })
-      await page.waitForSelector(`${SELECTORS.startGame}:not([disabled])`)
-      await page.click(SELECTORS.startGame)
-
-      // Confirm we're on the game screen
-      await page.waitForSelector(SELECTORS.back)
-
-      // Wait for the card image (or all fallbacks) to settle
-      try {
-        await page.waitForLoadState('networkidle', { timeout: 10000 })
-      } catch {
-        // Network did not reach idle within the timeout — carry on
-      }
-
-      // Hold for visual inspection
-      await page.waitForTimeout(VISUAL_PAUSE_MS)
-
-      // Return to setup screen
-      await page.click(SELECTORS.back)
-      await page.waitForSelector(SELECTORS.setSelect)
-      await page.waitForTimeout(BACK_PAUSE_MS)
-    }
+  if ((await chooseBase(page, base)) === null) {
+    console.log('      Not offered in the base sheet: skipped.')
+    notOffered.push(base)
+    continue
   }
+
+  await goToGame(page)
+
+  // Wait for the card image to load; if it does not, say so and carry on
+  try {
+    await waitForGameImage(page, IMAGE_TIMEOUT_MS)
+  } catch {
+    console.log(`      No card image within ${IMAGE_TIMEOUT_MS / 1000} s.`)
+    noImage.push(base)
+  }
+
+  // Hold for visual inspection
+  await page.waitForTimeout(VISUAL_PAUSE_MS)
+
+  await backToSetup(page)
+  await page.waitForTimeout(BACK_PAUSE_MS)
 }
 
-console.log(`\nValidation complete — ${count} bases checked.`)
+console.log(`\nValidation complete: ${count - notOffered.length} of ${count} bases checked.`)
+if (notOffered.length) {
+  console.log('Not offered in the base sheet:')
+  for (const b of notOffered) console.log(`  ${baseLabel(b)}`)
+}
+if (noImage.length) {
+  console.log('No card image on the game screen:')
+  for (const b of noImage) console.log(`  ${baseLabel(b)}`)
+}
 await browser.close()
