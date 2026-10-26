@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Base } from '../hooks/useBases'
-import { baseKey, SWU_MODES, TOURNAMENT_FORMATS } from '../hooks/useSwuSetup'
+import { baseKey, SWU_MODES, TOURNAMENT_FORMATS, TWIN_SUNS_MIN_OPPONENTS, TWIN_SUNS_SEATS } from '../hooks/useSwuSetup'
+import SwuTwinSunsGrid from './swuTwinSunsGrid'
 import type { SwuMode, TournamentFormat, TournamentSettings } from '../hooks/useSwuSetup'
 import type { useBaseArt } from '../hooks/useBaseArt'
 import AppScreenLayout from './layout/appScreenLayout'
@@ -44,6 +45,11 @@ interface Props {
   theirArt: ReturnType<typeof useBaseArt>
   theirBaseFromLastGame: boolean
   onChooseTheirBase: (b: Base) => void
+  // Twin Suns: opponents' bases by seat (TWIN_SUNS_SEATS), and the bases used for other players before.
+  seats: (Base | null)[]
+  onChooseSeatBase: (seat: number, b: Base) => void
+  onRemoveSeatBase: (seat: number) => void
+  otherPlayersBases: Base[]
   // Every base the mode needs is chosen.
   ready: boolean
   swudb: SwudbImportControls
@@ -52,7 +58,20 @@ interface Props {
   onSettings?: () => void
 }
 
-type OpenSheet = null | 'more' | 'base' | 'theirBase' | 'tournament'
+type OpenSheet = null | 'more' | 'base' | 'theirBase' | 'seat' | 'tournament'
+
+// Under Match in Twin Suns: how many are playing, or what is still needed.
+function twinSunsHint(hasBase: boolean, opponents: number): string {
+  if (!hasBase) return 'Choose your base to start.'
+  if (opponents === 0) return 'Twin Suns is for 3 or 4 players on this device. Add a base where each opponent sits; at least 2.'
+  const players = opponents + 1
+  if (opponents < TWIN_SUNS_MIN_OPPONENTS) {
+    const more = TWIN_SUNS_MIN_OPPONENTS - opponents
+    return `${players} players. Add ${more} more ${more === 1 ? 'base' : 'bases'} to play.`
+  }
+  if (opponents < TWIN_SUNS_SEATS.length) return `${players} players. Add a fourth, or go.`
+  return `${players} players. Tap a base to change or remove it; it keeps its place.`
+}
 
 // The controls column (Mode, Match, primary) keeps this width whatever the mode.
 const CONTROLS_WIDTH = '284px'
@@ -146,6 +165,10 @@ export default function SwuSetupScreenView({
   theirArt,
   theirBaseFromLastGame,
   onChooseTheirBase,
+  seats,
+  onChooseSeatBase,
+  onRemoveSeatBase,
+  otherPlayersBases,
   ready,
   swudb,
   onBack,
@@ -154,6 +177,9 @@ export default function SwuSetupScreenView({
 }: Props) {
   const { isPortrait } = useOrientation()
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null)
+  // The Twin Suns seat the opponent sheet is for.
+  const [seat, setSeat] = useState(0)
+  const seatBase = seats[seat] ?? null
 
   const close = () => setOpenSheet(null)
   // Sheet actions close the sheet first, so it isn't left open behind the next screen.
@@ -162,7 +188,9 @@ export default function SwuSetupScreenView({
 
   const choose = (b: Base) => { onChooseBase(b); close() }
   const chooseTheirs = (b: Base) => { onChooseTheirBase(b); close() }
+  const chooseForSeat = (b: Base) => { onChooseSeatBase(seat, b); close() }
   const twoPlayers = mode === '2p'
+  const twinSuns = mode === 'twin-suns'
   const missingTheirs = twoPlayers && theirBase === null
 
   const topBar = (
@@ -305,6 +333,22 @@ export default function SwuSetupScreenView({
     onOpen: () => setOpenSheet('theirBase'),
   })
 
+  const twinSunsGrid = (
+    <SwuTwinSunsGrid
+      base={base}
+      isFavourite={isFavourite}
+      onFavouriteToggle={onFavouriteToggle}
+      seats={seats}
+      onOpenYours={openBaseSheet}
+      onOpenSeat={i => { setSeat(i); setOpenSheet('seat') }}
+      compact={isPortrait}
+    />
+  )
+
+  const twinSunsNote = error
+    ? <div role="alert" style={{ fontSize: '0.85rem', color: 'var(--color-error)' }}>{error}</div>
+    : <div style={{ ...mutedStyle, lineHeight: 1.4 }}>{twinSunsHint(base !== null, seats.filter(b => b !== null).length)}</div>
+
   const modeSection = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
       <div style={sectionLabelStyle()}>Mode</div>
@@ -363,6 +407,24 @@ export default function SwuSetupScreenView({
         onChoose={chooseTheirs}
         swudb={swudb}
       />
+      {/* Opponents' bases: no favourites, and the bases used for other players rather than your recent ones. */}
+      <SwuBaseSheet
+        title="Opponent’s base"
+        open={openSheet === 'seat'}
+        onClose={close}
+        action={seatBase && (
+          <Button onClick={() => { onRemoveSeatBase(seat); close() }} style={{ background: 'rgba(var(--color-error-rgb), 0.15)', color: 'var(--color-error)' }}>
+            Remove base
+          </Button>
+        )}
+        bases={sheetBases}
+        favouriteBases={[]}
+        recentBases={otherPlayersBases}
+        recentLabel="Used for other players before"
+        currentKey={seatBase ? baseKey(seatBase) : null}
+        onChoose={chooseForSeat}
+        swudb={swudb}
+      />
       <Sheet open={openSheet === 'tournament' && base !== null} title="Start a tournament" onClose={close}>
         {base && (
           <StartTournamentBody
@@ -383,11 +445,16 @@ export default function SwuSetupScreenView({
       <AppScreenLayout>
         <div data-testid="swu-setup" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px 16px 24px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
           {topBar}
-          {baseCard}
-          {theirBaseCard}
-          {base && !twoPlayers && <div style={{ flex: 1 }} />}
+          {twinSuns ? twinSunsGrid : (
+            <>
+              {baseCard}
+              {theirBaseCard}
+              {base && !twoPlayers && <div style={{ flex: 1 }} />}
+            </>
+          )}
           {modeSection}
           {matchSection}
+          {twinSuns && twinSunsNote}
           {primary}
         </div>
         {sheets}
@@ -400,11 +467,11 @@ export default function SwuSetupScreenView({
       <div data-testid="swu-setup" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px', overflow: 'hidden', color: 'var(--color-text-primary)' }}>
         {topBar}
         <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: `${twoPlayers ? 'minmax(0, 1fr) ' : ''}minmax(0, 1fr) ${CONTROLS_WIDTH}`, gap: '12px' }}>
-          {baseCard}
-          {theirBaseCard}
+          {twinSuns ? twinSunsGrid : <>{baseCard}{theirBaseCard}</>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0 }}>
             {modeSection}
             {matchSection}
+            {twinSuns && twinSunsNote}
             <div style={{ flex: 1 }} />
             {primary}
           </div>

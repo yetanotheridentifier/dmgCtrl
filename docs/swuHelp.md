@@ -4,11 +4,11 @@
 
 The **Star Wars: Unlimited** setup screen opens from game select, at dmgctrl.app/swu, or on its own when SWU is the game you played last. The first time, it shows a splash for a moment while it gets the card data from the internet; after that it keeps the data for playing offline. Opened offline before it has the data, it says so: **Try again**, or **Play X-Wing** instead.
 
-Setup has four things: **Mode**, **Your base** (and **Their base** with 2 players), **Match**, and the button that starts play.
+Setup has four things: **Mode**, **Your base** (and **Their base** with 2 players, or the seating grid in Twin Suns), **Match**, and the button that starts play.
 
 ### Mode
 
-Choose **1 player** to track your base alone, or **2 players** to set up a base for each side. Your choice is kept for next time; the first time it is 1 player.
+Choose **1 player** to track your base alone, **2 players** to set up a base for each side, or **Twin Suns** for 3 or 4 players round one device. Your choice is kept for next time; the first time it is 1 player.
 
 With 2 players, **Go to game** opens the two-player game: one phone flat on the table between you, with a half each (see Game).
 
@@ -23,6 +23,16 @@ Once chosen, your base is kept: it is there next game, and next time you open th
 With 2 players, a **Their base** card sits beside yours. The first time it reads **Choose their base**, and the start button waits with "Choose their base to start." Tap the card, or **Change base** once there is one, to open the same base sheet as yours. Their base has no Favourite, and it never joins your Recent bases.
 
 Their base is kept from your last 2-player game, and the card says **Same as last game** while it is unchanged.
+
+### Twin Suns
+
+With Twin Suns, the bases sit in a 2×2 grid that is the seating round the table. **Your base** is always top left, with its Favourite star. Every other cell reads **Add base**: add each opponent's base in the cell where they sit. A base never moves once placed.
+
+Tap any base to change it. An opponent's base sheet is titled **Opponent's base**: it lists the bases **Used for other players before** in place of your favourites and recent bases, and has **Remove base**, which empties that cell and moves nothing else. Opponents' bases have no Favourite and never join your Recent bases.
+
+**Go to game** needs at least 3 bases, yours and two opponents'; a fourth is optional. The line under Match says how many are playing, or how many more bases are needed. The bases and their cells are kept for your next Twin Suns game.
+
+For now, Go to game opens the game for your base alone.
 
 ### Choosing a base
 
@@ -53,7 +63,7 @@ Tap **Favourite** on the Your base card to save your base as a favourite: the st
 
 Choose **Casual** or **Tournament**; your choice is kept. With Casual, **Go to game** opens the game. With Tournament, **Start tournament** opens a sheet where you set the format, best of 1 or 3 and the rounds, then **Start round 1** goes straight to the game (see Tournament). While a tournament is under way the button reads **Go to tournament** and takes you back to it.
 
-The button is disabled until you have chosen a base, and with 2 players until you have chosen theirs too.
+The button is disabled until you have chosen a base, with 2 players until you have chosen theirs too, and in Twin Suns until at least two opponents have a base.
 
 ### More
 

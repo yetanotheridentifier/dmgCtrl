@@ -127,7 +127,8 @@ function AppScreens() {
     setScreen('gameSelect')
   }
 
-  // Setup passes their base too in 2 players, which opens the two-player game screen.
+  // Setup passes their base too in 2 players, which opens the two-player game screen. In Twin Suns it
+  // also passes the opponents' seats, not used yet: the game opens with your base alone.
   const handleConfirm = (base: Base, mode: SetupMode, theirBase?: Base) => {
     if (mode === 'tournament') {
       // Back to the tournament under way; a new one is started from the setup start sheet.

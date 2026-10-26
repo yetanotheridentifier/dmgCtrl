@@ -109,6 +109,10 @@ export function SegmentedControl<T extends string>({ label, options, value, onCh
             style={{
               ...TAP,
               flex: 1,
+              minWidth: 0,
+              // One line, so three options fit the 284px controls column.
+              padding: '0 4px',
+              whiteSpace: 'nowrap',
               borderRadius: '9px',
               fontSize: '0.95rem',
               background: selected ? 'var(--color-accent)' : 'transparent',
@@ -235,11 +239,13 @@ interface SheetProps {
   children: ReactNode
   // For a grid of choices too wide for the side: fills the screen in landscape.
   wide?: boolean
+  // A button in the header, before Close, for an action on the sheet as a whole.
+  action?: ReactNode
 }
 
 // Choices open over the screen rather than replacing it: from the right in landscape, where height
 // is short, and from the bottom in portrait, where the thumb is.
-export function Sheet({ open, title, onClose, children, wide = false }: SheetProps) {
+export function Sheet({ open, title, onClose, children, wide = false, action }: SheetProps) {
   const { isPortrait } = useOrientation()
   const titleId = useId()
 
@@ -282,6 +288,7 @@ export function Sheet({ open, title, onClose, children, wide = false }: SheetPro
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minHeight: '44px' }}>
           <h2 id={titleId} style={{ flex: 1, margin: 0, fontSize: '1.15rem', fontWeight: 500 }}>{title}</h2>
+          {action}
           <IconButton label="Close" onClick={onClose}><CloseIcon /></IconButton>
         </div>
         {children}
