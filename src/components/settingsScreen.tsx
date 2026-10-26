@@ -1,111 +1,43 @@
 import { useUserSettings } from '../hooks/useUserSettings'
-import type { StartScreen } from '../hooks/useUserSettings'
-import { useFavourites } from '../hooks/useFavourites'
 import AppScreenLayout from './layout/appScreenLayout'
 import SettingsScreenView from './settingsScreenView'
-import { onSettingChanged, onFavouriteRemoved, onFavouritesCleared } from '../services/analytics'
-
-type Tab = 'general' | 'swu' | 'xwing'
+import { onSettingChanged } from '../services/analytics'
 
 interface Props {
   onBack: () => void
-  onHelp: () => void
   onManageXwingLists?: () => void
-  defaultTab?: Tab
 }
 
-function SettingsScreen({ onBack, onHelp, onManageXwingLists, defaultTab = 'general' }: Props) {
-  const {
-    useHyperspace,
-    forceTokenDisplay,
-    enableEpicActions,
-    enableWakeLock,
-    enableActionLog,
-    enableInitiativeBar,
-    enableFavourites,
-    enableCompetitiveMode,
-    bo1TimerMinutes,
-    bo3TimerMinutes,
-    xwingTimerMinutes,
-    enableXwingPhases,
-    enableXwingAlwaysIncDec,
-    meleePlayerGuid,
-    startScreen,
-    setUseHyperspace,
-    setForceTokenDisplay,
-    setEnableEpicActions,
-    setEnableWakeLock,
-    setEnableActionLog,
-    setEnableInitiativeBar,
-    setEnableFavourites,
-    setEnableCompetitiveMode,
-    setBo1TimerMinutes,
-    setBo3TimerMinutes,
-    setXwingTimerMinutes,
-    setEnableXwingPhases,
-    setEnableXwingAlwaysIncDec,
-    setMeleePlayerGuid,
-    setStartScreen,
-  } = useUserSettings()
+function SettingsScreen({ onBack, onManageXwingLists }: Props) {
+  const settings = useUserSettings()
 
-  const { favourites, removeFavourite, clearFavourites } = useFavourites()
-
-  const handleSettingChange = <T,>(name: string, setter: (v: T) => void) => (v: T) => {
+  // Every choice is reported by its stored key; the Melee player ID is personal, so it is not.
+  const reported = <T,>(name: string, setter: (v: T) => void) => (v: T) => {
     setter(v)
     void onSettingChanged(name, v)
-  }
-
-  const handleRemoveFavourite = (key: string) => {
-    const fav = favourites.find(f => f.key === key)
-    removeFavourite(key)
-    if (fav) void onFavouriteRemoved(key, fav.set)
-  }
-
-  const handleClearFavourites = () => {
-    clearFavourites()
-    void onFavouritesCleared()
   }
 
   return (
     <AppScreenLayout>
       <SettingsScreenView
-        defaultTab={defaultTab}
-        useHyperspace={useHyperspace}
-        forceTokenDisplay={forceTokenDisplay}
-        enableEpicActions={enableEpicActions}
-        enableWakeLock={enableWakeLock}
-        enableFavourites={enableFavourites}
-        favourites={favourites}
-        onUseHyperspaceChange={handleSettingChange('useHyperspace', setUseHyperspace)}
-        onForceTokenDisplayChange={handleSettingChange('forceTokenDisplay', setForceTokenDisplay)}
-        onEnableEpicActionsChange={handleSettingChange('enableEpicActions', setEnableEpicActions)}
-        onEnableWakeLockChange={handleSettingChange('enableWakeLock', setEnableWakeLock)}
-        enableActionLog={enableActionLog}
-        onEnableActionLogChange={handleSettingChange('enableActionLog', setEnableActionLog)}
-        enableInitiativeBar={enableInitiativeBar}
-        onEnableInitiativeBarChange={handleSettingChange('enableInitiativeBar', setEnableInitiativeBar)}
-        onEnableFavouritesChange={handleSettingChange('enableFavourites', setEnableFavourites)}
-        enableCompetitiveMode={enableCompetitiveMode}
-        onEnableCompetitiveModeChange={handleSettingChange('enableCompetitiveMode', setEnableCompetitiveMode)}
-        bo1TimerMinutes={bo1TimerMinutes}
-        bo3TimerMinutes={bo3TimerMinutes}
-        xwingTimerMinutes={xwingTimerMinutes}
-        enableXwingPhases={enableXwingPhases}
-        enableXwingAlwaysIncDec={enableXwingAlwaysIncDec}
-        meleePlayerGuid={meleePlayerGuid}
-        onBo1TimerChange={setBo1TimerMinutes}
-        onBo3TimerChange={setBo3TimerMinutes}
-        onXwingTimerChange={setXwingTimerMinutes}
-        onEnableXwingPhasesChange={handleSettingChange('enableXwingPhases', setEnableXwingPhases)}
-        onEnableXwingAlwaysIncDecChange={handleSettingChange('enableXwingAlwaysIncDec', setEnableXwingAlwaysIncDec)}
-        onMeleePlayerGuidChange={setMeleePlayerGuid}
-        startScreen={startScreen}
-        onStartScreenChange={handleSettingChange<StartScreen>('startScreen', setStartScreen)}
-        onRemoveFavourite={handleRemoveFavourite}
-        onClearFavourites={handleClearFavourites}
+        startScreen={settings.startScreen}
+        onStartScreenChange={reported('startScreen', settings.setStartScreen)}
+        useHyperspace={settings.useHyperspace}
+        onUseHyperspaceChange={reported('useHyperspace', settings.setUseHyperspace)}
+        forceTokenDisplay={settings.forceTokenDisplay}
+        onForceTokenDisplayChange={reported('forceTokenDisplay', settings.setForceTokenDisplay)}
+        meleePlayerGuid={settings.meleePlayerGuid}
+        onMeleePlayerGuidChange={settings.setMeleePlayerGuid}
+        enableDamageButtons={settings.enableDamageButtons}
+        onEnableDamageButtonsChange={reported('enableDamageButtons', settings.setEnableDamageButtons)}
+        enableInitiativeBar={settings.enableInitiativeBar}
+        onEnableInitiativeBarChange={reported('enableInitiativeBar', settings.setEnableInitiativeBar)}
+        enableXwingPhases={settings.enableXwingPhases}
+        onEnableXwingPhasesChange={reported('enableXwingPhases', settings.setEnableXwingPhases)}
+        enableXwingAlwaysIncDec={settings.enableXwingAlwaysIncDec}
+        onEnableXwingAlwaysIncDecChange={reported('enableXwingAlwaysIncDec', settings.setEnableXwingAlwaysIncDec)}
         onManageXwingLists={onManageXwingLists}
         onBack={onBack}
-        onHelp={onHelp}
       />
     </AppScreenLayout>
   )

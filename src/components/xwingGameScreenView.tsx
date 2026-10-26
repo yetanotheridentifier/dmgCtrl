@@ -45,8 +45,6 @@ interface Props {
   onPlayerDecrement: (n: number) => void
   onOpponentIncrement: (n: number) => void
   onOpponentDecrement: (n: number) => void
-  enableLongPress: boolean
-  enableActionLog: boolean
   enableXwingAlwaysIncDec?: boolean
   logEntries: HistoryEntry<{ round: number }>[]
   logOpen: boolean
@@ -447,7 +445,7 @@ export default function XwingGameScreenView(props: Props) {
     gameStarted, gameOver, gameOverReason, result, timerRemaining, timerMinutes, onTimerMinutesChange,
     round, roundEndsGame, phase, onPhaseAdvance, enableXwingPhases, onStartGame, scoringOpen, onOpenScoring, onEndOfRound,
     playerScore, opponentScore, onPlayerIncrement, onPlayerDecrement, onOpponentIncrement, onOpponentDecrement,
-    enableActionLog, enableXwingAlwaysIncDec = false, logEntries, logOpen, onLogToggle, onLogUndo,
+    enableXwingAlwaysIncDec = false, logEntries, logOpen, onLogToggle, onLogUndo,
     initiative, onInitiativeOpponent, onInitiativePlayer, onBack, onHelp, onSettings,
     scenario, scenarioScoringActive = false, scenarioAlreadyScoredThisRound = false,
     pendingPlayerScenario = null, pendingOpponentScenario = null, onPlayerScenarioSelect, onOpponentScenarioSelect,
@@ -471,7 +469,7 @@ export default function XwingGameScreenView(props: Props) {
       <div style={{ ...CAPS, fontSize: '12px', flex: 1, textAlign: side === 'player' ? 'left' : 'right' }}>
         {side === 'player' ? 'YOUR SHIPS' : "OPPONENT'S SHIPS"}
       </div>
-      {side === 'opponent' && enableActionLog && (
+      {side === 'opponent' && (
         <button type="button" data-testid="log-btn" aria-label="Log" onClick={onLogToggle} style={{ width: '44px', height: '44px', border: 'none', borderRadius: '12px', background: 'var(--color-surface-raised)', color: 'var(--color-text-body)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <LogIcon />
         </button>

@@ -20,9 +20,6 @@ vi.mock('../services/analytics', () => ({
 
 const mockUserSettings = vi.hoisted(() => ({
   useHyperspace: true,
-  // Setup ignores both: the star and Match always show.
-  enableFavourites: false,
-  enableCompetitiveMode: false,
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
@@ -95,8 +92,6 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn().mockImplementation(() => deckResponse()))
   vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
   mockUserSettings.useHyperspace = true
-  mockUserSettings.enableFavourites = false
-  mockUserSettings.enableCompetitiveMode = false
   mockFavourites.favourites = []
   mockFavourites.addFavourite.mockReset()
   mockFavourites.removeFavourite.mockReset()

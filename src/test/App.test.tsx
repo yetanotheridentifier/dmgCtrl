@@ -91,16 +91,8 @@ vi.mock('../hooks/useBases', () => ({
 
 const mockUserSettings = vi.hoisted(() => ({
   useHyperspace: true,
-  enableForceToken: true,
-  enableEpicActions: true,
-  enableWakeLock: true,
-  enableCompetitiveMode: false,
-  enableFavourites: false,
   startScreen: 'swu',
   setUseHyperspace: vi.fn(),
-  setEnableForceToken: vi.fn(),
-  setEnableEpicActions: vi.fn(),
-  setEnableWakeLock: vi.fn(),
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
@@ -153,7 +145,6 @@ beforeEach(() => {
   mockUseTournament.startMatch.mockReset()
   mockUseTournament.completeMatch.mockReset()
   mockUseTournament.dropTournament.mockReset()
-  mockUserSettings.enableCompetitiveMode = false
   mockUserSettings.startScreen = 'swu'
 })
 
@@ -462,6 +453,7 @@ describe('App', () => {
     await waitForSetup()
     await openFromMore(user, 'Settings')
     await user.click(screen.getByRole('button', { name: 'Squad lists' }))
+    expect(await screen.findByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back' }))
@@ -1038,11 +1030,11 @@ describe('App game select', () => {
     expect(screen.getByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
   })
 
-  it('Manage lists in settings opens Squad Lists, and back returns to settings', async () => {
+  it('Squad lists in settings opens Squad Lists, and back returns to settings', async () => {
     const user = userEvent.setup()
     await openXwingSetup(user)
     await openFromMore(user, 'Settings')
-    await user.click(screen.getByRole('button', { name: 'Manage lists' }))
+    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
     expect(screen.getByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument()
@@ -1129,26 +1121,18 @@ describe('App game select', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument())
   })
 
-  it('opening settings from game select shows the General tab active', async () => {
+  it('back from settings opened on game select returns to game select', async () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /settings/i }))
-    expect(screen.getByRole('tab', { name: /general/i })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: /swu/i })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument()
   })
 
-  it('opening settings from setup shows the SWU tab active', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await waitForSetup()
-    await openFromMore(user, 'Settings')
-    expect(screen.getByRole('tab', { name: /swu/i })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: /general/i })).toHaveAttribute('aria-selected', 'false')
-  })
-
-  it('opening settings from xwing shows the X-Wing tab active', async () => {
+  it('back from settings opened on X-Wing setup returns to X-Wing setup', async () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
@@ -1157,8 +1141,9 @@ describe('App game select', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'More' }))
     await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: 'Settings' }))
-    expect(screen.getByRole('tab', { name: /x-wing/i })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: /general/i })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('heading', { name: 'X-Wing' })).toBeInTheDocument()
   })
 
 })

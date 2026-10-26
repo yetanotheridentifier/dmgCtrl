@@ -1,765 +1,208 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useOrientation } from '../hooks/useOrientation'
-import { BackIcon, HelpIcon } from './icons'
-import { NAV_BTN_STYLE } from '../styles/navButton'
-import type { FavouriteBase } from '../hooks/useFavourites'
-import TimerStepper from './shared/timerStepper'
+import { BackIcon } from './icons'
+import { Button, IconButton, OptionRow, SegmentedControl, SelectButton, Sheet } from './shared/controls'
+import { sectionLabelStyle } from '../styles/sectionLabel'
+import type { ForceTokenDisplay, StartScreen } from '../hooks/useUserSettings'
 
-interface ToggleRowProps {
-  id: string
-  label: string
-  subtitle?: string
-  checked: boolean
-  onChange: (value: boolean) => void
-  vmin: number
-}
+const START_SCREENS: { value: StartScreen; label: string }[] = [
+  { value: 'gameSelect', label: 'Game select' },
+  { value: 'swu', label: 'Star Wars: Unlimited' },
+  { value: 'xwing', label: 'X-Wing' },
+]
 
-function ToggleRow({ id, label, subtitle, checked, onChange, vmin }: ToggleRowProps) {
+const FORCE_TOKENS: { value: ForceTokenDisplay; label: string }[] = [
+  { value: 'always-on', label: 'Always' },
+  { value: 'lof-only', label: 'LOF bases' },
+  { value: 'always-off', label: 'Off' },
+]
+
+// The width of a control beside its label in landscape, so the right-hand controls line up.
+const CONTROL_WIDTH = '260px'
+
+const labelStyle: React.CSSProperties = { fontSize: '15px', color: 'var(--color-text-primary)' }
+const noteStyle: React.CSSProperties = { fontSize: '12px', lineHeight: '16px', color: 'var(--color-text-muted)' }
+
+// Settings is the only screen with on/off choices, so the switch lives here rather than in the
+// shared controls. The button is 44px tall so the track is easy to hit.
+function SwitchRow({ label, note, checked, onChange }: { label: string; note?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label
-      htmlFor={id}
-      style={{
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '2vw',
-        padding: '1.5vh 0',
-        borderBottom: '1px solid rgba(107, 114, 128, 0.3)',
-        cursor: 'pointer',
-      }}
-    >
-      <div style={{ flex: 1 }}>
-        <div style={{
-          color: 'var(--color-text-primary)',
-          fontWeight: '300',
-          fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
-          letterSpacing: '0.03em',
-        }}>
-          {label}
-        </div>
-        {subtitle && (
-          <div style={{
-            color: 'var(--color-text-muted)',
-            fontWeight: '300',
-            fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
-            marginTop: '0.25em',
-          }}>
-            {subtitle}
-          </div>
-        )}
-      </div>
-
-      {/* Toggle track */}
-      <div style={{
-        position: 'relative',
-        flexShrink: 0,
-        width: '44px',
-        height: '24px',
-        background: checked ? 'var(--color-accent)' : '#374151',
-        borderRadius: '12px',
-        transition: 'background 0.2s',
-      }}>
-        {/* Toggle thumb */}
-        <div style={{
-          position: 'absolute',
-          top: '2px',
-          left: checked ? '22px' : '2px',
-          width: '20px',
-          height: '20px',
-          background: '#ffffff',
-          borderRadius: '50%',
-          transition: 'left 0.2s',
-          pointerEvents: 'none',
-        }} />
-        {/* Hidden native checkbox — accessible to testing and keyboard */}
-        <input
-          id={id}
-          type="checkbox"
-          checked={checked}
-          onChange={e => onChange(e.target.checked)}
-          aria-label={label}
-          style={{
-            position: 'absolute',
-            opacity: 0,
-            width: '100%',
-            height: '100%',
-            margin: 0,
-            cursor: 'pointer',
-          }}
-        />
-      </div>
-    </label>
-  )
-}
-
-
-const smallButtonStyle: React.CSSProperties = {
-  padding: '0.4em 0.8em',
-  background: 'transparent',
-  border: '1px solid rgba(107, 114, 128, 0.5)',
-  borderRadius: '6px',
-  color: 'var(--color-text-muted)',
-  cursor: 'pointer',
-}
-
-type ForceTokenDisplay = 'always-on' | 'lof-only' | 'always-off'
-type Tab = 'general' | 'swu' | 'xwing'
-type StartScreen = 'gameSelect' | 'swu' | 'xwing'
-
-interface Props {
-  defaultTab: Tab
-  useHyperspace: boolean
-  forceTokenDisplay: ForceTokenDisplay
-  enableEpicActions: boolean
-  enableWakeLock: boolean
-  enableActionLog: boolean
-  enableInitiativeBar: boolean
-  enableFavourites: boolean
-  enableCompetitiveMode: boolean
-  bo1TimerMinutes: number
-  bo3TimerMinutes: number
-  xwingTimerMinutes: number
-  enableXwingPhases: boolean
-  enableXwingAlwaysIncDec: boolean
-  meleePlayerGuid: string
-  favourites: FavouriteBase[]
-  onUseHyperspaceChange: (v: boolean) => void
-  onForceTokenDisplayChange: (v: ForceTokenDisplay) => void
-  onEnableEpicActionsChange: (v: boolean) => void
-  onEnableWakeLockChange: (v: boolean) => void
-  onEnableActionLogChange: (v: boolean) => void
-  onEnableInitiativeBarChange: (v: boolean) => void
-  onEnableFavouritesChange: (v: boolean) => void
-  onEnableCompetitiveModeChange: (v: boolean) => void
-  onBo1TimerChange: (v: number) => void
-  onBo3TimerChange: (v: number) => void
-  onXwingTimerChange: (v: number) => void
-  onEnableXwingPhasesChange: (v: boolean) => void
-  onEnableXwingAlwaysIncDecChange: (v: boolean) => void
-  onMeleePlayerGuidChange: (v: string) => void
-  startScreen: StartScreen
-  onStartScreenChange: (v: StartScreen) => void
-  onRemoveFavourite: (key: string) => void
-  onClearFavourites: () => void
-  onManageXwingLists?: () => void
-  onBack: () => void
-  onHelp: () => void
-}
-
-function SettingsScreenView({
-  defaultTab,
-  useHyperspace,
-  forceTokenDisplay,
-  enableEpicActions,
-  enableWakeLock,
-  enableActionLog,
-  enableInitiativeBar,
-  enableFavourites,
-  enableCompetitiveMode,
-  bo1TimerMinutes,
-  bo3TimerMinutes,
-  xwingTimerMinutes,
-  enableXwingPhases,
-  enableXwingAlwaysIncDec,
-  meleePlayerGuid,
-  favourites,
-  onUseHyperspaceChange,
-  onForceTokenDisplayChange,
-  onEnableEpicActionsChange,
-  onEnableWakeLockChange,
-  onEnableActionLogChange,
-  onEnableInitiativeBarChange,
-  onEnableFavouritesChange,
-  onEnableCompetitiveModeChange,
-  onBo1TimerChange,
-  onBo3TimerChange,
-  onXwingTimerChange,
-  onEnableXwingPhasesChange,
-  onEnableXwingAlwaysIncDecChange,
-  onMeleePlayerGuidChange,
-  startScreen,
-  onStartScreenChange,
-  onRemoveFavourite,
-  onClearFavourites,
-  onManageXwingLists,
-  onBack,
-  onHelp,
-}: Props) {
-  const { vmin, isPortrait } = useOrientation()
-  const [confirmingClear, setConfirmingClear] = useState(false)
-  const [activeTab, setActiveTab] = useState<Tab>(defaultTab)
-
-  const scrollableColumn: React.CSSProperties = {
-    flex: 1,
-    overflowY: 'auto',
-    paddingRight: '1rem',
-    paddingBottom: '5vw',
-  }
-
-  // ── Tab bar ───────────────────────────────────────────────────────────────
-
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'general', label: 'General' },
-    { id: 'swu', label: 'SWU' },
-    { id: 'xwing', label: 'X-Wing' },
-  ]
-
-  // Portrait: horizontal bar across the top
-  // Landscape: vertical sidebar on the left
-  const tabBar = (
-    <div
-      role="tablist"
-      style={isPortrait ? {
-        display: 'flex',
-        flexShrink: 0,
-        borderBottom: '1px solid rgba(107, 114, 128, 0.3)',
-        marginBottom: '1.5vh',
-      } : {
-        display: 'flex',
-        flexDirection: 'column',
-        flexShrink: 0,
-        alignItems: 'center',
-        borderRight: '1px solid rgba(107, 114, 128, 0.3)',
-        paddingTop: '0.5vh',
-        gap: '0.5vh',
-      }}
-    >
-      {tabs.map(({ id, label }) => {
-        const isActive = activeTab === id
-        return (
-          <button
-            key={id}
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => setActiveTab(id)}
-            style={isPortrait ? {
-              flex: 1,
-              background: 'transparent',
-              border: 'none',
-              borderBottom: isActive
-                ? '2px solid var(--color-accent)'
-                : '2px solid transparent',
-              color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-              fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif",
-              fontWeight: isActive ? '400' : '300',
-              fontSize: `clamp(0.85rem, ${vmin * 0.032}px, 1.05rem)`,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              padding: '0.75vh 0',
-              marginBottom: '-1px',
-              cursor: 'pointer',
-              transition: 'color 0.15s, border-color 0.15s',
-              WebkitTapHighlightColor: 'transparent',
-            } : {
-              flex: 1,
-              background: 'transparent',
-              border: 'none',
-              borderLeft: isActive
-                ? '2px solid var(--color-accent)'
-                : '2px solid transparent',
-              color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-              fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif",
-              fontWeight: isActive ? '400' : '300',
-              fontSize: `clamp(0.75rem, ${vmin * 0.03}px, 0.9rem)`,
-              letterSpacing: '0.05em',
-              textTransform: 'uppercase',
-              writingMode: 'vertical-rl',
-              transform: 'rotate(180deg)',
-              padding: '0.8vh 0.4vw',
-              cursor: 'pointer',
-              transition: 'color 0.15s, border-color 0.15s',
-              WebkitTapHighlightColor: 'transparent',
-            }}
-          >
-            {label}
-          </button>
-        )
-      })}
-    </div>
-  )
-
-  // ── General tab ───────────────────────────────────────────────────────────
-
-  const generalContent = (
-    <>
-      <div style={{
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '2vw',
-        padding: '1.5vh 0 0.5vh',
-      }}>
-        <label
-          htmlFor="select-start-screen"
-          style={{
-            flex: 1,
-            color: 'var(--color-text-primary)',
-            fontWeight: '300',
-            fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
-            letterSpacing: '0.03em',
-            cursor: 'pointer',
-          }}
-        >
-          Start Screen
-        </label>
-        <select
-          id="select-start-screen"
-          aria-label="Start Screen"
-          value={startScreen}
-          onChange={e => onStartScreenChange(e.target.value as StartScreen)}
-          style={{
-            background: 'transparent',
-            border: '2px solid var(--color-accent)',
-            borderRadius: '12px',
-            color: 'var(--color-text-primary)',
-            fontSize: `clamp(0.8rem, ${vmin * 0.03}px, 1rem)`,
-            padding: '0.3em 0.6em',
-            cursor: 'pointer',
-            flexShrink: 0,
-            outline: 'none',
-            boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
-            WebkitAppearance: 'none',
-          }}
-        >
-          <option value="gameSelect">Game Select</option>
-          <option value="swu">SWU</option>
-          <option value="xwing">X-Wing</option>
-        </select>
-      </div>
-      <ToggleRow
-        id="toggle-wake-lock"
-        label="Enable Screen Wake Lock"
-        subtitle="Keeps the screen on during play. May affect battery life."
-        checked={enableWakeLock}
-        onChange={onEnableWakeLockChange}
-        vmin={vmin}
-      />
-      <ToggleRow
-        id="toggle-action-log"
-        label="Enable Action Log"
-        subtitle="Shows a scrollable log of game actions with undo support. Also enables the round tracker."
-        checked={enableActionLog}
-        onChange={onEnableActionLogChange}
-        vmin={vmin}
-      />
-      <ToggleRow
-        id="toggle-initiative-bar"
-        label="Enable Initiative Bar"
-        subtitle="Shows a vertical initiative indicator in the left column of each game screen."
-        checked={enableInitiativeBar}
-        onChange={onEnableInitiativeBarChange}
-        vmin={vmin}
-      />
-    </>
-  )
-
-  // ── SWU tab — options column ──────────────────────────────────────────────
-
-  const swuOptions = (
-    <>
-      <ToggleRow
-        id="toggle-hyperspace"
-        label="Use Hyperspace Art"
-        checked={useHyperspace}
-        onChange={onUseHyperspaceChange}
-        vmin={vmin}
-      />
-      <div style={{
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '2vw',
-        padding: '1.5vh 0',
-        borderBottom: '1px solid rgba(107, 114, 128, 0.3)',
-      }}>
-        <label
-          htmlFor="select-force-token"
-          style={{
-            flex: 1,
-            color: 'var(--color-text-primary)',
-            fontWeight: '300',
-            fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
-            letterSpacing: '0.03em',
-            cursor: 'pointer',
-          }}
-        >
-          Force Token Display
-        </label>
-        <select
-          id="select-force-token"
-          aria-label="Force Token Display"
-          value={forceTokenDisplay}
-          onChange={e => onForceTokenDisplayChange(e.target.value as ForceTokenDisplay)}
-          style={{
-            background: 'transparent',
-            border: '2px solid var(--color-accent)',
-            borderRadius: '12px',
-            color: 'var(--color-text-primary)',
-            fontSize: `clamp(0.8rem, ${vmin * 0.03}px, 1rem)`,
-            padding: '0.3em 0.6em',
-            cursor: 'pointer',
-            flexShrink: 0,
-            outline: 'none',
-            boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
-            WebkitAppearance: 'none',
-          }}
-        >
-          <option value="always-on">Always on</option>
-          <option value="lof-only">LOF bases only</option>
-          <option value="always-off">Always off</option>
-        </select>
-      </div>
-      <ToggleRow
-        id="toggle-epic-actions"
-        label="Enable Epic Actions"
-        checked={enableEpicActions}
-        onChange={onEnableEpicActionsChange}
-        vmin={vmin}
-      />
-      <ToggleRow
-        id="toggle-competitive-mode"
-        label="Enable Competitive Mode"
-        subtitle="Beta feature. Adds a tournament mode selector to the setup screen."
-        checked={enableCompetitiveMode}
-        onChange={onEnableCompetitiveModeChange}
-        vmin={vmin}
-      />
-      {enableCompetitiveMode && (
-        <div style={{ paddingLeft: '0.5em' }}>
-          <TimerStepper
-            label="Bo1 Timer"
-            value={bo1TimerMinutes}
-            min={5}
-            max={90}
-            step={5}
-            onChange={onBo1TimerChange}
-            testId="bo1-timer-stepper"
-          />
-          <TimerStepper
-            label="Bo3 Timer"
-            value={bo3TimerMinutes}
-            min={5}
-            max={90}
-            step={5}
-            onChange={onBo3TimerChange}
-            testId="bo3-timer-stepper"
-          />
-          <div style={{
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '2vw',
-            padding: '1.5vh 0 0.5vh',
-            marginTop: '0.5vh',
-          }}>
-            <label
-              htmlFor="input-melee-player-id"
-              style={{
-                flex: 1,
-                color: 'var(--color-text-primary)',
-                fontWeight: '300',
-                fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
-                letterSpacing: '0.03em',
-                cursor: 'pointer',
-              }}
-            >
-              Melee Player ID
-            </label>
-            <input
-              id="input-melee-player-id"
-              type="text"
-              aria-label="Melee Player ID"
-              value={meleePlayerGuid}
-              onChange={e => onMeleePlayerGuidChange(e.target.value)}
-              placeholder="Enter Player ID"
-              style={{
-                background: 'transparent',
-                border: '2px solid var(--color-accent)',
-                borderRadius: '12px',
-                color: 'var(--color-text-primary)',
-                fontWeight: '300',
-                fontSize: `clamp(0.8rem, ${vmin * 0.03}px, 1rem)`,
-                padding: '0.3em 0.6em',
-                outline: 'none',
-                flexShrink: 0,
-                width: '45%',
-                boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
-              }}
-            />
-          </div>
-        </div>
-      )}
-    </>
-  )
-
-  // ── SWU tab — favourites column ───────────────────────────────────────────
-
-  const favouritesSection = (
-    <>
-      <ToggleRow
-        id="toggle-favourites"
-        label="Enable Favourites"
-        checked={enableFavourites}
-        onChange={onEnableFavouritesChange}
-        vmin={vmin}
-      />
-      {enableFavourites && (
-        <div style={{
-          marginLeft: '0.5em',
-          paddingLeft: '1em',
-          borderLeft: '2px solid rgba(var(--color-accent-rgb), 0.35)',
-          marginTop: '0.5vh',
-        }}>
-          {favourites.length === 0 ? (
-            <div style={{
-              color: 'var(--color-text-muted)',
-              fontWeight: '300',
-              fontSize: `clamp(0.85rem, ${vmin * 0.032}px, 1rem)`,
-              padding: '1vh 0',
-            }}>
-              No favourites saved
-            </div>
-          ) : (
-            <>
-              {favourites.map(fav => (
-                <div key={fav.key} style={{
-                  display: 'flex',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '2vw',
-                  padding: '1vh 0',
-                  borderBottom: '1px solid rgba(107, 114, 128, 0.15)',
-                }}>
-                  <span style={{
-                    flex: 1,
-                    color: 'var(--color-text-primary)',
-                    fontWeight: '300',
-                    fontSize: `clamp(0.85rem, ${vmin * 0.032}px, 1rem)`,
-                  }}>
-                    {fav.set}: {fav.name} — {fav.hp}HP ({fav.aspect})
-                  </span>
-                  <button
-                    onClick={() => onRemoveFavourite(fav.key)}
-                    aria-label="Remove"
-                    style={{
-                      ...smallButtonStyle,
-                      fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
-                    }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-
-              <div style={{ marginTop: '1.5vh', display: 'flex', gap: '1.5vw' }}>
-                {!confirmingClear ? (
-                  <button
-                    onClick={() => setConfirmingClear(true)}
-                    style={{
-                      ...smallButtonStyle,
-                      fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
-                    }}
-                  >
-                    Clear All
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => { onClearFavourites(); setConfirmingClear(false) }}
-                      style={{
-                        ...smallButtonStyle,
-                        border: '1px solid var(--color-accent)',
-                        color: 'var(--color-accent)',
-                        fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
-                      }}
-                    >
-                      Confirm
-                    </button>
-                    <button
-                      onClick={() => setConfirmingClear(false)}
-                      style={{
-                        ...smallButtonStyle,
-                        fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </>
-  )
-
-  // ── X-Wing tab ────────────────────────────────────────────────────────────
-
-  const xwingSquadListsSection = onManageXwingLists && (
-    <div data-testid="xwing-lists-row" style={{
-      display: 'flex',
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: '2vw',
-      padding: '1.5vh 0',
-      borderBottom: '1px solid rgba(107, 114, 128, 0.3)',
-    }}>
-      <div style={{ flex: 1 }}>
-        <div style={{
-          color: 'var(--color-text-primary)',
-          fontWeight: '300',
-          fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
-          letterSpacing: '0.03em',
-        }}>
-          Squad Lists
-        </div>
-        <div style={{
-          color: 'var(--color-text-muted)',
-          fontWeight: '300',
-          fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
-          marginTop: '0.25em',
-        }}>
-          Create, rename and delete your saved squads.
-        </div>
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minHeight: '44px' }}>
+      <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <span style={labelStyle}>{label}</span>
+        {note && <span style={noteStyle}>{note}</span>}
+      </span>
       <button
-        onClick={onManageXwingLists}
-        style={{
-          ...smallButtonStyle,
-          flexShrink: 0,
-          fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
-        }}
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        style={{ flexShrink: 0, width: '60px', height: '44px', padding: 0, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
       >
-        Manage lists
+        <span style={{
+          width: '52px',
+          height: '32px',
+          boxSizing: 'border-box',
+          padding: '3px',
+          borderRadius: '16px',
+          background: checked ? 'var(--color-accent)' : 'rgba(var(--color-ui-border-muted-rgb), 0.25)',
+          display: 'flex',
+          justifyContent: checked ? 'flex-end' : 'flex-start',
+          transition: 'background 0.15s',
+        }}>
+          <span style={{ width: '26px', height: '26px', borderRadius: '13px', background: checked ? 'var(--color-on-accent)' : 'var(--color-text-muted)' }} />
+        </span>
       </button>
     </div>
   )
+}
 
-  const xwingContent = (
-    <>
-      <TimerStepper
-        label="Game Timer"
-        value={xwingTimerMinutes}
-        values={[5.5, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90]}
-        formatValue={(v) => v === 5.5 ? '5:30 (test)' : `${v} min`}
-        onChange={onXwingTimerChange}
-        testId="xwing-timer-stepper"
-      />
-      <ToggleRow
-        id="toggle-xwing-phases"
-        label="Enable Phase Tracker"
-        subtitle="Shows the current game phase in the centre of the game screen. Tap to advance through Planning, System, Activation, Engagement, and End."
-        checked={enableXwingPhases}
-        onChange={onEnableXwingPhasesChange}
-        vmin={vmin}
-      />
-      <ToggleRow
-        id="toggle-xwing-always-inc-dec"
-        label="Always Show +/− Buttons"
-        subtitle="Always show the score increment and decrement buttons, even when ship lists are loaded or scenario scoring is active."
-        checked={enableXwingAlwaysIncDec}
-        onChange={onEnableXwingAlwaysIncDecChange}
-        vmin={vmin}
-      />
-      {xwingSquadListsSection}
-    </>
-  )
-
-  // ── Tab content ───────────────────────────────────────────────────────────
-
-  let tabContent: React.ReactNode
-
-  if (activeTab === 'general') {
-    tabContent = (
-      <div style={scrollableColumn}>
-        {generalContent}
-      </div>
-    )
-  } else if (activeTab === 'swu') {
-    tabContent = (
-      <div style={scrollableColumn}>
-        {swuOptions}
-        {favouritesSection}
-      </div>
-    )
-  } else {
-    tabContent = (
-      <div style={scrollableColumn}>
-        {xwingContent}
+// A labelled control: beside its label in landscape, under it in portrait where the width is short.
+function FieldRow({ label, htmlFor, stacked, children }: { label: string; htmlFor?: string; stacked: boolean; children: ReactNode }) {
+  const text = htmlFor ? <label htmlFor={htmlFor} style={{ ...labelStyle, flex: 1 }}>{label}</label> : <span style={{ ...labelStyle, flex: 1 }}>{label}</span>
+  if (stacked) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {text}
+        {children}
       </div>
     )
   }
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
-    <div key={isPortrait ? 'portrait' : 'landscape'} style={{
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      padding: '2vw 2vw 0',
-      boxSizing: 'border-box',
-      fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif",
-      WebkitTextSizeAdjust: '100%',
-    }}>
-
-      {/* Header row */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: '3vw',
-        paddingBottom: '2vh',
-        flexShrink: 0,
-      }}>
-        <button onClick={onBack} aria-label="Back" style={NAV_BTN_STYLE}>
-          <BackIcon />
-        </button>
-
-        <img
-          src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
-          alt="dmgCtrl"
-          style={{ height: `clamp(1.8rem, ${vmin * 0.08}px, 3rem)`, width: 'auto', flexShrink: 0 }}
-        />
-
-        <h1 style={{
-          flex: 1,
-          color: 'var(--color-text-primary)',
-          fontWeight: '200',
-          fontSize: `clamp(1.8rem, ${vmin * 0.08}px, 3rem)`,
-          letterSpacing: '0.15em',
-          margin: 0,
-          lineHeight: 0.8,
-        }}>
-          Settings
-        </h1>
-
-        <button onClick={onHelp} aria-label="Help" style={NAV_BTN_STYLE}>
-          <HelpIcon />
-        </button>
-      </div>
-
-      {isPortrait ? (
-        <>
-          {tabBar}
-          {tabContent}
-        </>
-      ) : (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'row', gap: '2vw', overflow: 'hidden' }}>
-          {tabBar}
-          {tabContent}
-        </div>
-      )}
-
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minHeight: '44px' }}>
+      {text}
+      <div style={{ width: CONTROL_WIDTH, flexShrink: 0, display: 'flex' }}>{children}</div>
     </div>
   )
 }
 
-export default SettingsScreenView
+// A filled group. Its controls sit on the group's fill, so they take the raised fill instead of
+// the surface one they use on a bare screen.
+function Section({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <section aria-label={label} style={{ background: 'var(--color-surface)', borderRadius: '16px', padding: '12px 14px' }}>
+      <div style={{ ['--color-surface' as string]: 'var(--color-surface-raised)', display: 'flex', flexDirection: 'column', gap: '8px' } as React.CSSProperties}>
+        <div style={sectionLabelStyle('var(--color-accent)')}>{label}</div>
+        {children}
+      </div>
+    </section>
+  )
+}
+
+interface Props {
+  startScreen: StartScreen
+  onStartScreenChange: (v: StartScreen) => void
+  useHyperspace: boolean
+  onUseHyperspaceChange: (v: boolean) => void
+  forceTokenDisplay: ForceTokenDisplay
+  onForceTokenDisplayChange: (v: ForceTokenDisplay) => void
+  meleePlayerGuid: string
+  onMeleePlayerGuidChange: (v: string) => void
+  enableDamageButtons: boolean
+  onEnableDamageButtonsChange: (v: boolean) => void
+  enableInitiativeBar: boolean
+  onEnableInitiativeBarChange: (v: boolean) => void
+  enableXwingPhases: boolean
+  onEnableXwingPhasesChange: (v: boolean) => void
+  enableXwingAlwaysIncDec: boolean
+  onEnableXwingAlwaysIncDecChange: (v: boolean) => void
+  onManageXwingLists?: () => void
+  onBack: () => void
+}
+
+export default function SettingsScreenView(props: Props) {
+  const { isPortrait } = useOrientation()
+  const [startSheetOpen, setStartSheetOpen] = useState(false)
+  const meleeId = useId()
+
+  const startLabel = START_SCREENS.find(s => s.value === props.startScreen)?.label ?? START_SCREENS[0].label
+
+  const general = (
+    <Section label="General">
+      <FieldRow label="Start screen" stacked={isPortrait}>
+        <SelectButton label="Start screen" value={startLabel} onClick={() => setStartSheetOpen(true)} />
+      </FieldRow>
+    </Section>
+  )
+
+  const swu = (
+    <Section label="Star Wars: Unlimited">
+      <SwitchRow label="Hyperspace art" checked={props.useHyperspace} onChange={props.onUseHyperspaceChange} />
+      <FieldRow label="Force tokens" stacked={isPortrait}>
+        <div style={{ flex: 1 }}>
+          <SegmentedControl label="Force tokens" options={FORCE_TOKENS} value={props.forceTokenDisplay} onChange={props.onForceTokenDisplayChange} />
+        </div>
+      </FieldRow>
+      <FieldRow label="Melee player ID" htmlFor={meleeId} stacked={isPortrait}>
+        <input
+          id={meleeId}
+          type="text"
+          value={props.meleePlayerGuid}
+          onChange={e => props.onMeleePlayerGuidChange(e.target.value)}
+          placeholder="Optional"
+          style={{ flex: 1, minWidth: 0, height: '44px', boxSizing: 'border-box', border: 'none', borderRadius: '12px', background: 'var(--color-surface-raised)', color: 'var(--color-text-primary)', fontFamily: 'inherit', fontSize: '15px', padding: '0 14px', outline: 'none' }}
+        />
+      </FieldRow>
+      <SwitchRow label="Damage −/+ buttons" checked={props.enableDamageButtons} onChange={props.onEnableDamageButtonsChange} />
+      <SwitchRow label="Initiative" checked={props.enableInitiativeBar} onChange={props.onEnableInitiativeBarChange} />
+    </Section>
+  )
+
+  const xwing = (
+    <Section label="X-Wing">
+      <SwitchRow
+        label="Phase tracker"
+        note={isPortrait ? 'Step through every phase. Off: the round button scores the round' : undefined}
+        checked={props.enableXwingPhases}
+        onChange={props.onEnableXwingPhasesChange}
+      />
+      <SwitchRow
+        label="Score −/+ buttons"
+        note={isPortrait ? 'Change scores by hand on the game screen' : undefined}
+        checked={props.enableXwingAlwaysIncDec}
+        onChange={props.onEnableXwingAlwaysIncDecChange}
+      />
+      {props.onManageXwingLists && <Button onClick={props.onManageXwingLists}>Squad lists</Button>}
+    </Section>
+  )
+
+  const header = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '44px', flexShrink: 0 }}>
+      <IconButton label="Back" onClick={props.onBack}><BackIcon /></IconButton>
+      <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 300, letterSpacing: '0.12em', color: 'var(--color-text-primary)' }}>Settings</h1>
+    </div>
+  )
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', boxSizing: 'border-box', padding: '16px', display: 'flex', flexDirection: 'column', gap: isPortrait ? '14px' : '12px', color: 'var(--color-text-primary)' }}>
+      {header}
+      {isPortrait ? (
+        <>
+          {general}
+          {swu}
+          {xwing}
+        </>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
+          <div data-testid="settings-left" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {general}
+            {xwing}
+          </div>
+          <div data-testid="settings-right">{swu}</div>
+        </div>
+      )}
+      <Sheet open={startSheetOpen} title="Start screen" onClose={() => setStartSheetOpen(false)}>
+        {START_SCREENS.map(s => (
+          <OptionRow
+            key={s.value}
+            title={s.label}
+            selected={s.value === props.startScreen}
+            onClick={() => { props.onStartScreenChange(s.value); setStartSheetOpen(false) }}
+          />
+        ))}
+      </Sheet>
+    </div>
+  )
+}

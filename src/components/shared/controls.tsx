@@ -154,6 +154,44 @@ export function SelectButton({ label, value, onClick }: SelectButtonProps) {
   )
 }
 
+interface OptionRowProps {
+  title: string
+  detail?: string
+  selected?: boolean
+  // A one-tap shortcut (last game's opponent): filled tonal like a selection, so it reads as tappable.
+  suggested?: boolean
+  onClick: () => void
+  testId?: string
+}
+
+// One choice in a Sheet, one or two lines: a list, a scenario, a start screen. `selected` marks the
+// current choice.
+export function OptionRow({ title, detail, selected = false, suggested = false, onClick, testId }: OptionRowProps) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      aria-pressed={suggested ? undefined : selected}
+      onClick={onClick}
+      style={{
+        ...TAP,
+        minHeight: '52px',
+        padding: '6px 14px',
+        background: selected || suggested ? 'var(--color-tonal)' : 'var(--color-surface)',
+        color: 'var(--color-text-primary)',
+        textAlign: 'left',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        gap: '2px',
+      }}
+    >
+      <span style={{ fontSize: '0.95rem' }}>{title}</span>
+      {detail && <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{detail}</span>}
+    </button>
+  )
+}
+
 interface StepperProps {
   label: string
   value: number

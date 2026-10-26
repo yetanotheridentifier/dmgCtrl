@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useOrientation } from '../hooks/useOrientation'
 import AppScreenLayout from './layout/appScreenLayout'
 import { BackIcon, DiceIcon, DotsIcon } from './icons'
-import { Button, IconButton, SegmentedControl, SelectButton, Sheet, Stepper } from './shared/controls'
+import { Button, IconButton, OptionRow, SegmentedControl, SelectButton, Sheet, Stepper } from './shared/controls'
 import type { XwingMatchType, XwingScenario, XwingPlayerChoice } from '../hooks/useXwingSetup'
 import { XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
 import type { XwingList } from '../hooks/useXwingLists'
@@ -52,45 +52,6 @@ const sectionLabelStyle: React.CSSProperties = {
 }
 
 const mutedStyle: React.CSSProperties = { fontSize: '0.8rem', color: 'var(--color-text-muted)' }
-
-// A two-line row in a sheet: a list, a scenario, or No list. `selected` marks the current choice.
-function OptionRow({ title, detail, selected = false, suggested = false, onClick, testId }: {
-  title: string
-  detail?: string
-  selected?: boolean
-  // A one-tap shortcut (last game's opponent): filled tonal like a selection, so it reads as tappable.
-  suggested?: boolean
-  onClick: () => void
-  testId?: string
-}) {
-  return (
-    <button
-      type="button"
-      data-testid={testId}
-      aria-pressed={suggested ? undefined : selected}
-      onClick={onClick}
-      style={{
-        minHeight: '52px',
-        padding: '6px 14px',
-        border: 'none',
-        borderRadius: '12px',
-        background: selected || suggested ? 'var(--color-tonal)' : 'var(--color-surface)',
-        color: 'var(--color-text-primary)',
-        fontFamily: 'inherit',
-        textAlign: 'left',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        gap: '2px',
-        cursor: 'pointer',
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
-      <span style={{ fontSize: '0.95rem' }}>{title}</span>
-      {detail && <span style={mutedStyle}>{detail}</span>}
-    </button>
-  )
-}
 
 export default function XwingSetupScreenView({
   matchType,
