@@ -8,7 +8,12 @@ const STORAGE_KEY = 'user_settings'
 const OTHER_APP_KEYS = ['swu_setup', 'xwing_setup', 'xwing_favourites', 'favourites', 'tournament_state']
 
 export type ForceTokenDisplay = 'always-on' | 'lof-only' | 'always-off'
-export type StartScreen = 'gameSelect' | 'swu' | 'xwing'
+export type StartScreen = 'lastGame' | 'gameSelect' | 'swu' | 'xwing'
+
+// Stored with the settings. Before version 2 there was no Last game played, and Game select was
+// the default, so a stored Game select cannot be told from one never chosen: it becomes Last game
+// played once, and is saved with the version so a Game select chosen afterwards is kept.
+const SETTINGS_VERSION = 2
 
 // Stored settings may still carry keys for features that are now always on (epic actions, wake
 // lock, action log, favourites, competitive mode, long-press) or that nothing read (game select).
@@ -32,7 +37,7 @@ interface UserSettings {
 
 const VALID_FORCE_TOKEN_DISPLAY: ForceTokenDisplay[] = ['always-on', 'lof-only', 'always-off']
 
-const VALID_START_SCREENS: StartScreen[] = ['gameSelect', 'swu', 'xwing']
+const VALID_START_SCREENS: StartScreen[] = ['lastGame', 'gameSelect', 'swu', 'xwing']
 
 const DEFAULTS: UserSettings = {
   useHyperspace: true,
@@ -42,7 +47,7 @@ const DEFAULTS: UserSettings = {
   enableXwingPhases: false,
   enableXwingAlwaysIncDec: false,
   enableDamageButtons: false,
-  startScreen: 'gameSelect',
+  startScreen: 'lastGame',
   bo1TimerMinutes: 25,
   bo3TimerMinutes: 55,
   xwingTimerMinutes: 75,
@@ -65,6 +70,15 @@ function migrateForceTokenDisplay(parsed: Record<string, unknown>): ForceTokenDi
   return DEFAULTS.forceTokenDisplay
 }
 
+const isBeforeLastGame = (parsed: Record<string, unknown>) => ((parsed.version as number | undefined) ?? 1) < SETTINGS_VERSION
+
+function loadStartScreen(parsed: Record<string, unknown>): StartScreen {
+  const v = parsed.startScreen as StartScreen
+  if (!VALID_START_SCREENS.includes(v)) return DEFAULTS.startScreen
+  if (v === 'gameSelect' && isBeforeLastGame(parsed)) return 'lastGame'
+  return v
+}
+
 function fromStored(parsed: Record<string, unknown>): UserSettings {
   return {
     useHyperspace: (parsed.useHyperspace as boolean) ?? DEFAULTS.useHyperspace,
@@ -73,9 +87,7 @@ function fromStored(parsed: Record<string, unknown>): UserSettings {
     enableXwingPhases: (parsed.enableXwingPhases as boolean) ?? EXISTING_PLAYER_PHASES,
     enableXwingAlwaysIncDec: (parsed.enableXwingAlwaysIncDec as boolean) ?? DEFAULTS.enableXwingAlwaysIncDec,
     enableDamageButtons: (parsed.enableDamageButtons as boolean) ?? DEFAULTS.enableDamageButtons,
-    startScreen: VALID_START_SCREENS.includes(parsed.startScreen as StartScreen)
-      ? (parsed.startScreen as StartScreen)
-      : DEFAULTS.startScreen,
+    startScreen: loadStartScreen(parsed),
     bo1TimerMinutes: (parsed.bo1TimerMinutes as number) ?? DEFAULTS.bo1TimerMinutes,
     bo3TimerMinutes: (parsed.bo3TimerMinutes as number) ?? DEFAULTS.bo3TimerMinutes,
     xwingTimerMinutes: (parsed.xwingTimerMinutes as number) ?? DEFAULTS.xwingTimerMinutes,
@@ -86,7 +98,13 @@ function fromStored(parsed: Record<string, unknown>): UserSettings {
 function load(): UserSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return fromStored(JSON.parse(raw) as Record<string, unknown>)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      const settings = fromStored(parsed)
+      // Saved straight away, so the Start screen migration happens once.
+      if (isBeforeLastGame(parsed)) save(settings)
+      return settings
+    }
     // Nothing stored yet: a new install, or a player who never changed a setting. Save the result
     // straight away, so the choice between the two is made once and not re-made on a later launch.
     const existing = OTHER_APP_KEYS.some(key => localStorage.getItem(key) !== null)
@@ -99,7 +117,7 @@ function load(): UserSettings {
 }
 
 function save(settings: UserSettings): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SETTINGS_VERSION, ...settings }))
 }
 
 type UserSettingsValue = UserSettings & {

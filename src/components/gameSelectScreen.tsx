@@ -1,114 +1,95 @@
+import type { ReactNode } from 'react'
 import AppScreenLayout from './layout/appScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
-import { CogIcon } from './icons'
-import { NAV_BTN_STYLE } from '../styles/navButton'
+import { Button } from './shared/controls'
+import type { Game } from '../utils/appStart'
 
 interface Props {
+  lastGame: Game | null
   onSelectSwu: () => void
   onSelectXwing: () => void
+  onHelp: () => void
   onSettings: () => void
+  // The install banner, under the tiles, when it is showing.
+  banner?: ReactNode
 }
 
-function GameSelectScreen({ onSelectSwu, onSelectXwing, onSettings }: Props) {
-  const { isPortrait } = useOrientation()
+const TILES: { game: Game; label: string; logo: string; alt: string }[] = [
+  { game: 'swu', label: 'Star Wars: Unlimited', logo: 'Star-Wars-Unlimited-logo-white.png', alt: 'Star Wars Unlimited' },
+  { game: 'xwing', label: 'X-Wing', logo: 'Star-Wars-X-wing-logo.png', alt: 'Star Wars X-Wing' },
+]
 
-  const buttonBase: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'rgba(255,255,255,0.04)',
-    border: '2px solid var(--color-accent)',
-    borderRadius: '16px',
-    cursor: 'pointer',
-    padding: '64px',
-    boxSizing: 'border-box',
-    boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
-    width: 'min(65vmin, 300px)',
-    height: 'min(65vmin, 300px)',
-    flexShrink: 0,
-  }
+function GameSelectScreen({ lastGame, onSelectSwu, onSelectXwing, onHelp, onSettings, banner }: Props) {
+  const { isPortrait } = useOrientation()
+  const onSelect: Record<Game, () => void> = { swu: onSelectSwu, xwing: onSelectXwing }
 
   return (
     <AppScreenLayout>
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        padding: isPortrait ? '2vw' : '2vw 2vw 3vw',
-        boxSizing: 'border-box',
-        gap: isPortrait ? '2vh' : 'clamp(12px, 3vw, 20px)',
-      }}>
-        {/* Header */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexShrink: 0,
-        }}>
-          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: isPortrait ? '2vw' : '1vw' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: banner ? '12px' : '16px', padding: '16px', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '44px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isPortrait ? '8px' : '10px' }}>
             <img
+              data-testid="app-icon"
               src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
-              alt="dmgCtrl"
-              style={{ width: '5vw', height: '5vw', minWidth: '36px', minHeight: '36px', objectFit: 'contain' }}
+              alt=""
+              style={{ width: isPortrait ? '32px' : '36px', height: isPortrait ? '32px' : '36px' }}
             />
-            <h1 style={{
-              color: 'var(--color-text-primary)',
-              fontWeight: '200',
-              fontSize: isPortrait ? 'clamp(1.8rem, 8vw, 3rem)' : 'clamp(1.2rem, 4vw, 1.8rem)',
-              letterSpacing: '0.15em',
-              margin: 0,
-              lineHeight: 0.8,
-            }}>
+            <h1 style={{ margin: 0, fontSize: isPortrait ? '22px' : '26px', fontWeight: 200, letterSpacing: '0.15em', color: 'var(--color-text-primary)' }}>
               dmgCtrl
             </h1>
           </div>
-
-          <button
-            onClick={onSettings}
-            aria-label="Settings"
-            style={NAV_BTN_STYLE}
-          >
-            <CogIcon />
-          </button>
-        </div>
-
-        {/* Game buttons */}
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <div style={{
-            display: 'flex',
-            flexDirection: isPortrait ? 'column' : 'row',
-            gap: 'clamp(12px, 4vw, 24px)',
-          }}>
-            <button
-              onClick={onSelectSwu}
-              aria-label="Star Wars Unlimited"
-              style={buttonBase}
-            >
-              <img
-                src={`${import.meta.env.BASE_URL}Star-Wars-Unlimited-logo-white.png`}
-                alt="Star Wars Unlimited"
-                style={{ width: '100%', height: 'auto', objectFit: 'contain' }}
-              />
-            </button>
-
-            <button
-              onClick={onSelectXwing}
-              aria-label="Star Wars X-Wing"
-              style={buttonBase}
-            >
-              <img
-                src={`${import.meta.env.BASE_URL}Star-Wars-X-wing-logo.png`}
-                alt="Star Wars X-Wing"
-                style={{ width: '100%', height: 'auto', objectFit: 'contain' }}
-              />
-            </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button onClick={onHelp} style={{ padding: isPortrait ? '0 14px' : '0 18px' }}>Help</Button>
+            <Button onClick={onSettings} style={{ padding: isPortrait ? '0 14px' : '0 18px' }}>Settings</Button>
           </div>
         </div>
+
+        <div style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'grid',
+          gap: '16px',
+          ...(isPortrait ? { gridTemplateRows: '1fr 1fr' } : { gridTemplateColumns: '1fr 1fr' }),
+        }}>
+          {TILES.map(({ game, label, logo, alt }) => {
+            const last = game === lastGame
+            return (
+              <button
+                key={game}
+                type="button"
+                aria-label={last ? `${label}, last played` : label}
+                onClick={onSelect[game]}
+                style={{
+                  position: 'relative',
+                  minHeight: 0,
+                  border: 'none',
+                  borderRadius: '12px',
+                  background: last ? 'var(--color-tonal)' : 'var(--color-surface)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: '32px 24px',
+                  overflow: 'hidden',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
+              >
+                {last && (
+                  <span style={{ position: 'absolute', left: '14px', top: '12px', fontSize: '12px', letterSpacing: '0.14em', color: 'var(--color-tonal-text)', fontFamily: 'inherit' }}>
+                    LAST PLAYED
+                  </span>
+                )}
+                <img
+                  src={`${import.meta.env.BASE_URL}${logo}`}
+                  alt={alt}
+                  style={{ maxWidth: game === 'xwing' ? '300px' : '260px', width: '80%', maxHeight: '100%', objectFit: 'contain' }}
+                />
+              </button>
+            )
+          })}
+        </div>
+
+        {banner}
       </div>
     </AppScreenLayout>
   )

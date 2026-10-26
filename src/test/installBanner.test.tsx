@@ -18,7 +18,7 @@ describe('InstallBanner', () => {
   it('iPhone: shows the Safari steps in one list, in order', () => {
     show('ios')
     expect(screen.getByText('Install dmgCtrl from Safari')).toBeInTheDocument()
-    const steps = within(screen.getByRole('list')).getAllByRole('listitem').map(li => li.textContent)
+    const steps = within(screen.getByRole('list')).getAllByRole('listitem').map(li => li.textContent?.trim())
     expect(steps).toEqual(['Tap', 'Share', 'View More', 'Add to Home Screen'])
     expect(screen.getByTestId('share-icon')).toBeInTheDocument()
   })

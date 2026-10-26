@@ -1,6 +1,9 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
-import SwuLoadingScreen from './components/swuLoadingScreen'
+import { SwuSplash, SwuOffline } from './components/swuCardDataScreens'
 import GameSelectScreen from './components/gameSelectScreen'
+import InstallBanner from './components/installBanner'
+import { useInstallPrompt } from './hooks/useInstallPrompt'
+import { gameFromPath, launchScreen, readLastGame, recordLastGame } from './utils/appStart'
 import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
 import { XwingListsProvider } from './hooks/useXwingLists'
@@ -24,28 +27,13 @@ const XwingSetupScreen = lazy(() => import('./components/xwingSetupScreen'))
 const XwingGameScreen = lazy(() => import('./components/xwingGameScreen'))
 const XwingListsScreen = lazy(() => import('./components/xwingListsScreen'))
 
-type Screen = 'loading' | 'gameSelect' | 'xwingSetup' | 'xwing' | 'xwingLists' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
+type Screen = 'gameSelect' | 'xwingSetup' | 'xwing' | 'xwingLists' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
+type HelpSource = 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' | 'gameSelect'
+
+// The install banner shows only on these: never over a game.
+const BANNER_SCREENS: Screen[] = ['gameSelect', 'setup', 'xwingSetup']
 
 function AppScreens() {
-  const [screen, setScreen] = useState<Screen>('loading')
-  const [backStack, setBackStack] = useState<Screen[]>([])
-  const [selectedBase, setSelectedBase] = useState<Base | null>(null)
-  // Two players: their base. Held for this session only, so a tournament resumed after a reload plays one-player.
-  const [selectedTheirBase, setSelectedTheirBase] = useState<Base | null>(null)
-  const [selectedPlayMode, setSelectedPlayMode] = useState<PlayMode>('casual')
-  const [isInGame, setIsInGame] = useState(false)
-  const [isInXwing, setIsInXwing] = useState(false)
-  const [isInXwingSetup, setIsInXwingSetup] = useState(false)
-  const [xwingPlayerDeficit, setXwingPlayerDeficit] = useState(0)
-  const [xwingOpponentDeficit, setXwingOpponentDeficit] = useState(0)
-  const [xwingScenario, setXwingScenario] = useState<XwingScenario>('None')
-  const [xwingMatchType, setXwingMatchType] = useState<XwingMatchType>('Casual')
-  const [xwingPlayerPilots, setXwingPlayerPilots] = useState<XwingPilot[]>([])
-  const [xwingOpponentPilots, setXwingOpponentPilots] = useState<XwingPilot[]>([])
-  const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
-  const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
-  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists'>('setup')
-  const { loading, bases } = useBases()
   const { startScreen } = useUserSettings()
   const {
     tournament,
@@ -58,8 +46,41 @@ function AppScreens() {
     completeMatch,
     dropTournament,
   } = useTournament()
+  // Where the app opens is settled once, at launch. SWU setup that has no card data yet shows the
+  // splash or the offline screen in its place (below), so nothing else waits for SWU card data.
+  const [screen, setScreen] = useState<Screen>(() => launchScreen({
+    tournamentInProgress: tournament !== null,
+    route: gameFromPath(window.location.pathname, import.meta.env.BASE_URL),
+    startScreen,
+    lastGame: readLastGame(),
+  }))
+  const [backStack, setBackStack] = useState<Screen[]>([])
+  const [selectedBase, setSelectedBase] = useState<Base | null>(null)
+  // Two players: their base. Held for this session only, so a tournament resumed after a reload plays one-player.
+  const [selectedTheirBase, setSelectedTheirBase] = useState<Base | null>(null)
+  const [selectedPlayMode, setSelectedPlayMode] = useState<PlayMode>('casual')
+  const [isInGame, setIsInGame] = useState(false)
+  const [isInXwing, setIsInXwing] = useState(false)
+  const [isInXwingSetup, setIsInXwingSetup] = useState(screen === 'xwingSetup')
+  const [xwingPlayerDeficit, setXwingPlayerDeficit] = useState(0)
+  const [xwingOpponentDeficit, setXwingOpponentDeficit] = useState(0)
+  const [xwingScenario, setXwingScenario] = useState<XwingScenario>('None')
+  const [xwingMatchType, setXwingMatchType] = useState<XwingMatchType>('Casual')
+  const [xwingPlayerPilots, setXwingPlayerPilots] = useState<XwingPilot[]>([])
+  const [xwingOpponentPilots, setXwingOpponentPilots] = useState<XwingPilot[]>([])
+  const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
+  const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
+  const [helpSource, setHelpSource] = useState<HelpSource>('setup')
+  const { loading, bases, error: basesError, retry: retryBases } = useBases()
+  const install = useInstallPrompt()
 
   useEffect(() => { void onAppStart() }, [])
+
+  // A game counts as played once its setup opens.
+  useEffect(() => {
+    if (screen === 'setup') recordLastGame('swu')
+    if (screen === 'xwingSetup') recordLastGame('xwing')
+  }, [screen])
 
   useEffect(() => {
     const isStandalone =
@@ -98,20 +119,6 @@ function AppScreens() {
   const leaveXwingSetup = () => {
     setIsInXwingSetup(false)
     setScreen('gameSelect')
-  }
-
-  const handleReady = () => {
-    if (tournament !== null) {
-      setScreen('tournament')
-      return
-    }
-    if (startScreen === 'xwing') {
-      enterXwingSetup()
-    } else if (startScreen === 'swu') {
-      setScreen('setup')
-    } else {
-      setScreen('gameSelect')
-    }
   }
 
   // Setup passes their base too in 2 players, which opens the two-player game screen.
@@ -179,7 +186,8 @@ function AppScreens() {
   }
 
   const handleHelp = () => {
-    const source: 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' =
+    const source: HelpSource =
+      screen === 'gameSelect' ? 'gameSelect' :
       screen === 'game' ? 'game' :
       screen === 'tournament' ? 'tournament' :
       screen === 'xwing' ? 'xwing' :
@@ -223,30 +231,47 @@ function AppScreens() {
     setScreen(target)
   }
 
-  if (screen === 'loading') {
-    return <SwuLoadingScreen loading={loading} onReady={handleReady} />
-  }
+  const banner = install.showBanner && install.platform && BANNER_SCREENS.includes(screen)
+    ? <InstallBanner platform={install.platform} onInstall={install.onInstall} onDismiss={install.onDismiss} />
+    : null
+  // Over a setup screen the banner floats at the foot; game select makes room for it under its tiles.
+  const floatingBanner = banner && (
+    <div style={{ position: 'fixed', left: 'calc(16px + env(safe-area-inset-left))', right: 'calc(16px + env(safe-area-inset-right))', bottom: 'calc(16px + env(safe-area-inset-bottom))', zIndex: 200 }}>
+      {banner}
+    </div>
+  )
 
   if (screen === 'gameSelect') {
     return (
       <GameSelectScreen
+        lastGame={readLastGame()}
         onSelectSwu={() => setScreen('setup')}
         onSelectXwing={enterXwingSetup}
+        onHelp={handleHelp}
         onSettings={handleSettings}
+        banner={banner}
       />
     )
   }
 
   if (screen === 'setup') {
+    // SWU setup needs card data: none yet means the splash while it loads, or the offline screen.
+    if (bases.length === 0 && loading) return <SwuSplash />
+    if (bases.length === 0 && basesError) {
+      return <SwuOffline onRetry={retryBases} onPlayXwing={enterXwingSetup} onBack={() => setScreen('gameSelect')} />
+    }
     return (
-      <SwuSetupScreen
-        onConfirm={handleConfirm}
-        onStartTournament={handleStartTournament}
-        tournamentInProgress={tournament !== null}
-        onHelp={handleHelp}
-        onBack={() => setScreen('gameSelect')}
-        onSettings={handleSettings}
-      />
+      <>
+        <SwuSetupScreen
+          onConfirm={handleConfirm}
+          onStartTournament={handleStartTournament}
+          tournamentInProgress={tournament !== null}
+          onHelp={handleHelp}
+          onBack={() => setScreen('gameSelect')}
+          onSettings={handleSettings}
+        />
+        {floatingBanner}
+      </>
     )
   }
 
@@ -268,6 +293,7 @@ function AppScreens() {
               onSettings={handleSettings}
               onLists={handleXwingLists}
             />
+            {floatingBanner}
           </div>
         )}
         {screen === 'xwingLists' && <XwingListsScreen onBack={handleOverlayBack} onHelp={handleHelp} />}

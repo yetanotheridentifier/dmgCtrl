@@ -90,7 +90,7 @@ beforeEach(() => {
   })
   deckResponse = () => Promise.resolve({ ok: true, json: () => Promise.resolve(deckFound) })
   vi.stubGlobal('fetch', vi.fn().mockImplementation(() => deckResponse()))
-  vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
+  vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null, retry: vi.fn() })
   mockUserSettings.useHyperspace = true
   mockFavourites.favourites = []
   mockFavourites.addFavourite.mockReset()
@@ -224,7 +224,7 @@ describe('SwuSetupScreen: your base', () => {
   })
 
   it('says when the card data could not load', () => {
-    vi.mocked(useBases).mockReturnValue({ bases: [], loading: false, error: 'Could not load bases' })
+    vi.mocked(useBases).mockReturnValue({ bases: [], loading: false, error: 'Could not load bases', retry: vi.fn() })
     renderSetup()
     expect(screen.getByText('Could not load bases')).toBeInTheDocument()
   })

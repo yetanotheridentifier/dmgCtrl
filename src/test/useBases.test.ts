@@ -382,7 +382,7 @@ describe('useBases', () => {
     const { result } = renderHook(() => useBases())
     expect(result.current.loading).toBe(false)
     expect(result.current.bases[0].frontArt).toBe('cached-url')
-    await waitFor(() => expect(result.current.bases.some(b => b.name === 'Energy Conversion Lab')).toBe(true))
+    await waitFor(() => expect(result.current.bases.some(b => b.name === 'Coaxium Mine')).toBe(true))
   })
 
   it('is loading on its first render when there is no cached data', () => {

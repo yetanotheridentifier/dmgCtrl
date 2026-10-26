@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { launchCount } from '../utils/appStart'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>
@@ -11,10 +12,22 @@ export interface UseInstallPromptReturn {
   onDismiss: () => void
 }
 
+// Not now (or Install) hides the banner until this time, stored as epoch milliseconds.
+const HIDDEN_UNTIL_KEY = 'install_banner_hidden_until'
+const HIDE_FOR_MS = 30 * 24 * 60 * 60 * 1000
+
+function readHiddenUntil(): number {
+  try {
+    return Number(localStorage.getItem(HIDDEN_UNTIL_KEY)) || 0
+  } catch {
+    return 0
+  }
+}
+
 export function useInstallPrompt(): UseInstallPromptReturn {
-  const [dismissed, setDismissed] = useState(() =>
-    sessionStorage.getItem('install_banner_dismissed') === '1'
-  )
+  // The banner waits for the second launch, so a first visit is not met with it.
+  const [eligible] = useState(() => launchCount() >= 2 && Date.now() > readHiddenUntil())
+  const [dismissed, setDismissed] = useState(false)
   // `beforeinstallprompt` usually fires before React mounts, so an inline script in index.html
   // captures it on `window`. Read that in the initialiser rather than assigning it from an
   // effect: setting state synchronously on mount renders twice and, with the banner keyed off
@@ -45,21 +58,24 @@ export function useInstallPrompt(): UseInstallPromptReturn {
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
-  const showBanner = !isStandalone && !dismissed && (isIOS || (isAndroid && deferredPrompt !== null))
+  const showBanner = eligible && !isStandalone && !dismissed && (isIOS || (isAndroid && deferredPrompt !== null))
+
+  const hide = () => {
+    try {
+      localStorage.setItem(HIDDEN_UNTIL_KEY, String(Date.now() + HIDE_FOR_MS))
+    } catch {
+      // Storage refused: hidden for this launch only.
+    }
+    setDismissed(true)
+  }
 
   const onInstall = () => {
     if (!deferredPrompt) return
     void deferredPrompt.prompt()
     delete (window as Window & { __dmgInstallPrompt?: BeforeInstallPromptEvent }).__dmgInstallPrompt
-    sessionStorage.setItem('install_banner_dismissed', '1')
-    setDismissed(true)
+    hide()
     setDeferredPrompt(null)
   }
 
-  const onDismiss = () => {
-    sessionStorage.setItem('install_banner_dismissed', '1')
-    setDismissed(true)
-  }
-
-  return { showBanner, platform, onInstall, onDismiss }
+  return { showBanner, platform, onInstall, onDismiss: hide }
 }

@@ -6,6 +6,63 @@ import { marked } from 'marked'
 import mkcert from 'vite-plugin-mkcert'
 
 import { cloudflare } from "@cloudflare/vite-plugin";
+import type { Plugin } from 'vite'
+import type { ManifestOptions } from 'vite-plugin-pwa'
+
+/** The games with an address of their own: dmgctrl.app/swu and dmgctrl.app/xwing. */
+const GAME_ADDRESSES = ['swu', 'xwing']
+
+/**
+ * One install for both games, started at the root so it follows Settings › Start screen, with a
+ * shortcut to each game's address (Android long-press, desktop right-click). Paths are relative
+ * to the manifest, so they hold under the GitHub base path too.
+ */
+export const PWA_MANIFEST: Partial<ManifestOptions> = {
+  name: 'dmgCtrl',
+  short_name: 'dmgCtrl',
+  description: 'Star Wars Unlimited game state tracker',
+  theme_color: '#0a0e1a',
+  background_color: '#0a0e1a',
+  display: 'standalone',
+  start_url: '.',
+  icons: [
+    {
+      src: 'dmgCtrl-icon-192.png',
+      sizes: '192x192',
+      type: 'image/png'
+    },
+    {
+      src: 'dmgCtrl-icon-512.png',
+      sizes: '512x512',
+      type: 'image/png'
+    }
+  ],
+  shortcuts: [
+    { name: 'Star Wars: Unlimited', short_name: 'SWU', url: 'swu/', icons: [{ src: 'dmgCtrl-icon-192.png', sizes: '192x192', type: 'image/png' }] },
+    { name: 'X-Wing', short_name: 'X-Wing', url: 'xwing/', icons: [{ src: 'dmgCtrl-icon-192.png', sizes: '192x192', type: 'image/png' }] },
+  ],
+}
+
+/**
+ * GitHub Pages has no fallback to the app's page, so a first visit to /swu would be a 404. The
+ * build writes the app's page again at swu/index.html and xwing/index.html; the app reads the
+ * address to open that game. Its asset paths are absolute (from `base`), so the copy works one
+ * folder down, and the service worker precaches it with the rest of the HTML.
+ */
+function gameAddresses(): Plugin {
+  return {
+    name: 'game-addresses',
+    apply: 'build',
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      const page = bundle['index.html']
+      if (!page || page.type !== 'asset') return
+      for (const game of GAME_ADDRESSES) {
+        this.emitFile({ type: 'asset', fileName: `${game}/index.html`, source: page.source })
+      }
+    },
+  }
+}
 
 export default defineConfig(({ command, mode }) => {
   const base = mode === 'github' ? '/dmgCtrl/' : '/'
@@ -55,27 +112,8 @@ export default defineConfig(({ command, mode }) => {
         // service worker must not rewrite its navigations to the PWA index.
         navigateFallbackDenylist: [/^\/sealed/],
       },
-      manifest: {
-        name: 'dmgCtrl',
-        short_name: 'dmgCtrl',
-        description: 'Star Wars Unlimited game state tracker',
-        theme_color: '#0a0e1a',
-        background_color: '#0a0e1a',
-        display: 'standalone',
-        icons: [
-          {
-            src: 'dmgCtrl-icon-192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: 'dmgCtrl-icon-512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      }
-    }), cloudflare()],
+      manifest: PWA_MANIFEST,
+    }), gameAddresses(), cloudflare()],
     test: {
       // `npm test` runs three separate Vitest invocations, so each writes its own summary to
       // the CI report. Named, or the run shows three anonymous blocks and you count tests to

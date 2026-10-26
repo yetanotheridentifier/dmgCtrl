@@ -4,10 +4,8 @@ import { useSwuSetup, baseKey } from '../hooks/useSwuSetup'
 import { useBaseArt, getFirstGameImageUrl } from '../hooks/useBaseArt'
 import SwuSetupScreenView from './swuSetupScreenView'
 import type { SwudbImport } from './swuSetupScreenView'
-import InstallBanner from './installBanner'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useFavourites } from '../hooks/useFavourites'
-import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swudbUrl'
 import { onFavouriteAdded, onFavouriteRemoved, onDeckImportSuccess, onDeckImportFailure } from '../services/analytics'
 import { SetupMode } from '../utils/playMode'
@@ -32,7 +30,6 @@ function SwuSetupScreen({ onConfirm, onStartTournament, tournamentInProgress = f
   const setup = useSwuSetup(onConfirm, onStartTournament)
   const art = useBaseArt(setup.base, useHyperspace)
   const theirArt = useBaseArt(setup.mode === '2p' ? setup.theirBase : null, useHyperspace)
-  const { showBanner, platform, onInstall, onDismiss } = useInstallPrompt()
 
   // Warm the cache with the art the game screen will show first.
   useEffect(() => {
@@ -114,7 +111,6 @@ function SwuSetupScreen({ onConfirm, onStartTournament, tournamentInProgress = f
   }
 
   return (
-    <>
       <SwuSetupScreenView
         error={setup.error}
         base={setup.base}
@@ -145,10 +141,6 @@ function SwuSetupScreen({ onConfirm, onStartTournament, tournamentInProgress = f
         onHelp={onHelp}
         onSettings={onSettings}
       />
-      {showBanner && platform && (
-        <InstallBanner platform={platform} onInstall={onInstall} onDismiss={onDismiss} />
-      )}
-    </>
   )
 }
 

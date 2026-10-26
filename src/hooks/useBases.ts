@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { onBasesLoadFailed, onBasesLoadStale } from '../services/analytics'
 
 const PROXY_URL = 'https://worker.dmgctrl.app'
@@ -126,28 +126,25 @@ async function fetchAllSwuApiCards(): Promise<SwuApiCard[]> {
   return allCards
 }
 
-export function useBases() {
-  const [bases, setBases] = useState<Base[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+function readCache(): CacheEntry | null {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY)
+    return cached ? (JSON.parse(cached) as CacheEntry) : null
+  } catch {
+    return null
+  }
+}
 
-  useEffect(() => {
-    async function fetchBases() {
-      // Check cache first
-      const cached = localStorage.getItem(CACHE_KEY)
-      let staleCache: Base[] | null = null
+// App, SWU setup and the tournament screen each hold card data, and may ask for it at the same
+// moment, so they share one fetch.
+let inflight: Promise<Base[]> | null = null
 
-      if (cached) {
-        const entry: CacheEntry = JSON.parse(cached)
-        if (Date.now() - entry.lastChecked < CACHE_TTL) {
-          setBases(entry.data)
-          setLoading(false)
-          return
-        }
-        staleCache = entry.data
-      }
+function fetchBasesOnce(): Promise<Base[]> {
+  inflight ??= fetchAndMergeBases().finally(() => { inflight = null })
+  return inflight
+}
 
-      try {
+async function fetchAndMergeBases(): Promise<Base[]> {
         // Fetch both sources in parallel (swuapi.com needs pagination)
         const [swuDbResponse, swuApiCards] = await Promise.all([
           fetch(`${PROXY_URL}/cards/search?q=type:base`),
@@ -245,22 +242,48 @@ export function useBases() {
         const entry: CacheEntry = { lastChecked: Date.now(), data: mergedBases }
         localStorage.setItem(CACHE_KEY, JSON.stringify(entry))
 
-        setBases(mergedBases)
-      } catch {
-        if (staleCache) {
-          setBases(staleCache)
+        return mergedBases
+}
+
+// Card data held in the cache, of any age, is there on the first render, so SWU never waits for
+// the network when it has data: a stale cache is served at once and refreshed in the background.
+// Only with nothing cached does `loading` start true; `retry` asks again after a failure.
+export function useBases() {
+  const [cached] = useState(readCache)
+  const [bases, setBases] = useState<Base[]>(cached?.data ?? [])
+  const [loading, setLoading] = useState(cached === null)
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    if (attempt === 0 && cached && Date.now() - cached.lastChecked < CACHE_TTL) return
+    let live = true
+    fetchBasesOnce()
+      .then(data => {
+        if (!live) return
+        setBases(data)
+        setError(null)
+      })
+      .catch(() => {
+        if (!live) return
+        if (cached) {
           void onBasesLoadStale()
         } else {
           setError('Could not load bases. Please check your connection.')
           void onBasesLoadFailed()
         }
-      } finally {
-        setLoading(false)
-      }
-    }
+      })
+      .finally(() => {
+        if (live) setLoading(false)
+      })
+    return () => { live = false }
+  }, [attempt, cached])
 
-    fetchBases()
+  const retry = useCallback(() => {
+    setError(null)
+    setLoading(true)
+    setAttempt(a => a + 1)
   }, [])
 
-  return { bases, loading, error }
+  return { bases, loading, error, retry }
 }
