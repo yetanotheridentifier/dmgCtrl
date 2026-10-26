@@ -1,3 +1,5 @@
+import { POINTS_MAX, POINTS_MIN, SHIPS_MAX, SHIPS_MIN } from './xwingListRules'
+
 export interface XwingPilot {
   name: string
   ship: string
@@ -40,11 +42,11 @@ export function parseXwsText(text: string): ParseResult {
     pilots.push({ name: e.name as string, ship: e.ship as string, points: e.points as number })
   }
 
-  if (pilots.length < 3) return { ok: false, error: 'too-few-ships' }
-  if (pilots.length > 8) return { ok: false, error: 'too-many-ships' }
+  if (pilots.length < SHIPS_MIN) return { ok: false, error: 'too-few-ships' }
+  if (pilots.length > SHIPS_MAX) return { ok: false, error: 'too-many-ships' }
 
   const total = obj.points as number
-  if (total < 46 || total > 50) return { ok: false, error: 'invalid-total' }
+  if (total < POINTS_MIN || total > POINTS_MAX) return { ok: false, error: 'invalid-total' }
 
   const name = typeof obj.name === 'string' ? obj.name : undefined
   const faction = typeof obj.faction === 'string' ? obj.faction : undefined

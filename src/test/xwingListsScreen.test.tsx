@@ -3,7 +3,6 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import XwingListsScreen from '../components/xwingListsScreen'
 import type { XwingList } from '../hooks/useXwingLists'
-import { makeMatchMediaMock } from './setup'
 
 const VALID_XWS = JSON.stringify({
   name: 'Scum Syndicate',
@@ -25,6 +24,20 @@ const UNNAMED_XWS = JSON.stringify({
   points: 46,
 })
 
+// Two of the same unique pilot: the shape is fine, the list is not.
+const DUPLICATE_XWS = JSON.stringify({
+  name: 'Two Howlrunners',
+  faction: 'galacticempire',
+  pilots: [
+    { name: 'howlrunner', ship: 'tielnfighter', points: 8 },
+    { name: 'howlrunner', ship: 'tielnfighter', points: 8 },
+    { name: 'soontirfel', ship: 'tieininterceptor', points: 13 },
+    { name: 'soontirfel', ship: 'tieininterceptor', points: 13 },
+    { name: 'academypilot', ship: 'tielnfighter', points: 5 },
+  ],
+  points: 47,
+})
+
 const SCUM: XwingList = {
   id: 'l1',
   name: 'Scum Syndicate',
@@ -41,31 +54,34 @@ const EMPIRE: XwingList = {
   name: 'Vader Wing',
   pilots: [
     { name: 'darthvader', ship: 'tieadvancedx1', points: 21 },
-    { name: 'soontirfel', ship: 'tieinterceptor', points: 15 },
+    { name: 'soontirfel', ship: 'tieininterceptor', points: 15 },
     { name: 'vermeil', ship: 'tiedefender', points: 14 },
   ],
 }
 
 const mockXwingLists = vi.hoisted(() => ({
   lists: [] as XwingList[],
-  saveList: vi.fn(),
+  saveList: vi.fn(() => 'new-id'),
   renameList: vi.fn(),
   removeList: vi.fn(),
-  clearLists: vi.fn(),
 }))
 vi.mock('../hooks/useXwingLists', () => ({
   useXwingLists: () => mockXwingLists,
 }))
 
-function renderScreen(overrides: Partial<{ onBack: () => void; onHelp: () => void }> = {}) {
+type Props = Partial<React.ComponentProps<typeof XwingListsScreen>>
+
+function renderScreen(overrides: Props = {}) {
   return render(<XwingListsScreen onBack={vi.fn()} onHelp={vi.fn()} {...overrides} />)
 }
 
-async function pasteAndCheck(text: string) {
-  const user = userEvent.setup()
+async function openImport(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Import XWS' }))
+}
+
+async function pasteAndCheck(user: ReturnType<typeof userEvent.setup>, text: string) {
   fireEvent.change(screen.getByTestId('lists-textarea'), { target: { value: text } })
-  await user.click(screen.getByTestId('lists-check-btn'))
-  return user
+  await user.click(screen.getByRole('button', { name: 'Check' }))
 }
 
 beforeEach(() => {
@@ -73,7 +89,6 @@ beforeEach(() => {
   mockXwingLists.saveList.mockClear()
   mockXwingLists.renameList.mockClear()
   mockXwingLists.removeList.mockClear()
-  mockXwingLists.clearLists.mockClear()
 })
 
 describe('XwingListsScreen', () => {
@@ -108,45 +123,15 @@ describe('XwingListsScreen', () => {
     expect(screen.getByTestId('xwing-lists-empty')).toHaveTextContent('No saved lists')
   })
 
-  it('does not show the empty state when lists exist', () => {
-    mockXwingLists.lists = [SCUM]
-    renderScreen()
-    expect(screen.queryByTestId('xwing-lists-empty')).not.toBeInTheDocument()
-  })
-
-  it('shows each saved list by name', () => {
+  it('shows each saved list with its faction symbol, points, ships, faction and pilots', () => {
     mockXwingLists.lists = [SCUM, EMPIRE]
     renderScreen()
-    expect(screen.getByTestId('list-toggle-l1')).toHaveTextContent('Scum Syndicate')
-    expect(screen.getByTestId('list-toggle-l2')).toHaveTextContent('Vader Wing')
-  })
-
-  it('shows the points total and faction for a list', () => {
-    mockXwingLists.lists = [SCUM]
-    renderScreen()
-    expect(screen.getByTestId('list-meta-l1')).toHaveTextContent('32 pts · Scum and Villainy')
-  })
-
-  it('shows only the points total when a list has no faction', () => {
-    mockXwingLists.lists = [EMPIRE]
-    renderScreen()
-    expect(screen.getByTestId('list-meta-l2')).toHaveTextContent(/^50 pts$/)
-  })
-
-  it('pilots are hidden until the list is tapped', () => {
-    mockXwingLists.lists = [SCUM]
-    renderScreen()
-    expect(screen.queryByTestId('list-pilots-l1')).not.toBeInTheDocument()
-  })
-
-  it('tapping a list shows its pilots, tapping again hides them', async () => {
-    const user = userEvent.setup()
-    mockXwingLists.lists = [SCUM]
-    renderScreen()
-    await user.click(screen.getByTestId('list-toggle-l1'))
-    expect(screen.getByTestId('list-pilots-l1')).toHaveTextContent('Asajj Ventress')
-    await user.click(screen.getByTestId('list-toggle-l1'))
-    expect(screen.queryByTestId('list-pilots-l1')).not.toBeInTheDocument()
+    const scum = screen.getByTestId('list-row-l1')
+    expect(scum).toHaveTextContent('Scum Syndicate')
+    expect(scum.querySelector('svg[aria-label="Scum and Villainy"]')).not.toBeNull()
+    expect(screen.getByTestId('list-meta-l1')).toHaveTextContent('32 pts · 3 ships · Scum and Villainy')
+    expect(scum).toHaveTextContent('Asajj Ventress, Bossk')
+    expect(screen.getByTestId('list-meta-l2')).toHaveTextContent(/^50 pts · 3 ships$/)
   })
 
   // --- Rename ---
@@ -204,12 +189,14 @@ describe('XwingListsScreen', () => {
 
   // --- Delete ---
 
-  it('delete asks for confirmation before removing', async () => {
+  it('delete asks for confirmation, naming the list, before removing', async () => {
     const user = userEvent.setup()
     mockXwingLists.lists = [SCUM]
     renderScreen()
     await user.click(screen.getByTestId('list-delete-btn-l1'))
     expect(mockXwingLists.removeList).not.toHaveBeenCalled()
+    const confirm = screen.getByRole('alertdialog', { name: 'Delete Scum Syndicate?' })
+    expect(confirm).toHaveTextContent("32 pts · 3 ships · Scum and Villainy. This can't be undone.")
     await user.click(screen.getByTestId('list-delete-confirm-l1'))
     expect(mockXwingLists.removeList).toHaveBeenCalledWith('l1')
   })
@@ -224,127 +211,128 @@ describe('XwingListsScreen', () => {
     expect(screen.getByTestId('list-delete-btn-l1')).toBeInTheDocument()
   })
 
-  // --- Clear all ---
+  // --- Builder ---
 
-  it('Clear All is not shown when there are no lists', () => {
-    renderScreen()
-    expect(screen.queryByTestId('lists-clear-btn')).not.toBeInTheDocument()
-  })
-
-  it('Clear All asks for confirmation, then clears every list', async () => {
+  it('New list opens the builder at the faction step, and Back returns to the lists', async () => {
     const user = userEvent.setup()
-    mockXwingLists.lists = [SCUM, EMPIRE]
+    mockXwingLists.lists = [SCUM]
     renderScreen()
-    await user.click(screen.getByTestId('lists-clear-btn'))
-    expect(mockXwingLists.clearLists).not.toHaveBeenCalled()
-    await user.click(screen.getByTestId('lists-clear-confirm-btn'))
-    expect(mockXwingLists.clearLists).toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'New list' }))
+    expect(screen.getByTestId('faction-galacticempire')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
   })
 
-  // --- Create ---
-
-  it('shows the paste box for a new list', () => {
+  it('Edit opens the builder on that list', async () => {
+    const user = userEvent.setup()
+    mockXwingLists.lists = [SCUM]
     renderScreen()
+    await user.click(screen.getByTestId('list-edit-btn-l1'))
+    expect(screen.getByRole('heading', { name: 'Scum and Villainy' })).toBeInTheDocument()
+    expect(screen.getByText(/^Editing Scum Syndicate/)).toBeInTheDocument()
+  })
+
+  // --- Import XWS ---
+
+  it('Import XWS opens the paste box', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await openImport(user)
+    expect(screen.getByRole('heading', { name: 'Import XWS' })).toBeInTheDocument()
     expect(screen.getByTestId('lists-textarea')).toBeInTheDocument()
   })
 
-  it('an invalid paste shows an error and no preview', async () => {
+  it('opened straight to the paste box, Back leaves the screen', async () => {
+    const user = userEvent.setup()
+    const onBack = vi.fn()
+    renderScreen({ startWith: 'import', onBack })
+    expect(screen.getByTestId('lists-textarea')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(onBack).toHaveBeenCalled()
+  })
+
+  it('opened from the lists, Back from the paste box returns to the lists', async () => {
+    const user = userEvent.setup()
+    const onBack = vi.fn()
+    renderScreen({ onBack })
+    await openImport(user)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
+    expect(onBack).not.toHaveBeenCalled()
+  })
+
+  it('an unreadable paste shows an error and cannot be saved', async () => {
+    const user = userEvent.setup()
     renderScreen()
-    await pasteAndCheck('not json')
+    await openImport(user)
+    await pasteAndCheck(user, 'not json')
     expect(screen.getByTestId('lists-error')).toHaveTextContent("Couldn't read list")
+    expect(screen.getByRole('button', { name: 'Save list' })).toBeDisabled()
+  })
+
+  it('a list with a unique pilot twice lists the problem and cannot be saved', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await openImport(user)
+    await pasteAndCheck(user, DUPLICATE_XWS)
+    const result = screen.getByRole('alert')
+    expect(result).toHaveTextContent("Two Howlrunners can't be saved yet")
+    expect(result).toHaveTextContent('2 problems')
+    expect(result).toHaveTextContent('"Howlrunner" is unique: only one per list.')
+    expect(result).toHaveTextContent('Soontir Fel is unique: only one per list.')
+    expect(screen.getByRole('button', { name: 'Save list' })).toBeDisabled()
+  })
+
+  it('a valid paste shows the pilots and points, and Clear empties the box', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await openImport(user)
+    await pasteAndCheck(user, VALID_XWS)
+    expect(screen.getByTestId('lists-preview')).toHaveTextContent('Asajj Ventress')
+    expect(screen.getByTestId('lists-new-meta')).toHaveTextContent('50 pts · 3 ships · Scum and Villainy')
+    await user.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByTestId('lists-textarea')).toHaveValue('')
     expect(screen.queryByTestId('lists-preview')).not.toBeInTheDocument()
   })
 
-  it('a valid paste shows the pilot preview and points total', async () => {
+  it('saving opens the save sheet with the XWS name, saves, and returns to the lists', async () => {
+    const user = userEvent.setup()
     renderScreen()
-    await pasteAndCheck(VALID_XWS)
-    expect(screen.getByTestId('lists-preview')).toHaveTextContent('Asajj Ventress')
-    expect(screen.getByTestId('lists-new-meta')).toHaveTextContent('50 pts · Scum and Villainy')
-    expect(screen.queryByTestId('lists-textarea')).not.toBeInTheDocument()
-  })
-
-  it('the name field is pre-filled from the XWS name', async () => {
-    renderScreen()
-    await pasteAndCheck(VALID_XWS)
-    expect(screen.getByTestId('lists-name-input')).toHaveValue('Scum Syndicate')
-  })
-
-  it('save is disabled until an unnamed list is given a name', async () => {
-    renderScreen()
-    const user = await pasteAndCheck(UNNAMED_XWS)
-    expect(screen.getByTestId('lists-name-input')).toHaveValue('')
-    expect(screen.getByTestId('lists-save-btn')).toBeDisabled()
-    await user.type(screen.getByTestId('lists-name-input'), 'My List')
-    expect(screen.getByTestId('lists-save-btn')).toBeEnabled()
-  })
-
-  it('saving calls saveList with the name, pilots and faction, then resets the form', async () => {
-    renderScreen()
-    const user = await pasteAndCheck(VALID_XWS)
-    await user.click(screen.getByTestId('lists-save-btn'))
+    await openImport(user)
+    await pasteAndCheck(user, VALID_XWS)
+    await user.click(screen.getByRole('button', { name: 'Save list' }))
+    const sheet = screen.getByRole('dialog', { name: 'Save list' })
+    expect(within(sheet).getByRole('textbox', { name: 'Name' })).toHaveValue('Scum Syndicate')
+    await user.click(within(sheet).getByRole('button', { name: 'Save list' }))
     expect(mockXwingLists.saveList).toHaveBeenCalledWith(
       'Scum Syndicate',
       expect.arrayContaining([expect.objectContaining({ name: 'asajjventress' })]),
       'scumandvillainy',
     )
-    expect(screen.getByTestId('lists-textarea')).toHaveValue('')
+    expect(screen.getByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
   })
 
-  it('the saved name is trimmed', async () => {
+  it('an unnamed list with no faction saves as the lowest unused List N', async () => {
+    const user = userEvent.setup()
     renderScreen()
-    const user = await pasteAndCheck(UNNAMED_XWS)
-    await user.type(screen.getByTestId('lists-name-input'), '  My List  ')
-    await user.click(screen.getByTestId('lists-save-btn'))
-    expect(mockXwingLists.saveList).toHaveBeenCalledWith('My List', expect.any(Array), undefined)
+    await openImport(user)
+    await pasteAndCheck(user, UNNAMED_XWS)
+    await user.click(screen.getByRole('button', { name: 'Save list' }))
+    const sheet = screen.getByRole('dialog', { name: 'Save list' })
+    await user.click(within(sheet).getByRole('button', { name: 'Save list' }))
+    expect(mockXwingLists.saveList).toHaveBeenCalledWith('List 1', expect.any(Array), undefined)
   })
 
-  it('saving under an existing name asks to overwrite first', async () => {
+  it('saving under an existing name says which list it replaces', async () => {
+    const user = userEvent.setup()
     mockXwingLists.lists = [SCUM]
     renderScreen()
-    const user = await pasteAndCheck(VALID_XWS)
-    await user.click(screen.getByTestId('lists-save-btn'))
-    expect(mockXwingLists.saveList).not.toHaveBeenCalled()
-    expect(screen.getByTestId('lists-overwrite')).toHaveTextContent("Overwrite 'Scum Syndicate'?")
-    await user.click(screen.getByTestId('lists-overwrite-confirm-btn'))
+    await openImport(user)
+    await pasteAndCheck(user, VALID_XWS)
+    await user.click(screen.getByRole('button', { name: 'Save list' }))
+    const sheet = screen.getByRole('dialog', { name: 'Save list' })
+    expect(within(sheet).getByText('Replaces your saved Scum Syndicate')).toBeInTheDocument()
+    await user.click(within(sheet).getByRole('button', { name: 'Overwrite Scum Syndicate' }))
     expect(mockXwingLists.saveList).toHaveBeenCalledWith('Scum Syndicate', expect.any(Array), 'scumandvillainy')
-  })
-
-  it('cancelling an overwrite does not save and keeps the preview', async () => {
-    mockXwingLists.lists = [SCUM]
-    renderScreen()
-    const user = await pasteAndCheck(VALID_XWS)
-    await user.click(screen.getByTestId('lists-save-btn'))
-    await user.click(screen.getByTestId('lists-overwrite-cancel-btn'))
-    expect(mockXwingLists.saveList).not.toHaveBeenCalled()
-    expect(screen.queryByTestId('lists-overwrite')).not.toBeInTheDocument()
-    expect(screen.getByTestId('lists-preview')).toBeInTheDocument()
-  })
-
-  it('edit returns to the paste box with the text kept', async () => {
-    renderScreen()
-    const user = await pasteAndCheck(VALID_XWS)
-    await user.click(screen.getByTestId('lists-edit-btn'))
-    expect(screen.getByTestId('lists-textarea')).toHaveValue(VALID_XWS)
-    expect(screen.queryByTestId('lists-preview')).not.toBeInTheDocument()
-  })
-
-  // --- Layout ---
-
-  it('landscape: saved lists and the new-list panel sit side by side', () => {
-    // landscape is the default test orientation
-    renderScreen()
-    const row = screen.getByTestId('lists-layout')
-    expect(row).toHaveStyle({ flexDirection: 'row' })
-    expect(within(row).getByTestId('lists-saved-panel')).toBeInTheDocument()
-    expect(within(row).getByTestId('lists-new-panel')).toBeInTheDocument()
-  })
-
-  it('portrait: the saved lists sit above the new-list panel', () => {
-    makeMatchMediaMock(true)
-    renderScreen()
-    const row = screen.getByTestId('lists-layout')
-    expect(row).toHaveStyle({ flexDirection: 'column' })
-    const panels = within(row).getAllByTestId(/^lists-(new|saved)-panel$/).map(p => p.dataset.testid)
-    expect(panels).toEqual(['lists-saved-panel', 'lists-new-panel'])
   })
 })

@@ -128,6 +128,28 @@ describe('useXwingLists', () => {
     expect(stored[0].name).toBe('Scum Squad')
   })
 
+  it('saveList returns the id of the list it saved', () => {
+    const { result } = renderHook(() => useXwingLists(), { wrapper: XwingListsProvider })
+    let id = ''
+    act(() => { id = result.current.saveList('Squad A', PILOTS_A) })
+    expect(result.current.lists[0].id).toBe(id)
+  })
+
+  // Editing a list saves it under its own name, so it must stay the same list: a setup choice or
+  // last game's opponent points at it by id.
+  it('saveList over an existing name keeps that list\'s id and createdAt, and returns that id', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([
+      { id: '1', name: 'Squad A', pilots: PILOTS_A, faction: 'scumandvillainy', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: '2', name: 'Squad B', pilots: PILOTS_B },
+    ]))
+    const { result } = renderHook(() => useXwingLists(), { wrapper: XwingListsProvider })
+    let id = ''
+    act(() => { id = result.current.saveList('Squad A', PILOTS_B, 'galacticempire') })
+    expect(id).toBe('1')
+    expect(result.current.lists[0]).toEqual({ id: '1', name: 'Squad A', pilots: PILOTS_B, faction: 'galacticempire', createdAt: '2026-01-01T00:00:00.000Z' })
+    expect(result.current.lists[1].name).toBe('Squad B')
+  })
+
   // --- renameList ---
 
   it('renameList changes the name of the list with the given id', () => {
@@ -183,24 +205,6 @@ describe('useXwingLists', () => {
     act(() => { result.current.removeList(id) })
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
     expect(stored).toHaveLength(0)
-  })
-
-  // --- clearLists ---
-
-  it('clearLists empties the list', () => {
-    const { result } = renderHook(() => useXwingLists(), { wrapper: XwingListsProvider })
-    act(() => { result.current.saveList('Squad A', PILOTS_A) })
-    act(() => { result.current.saveList('Squad B', PILOTS_B) })
-    act(() => { result.current.clearLists() })
-    expect(result.current.lists).toEqual([])
-  })
-
-  it('clearLists persists empty list to localStorage', () => {
-    const { result } = renderHook(() => useXwingLists(), { wrapper: XwingListsProvider })
-    act(() => { result.current.saveList('Squad A', PILOTS_A) })
-    act(() => { result.current.clearLists() })
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
-    expect(stored).toEqual([])
   })
 
   // --- Shared store ---

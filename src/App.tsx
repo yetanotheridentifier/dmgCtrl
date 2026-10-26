@@ -68,6 +68,8 @@ function AppScreens() {
   const [isInGame, setIsInGame] = useState(false)
   const [isInXwing, setIsInXwing] = useState(false)
   const [isInXwingSetup, setIsInXwingSetup] = useState(screen === 'xwingSetup')
+  // Squad Lists opened from a list sheet's Import XWS starts at the paste box.
+  const [xwingListsImport, setXwingListsImport] = useState(false)
   const [xwingPlayerDeficit, setXwingPlayerDeficit] = useState(0)
   const [xwingOpponentDeficit, setXwingOpponentDeficit] = useState(0)
   const [xwingScenario, setXwingScenario] = useState<XwingScenario>('None')
@@ -217,7 +219,8 @@ function AppScreens() {
     setScreen('settings')
   }
 
-  const handleXwingLists = () => {
+  const handleXwingLists = (startAtImport = false) => {
+    setXwingListsImport(startAtImport)
     setBackStack(prev => [...prev, screen])
     setScreen('xwingLists')
   }
@@ -348,7 +351,8 @@ function AppScreens() {
               onBack={leaveXwingSetup}
               onHelp={handleHelp}
               onSettings={handleSettings}
-              onLists={handleXwingLists}
+              onLists={() => handleXwingLists()}
+              onImport={() => handleXwingLists(true)}
               tournamentInProgress={xwingTournament.tournament !== null}
               onStartTournament={handleXwingStartTournament}
               onGoToTournament={() => setScreen('xwingTournament')}
@@ -356,7 +360,7 @@ function AppScreens() {
             {floatingBanner}
           </div>
         )}
-        {screen === 'xwingLists' && <XwingListsScreen onBack={handleOverlayBack} onHelp={handleHelp} />}
+        {screen === 'xwingLists' && <XwingListsScreen onBack={handleOverlayBack} onHelp={handleHelp} startWith={xwingListsImport ? 'import' : undefined} />}
         {isInXwing && (
           <div style={screen === 'xwing' ? undefined : { display: 'none' }}>
             <XwingGameScreen
@@ -438,7 +442,7 @@ function AppScreens() {
         />
       )}
       {screen === 'help' && <HelpScreen onBack={handleOverlayBack} source={helpSource} />}
-      {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onManageXwingLists={handleXwingLists} />}
+      {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onManageXwingLists={() => handleXwingLists()} />}
     </>
   )
 }

@@ -26,16 +26,18 @@ interface ButtonProps {
   onClick?: () => void
   disabled?: boolean
   style?: React.CSSProperties
+  testId?: string
 }
 
 // Primary is the screen's one next step; secondary is everything else that is worded.
-export function Button({ variant = 'secondary', children, onClick, disabled = false, style }: ButtonProps) {
+export function Button({ variant = 'secondary', children, onClick, disabled = false, style, testId }: ButtonProps) {
   const fill: React.CSSProperties = variant === 'primary'
     ? { background: 'var(--color-accent)', color: 'var(--color-on-accent)', fontWeight: 600, fontSize: '1.05rem' }
     : { background: 'var(--color-tonal)', color: 'var(--color-tonal-text)', fontWeight: 500, fontSize: '0.95rem' }
   return (
     <button
       type="button"
+      data-testid={testId}
       onClick={onClick}
       disabled={disabled}
       style={{ ...TAP, ...fill, ...(disabled ? DISABLED : {}), minHeight: '44px', padding: '0 16px', ...style }}
@@ -171,11 +173,13 @@ interface OptionRowProps {
   suggested?: boolean
   onClick: () => void
   testId?: string
+  // A small symbol before the title, such as a list's faction.
+  icon?: ReactNode
 }
 
 // One choice in a Sheet, one or two lines: a list, a scenario, a start screen. `selected` marks the
 // current choice.
-export function OptionRow({ title, detail, selected = false, suggested = false, onClick, testId }: OptionRowProps) {
+export function OptionRow({ title, detail, selected = false, suggested = false, onClick, testId, icon }: OptionRowProps) {
   return (
     <button
       type="button"
@@ -195,7 +199,9 @@ export function OptionRow({ title, detail, selected = false, suggested = false, 
         gap: '2px',
       }}
     >
-      <span style={{ fontSize: '0.95rem' }}>{title}</span>
+      {icon
+        ? <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>{icon}{title}</span>
+        : <span style={{ fontSize: '0.95rem' }}>{title}</span>}
       {detail && <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{detail}</span>}
     </button>
   )

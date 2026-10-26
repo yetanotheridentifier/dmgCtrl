@@ -32,7 +32,6 @@ const mockXwingLists = vi.hoisted(() => ({
   saveList: vi.fn(),
   renameList: vi.fn(),
   removeList: vi.fn(),
-  clearLists: vi.fn(),
 }))
 vi.mock('../hooks/useXwingLists', () => ({
   useXwingLists: () => mockXwingLists,
@@ -176,15 +175,16 @@ describe('XwingSetupScreen', () => {
     expect(card('opponent')).toHaveTextContent("Choose opponent's list")
   })
 
-  it('the list sheet offers each saved list, Import XWS, then No list last as a fallback', async () => {
+  it('the list sheet offers each saved list, Build a list, Import XWS, then No list last as a fallback', async () => {
     const user = userEvent.setup()
     mockXwingLists.lists = [SCUM, EMPIRE]
-    renderSetup()
+    renderSetup({ onImport: vi.fn() })
     await openListSheet(user, 'player')
     const sheet = screen.getByRole('dialog', { name: 'Your list' })
     expect(screen.getByTestId('player-list-option-scum')).toHaveTextContent('Scum Squad')
     expect(screen.getByTestId('player-list-option-scum')).toHaveTextContent('50 pts · Scum and Villainy')
     expect(screen.getByTestId('player-list-option-empire')).toHaveTextContent('47 pts')
+    expect(within(sheet).getByRole('button', { name: 'Build a list' })).toBeInTheDocument()
     expect(within(sheet).getByRole('button', { name: 'Import XWS' })).toBeInTheDocument()
     const buttons = within(sheet).getAllByRole('button')
     expect(buttons.at(-1)).toBe(screen.getByTestId('player-no-list-btn'))
@@ -205,14 +205,58 @@ describe('XwingSetupScreen', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('No saved lists yet')
   })
 
-  it('Import XWS closes the sheet and calls onLists', async () => {
+  it('Import XWS closes the sheet and calls onImport', async () => {
     const user = userEvent.setup()
-    const onLists = vi.fn()
-    renderSetup({ onLists })
+    const onImport = vi.fn()
+    renderSetup({ onImport })
     await openListSheet(user, 'player')
     await user.click(screen.getByRole('button', { name: 'Import XWS' }))
-    expect(onLists).toHaveBeenCalledOnce()
+    expect(onImport).toHaveBeenCalledOnce()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('the list sheet shows each list with its faction symbol', async () => {
+    const user = userEvent.setup()
+    mockXwingLists.lists = [SCUM, EMPIRE]
+    renderSetup()
+    await openListSheet(user, 'player')
+    expect(screen.getByTestId('player-list-option-scum').querySelector('svg[aria-label="Scum and Villainy"]')).not.toBeNull()
+    expect(screen.getByTestId('player-list-option-empire').querySelector('svg')).toBeNull()
+  })
+
+  it.each([['player', 'for you'], ['opponent', 'for your opponent']] as const)(
+    'Build a list (%s) opens the builder %s, and Back returns to setup with the sheet closed',
+    async (side, forWhom) => {
+      const user = userEvent.setup()
+      renderSetup()
+      await openListSheet(user, side)
+      await user.click(screen.getByRole('button', { name: 'Build a list' }))
+      expect(screen.getByText(`${forWhom[0].toUpperCase()}${forWhom.slice(1)} · choose a faction`)).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Back' }))
+      expect(screen.getByTestId('xwing-setup')).toBeInTheDocument()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    },
+  )
+
+  it('a list built from the opponent sheet comes back to setup chosen for the opponent', async () => {
+    const user = userEvent.setup()
+    mockXwingLists.saveList.mockImplementationOnce((name: string, pilots: XwingList['pilots'], faction?: string) => {
+      mockXwingLists.lists = [...mockXwingLists.lists, { id: 'built', name, pilots, faction }]
+      return 'built'
+    })
+    renderSetup()
+    await openListSheet(user, 'opponent')
+    await user.click(screen.getByRole('button', { name: 'Build a list' }))
+    await user.click(screen.getByRole('button', { name: /Galactic Empire/ }))
+    await user.click(screen.getByRole('button', { name: /TIE\/ln Fighter/ }))
+    for (const id of ['howlrunner', 'maulermithel', 'wampa', 'isbjingoist', 'isbjingoist', 'academypilot', 'blacksquadronace']) {
+      await user.click(screen.getByTestId(`pilot-option-${id}`))
+    }
+    await user.click(screen.getByRole('button', { name: 'Save list' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Save list' })).getByRole('button', { name: 'Save list' }))
+    expect(screen.getByTestId('xwing-setup')).toBeInTheDocument()
+    expect(screen.getByTestId('opponent-chosen-name')).toHaveTextContent('Galactic Empire list 1')
+    expect(card('opponent')).toHaveTextContent('49 pts · Galactic Empire')
   })
 
   it('choosing a saved list closes the sheet and shows its name, points, faction and pilots, but no deficit', async () => {

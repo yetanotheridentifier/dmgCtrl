@@ -32,16 +32,18 @@ function save(lists: XwingList[]): void {
 function useXwingListsState() {
   const [lists, setLists] = useState<XwingList[]>(load)
 
-  // Saving under a name that already exists replaces that list in place.
-  function saveList(name: string, pilots: XwingPilot[], faction?: string) {
-    setLists(prev => {
-      const entry: XwingList = { id: crypto.randomUUID(), name, pilots, createdAt: new Date().toISOString() }
-      if (faction !== undefined) entry.faction = faction
-      const idx = prev.findIndex(l => l.name === name)
-      const next = idx === -1 ? [...prev, entry] : prev.map((l, i) => (i === idx ? entry : l))
-      save(next)
-      return next
-    })
+  // Saving under a name that already exists replaces that list in place, keeping its id and
+  // createdAt, so a list edited under its own name stays the list setup has chosen. Returns the id.
+  function saveList(name: string, pilots: XwingPilot[], faction?: string): string {
+    const existing = lists.find(l => l.name === name)
+    const entry: XwingList = existing
+      ? { id: existing.id, name, pilots, ...(existing.createdAt !== undefined && { createdAt: existing.createdAt }) }
+      : { id: crypto.randomUUID(), name, pilots, createdAt: new Date().toISOString() }
+    if (faction !== undefined) entry.faction = faction
+    const next = existing ? lists.map(l => (l === existing ? entry : l)) : [...lists, entry]
+    save(next)
+    setLists(next)
+    return entry.id
   }
 
   function renameList(id: string, name: string) {
@@ -62,12 +64,7 @@ function useXwingListsState() {
     })
   }
 
-  function clearLists() {
-    setLists([])
-    save([])
-  }
-
-  return { lists, saveList, renameList, removeList, clearLists }
+  return { lists, saveList, renameList, removeList }
 }
 
 type XwingListsValue = ReturnType<typeof useXwingListsState>
