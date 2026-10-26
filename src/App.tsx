@@ -251,11 +251,11 @@ function AppScreens() {
     playXwingRound(player, opponent, scenario)
   }
 
-  const handleXwingNextRound = (opponent: XwingTournamentList) => {
+  const handleXwingNextRound = (opponent: XwingTournamentList, scenario: XwingScenario) => {
     const t = xwingTournament.tournament
     if (!t) return
-    xwingTournament.startRound(opponent)
-    playXwingRound(t.player, opponent, t.scenario)
+    xwingTournament.startRound(opponent, scenario)
+    playXwingRound(t.player, opponent, scenario)
   }
 
   // The game is still mounted unless the app was closed mid-round; then the round starts afresh.
@@ -264,7 +264,8 @@ function AppScreens() {
     if (isInXwing && isXwingTournamentGame) {
       setScreen('xwing')
     } else if (t && t.rounds.length > 0) {
-      playXwingRound(t.player, t.rounds[t.rounds.length - 1].opponent, t.scenario)
+      const round = t.rounds[t.rounds.length - 1]
+      playXwingRound(t.player, round.opponent, round.scenario)
     }
   }
 

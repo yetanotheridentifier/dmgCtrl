@@ -140,7 +140,7 @@ A tournament keeps your record across its rounds. Each round is one game.
 
 Choose **Tournament** under Match type on setup, choose your list and round 1's opponent, and tap **Start tournament**. A sheet asks for the number of **Rounds** (2 to 10), which is fixed once round 1 starts. **Start round 1** goes straight to the game.
 
-Your list is fixed for the whole tournament, and the scenario chosen on setup is played in every round. The opponent is chosen each round.
+Your list is fixed for the whole tournament. Round 1 is played with the scenario chosen on setup; the opponent and the scenario are chosen again for each later round.
 
 ### Playing a round
 
@@ -152,9 +152,9 @@ The tournament screen shows:
 
 - your **record** (wins and losses) and the **margin**, the total of the score differences of every round played
 - your list for the tournament
-- every round: those played with their result, score and the opponent's list, the next one outlined
+- every round: those played with their result, score, the opponent's list and the scenario (unless it was None), the next one outlined
 
-**Start round N** opens a sheet of your saved lists for the opponent, with **Import XWS** and **No list**; choosing one starts the game. **Drop** asks first, then clears the tournament and returns to setup.
+**Start round N** opens a sheet of your saved lists for the opponent, with **Import XWS** and **No list**; choosing one starts the game. The round's **Scenario** sits at the top of the sheet, set to last round's: tap it to choose another, or the **dice button** to roll one. If the app was closed during a round, that round's game starts again with its own scenario. **Drop** asks first, then clears the tournament and returns to setup.
 
 Once every round is played the screen reads **Tournament complete**, and **Finish** clears it and returns to setup.
 

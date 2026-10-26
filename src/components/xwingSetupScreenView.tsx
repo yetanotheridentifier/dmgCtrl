@@ -4,7 +4,7 @@ import AppScreenLayout from './layout/appScreenLayout'
 import { BackIcon, DiceIcon, DotsIcon } from './icons'
 import { Button, IconButton, OptionRow, SegmentedControl, SelectButton, SetupHeaderMark, Sheet, Stepper } from './shared/controls'
 import type { XwingMatchType, XwingScenario, XwingPlayerChoice } from '../hooks/useXwingSetup'
-import { XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
+import { XWING_SCENARIOS } from '../hooks/useXwingSetup'
 import type { XwingList } from '../hooks/useXwingLists'
 import { listMeta, pilotSummary } from '../utils/xwingListInfo'
 
@@ -44,8 +44,6 @@ interface Props {
 }
 
 const NO_SHIPS_NOTE = 'No ships to tap in the game'
-
-const SCENARIOS: XwingScenario[] = ['None', ...XWING_NAMED_SCENARIOS]
 
 const sectionLabelStyle: React.CSSProperties = {
   fontSize: '0.75rem',
@@ -210,7 +208,7 @@ export default function XwingSetupScreenView({
         {onSettings && <Button onClick={closeThen(onSettings)}>Settings</Button>}
       </Sheet>
       <Sheet open={openSheet === 'scenario'} title="Scenario" onClose={close}>
-        {SCENARIOS.map(s => (
+        {XWING_SCENARIOS.map(s => (
           <OptionRow key={s} title={s} selected={s === scenario} onClick={() => { onScenarioChange(s); close() }} />
         ))}
       </Sheet>
