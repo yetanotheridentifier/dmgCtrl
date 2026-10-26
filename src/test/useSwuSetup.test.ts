@@ -38,7 +38,7 @@ let store: Map<string, string>
 
 beforeEach(() => {
   store = new Map()
-  vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
+  vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null, retry: vi.fn() })
   vi.stubGlobal('localStorage', {
     getItem: vi.fn((k: string) => store.get(k) ?? null),
     setItem: vi.fn((k: string, v: string) => { store.set(k, v) }),
@@ -86,7 +86,7 @@ describe('useSwuSetup: your base', () => {
   })
 
   it('exposes every base, and the loading and error state of the card data', () => {
-    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: true, error: 'offline' })
+    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: true, error: 'offline', retry: vi.fn() })
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
     expect(result.current.bases).toBe(mockBases)
     expect(result.current.loading).toBe(true)

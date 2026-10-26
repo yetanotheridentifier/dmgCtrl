@@ -5,12 +5,21 @@ import { BackIcon } from './icons'
 import { Button, IconButton, OptionRow, SegmentedControl, SelectButton, Sheet } from './shared/controls'
 import { sectionLabelStyle } from '../styles/sectionLabel'
 import type { ForceTokenDisplay, StartScreen } from '../hooks/useUserSettings'
+import type { Game } from '../utils/appStart'
 
 const START_SCREENS: { value: StartScreen; label: string }[] = [
+  { value: 'lastGame', label: 'Last game played' },
   { value: 'gameSelect', label: 'Game select' },
   { value: 'swu', label: 'Star Wars: Unlimited' },
   { value: 'xwing', label: 'X-Wing' },
 ]
+
+const SETUP_NAMES: Record<Game, string> = { swu: 'SWU setup', xwing: 'X-Wing setup' }
+
+// Last game played says where it leads now, as that changes with each game.
+const lastGameDetail = (lastGame: Game | null) => lastGame
+  ? `Opens ${SETUP_NAMES[lastGame]}, the game you played last`
+  : 'Opens game select until you play a game'
 
 const FORCE_TOKENS: { value: ForceTokenDisplay; label: string }[] = [
   { value: 'always-on', label: 'Always' },
@@ -93,6 +102,7 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
 interface Props {
   startScreen: StartScreen
   onStartScreenChange: (v: StartScreen) => void
+  lastGame: Game | null
   useHyperspace: boolean
   onUseHyperspaceChange: (v: boolean) => void
   forceTokenDisplay: ForceTokenDisplay
@@ -198,6 +208,7 @@ export default function SettingsScreenView(props: Props) {
           <OptionRow
             key={s.value}
             title={s.label}
+            detail={s.value === 'lastGame' ? lastGameDetail(props.lastGame) : undefined}
             selected={s.value === props.startScreen}
             onClick={() => { props.onStartScreenChange(s.value); setStartSheetOpen(false) }}
           />

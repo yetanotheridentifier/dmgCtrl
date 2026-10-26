@@ -207,3 +207,13 @@ input[type=number] {
   background: rgba(var(--color-accent-rgb), 0.04);
 }
 
+/* The splash's progress bar: the card data arrives in one response, so it has no amount to show. */
+@keyframes splash-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(225%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-progress { animation: none !important; }
+}
+

@@ -5,6 +5,7 @@ import xwingHelpHtml from '../../docs/xwingGameHelp.md'
 import xwingSetupHelpHtml from '../../docs/xwingSetupHelp.md'
 import settingsHelpHtml from '../../docs/settingsHelp.md'
 import xwingListsHelpHtml from '../../docs/xwingListsHelp.md'
+import startHelpHtml from '../../docs/startHelp.md'
 import AppScreenLayout from './layout/appScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon } from './icons'
@@ -13,11 +14,12 @@ import { NAV_BTN_STYLE } from '../styles/navButton'
 
 interface Props {
   onBack: () => void
-  source?: 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' | 'settings'
+  source?: 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' | 'settings' | 'gameSelect'
 }
 
 function HelpScreen({ onBack, source = 'setup' }: Props) {
-  const rawHtml = source === 'game' ? gameHelpHtml
+  const rawHtml = source === 'gameSelect' ? startHelpHtml
+    : source === 'game' ? gameHelpHtml
     : source === 'tournament' ? tournamentHelpHtml
     : source === 'xwing' ? xwingHelpHtml
     : source === 'xwingSetup' ? xwingSetupHelpHtml

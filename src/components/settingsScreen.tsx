@@ -2,6 +2,7 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import AppScreenLayout from './layout/appScreenLayout'
 import SettingsScreenView from './settingsScreenView'
 import { onSettingChanged } from '../services/analytics'
+import { readLastGame } from '../utils/appStart'
 
 interface Props {
   onBack: () => void
@@ -22,6 +23,7 @@ function SettingsScreen({ onBack, onManageXwingLists }: Props) {
       <SettingsScreenView
         startScreen={settings.startScreen}
         onStartScreenChange={reported('startScreen', settings.setStartScreen)}
+        lastGame={readLastGame()}
         useHyperspace={settings.useHyperspace}
         onUseHyperspaceChange={reported('useHyperspace', settings.setUseHyperspace)}
         forceTokenDisplay={settings.forceTokenDisplay}

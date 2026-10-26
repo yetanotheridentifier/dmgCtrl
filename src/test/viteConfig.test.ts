@@ -3,7 +3,7 @@
 // refuses to run against jsdom's TextEncoder ("this JavaScript environment is broken").
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { ConfigEnv, UserConfig } from 'vite'
-import configFn from '../../vite.config'
+import configFn, { PWA_MANIFEST } from '../../vite.config'
 
 /**
  * `vite-plugin-mkcert` fetches the mkcert release list from the GitHub API when Vite resolves
@@ -60,6 +60,32 @@ describe('root vite config', () => {
     vi.stubEnv('VITEST', '')
     vi.stubEnv('CI', '')
     expect(pluginNames(serve)).toContain(MKCERT)
+  })
+
+  /**
+   * GitHub Pages has no fallback to the app's page, so a first visit to /swu would be a 404
+   * unless the build writes a real page there.
+   */
+  it('writes the app page at swu/index.html and xwing/index.html too', () => {
+    const config = (configFn as unknown as (e: ConfigEnv) => UserConfig)(build)
+    const found: unknown[] = []
+    const walk = (p: unknown): void => {
+      if (Array.isArray(p)) return p.forEach(walk)
+      if (p && typeof p === 'object' && (p as { name?: string }).name === 'game-addresses') found.push(p)
+    }
+    walk(config.plugins)
+    expect(found).toHaveLength(1)
+    const plugin = found[0] as { generateBundle: (this: unknown, o: unknown, b: unknown) => void }
+    const emitted: { fileName: string; source: unknown }[] = []
+    const bundle = { 'index.html': { type: 'asset', fileName: 'index.html', source: '<html>app</html>' } }
+    plugin.generateBundle.call({ emitFile: (f: { fileName: string; source: unknown }) => emitted.push(f) }, {}, bundle)
+    expect(emitted.map(f => f.fileName).sort()).toEqual(['swu/index.html', 'xwing/index.html'])
+    for (const f of emitted) expect(f.source).toBe('<html>app</html>')
+  })
+
+  it('keeps one install, started at the root, with a shortcut to each game', () => {
+    expect(PWA_MANIFEST.start_url).toBe('.')
+    expect(PWA_MANIFEST.shortcuts?.map(s => [s.short_name, s.url])).toEqual([['SWU', 'swu/'], ['X-Wing', 'xwing/']])
   })
 
   /** Gating one plugin must not disturb the others. */

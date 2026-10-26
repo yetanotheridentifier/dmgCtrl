@@ -1,4 +1,5 @@
 import { ShareIcon, HomeScreenIcon, DotsIcon, ChevronDownIcon } from './icons'
+import { Button } from './shared/controls'
 
 interface Props {
   platform: 'ios' | 'android'
@@ -6,98 +7,53 @@ interface Props {
   onDismiss: () => void
 }
 
-const iconWrapStyle: React.CSSProperties = {
-  display: 'inline-block',
-  verticalAlign: 'middle',
-  lineHeight: 1,
-  fontSize: '1.1em',
-}
+const stepStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '5px' }
+const arrow = <li aria-hidden="true" style={{ color: 'var(--color-accent)' }}>›</li>
 
-function BulletRow({ icon, label }: { icon: React.ReactNode; label: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45em' }}>
-      <span style={{ opacity: 0.6 }}>•</span>
-      <span style={iconWrapStyle}>{icon}</span>
-      <span>{label}</span>
-    </div>
-  )
-}
-
+// One row: the browser's install prompt on Android, the Safari steps on iPhone (Safari offers no
+// prompt). Where it sits is up to the screen: under the tiles on game select, over a setup screen.
 function InstallBanner({ platform, onInstall, onDismiss }: Props) {
   return (
-    <div
-      role="region"
-      aria-label="Install app"
+    <section
+      aria-label="Install dmgCtrl"
       style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        zIndex: 200,
         display: 'flex',
-        alignItems: 'flex-start',
-        gap: '0.75rem',
-        padding: 'clamp(0.7rem, 2vw, 1rem) clamp(0.75rem, 3vw, 1.25rem) calc(clamp(0.7rem, 2vw, 1rem) + env(safe-area-inset-bottom))',
-        background: 'rgba(20, 20, 30, 0.97)',
-        borderTop: '1px solid rgba(255,255,255,0.12)',
+        alignItems: 'center',
+        gap: platform === 'ios' ? '12px' : '14px',
+        minHeight: '72px',
+        boxSizing: 'border-box',
+        padding: '10px 14px',
+        borderRadius: '12px',
+        background: 'var(--color-surface-raised)',
+        color: 'var(--color-text-primary)',
         fontFamily: "'Segoe UI', system-ui, sans-serif",
-        color: '#fff',
-        fontSize: 'clamp(0.9rem, 3vw, 1.1rem)',
         WebkitTextSizeAdjust: '100%',
+        flexShrink: 0,
       }}
     >
-      <div style={{ flex: 1, lineHeight: 1.7 }}>
-        <div>Install locally for the best experience:</div>
-        {platform === 'ios' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.05em' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45em' }}>
-              <span style={{ opacity: 0.6 }}>•</span>
-              <span>Tap <span style={iconWrapStyle}><DotsIcon /></span> then</span>
-            </div>
-            <BulletRow icon={<ShareIcon />} label="Share" />
-            <BulletRow icon={<ChevronDownIcon />} label="View More" />
-            <BulletRow icon={<HomeScreenIcon />} label="Add to Home Screen" />
-          </div>
-        ) : (
-          <button
-            style={{
-              marginTop: '0.35em',
-              padding: '0.4rem 1.1rem',
-              borderRadius: '6px',
-              border: 'none',
-              background: 'var(--color-force)',
-              color: '#fff',
-              fontSize: 'inherit',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-            onClick={onInstall}
-          >
-            Install
-          </button>
-        )}
-      </div>
-      <button
-        style={{
-          flexShrink: 0,
-          width: '2rem',
-          height: '2rem',
-          borderRadius: '50%',
-          border: '1px solid rgba(255,255,255,0.25)',
-          background: 'transparent',
-          color: 'rgba(255,255,255,0.7)',
-          fontSize: '1.1rem',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-        onClick={onDismiss}
-        aria-label="Dismiss"
-      >
-        ×
-      </button>
-    </div>
+      <img src={`${import.meta.env.BASE_URL}dmgCtrl-icon-192.png`} alt="" style={{ width: '44px', height: '44px', borderRadius: '10px', flexShrink: 0 }} />
+      {platform === 'ios' ? (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ fontSize: '15px', fontWeight: 600 }}>Install dmgCtrl from Safari</div>
+          <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--color-tonal-text)' }}>
+            <li style={stepStyle}>Tap <span role="img" aria-label="the three dots" style={{ display: 'flex' }}><DotsIcon /></span></li>
+            {arrow}
+            <li style={stepStyle}><ShareIcon />Share</li>
+            {arrow}
+            <li style={stepStyle}><ChevronDownIcon />View More</li>
+            {arrow}
+            <li style={stepStyle}><HomeScreenIcon />Add to Home Screen</li>
+          </ol>
+        </div>
+      ) : (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <div style={{ fontSize: '16px', fontWeight: 600 }}>Install dmgCtrl</div>
+          <div style={{ fontSize: '13px', color: 'var(--color-text-body)' }}>Full screen, an icon on your home screen, and it works offline.</div>
+        </div>
+      )}
+      <Button onClick={onDismiss} style={{ flexShrink: 0 }}>Not now</Button>
+      {platform === 'android' && <Button variant="primary" onClick={onInstall} style={{ flexShrink: 0, fontSize: '0.95rem' }}>Install</Button>}
+    </section>
   )
 }
 

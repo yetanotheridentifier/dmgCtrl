@@ -19,14 +19,17 @@ function dispatchInstallPrompt() {
 
 describe('useInstallPrompt', () => {
   beforeEach(() => {
-    sessionStorage.removeItem('install_banner_dismissed')
+    localStorage.clear()
+    // The banner waits for the second launch; most of these tests are about what follows.
+    localStorage.setItem('app_launches', '2')
     Object.defineProperty(window.navigator, 'standalone', { value: undefined, configurable: true })
     Object.defineProperty(window.navigator, 'userAgent', { value: desktopUserAgent, configurable: true })
     makeMatchMediaMock()
   })
 
   afterEach(() => {
-    sessionStorage.removeItem('install_banner_dismissed')
+    localStorage.clear()
+    vi.useRealTimers()
     Object.defineProperty(window.navigator, 'userAgent', { value: originalUserAgent, configurable: true })
     Object.defineProperty(window.navigator, 'standalone', { value: undefined, configurable: true })
   })
@@ -137,13 +140,54 @@ describe('useInstallPrompt', () => {
     delete (window as unknown as Record<string, unknown>).__dmgInstallPrompt
   })
 
-  // ── Session persistence ───────────────────────────────────────────────────
+  // ── Timing: from the second launch ────────────────────────────────────────
 
-  it('showBanner is false on iOS when already dismissed in sessionStorage', () => {
-    sessionStorage.setItem('install_banner_dismissed', '1')
+  it('showBanner is false on the first launch', () => {
+    localStorage.setItem('app_launches', '1')
     Object.defineProperty(window.navigator, 'userAgent', { value: iosUserAgent, configurable: true })
     const { result } = renderHook(() => useInstallPrompt())
     expect(result.current.showBanner).toBe(false)
+  })
+
+  it('showBanner is true from the second launch on', () => {
+    localStorage.setItem('app_launches', '5')
+    Object.defineProperty(window.navigator, 'userAgent', { value: iosUserAgent, configurable: true })
+    const { result } = renderHook(() => useInstallPrompt())
+    expect(result.current.showBanner).toBe(true)
+  })
+
+  // ── Not now: 30 days ──────────────────────────────────────────────────────
+
+  const DAY = 24 * 60 * 60 * 1000
+
+  it('Not now keeps the banner hidden on later launches for 30 days', () => {
+    vi.useFakeTimers({ now: new Date('2026-10-01T12:00:00Z') })
+    Object.defineProperty(window.navigator, 'userAgent', { value: iosUserAgent, configurable: true })
+    const first = renderHook(() => useInstallPrompt())
+    act(() => first.result.current.onDismiss())
+    first.unmount()
+
+    vi.setSystemTime(Date.now() + 29 * DAY)
+    expect(renderHook(() => useInstallPrompt()).result.current.showBanner).toBe(false)
+  })
+
+  it('the banner returns once 30 days have passed since Not now', () => {
+    vi.useFakeTimers({ now: new Date('2026-10-01T12:00:00Z') })
+    Object.defineProperty(window.navigator, 'userAgent', { value: iosUserAgent, configurable: true })
+    const first = renderHook(() => useInstallPrompt())
+    act(() => first.result.current.onDismiss())
+    first.unmount()
+
+    vi.setSystemTime(Date.now() + 30 * DAY + 1)
+    expect(renderHook(() => useInstallPrompt()).result.current.showBanner).toBe(true)
+  })
+
+  it('Not now no longer uses the per-session flag', () => {
+    sessionStorage.setItem('install_banner_dismissed', '1')
+    Object.defineProperty(window.navigator, 'userAgent', { value: iosUserAgent, configurable: true })
+    const { result } = renderHook(() => useInstallPrompt())
+    expect(result.current.showBanner).toBe(true)
+    sessionStorage.removeItem('install_banner_dismissed')
   })
 
   // ── Non-mobile ────────────────────────────────────────────────────────────

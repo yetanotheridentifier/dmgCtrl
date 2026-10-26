@@ -156,3 +156,17 @@ export function CloseIcon() {
     </svg>
   )
 }
+
+export function WifiOffIcon() {
+  return (
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 8.8a15 15 0 0 1 4.2-2.6"/>
+      <path d="M10.7 5.1A15 15 0 0 1 22 8.8"/>
+      <path d="M5 12.5a10 10 0 0 1 5.2-2.4"/>
+      <path d="M16.8 10.7A10 10 0 0 1 19 12.5"/>
+      <path d="M8.5 16a5 5 0 0 1 7 0"/>
+      <circle cx="12" cy="19.5" r="0.8" fill="currentColor"/>
+      <path d="M3 3l18 18"/>
+    </svg>
+  )
+}
