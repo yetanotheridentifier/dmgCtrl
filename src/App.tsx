@@ -8,7 +8,7 @@ import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
 import { XwingListsProvider } from './hooks/useXwingLists'
 import SwuTournamentScreen from './components/swuTournamentScreen'
-import HelpScreen from './components/helpScreen'
+import HelpScreen, { type HelpSource } from './components/helpScreen'
 import SettingsScreen from './components/settingsScreen'
 import { Base, useBases } from './hooks/useBases'
 import type { XwingMatchType, XwingScenario } from './hooks/useXwingSetup'
@@ -28,7 +28,6 @@ const XwingGameScreen = lazy(() => import('./components/xwingGameScreen'))
 const XwingListsScreen = lazy(() => import('./components/xwingListsScreen'))
 
 type Screen = 'gameSelect' | 'xwingSetup' | 'xwing' | 'xwingLists' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
-type HelpSource = 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' | 'gameSelect'
 
 // The install banner shows only on these: never over a game.
 const BANNER_SCREENS: Screen[] = ['gameSelect', 'setup', 'xwingSetup']

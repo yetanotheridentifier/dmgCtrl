@@ -1,14 +1,10 @@
-# dmgCtrl: Starting the app
+# Help
+
+## Starting the app
 
 dmgCtrl tracks games of **Star Wars: Unlimited** (SWU) and **X-Wing**. It opens straight at the setup of the game you play, so most starts need no taps at all.
 
-## Game select
-
-Game select has a tile for each game. Tap one to open that game's setup. The game you played last is marked **Last played**. **Back** on either game's setup returns here.
-
-**Help** opens this page, and **Settings** opens Settings.
-
-## Where the app opens
+### Where the app opens
 
 The first of these that applies:
 
@@ -20,13 +16,17 @@ The first of these that applies:
 
 A game counts as played once its setup opens.
 
-## Card data
+### Game select
+
+Game select has a tile for each game. Tap one to open that game's setup. The game you played last is marked **Last played**. **Back** on either game's setup returns here. **Help** opens this page, and **Settings** opens Settings. Each game's own help is under **More** on its screens.
+
+### Card data
 
 SWU gets its card data from the internet the first time, then keeps it for playing offline, so SWU setup shows a short splash only while it has none. Game select and X-Wing never wait for it.
 
 Opened offline before SWU has its card data, SWU says it needs a connection the first time. **Try again** asks again, **Play X-Wing** opens X-Wing setup (X-Wing works without a connection), and **Back** returns to game select.
 
-## Installing
+## Install
 
 From your second visit, game select and the setup screens show a banner to install dmgCtrl: full screen, an icon on your home screen, and it works offline. There is one install for both games, and it opens wherever **Start screen** says.
 
@@ -36,3 +36,7 @@ From your second visit, game select and the setup screens show a banner to insta
 **Not now** hides the banner for 30 days.
 
 On Android, long-press the dmgCtrl icon (or right-click it on a desktop) for a shortcut to **SWU** or **X-Wing**. iPhone offers no shortcuts for web apps; there, Last game played does the job.
+
+## About
+
+dmgCtrl is an unofficial fan site and is not produced by or endorsed by Fantasy Flight Games, Atomic Mass Games, Lucasfilm or Disney. The Star Wars: Unlimited cards, logos and art used on the site are property of Disney and/or Fantasy Flight Games. Star Wars: X-Wing and all related marks are property of Disney and/or Atomic Mass Games.

@@ -1,8 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { readdirSync, readFileSync } from 'fs'
-import { join } from 'path'
 import HelpScreen from '../components/helpScreen'
 import { makeMatchMediaMock } from './setup'
 
@@ -99,9 +97,9 @@ describe('HelpScreen', () => {
   // --- Files ---
 
   it('only the three help pages exist and are imported', () => {
-    const docs = join(__dirname, '../../docs')
-    expect(readdirSync(docs).filter(f => f.endsWith('Help.md')).sort()).toEqual(['appHelp.md', 'swuHelp.md', 'xwingHelp.md'])
-    const source = readFileSync(join(__dirname, '../components/helpScreen.tsx'), 'utf-8')
+    const helpFiles = Object.keys(import.meta.glob('../../docs/*Help.md')).map(p => p.split('/').pop()).sort()
+    expect(helpFiles).toEqual(['appHelp.md', 'swuHelp.md', 'xwingHelp.md'])
+    const source = Object.values(import.meta.glob<string>('../components/helpScreen.tsx', { query: '?raw', import: 'default', eager: true }))[0]
     const imported = [...source.matchAll(/docs\/(\w+Help)\.md/g)].map(m => m[1]).sort()
     expect(imported).toEqual(['appHelp', 'swuHelp', 'xwingHelp'])
   })
