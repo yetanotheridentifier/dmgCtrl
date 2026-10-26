@@ -182,9 +182,10 @@ public/
 
 scripts/
   inspect-base-data.mjs           Replicates the useBases merging logic; writes docs/base-data-snapshot.json and docs/base-data-summary.json for offline data inspection
-  validate-bases.mjs              Playwright script — opens a headed Chromium window and iterates every base for semi-automated visual QA (see architecture-process.md)
-  validate-errors.mjs             Playwright script — opens a headed Chromium window and steps through all five error/info message states for semi-automated visual QA (see architecture-process.md)
-  measure-performance.mjs         Playwright script — measures setup ready time, LCP, preview image time, and game image time across three resolution tiers (low/normal/hi res) per iteration; reports min/median/max (see project-overview.md)
+  qa-helpers.mjs                  Shared browser setup and SWU setup steps for the three Playwright scripts below (launch, open /swu, choose a base in the base sheet, go to game, wait for images)
+  validate-bases.mjs              Playwright script: opens a Chromium window and takes every base in the card data through the base sheet to the game screen for semi-automated visual QA (see below)
+  validate-errors.mjs             Playwright script: opens a Chromium window and steps through all five error/info message states on SWU setup for semi-automated visual QA (see below)
+  measure-performance.mjs         Playwright script: measures setup ready time, LCP, preview image time, and game image time across three resolution tiers (low/normal/hi res) per iteration; reports min/median/max (see project-overview.md)
   populate-base-aspects.mjs       Fetches base card data from swuapi.com and the swu-db proxy (one query per set, skipping sets swu-db cannot serve), merges them into baseKey→aspect pairs, and writes to the base_aspects InfluxDB measurement; exports buildBaseAspects, toLineProtocol, fetchSetCodes and fetchSwuDbBases for unit testing; run by the GitHub Actions daily workflow and on-demand via node scripts/populate-base-aspects.mjs
   generate-xwing-data.mjs         Writes src/data/xwaCards.ts from YASB's card data (raithos/xwing `coffeescripts/content/cards-common.coffee` at the pinned `YASB_COMMIT`): YASB has no data API, so it compiles the CoffeeScript and runs YASB's own `basicCardData`/`setupCommonCardData` in `node:vm` to get the XWS ids YASB exports; exports extractXwingData and renderModule for unit testing. To pick up new XWA points, read the YASB diff, move `YASB_COMMIT` and run node scripts/generate-xwing-data.mjs
   check-influxdb-usage.mjs        Queries the dmgctrl InfluxDB bucket row count and prints an estimated storage size against the 5GB free-tier limit; reads credentials from .env.influxdb automatically; run with node scripts/check-influxdb-usage.mjs
@@ -395,7 +396,7 @@ Run with `node scripts/inspect-base-data.mjs` to inspect the live merged dataset
 
 ### Base validation script
 
-`scripts/validate-bases.mjs` is a Playwright-driven browser automation script for semi-automated visual QA of every base's game screen rendering. It opens a visible Chromium window, iterates through every set / aspect / base combination, navigates to the game screen for each base, waits for the card image to load, pauses for visual inspection, then returns to the setup screen.
+`scripts/validate-bases.mjs` is a Playwright-driven browser automation script for semi-automated visual QA of every base's game screen rendering. It opens a visible Chromium window at SWU setup (`/swu`) and, for every base in set order, opens the base sheet from Your base, searches for the base by name, taps the tile whose name and `SET · HP` line match, taps Go to game, waits for the card image to load, pauses for visual inspection, then returns to setup with Back.
 
 Prerequisites:
 - Dev server must be running (`npm run dev`)
@@ -403,31 +404,33 @@ Prerequisites:
 
 Run with:
 ```bash
-node scripts/validate-bases.mjs
+node scripts/validate-bases.mjs              # every base
+node scripts/validate-bases.mjs --set=LAW    # one set
+node scripts/validate-bases.mjs --headless   # no window
 ```
 
-The script reads set, aspect, and base options live from the DOM, so new bases added to the data source are picked up automatically. Progress is logged to the terminal:
+The script reads the bases from the card data the app has loaded (`swu_bases_cache` in localStorage), so new bases added to the data source are picked up automatically. Progress is logged to the terminal, and the bases the sheet did not offer or whose image did not load are listed at the end:
 ```
-[1] SOR / Aggression / Catacombs of Cadera
-[2] SOR / Cunning / Energy Conversion Lab
+[1/111] ASH-019 Fortress of the Great Mothers (ASH · 30 HP)
+[2/111] ASH-020 Nevarro City, Restored (ASH · 30 HP)
 ...
-Validation complete — 42 bases checked.
+Validation complete: 111 of 111 bases checked.
 ```
 
-Timing constants at the top of the script (`VISUAL_PAUSE_MS`, `BACK_PAUSE_MS`) can be adjusted if more or less inspection time is needed.
+Timing constants at the top of the script (`VISUAL_PAUSE_MS`, `IMAGE_TIMEOUT_MS`, `BACK_PAUSE_MS`) can be adjusted if more or less inspection time is needed. The steps it shares with the other two QA scripts (launching an iPhone 15 Pro landscape context with the install banner already dismissed, opening setup, choosing a base, waiting for images) live in `scripts/qa-helpers.mjs`.
 
 ### Error message validation script
 
-`scripts/validate-errors.mjs` is a Playwright-driven browser automation script for semi-automated visual QA of all five error and information message states. It opens a visible Chromium window and steps through each scenario in sequence, pausing 3 seconds for visual inspection before advancing. Settings modified during the run (e.g. `useHyperspace`) are restored to defaults at the end.
+`scripts/validate-errors.mjs` is a Playwright-driven browser automation script for semi-automated visual QA of all five error and information message states. It opens a visible Chromium window and steps through each scenario in sequence, pausing 3 seconds for visual inspection before advancing. Settings changed during the run (`useHyperspace`) live in the script's own browser profile, which is discarded at the end.
 
 **Scenarios:**
-1. SWUDB Import — "Invalid deck URL" (types an invalid URL)
-2. SWUDB Import — "Deck not accessible" (loads an unreachable deck URL via the proxy)
-3. Base Selector — "No base images found" (all PNG/WebP/JPEG requests blocked via `page.route`)
-4. Base Selector — "Hyperspace variant not found" (`useHyperspace` set to `true`, selects a base with no hyperspace art)
-5. Base Selector — "Only hyperspace image available" (`useHyperspace` set to `false`, blocks the base's standard art URLs so it falls back to hyperspace)
+1. Base sheet, Paste SWUDB link: "Invalid deck URL" (types an invalid URL)
+2. Base sheet, Paste SWUDB link: "Deck not accessible" (loads an unreachable deck URL via the proxy)
+3. Your base: "No base images found" (all PNG/WebP/JPEG requests blocked via `page.route`, then a base chosen in the sheet)
+4. Your base: "Hyperspace variant not found" (`useHyperspace` set to `true`, chooses a base with no hyperspace art)
+5. Your base: "Only hyperspace image available" (`useHyperspace` set to `false`, blocks the base's standard art URLs so it falls back to hyperspace)
 
-Scenarios 4 and 5 query `swu_bases_cache` in localStorage via `page.evaluate` to find suitable bases automatically — no hardcoded base names are required.
+Scenarios 3 to 5 read `swu_bases_cache` in localStorage to find suitable bases automatically: no hardcoded base names are required.
 
 Prerequisites:
 - HTTPS dev server must be running (`npm run dev:https`)
@@ -437,7 +440,7 @@ Run with:
 ```bash
 node scripts/validate-errors.mjs
 # or, for device testing on the local network:
-node scripts/validate-errors.mjs https://192.168.1.100:5173/dmgCtrl/
+node scripts/validate-errors.mjs https://192.168.1.100:5173/
 ```
 
 Timing can be adjusted via `VISUAL_PAUSE_MS` at the top of the script.

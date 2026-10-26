@@ -52,7 +52,9 @@ After setup, `npm run dev:https` will print a local network URL (e.g. `https://1
 
 ### Base validation script
 
-`scripts/validate-bases.mjs` automates the visual QA process for all bases. It opens a visible Chromium window and iterates through every set / aspect / base, navigating to the game screen for each one. You watch while it runs; the script handles the navigation and timing.
+`scripts/validate-bases.mjs` automates the visual QA process for all bases. It opens a visible Chromium window at SWU setup (`/swu`), reads every base from the card data the app has loaded (`swu_bases_cache`), and for each one in set order chooses it in the base sheet (search by name, tap the tile), goes to the game screen and waits for the card image. You watch while it runs; the script handles the navigation and timing.
+
+The three QA scripts share their browser setup and SWU setup steps in `scripts/qa-helpers.mjs`. Each takes the dev server address as its first argument (default `https://127.0.0.1:5173/`) and `--headless` to run without a window.
 
 **One-time setup** (Playwright + Chromium browser binary):
 ```bash
@@ -62,28 +64,28 @@ npx playwright install chromium
 
 **Running the script:**
 1. Start the dev server: `npm run dev`
-2. In a separate terminal: `node scripts/validate-bases.mjs`
+2. In a separate terminal: `node scripts/validate-bases.mjs` (add `--set=LAW` to check one set)
 
-The script logs each base as it goes:
+The script logs each base as it goes, and at the end lists any base the sheet does not offer or whose image did not load:
 ```
-[1] SOR / Aggression / Catacombs of Cadera
-[2] SOR / Cunning / Energy Conversion Lab
+[1/111] ASH-019 Fortress of the Great Mothers (ASH · 30 HP)
+[2/111] ASH-020 Nevarro City, Restored (ASH · 30 HP)
 ...
-Validation complete — 42 bases checked.
+Validation complete: 111 of 111 bases checked.
 ```
 
-Timing can be adjusted via `VISUAL_PAUSE_MS` and `BACK_PAUSE_MS` at the top of the script.
+Timing can be adjusted via `VISUAL_PAUSE_MS`, `IMAGE_TIMEOUT_MS` and `BACK_PAUSE_MS` at the top of the script.
 
 ### Error message validation script
 
-`scripts/validate-errors.mjs` automates the visual QA process for all five error and information message states. It opens a visible Chromium window and steps through each scenario in sequence, pausing for visual inspection before advancing.
+`scripts/validate-errors.mjs` automates the visual QA process for all five error and information message states on SWU setup. It opens a visible Chromium window and steps through each scenario in sequence, pausing for visual inspection before advancing.
 
 **Scenarios covered:**
-1. SWUDB Import — "Invalid deck URL" (invalid URL typed)
-2. SWUDB Import — "Deck not accessible" (unreachable deck URL)
-3. Base Selector — "No base images found" (all images blocked via Playwright route interception)
-4. Base Selector — "Hyperspace variant not found" (useHyperspace on, base without hyperspace art)
-5. Base Selector — "Only hyperspace image available" (useHyperspace off, normal art blocked for a base that has hyperspace art)
+1. Base sheet, Paste SWUDB link: "Invalid deck URL" (invalid URL typed)
+2. Base sheet, Paste SWUDB link: "Deck not accessible" (unreachable deck loaded)
+3. Your base: "No base images found" (all images blocked via Playwright route interception, then a base chosen)
+4. Your base: "Hyperspace variant not found" (useHyperspace on, base without hyperspace art)
+5. Your base: "Only hyperspace image available" (useHyperspace off, normal art blocked for a base that has hyperspace art)
 
 **One-time setup** (Playwright + Chromium browser binary):
 ```bash
@@ -108,13 +110,15 @@ Timing can be adjusted via `VISUAL_PAUSE_MS` at the top of the script.
 
 | Metric | What it measures |
 |---|---|
-| **Setup ready** | Navigation start → set selector enabled (covers loading screen + base data fetch) |
-| **Preview image** | First base selected → card image visible in setup screen |
-| **Game (low res)** | Start clicked → card image visible — TS26 base (`frontArtLowRes` only, no CDN art) |
-| **Game (normal res)** | Start clicked → card image visible — LAW-021 (`frontArt` from CDN) |
-| **Game (hi res)** | Start clicked → card image visible — SOR-019 with hyperspace on (`hyperspaceArtHiRes` / SOR-285) |
+| **Setup ready** | Reload → SWU setup shown with no base chosen (covers loading screen + base data fetch) |
+| **Preview image** | LAW-021's tile tapped in the base sheet → its art shown on Your base |
+| **Game (low res)** | Go to game tapped → card image shown: the first TS26 base (`frontArtLowRes` only, no CDN art) |
+| **Game (normal res)** | Go to game tapped → card image shown: LAW-021 (`frontArt` from CDN) |
+| **Game (hi res)** | Go to game tapped → card image shown: SOR-019 with hyperspace on (`hyperspaceArtHiRes` / SOR-285) |
 
-LCP is also captured per run (largest element painted before first interaction).
+LCP is also captured per run (largest element painted before first interaction). Each run clears the saved setup (`swu_setup`) before reloading, so every choice is a change.
+
+**These numbers are not comparable with runs made before the base sheet.** Setup ready used to end when the set select was enabled, the preview was timed from the first select change, and the game image from the old Start button.
 
 **One-time setup** (Playwright + Chromium browser binary):
 ```bash
@@ -127,29 +131,34 @@ npx playwright install chromium
 2. In a separate terminal: `node scripts/measure-performance.mjs`
 
 ```
-node scripts/measure-performance.mjs                          # 5 iterations, warm cache
-node scripts/measure-performance.mjs http://... 10           # 10 iterations
-node scripts/measure-performance.mjs http://... 5 --cold     # clear cache before each run
+node scripts/measure-performance.mjs                           # 5 iterations, warm cache
+node scripts/measure-performance.mjs https://... 10           # 10 iterations
+node scripts/measure-performance.mjs https://... 5 --cold     # clear cache before each run
 ```
 
-Sample output (warm cache):
+Sample output (warm cache, headless, dev server):
 ```
-[ 1/5]  setup    88 ms  lcp    80 ms  preview    49 ms  game-low   137 ms  game-normal    47 ms  game-hi    43 ms    (SOR / Catacombs of Cadera)
+[ 1/3]  setup    196 ms  lcp    188 ms  preview    209 ms  game-low    971 ms  game-normal     55 ms  game-hi    836 ms
 ...
+
+Preview: LAW-021 Coaxium Mine (LAW · 27 HP)
+Game (low res): TS26-009 First Battle Memorial (TS26 · 27 HP)
+Game (normal res): LAW-021 Coaxium Mine (LAW · 27 HP)
+Game (hi res): SOR-019 Security Complex (SOR · 25 HP)
 
 ────────────────────────────────────────────────────────────────
 Metric                     min  median     max
 ────────────────────────────────────────────────────────────────
-Setup ready                 88 ms    93 ms   100 ms
-LCP                         80 ms    88 ms    92 ms
-Preview image               49 ms    50 ms   146 ms
-Game (low res)             137 ms   176 ms   384 ms
-Game (normal res)           47 ms    63 ms   134 ms
-Game (hi res)               43 ms    60 ms   111 ms
+Setup ready                179 ms   187 ms   196 ms
+LCP                        180 ms   184 ms   188 ms
+Preview image               51 ms    54 ms   209 ms
+Game (low res)             286 ms   303 ms   971 ms
+Game (normal res)           49 ms    55 ms    58 ms
+Game (hi res)               56 ms    57 ms   836 ms
 ────────────────────────────────────────────────────────────────
 ```
 
-Use `--cold` to simulate a first-time user (clears `swu_bases_cache` before each run). Default is warm cache, which reflects the typical returning-user experience. The Chromium window must remain visible during measurement — LCP is not recorded for hidden pages.
+Use `--cold` to simulate a first-time user (clears `swu_bases_cache` before each run). Default is warm cache, which reflects the typical returning-user experience. In a visible window, keep it visible during measurement: LCP is not recorded for hidden pages.
 
 ## Notes for AI Assistants
 

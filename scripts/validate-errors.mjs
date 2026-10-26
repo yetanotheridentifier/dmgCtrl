@@ -1,12 +1,12 @@
 /**
  * Semi-automated error message validation script.
  *
- * Covers all five error / info message states introduced in issue #140:
- *   1. "Invalid deck URL"               — SWUDB Import, invalid URL typed
- *   2. "Deck not accessible"            — SWUDB Import, unreachable deck URL
- *   3. "No base images found"           — Base Selector, all images blocked
- *   4. "Hyperspace variant not found"   — Base Selector, useHyperspace on, base without hyperspace art
- *   5. "Only hyperspace image available"— Base Selector, useHyperspace off, normal art blocked
+ * Covers the five error / info message states on SWU setup:
+ *   1. "Invalid deck URL"                 base sheet, Paste SWUDB link, invalid URL typed
+ *   2. "Deck not accessible"              base sheet, Paste SWUDB link, unreachable deck loaded
+ *   3. "No base images found"             Your base, all images blocked
+ *   4. "Hyperspace variant not found"     Your base, useHyperspace on, base without hyperspace art
+ *   5. "Only hyperspace image available"  Your base, useHyperspace off, normal art blocked
  *
  * Prerequisites:
  *   - Dev server is running  (npm run dev  OR  npm run dev:https)
@@ -15,221 +15,116 @@
  *       npx playwright install chromium
  *
  * Usage:
- *   node scripts/validate-errors.mjs [URL]
+ *   node scripts/validate-errors.mjs [URL] [--headless]
  *
  * Examples:
  *   node scripts/validate-errors.mjs
- *   node scripts/validate-errors.mjs https://192.168.1.100:5173/dmgCtrl/
+ *   node scripts/validate-errors.mjs https://192.168.1.100:5173/
+ *
+ * Settings changed during the run (useHyperspace) live in the script's own
+ * browser profile, which is discarded at the end.
  */
 
-import { chromium, devices } from 'playwright'
+import {
+  SEL, parseArgs, launch, openSetup, waitForSetup, readBases, baseLabel, setSetting, openBaseSheet, chooseBase,
+} from './qa-helpers.mjs'
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-const DEV_URL = process.argv[2] ?? 'https://127.0.0.1:5173/dmgCtrl/'
+const args = parseArgs()
 
 // How long to hold on each scenario for visual inspection.
 const VISUAL_PAUSE_MS = 3000
 
-// Brief settling pause after navigating.
-const SETTLE_MS = 500
-
-// ─── Selectors ────────────────────────────────────────────────────────────────
-
-const SEL = {
-  modeSelect:   '[data-testid="mode-select"]',
-  setSelect:    '[data-testid="set-select"]',
-  aspectSelect: '[data-testid="aspect-select"]',
-  baseSelect:   '[data-testid="base-select"]',
-  swudbInput:   'input[placeholder="Paste SWUDB link"]',
-  swudbLoad:    '[data-testid="swudb-load-button"]',
-}
+const IMAGE_PATTERNS = ['**/*.png', '**/*.webp', '**/*.jpg']
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-async function waitForSetupScreen(page) {
-  await page.waitForSelector(SEL.modeSelect, { timeout: 15000 })
+async function reloadWithHyperspace(page, enabled) {
+  await setSetting(page, 'useHyperspace', enabled)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await waitForSetup(page)
 }
 
-async function waitForOptions(page, selector) {
-  await page.waitForSelector(`${selector}:not([disabled])`)
-  await page.waitForFunction(
-    sel => document.querySelector(`${sel} option:not([disabled])`) !== null,
-    selector,
-  )
-}
-
-async function switchMode(page, mode) {
-  await page.selectOption(SEL.modeSelect, mode)
-  await page.waitForTimeout(SETTLE_MS)
-}
-
-// Select a specific base in the Base Selector dropdowns.
-// aspect is the raw string stored in the Base record (e.g. 'Command', 'None').
-async function selectBase(page, set, aspect, baseName, baseHp) {
-  await page.selectOption(SEL.setSelect, { value: set })
-  await waitForOptions(page, SEL.aspectSelect)
-  await page.selectOption(SEL.aspectSelect, { value: aspect })
-  await waitForOptions(page, SEL.baseSelect)
-  const label = `${baseName} (${baseHp})`
-  await page.selectOption(SEL.baseSelect, { label })
-  await page.waitForTimeout(SETTLE_MS)
-}
-
-// Read the bases cache from localStorage and find the first base matching a predicate.
-async function findBaseByCriteria(page, predicate) {
-  return page.evaluate((predicateSrc) => {
-    const fn = new Function('b', `return (${predicateSrc})(b)`)
-    const raw = localStorage.getItem('swu_bases_cache')
-    if (!raw) return null
-    const { data } = JSON.parse(raw)
-    return data.find(fn) ?? null
-  }, predicate.toString())
-}
-
-// Derive the UI aspect label from a Base record (mirrors useSwuSetup logic).
-function aspectLabel(base) {
-  return base.aspects.length === 0 ? 'None' : base.aspects[0]
+async function showMessage(text, timeout) {
+  await page.getByText(text, { exact: true }).waitFor({ timeout })
+  console.log('      Message visible. Pausing...')
+  await page.waitForTimeout(VISUAL_PAUSE_MS)
 }
 
 // ─── Browser setup ────────────────────────────────────────────────────────────
 
-const browser = await chromium.launch({ headless: false, devtools: true })
-const context = await browser.newContext({
-  ...devices['iPhone 15 Pro landscape'],
-  ignoreHTTPSErrors: DEV_URL.startsWith('https://'),
-})
+const { browser, context } = await launch({ ...args, devtools: true })
 const page = await context.newPage()
+await openSetup(page, browser, args.url)
+console.log('Setup ready.\n')
 
-console.log(`Connecting to ${DEV_URL} ...`)
-try {
-  await page.goto(DEV_URL, { waitUntil: 'domcontentloaded', timeout: 15000 })
-} catch (err) {
-  console.error(`\nCould not reach ${DEV_URL}: ${err.message}`)
-  console.error('Is the dev server running?\n')
-  await browser.close()
-  process.exit(1)
-}
-
-try {
-  await waitForSetupScreen(page)
-} catch {
-  console.error('\nSetup screen did not appear — check the dev server and try again.')
-  await browser.close()
-  process.exit(1)
-}
-
-console.log('Setup screen ready.\n')
+const bases = await readBases(page)
 
 // ─── [1/5] Invalid deck URL ───────────────────────────────────────────────────
 
-console.log('[1/5] SWUDB Import — "Invalid deck URL"')
-await switchMode(page, 'swudb-import')
+console.log('[1/5] Paste SWUDB link: "Invalid deck URL"')
+await openBaseSheet(page)
+await page.getByRole('button', { name: 'Paste SWUDB link' }).click()
 await page.fill(SEL.swudbInput, 'not-a-valid-url')
-await page.waitForSelector('text="Invalid deck URL"', { timeout: 5000 })
-console.log('      Error dropdown visible. Pausing...')
-await page.waitForTimeout(VISUAL_PAUSE_MS)
+await showMessage('Invalid deck URL', 5000)
 
 // ─── [2/5] Deck not accessible ────────────────────────────────────────────────
 
-console.log('[2/5] SWUDB Import — "Deck not accessible"')
+console.log('[2/5] Paste SWUDB link: "Deck not accessible"')
 await page.fill(SEL.swudbInput, 'https://swudb.com/deck/validateErrors000')
-await page.waitForSelector(`${SEL.swudbLoad}:not([disabled])`, { timeout: 5000 })
-await page.click(SEL.swudbLoad)
-await page.waitForSelector('text="Deck not accessible"', { timeout: 15000 })
-console.log('      Error dropdown visible. Pausing...')
-await page.waitForTimeout(VISUAL_PAUSE_MS)
+await page.locator(SEL.sheet).getByRole('button', { name: 'Load' }).click()
+await showMessage('Deck not accessible', 15000)
+await page.keyboard.press('Escape')
+await page.waitForSelector(SEL.sheet, { state: 'detached' })
 
 // ─── [3/5] No base images found ───────────────────────────────────────────────
 
-console.log('[3/5] Base Selector — "No base images found" (blocking all images)')
-await switchMode(page, 'base-selector')
-await page.route('**/*.png', r => r.abort())
-await page.route('**/*.webp', r => r.abort())
-await page.route('**/*.jpg', r => r.abort())
+console.log('[3/5] Your base: "No base images found" (blocking all images)')
+for (const p of IMAGE_PATTERNS) await page.route(p, r => r.abort())
 
-await waitForOptions(page, SEL.setSelect)
-await page.selectOption(SEL.setSelect, { index: 1 })
-await waitForOptions(page, SEL.aspectSelect)
-await page.selectOption(SEL.aspectSelect, { index: 1 })
-await waitForOptions(page, SEL.baseSelect)
-await page.selectOption(SEL.baseSelect, { index: 1 })
+const anyBase = bases.find(b => b.frontArt || b.frontArtLowRes)
+console.log(`      ${baseLabel(anyBase)}`)
+await chooseBase(page, anyBase)
+await showMessage('No base images found', 10000)
 
-await page.waitForSelector('text="No base images found"', { timeout: 10000 })
-console.log('      Error box visible. Pausing...')
-await page.waitForTimeout(VISUAL_PAUSE_MS)
-
-await page.unroute('**/*.png')
-await page.unroute('**/*.webp')
-await page.unroute('**/*.jpg')
+for (const p of IMAGE_PATTERNS) await page.unroute(p)
 
 // ─── [4/5] Hyperspace variant not found ───────────────────────────────────────
 // Needs useHyperspace=true (app default) + a base that has no hyperspace art.
 
-console.log('[4/5] Base Selector — "Hyperspace variant not found"')
+console.log('[4/5] Your base: "Hyperspace variant not found"')
+await reloadWithHyperspace(page, true)
 
-await page.evaluate(() => {
-  const s = JSON.parse(localStorage.getItem('user_settings') ?? '{}')
-  s.useHyperspace = true
-  localStorage.setItem('user_settings', JSON.stringify(s))
-})
-await page.reload({ waitUntil: 'domcontentloaded' })
-await waitForSetupScreen(page)
-
-const noHyperBase = await findBaseByCriteria(
-  page,
-  b => !b.hyperspaceArtHiRes && !b.hyperspaceArt && !!b.frontArt,
-)
-
+const noHyperBase = bases.find(b => !b.hyperspaceArtHiRes && !b.hyperspaceArt && !!b.frontArt)
 if (noHyperBase) {
-  await selectBase(page, noHyperBase.set, aspectLabel(noHyperBase), noHyperBase.name, noHyperBase.hp)
-  await page.waitForSelector('text="Hyperspace variant not found"', { timeout: 8000 })
-  console.log(`      Info panel visible (${noHyperBase.set} — ${noHyperBase.name}). Pausing...`)
-  await page.waitForTimeout(VISUAL_PAUSE_MS)
+  console.log(`      ${baseLabel(noHyperBase)}`)
+  await chooseBase(page, noHyperBase)
+  await showMessage('Hyperspace variant not found', 8000)
 } else {
-  console.log('      No suitable base found in cache — skipping.')
+  console.log('      No suitable base in the card data: skipped.')
 }
 
 // ─── [5/5] Only hyperspace image available ────────────────────────────────────
 // Needs useHyperspace=false + normal art blocked for a base that has hyperspace art.
 
-console.log('[5/5] Base Selector — "Only hyperspace image available"')
+console.log('[5/5] Your base: "Only hyperspace image available"')
+await reloadWithHyperspace(page, false)
 
-await page.evaluate(() => {
-  const s = JSON.parse(localStorage.getItem('user_settings') ?? '{}')
-  s.useHyperspace = false
-  localStorage.setItem('user_settings', JSON.stringify(s))
-})
-await page.reload({ waitUntil: 'domcontentloaded' })
-await waitForSetupScreen(page)
-
-const hasHyperBase = await findBaseByCriteria(
-  page,
-  b => !!b.hyperspaceArtHiRes && (!!b.frontArt || !!b.frontArtLowRes),
-)
-
+const hasHyperBase = bases.find(b => !!b.hyperspaceArtHiRes && (!!b.frontArt || !!b.frontArtLowRes))
 if (hasHyperBase) {
-  // Block the normal art URLs for this specific base so it falls back to hyperspace.
+  // Block the normal art URLs for this base so it falls back to hyperspace.
   const blocked = [hasHyperBase.frontArt, hasHyperBase.frontArtLowRes].filter(Boolean)
   for (const url of blocked) await page.route(url, r => r.abort())
 
-  await selectBase(page, hasHyperBase.set, aspectLabel(hasHyperBase), hasHyperBase.name, hasHyperBase.hp)
-  await page.waitForSelector('text="Only hyperspace image available"', { timeout: 8000 })
-  console.log(`      Info panel visible (${hasHyperBase.set} — ${hasHyperBase.name}). Pausing...`)
-  await page.waitForTimeout(VISUAL_PAUSE_MS)
+  console.log(`      ${baseLabel(hasHyperBase)}`)
+  await chooseBase(page, hasHyperBase)
+  await showMessage('Only hyperspace image available', 8000)
 
   for (const url of blocked) await page.unroute(url)
 } else {
-  console.log('      No suitable base found in cache — skipping.')
+  console.log('      No suitable base in the card data: skipped.')
 }
 
-// ─── Restore default settings ─────────────────────────────────────────────────
-
-await page.evaluate(() => {
-  const s = JSON.parse(localStorage.getItem('user_settings') ?? '{}')
-  s.useHyperspace = true
-  localStorage.setItem('user_settings', JSON.stringify(s))
-})
-
-console.log('\nValidation complete — 5 scenarios checked.')
+console.log('\nValidation complete: 5 scenarios checked.')
 await browser.close()
