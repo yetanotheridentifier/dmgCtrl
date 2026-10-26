@@ -88,12 +88,12 @@ Your preferences are saved automatically and persist between sessions.
 
 | Setting | Default | Description |
 |---|---|---|
-| **Use Hyperspace Art** | On | When enabled, the Hyperspace variant is used by default on the game screen for any base that has one. If the Hyperspace image can't be loaded, the app falls back to the standard art. |
-| **Force Token Display** | LOF bases only | Controls when the Force button is shown. **Always on** shows it for every base. **LOF bases only** shows it for Legends of the Force bases that create the Force. **Always off** hides it. |
-| **Enable Initiative Bar** | On | Shows the initiative bar in the game screen's left margin. |
-| **Enable Favourites** | On | Reveals a star button on the setup screen to save bases as favourites, and adds a Favourites input mode for quick reselection. Saved bases are kept even when this setting is off. |
+| **Hyperspace art** | On | When enabled, the Hyperspace variant is used by default on the game screen for any base that has one. If the Hyperspace image can't be loaded, the app falls back to the standard art. |
+| **Force tokens** | LOF bases | Controls when the Force button is shown. **Always** shows it for every base. **LOF bases** shows it for Legends of the Force bases that create the Force. **Off** hides it. |
+| **Damage −/+ buttons** | Off | Adds − and + beside the card, as well as tapping and dragging it. |
+| **Initiative** | On | Shows the initiative bar in 1 player, and an Initiative button each in 2 players. |
 
-The SWU game screen always shows epic actions and the log, and always keeps the screen on.
+The SWU game screen always shows epic actions and the log, and always keeps the screen on. The timer's length is set on the timer itself, before the game starts.
 
 ## Rules
 

@@ -44,8 +44,7 @@ function AppScreens() {
   const [xwingOpponentPilots, setXwingOpponentPilots] = useState<XwingPilot[]>([])
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
-  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' | 'settings'>('setup')
-  const [settingsDefaultTab, setSettingsDefaultTab] = useState<'general' | 'swu' | 'xwing'>('swu')
+  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists'>('setup')
   const { loading, bases } = useBases()
   const { startScreen } = useUserSettings()
   const {
@@ -180,13 +179,12 @@ function AppScreens() {
   }
 
   const handleHelp = () => {
-    const source: 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' | 'settings' =
+    const source: 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' =
       screen === 'game' ? 'game' :
       screen === 'tournament' ? 'tournament' :
       screen === 'xwing' ? 'xwing' :
       screen === 'xwingSetup' ? 'xwingSetup' :
       screen === 'xwingLists' ? 'xwingLists' :
-      screen === 'settings' ? 'settings' :
       'setup'
     setHelpSource(source)
     setBackStack(prev => [...prev, screen])
@@ -194,11 +192,6 @@ function AppScreens() {
   }
 
   const handleSettings = () => {
-    const tab: 'general' | 'swu' | 'xwing' =
-      screen === 'gameSelect' ? 'general' :
-      screen === 'xwing' || screen === 'xwingSetup' ? 'xwing' :
-      'swu'
-    setSettingsDefaultTab(tab)
     setBackStack(prev => [...prev, screen])
     setScreen('settings')
   }
@@ -329,7 +322,7 @@ function AppScreens() {
         />
       )}
       {screen === 'help' && <HelpScreen onBack={handleOverlayBack} source={helpSource} />}
-      {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} onManageXwingLists={handleXwingLists} defaultTab={settingsDefaultTab} />}
+      {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onManageXwingLists={handleXwingLists} />}
     </>
   )
 }

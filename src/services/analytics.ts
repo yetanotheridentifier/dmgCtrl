@@ -118,10 +118,6 @@ export function onFavouriteRemoved(baseKey: string, baseSet: string): Promise<vo
   return sendEvent('favourite_removed', { baseKey, baseSet })
 }
 
-export function onFavouritesCleared(): Promise<void> {
-  return sendEvent('favourites_cleared', {})
-}
-
 export function onSettingChanged(setting: string, value: unknown): Promise<void> {
   return sendEvent('setting_changed', { setting, value })
 }

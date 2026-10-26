@@ -19,7 +19,7 @@ Up to 4 ships each get a full-width row, with the ship type and points. From the
 
 Both scores are in the centre panel, under the round and timer button. Points start at 0. The game ends at the end of the round in which a player reaches 50, and both players can finish above 50: the player with the most points wins.
 
-The score **−** and **+** buttons are off unless **Always Show +/− Buttons** is on in Settings › X-Wing; they then show above each ship column, and those above a column score its ships, so the ones over your opponent's ships change your score. A side with **No list** has no tiles, so the buttons above it always show: they are the only way to score it.
+The score **−** and **+** buttons are off unless **Score −/+ buttons** is on in Settings › X-Wing; they then show above each ship column, and those above a column score its ships, so the ones over your opponent's ships change your score. A side with **No list** has no tiles, so the buttons above it always show: they are the only way to score it.
 
 ## Round and timer
 
@@ -27,7 +27,7 @@ Tap the round and timer button at the top of the centre panel to see the round a
 
 ## Phase tracker on
 
-With **Enable Phase Tracker** on in Settings › X-Wing, the centre panel follows the round:
+With **Phase tracker** on in Settings › X-Wing (off by default), the centre panel follows the round:
 
 - **Before the game**: **Start game**, which starts the timer
 - **Planning**: who has initiative, **You** or **Opponent**

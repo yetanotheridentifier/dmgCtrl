@@ -16,9 +16,6 @@ vi.mock('../services/analytics', () => ({
 }))
 
 const mockUserSettings = vi.hoisted(() => ({
-  enableLongPress: true,
-  enableActionLog: true,
-  enableWakeLock: true,
   enableInitiativeBar: true,
   enableXwingPhases: true,
   enableXwingAlwaysIncDec: false,

@@ -4,7 +4,7 @@ import {
   onAppStart, onGameStart, onGameEnd, onMatchCompleted, onAppInstall, onAppResume,
   onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed,
   onEpicActionUsed, onForceGained, onForceUsed,
-  onFavouriteAdded, onFavouriteRemoved, onFavouritesCleared,
+  onFavouriteAdded, onFavouriteRemoved,
   onSettingChanged, onDeckImportSuccess, onDeckImportFailure,
   onImageLoadFailed, onBasesLoadFailed, onBasesLoadStale, onWakeLockFailed,
   onTournamentStarted, onTournamentRoundCompleted, onTournamentDropped, onTournamentEnded,
@@ -576,13 +576,6 @@ describe('onFavouriteRemoved', () => {
     const { baseKey, baseSet } = getLastBody().data
     expect(baseKey).toBe('SOR-026')
     expect(baseSet).toBe('SOR')
-  })
-})
-
-describe('onFavouritesCleared', () => {
-  it('sends event name favourites_cleared', async () => {
-    await onFavouritesCleared()
-    expect(getLastBody().name).toBe('favourites_cleared')
   })
 })
 

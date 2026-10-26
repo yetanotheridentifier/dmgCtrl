@@ -65,33 +65,21 @@ Tap ⋯ at the top right for **Help** and **Settings**. Tap <svg width="0.8em" h
 
 ## Settings
 
-Tap the <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> button at the top right of the game screen, or **More** › **Settings** on the setup screen, to open the Settings screen.
+Open Settings from **More** on the setup and game screens. The SWU settings are in the Star Wars: Unlimited group.
 
 Your preferences are saved automatically and persist between sessions.
 
 | Setting | Default | Description |
 |---|---|---|
-| **Use Hyperspace Art** | On | When enabled, the Hyperspace variant is used by default on the game screen for any base that has one. If the Hyperspace image can't be loaded, the app falls back to the standard art. |
-| **Force Token Display** | LOF bases only | Controls when the Force token button is shown: **Always on** shows it for every base; **LOF bases only** shows it only for Force-relevant bases in the Legends of the Force set; **Always off** hides it entirely. |
-| **Enable Epic Actions** | On | Shows the Epic Action button on the game screen. Turn off if you prefer not to track epic actions. |
-| **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
-| **Enable Action Log** | On | Shows a scrollable log of game actions with an Undo button for the most recent action. Also enables the round tracker button. |
-| **Enable Favourites** | On | Lists your saved favourites in Settings. The Favourite star on setup works whatever this is set to. |
-| **Enable Long Press** | On | Allows long-pressing or dragging the +/− buttons to apply larger damage or healing values quickly. Turn off if accidental large hits are a problem. |
-| **Enable Competitive Mode** | Off | Shows the Bo1 and Bo3 timer settings. Setup always offers Casual or Tournament. See [Competitive Play](#competitive-play) below. |
-| **Bo1 Timer** | 25 min | Match timer duration for Best of 1 games. Adjustable in 5-minute steps (5–90 min). Shown only when Enable Competitive Mode is on. |
-| **Bo3 Timer** | 55 min | Match timer duration for Best of 3 games. Adjustable in 5-minute steps (5–90 min). Shown only when Enable Competitive Mode is on. |
+| **Hyperspace art** | On | When enabled, the Hyperspace variant is used by default on the game screen for any base that has one. If the Hyperspace image can't be loaded, the app falls back to the standard art. |
+| **Force tokens** | LOF bases | Controls when the Force button is shown: **Always** shows it for every base; **LOF bases** shows it only for Legends of the Force bases that create the Force; **Off** hides it. |
+| **Melee player ID** | Blank | Your melee.gg player ID, for the player portal in a tournament. |
+| **Damage −/+ buttons** | Off | Adds − and + beside the card on the game screen. |
+| **Initiative** | On | Shows initiative on the game screen. |
 
-### Managing saved favourites
+Favourites are added and removed with the star on the Your base card. The game screen always shows epic actions and the log and keeps the screen awake, and the timer's length is set on the game's timer.
 
-When **Enable Favourites** is on, your saved bases are listed below the toggle in the Settings screen.
-
-- Tap **Remove** next to a base to delete it from your favourites
-- Tap **Clear All** to remove all saved bases at once — tap **Confirm** to proceed, or **Cancel** to go back
-
-If no bases have been saved yet, "No favourites saved" is shown in this section.
-
-Tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> to return to the previous screen, or <svg width="0.85em" height="0.85em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> for help.
+Tap **Back** to return to the previous screen.
 
 ## Format
 

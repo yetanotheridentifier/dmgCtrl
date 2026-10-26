@@ -1,43 +1,31 @@
 # Settings
 
+Settings is one page, in three groups. Every change is saved straight away and kept between launches. **Back** returns to the screen you opened Settings from.
+
 ## General
 
-Settings that apply across the whole app.
+**Start screen**: where the app opens: Game select, Star Wars: Unlimited or X-Wing. Tap it to choose from a sheet.
 
-**Start Screen** — Choose which screen the app opens on each time it launches: Game Select, SWU, or X-Wing.
+## Star Wars: Unlimited
 
-**Enable Screen Wake Lock** — Keeps the screen on while you play. Useful during a game so the device doesn't sleep mid-round. May affect battery life.
+**Hyperspace art**: uses the Hyperspace version of your base's art where there is one.
 
-**Enable Action Log** — Shows a scrollable log of game actions (damage dealt, healed, force gained/used) with undo support. Also enables the round tracker on the game screen.
+**Force tokens**: when the Force button shows on the game screen. *Always*: for every base. *LOF bases*: for Legends of the Force bases that create the Force. *Off*: never.
 
-**Enable Initiative Bar** — Shows a vertical initiative tracker on the left side of the game screen. Tap the top half to record OPP initiative, or the bottom half to record YOUR initiative. It stays set until you change it. The X-Wing game screen records initiative in its centre panel instead.
+**Melee player ID**: your melee.gg player ID, used to open your player portal from a tournament.
 
-## SWU
+**Damage −/+ buttons**: adds − and + beside the card on the game screen, as well as tapping and dragging the card. Off by default.
 
-Settings for the Star Wars: Unlimited game mode.
-
-**Use Hyperspace Art** — Replaces standard base card art with the Hyperspace-format version where available.
-
-**Force Token Display** — Controls when the Force token counter is shown on the game screen:
-- *Always on* — always visible
-- *LOF bases only* — shown only for bases with a Light of the Force mechanic
-- *Always off* — never shown
-
-**Enable Epic Actions** — Shows Epic Action buttons on the game screen for bases that have one.
-
-**Enable Competitive Mode** *(Beta)* — Shows the competitive sub-settings below. The SWU setup screen always offers Casual or Tournament, whatever this is set to. When on, these appear:
-- *Bo1 Timer* — match timer duration in minutes for Best-of-1 play
-- *Bo3 Timer* — match timer duration in minutes for Best-of-3 play
-- *Melee Player ID* — your Melee.gg player ID, used to link tournament rounds
-
-**Enable Favourites** — Lists your saved favourites here, where they can be removed individually or cleared all at once. The Favourite star on the SWU setup screen works whatever this is set to.
+**Initiative**: shows initiative on the game screen: the bar in 1 player, a button each in 2 players. Twin Suns always shows it. On by default.
 
 ## X-Wing
 
-Settings for the X-Wing game mode.
+**Phase tracker**: steps through every phase of a round on the game screen. Off: the round button scores the round and starts the next. Off by default for a new install.
 
-**Game Timer** — Duration of the X-Wing game timer in minutes. The 5:30 option is a short test value. All other options are in 5-minute increments from 30 to 90 minutes. The game screen's round and timer sheet sets the same length before a game starts.
+**Score −/+ buttons**: shows the score − and + buttons on the game screen, to change scores by hand. Off by default.
 
-**Enable Phase Tracker** — Shows a phase button in the centre of the game screen during a game. Tap to advance through Planning → System → Activation → Engagement → End. Tapping End advances the round (or ends the game at round 12 / timer expiry). When enabled, initiative can only be set during the Planning phase.
+**Squad lists**: opens the Squad Lists screen, where you create, rename and delete saved squads.
 
-**Squad Lists** — **Manage lists** opens the Squad Lists screen, where you create, rename and delete saved squads. Saved squads are offered for each player on the X-Wing setup screen.
+## Always on
+
+The game screens always keep the screen awake, always have the log, and always show a base's epic action. Favourites are added and removed with the star on SWU setup. Timer lengths are set on each game's timer before the game starts.

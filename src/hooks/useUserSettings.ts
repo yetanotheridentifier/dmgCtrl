@@ -3,24 +3,27 @@ import type { ReactNode } from 'react'
 
 const STORAGE_KEY = 'user_settings'
 
+// Keys the app's other stores write. Any of them present means this is not a new install, even
+// when no setting has ever been changed (settings are stored only once one is).
+const OTHER_APP_KEYS = ['swu_setup', 'xwing_setup', 'xwing_favourites', 'favourites', 'tournament_state']
+
 export type ForceTokenDisplay = 'always-on' | 'lof-only' | 'always-off'
 export type StartScreen = 'gameSelect' | 'swu' | 'xwing'
 
+// Stored settings may still carry keys for features that are now always on (epic actions, wake
+// lock, action log, favourites, competitive mode, long-press) or that nothing read (game select).
+// load() reads only the keys below, so those are ignored and dropped on the next save.
 interface UserSettings {
   useHyperspace: boolean
   forceTokenDisplay: ForceTokenDisplay
-  enableEpicActions: boolean
-  enableWakeLock: boolean
-  enableFavourites: boolean
-  enableLongPress: boolean
-  enableActionLog: boolean
+  // Shown as Initiative: the bar in a 1-player game, a button each in 2 players.
   enableInitiativeBar: boolean
-  enableCompetitiveMode: boolean
   enableXwingPhases: boolean
   enableXwingAlwaysIncDec: boolean
   // SWU game: − and + in the margins beside the card, as well as tapping and dragging the card.
   enableDamageButtons: boolean
   startScreen: StartScreen
+  // Set on each game's timer before it starts, not in Settings.
   bo1TimerMinutes: number
   bo3TimerMinutes: number
   xwingTimerMinutes: number
@@ -34,14 +37,9 @@ const VALID_START_SCREENS: StartScreen[] = ['gameSelect', 'swu', 'xwing']
 const DEFAULTS: UserSettings = {
   useHyperspace: true,
   forceTokenDisplay: 'lof-only',
-  enableEpicActions: true,
-  enableWakeLock: true,
-  enableFavourites: true,
-  enableLongPress: true,
-  enableActionLog: true,
   enableInitiativeBar: true,
-  enableCompetitiveMode: true,
-  enableXwingPhases: true,
+  // Off for a new install; an existing player keeps the phase tracker they had (see load()).
+  enableXwingPhases: false,
   enableXwingAlwaysIncDec: false,
   enableDamageButtons: false,
   startScreen: 'gameSelect',
@@ -50,6 +48,10 @@ const DEFAULTS: UserSettings = {
   xwingTimerMinutes: 75,
   meleePlayerGuid: '',
 }
+
+// The phase tracker was on by default before it defaulted to off, so that is what an existing
+// player who never changed it has been playing with.
+const EXISTING_PLAYER_PHASES = true
 
 function migrateForceTokenDisplay(parsed: Record<string, unknown>): ForceTokenDisplay {
   if ('forceTokenDisplay' in parsed) {
@@ -63,34 +65,36 @@ function migrateForceTokenDisplay(parsed: Record<string, unknown>): ForceTokenDi
   return DEFAULTS.forceTokenDisplay
 }
 
+function fromStored(parsed: Record<string, unknown>): UserSettings {
+  return {
+    useHyperspace: (parsed.useHyperspace as boolean) ?? DEFAULTS.useHyperspace,
+    forceTokenDisplay: migrateForceTokenDisplay(parsed),
+    enableInitiativeBar: (parsed.enableInitiativeBar as boolean) ?? DEFAULTS.enableInitiativeBar,
+    enableXwingPhases: (parsed.enableXwingPhases as boolean) ?? EXISTING_PLAYER_PHASES,
+    enableXwingAlwaysIncDec: (parsed.enableXwingAlwaysIncDec as boolean) ?? DEFAULTS.enableXwingAlwaysIncDec,
+    enableDamageButtons: (parsed.enableDamageButtons as boolean) ?? DEFAULTS.enableDamageButtons,
+    startScreen: VALID_START_SCREENS.includes(parsed.startScreen as StartScreen)
+      ? (parsed.startScreen as StartScreen)
+      : DEFAULTS.startScreen,
+    bo1TimerMinutes: (parsed.bo1TimerMinutes as number) ?? DEFAULTS.bo1TimerMinutes,
+    bo3TimerMinutes: (parsed.bo3TimerMinutes as number) ?? DEFAULTS.bo3TimerMinutes,
+    xwingTimerMinutes: (parsed.xwingTimerMinutes as number) ?? DEFAULTS.xwingTimerMinutes,
+    meleePlayerGuid: (parsed.meleePlayerGuid as string) ?? DEFAULTS.meleePlayerGuid,
+  }
+}
+
 function load(): UserSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { ...DEFAULTS }
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    return {
-      useHyperspace: (parsed.useHyperspace as boolean) ?? DEFAULTS.useHyperspace,
-      forceTokenDisplay: migrateForceTokenDisplay(parsed),
-      enableEpicActions: (parsed.enableEpicActions as boolean) ?? DEFAULTS.enableEpicActions,
-      enableWakeLock: (parsed.enableWakeLock as boolean) ?? DEFAULTS.enableWakeLock,
-      enableFavourites: (parsed.enableFavourites as boolean) ?? DEFAULTS.enableFavourites,
-      enableLongPress: (parsed.enableLongPress as boolean) ?? DEFAULTS.enableLongPress,
-      enableActionLog: (parsed.enableActionLog as boolean) ?? DEFAULTS.enableActionLog,
-      enableInitiativeBar: (parsed.enableInitiativeBar as boolean) ?? DEFAULTS.enableInitiativeBar,
-      enableCompetitiveMode: (parsed.enableCompetitiveMode as boolean) ?? DEFAULTS.enableCompetitiveMode,
-      enableXwingPhases: (parsed.enableXwingPhases as boolean) ?? DEFAULTS.enableXwingPhases,
-      enableXwingAlwaysIncDec: (parsed.enableXwingAlwaysIncDec as boolean) ?? DEFAULTS.enableXwingAlwaysIncDec,
-      enableDamageButtons: (parsed.enableDamageButtons as boolean) ?? DEFAULTS.enableDamageButtons,
-      startScreen: VALID_START_SCREENS.includes(parsed.startScreen as StartScreen)
-        ? (parsed.startScreen as StartScreen)
-        : DEFAULTS.startScreen,
-      bo1TimerMinutes: (parsed.bo1TimerMinutes as number) ?? DEFAULTS.bo1TimerMinutes,
-      bo3TimerMinutes: (parsed.bo3TimerMinutes as number) ?? DEFAULTS.bo3TimerMinutes,
-      xwingTimerMinutes: (parsed.xwingTimerMinutes as number) ?? DEFAULTS.xwingTimerMinutes,
-      meleePlayerGuid: (parsed.meleePlayerGuid as string) ?? DEFAULTS.meleePlayerGuid,
-    }
+    if (raw) return fromStored(JSON.parse(raw) as Record<string, unknown>)
+    // Nothing stored yet: a new install, or a player who never changed a setting. Save the result
+    // straight away, so the choice between the two is made once and not re-made on a later launch.
+    const existing = OTHER_APP_KEYS.some(key => localStorage.getItem(key) !== null)
+    const first = existing ? { ...DEFAULTS, enableXwingPhases: EXISTING_PLAYER_PHASES } : { ...DEFAULTS }
+    save(first)
+    return first
   } catch {
-    return { ...DEFAULTS }
+    return fromStored({})
   }
 }
 
@@ -101,13 +105,7 @@ function save(settings: UserSettings): void {
 type UserSettingsValue = UserSettings & {
   setUseHyperspace: (v: boolean) => void
   setForceTokenDisplay: (v: ForceTokenDisplay) => void
-  setEnableEpicActions: (v: boolean) => void
-  setEnableWakeLock: (v: boolean) => void
-  setEnableFavourites: (v: boolean) => void
-  setEnableLongPress: (v: boolean) => void
-  setEnableActionLog: (v: boolean) => void
   setEnableInitiativeBar: (v: boolean) => void
-  setEnableCompetitiveMode: (v: boolean) => void
   setEnableXwingPhases: (v: boolean) => void
   setEnableXwingAlwaysIncDec: (v: boolean) => void
   setEnableDamageButtons: (v: boolean) => void
@@ -132,32 +130,10 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
   }
 
   const value: UserSettingsValue = {
-    useHyperspace: settings.useHyperspace,
-    forceTokenDisplay: settings.forceTokenDisplay,
-    enableEpicActions: settings.enableEpicActions,
-    enableWakeLock: settings.enableWakeLock,
-    enableFavourites: settings.enableFavourites,
-    enableLongPress: settings.enableLongPress,
-    enableActionLog: settings.enableActionLog,
-    enableInitiativeBar: settings.enableInitiativeBar,
-    enableCompetitiveMode: settings.enableCompetitiveMode,
-    enableXwingPhases: settings.enableXwingPhases,
-    enableXwingAlwaysIncDec: settings.enableXwingAlwaysIncDec,
-    enableDamageButtons: settings.enableDamageButtons,
-    startScreen: settings.startScreen,
-    bo1TimerMinutes: settings.bo1TimerMinutes,
-    bo3TimerMinutes: settings.bo3TimerMinutes,
-    xwingTimerMinutes: settings.xwingTimerMinutes,
-    meleePlayerGuid: settings.meleePlayerGuid,
+    ...settings,
     setUseHyperspace: (v) => update({ useHyperspace: v }),
     setForceTokenDisplay: (v) => update({ forceTokenDisplay: v }),
-    setEnableEpicActions: (v) => update({ enableEpicActions: v }),
-    setEnableWakeLock: (v) => update({ enableWakeLock: v }),
-    setEnableFavourites: (v) => update({ enableFavourites: v }),
-    setEnableLongPress: (v) => update({ enableLongPress: v }),
-    setEnableActionLog: (v) => update({ enableActionLog: v }),
     setEnableInitiativeBar: (v) => update({ enableInitiativeBar: v }),
-    setEnableCompetitiveMode: (v) => update({ enableCompetitiveMode: v }),
     setEnableXwingPhases: (v) => update({ enableXwingPhases: v }),
     setEnableXwingAlwaysIncDec: (v) => update({ enableXwingAlwaysIncDec: v }),
     setEnableDamageButtons: (v) => update({ enableDamageButtons: v }),

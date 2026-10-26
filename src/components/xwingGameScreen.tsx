@@ -51,7 +51,7 @@ const shipPointsAgainst = (ships: ShipEntry[]) =>
 const allDestroyed = (ships: ShipEntry[]) => ships.length > 0 && ships.every(s => s.state === 'destroyed')
 
 export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario = 'None', matchType = 'Casual', playerPilots = [], opponentPilots = [] }: Props) {
-  const { enableLongPress, enableActionLog, enableWakeLock, enableXwingPhases, enableXwingAlwaysIncDec, xwingTimerMinutes, setXwingTimerMinutes } = useUserSettings()
+  const { enableXwingPhases, enableXwingAlwaysIncDec, xwingTimerMinutes, setXwingTimerMinutes } = useUserSettings()
   const { isPortrait } = useOrientation()
 
   const [gameStarted, setGameStarted] = useState(false)
@@ -72,7 +72,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
   const phaseTracker = usePhaseTracker(XWING_PHASES)
   const [logOpen, setLogOpen] = useState(false)
 
-  useWakeLock(enableWakeLock)
+  useWakeLock(true)
 
   const gameStartedRef = useRef(false)
 
@@ -364,8 +364,6 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
       onPlayerDecrement={handlePlayerDecrement}
       onOpponentIncrement={handleOpponentIncrement}
       onOpponentDecrement={handleOpponentDecrement}
-      enableLongPress={enableLongPress}
-      enableActionLog={enableActionLog}
       enableXwingAlwaysIncDec={enableXwingAlwaysIncDec}
       logEntries={log.entries}
       logOpen={logOpen}
