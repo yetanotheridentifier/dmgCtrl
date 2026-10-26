@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import XwingTournamentScreen from '../components/xwingTournamentScreen'
 import type { XwingTournamentList, XwingTournamentRound, XwingTournamentState } from '../hooks/useXwingTournament'
 import type { XwingList } from '../hooks/useXwingLists'
+import { XWING_NAMED_SCENARIOS, type XwingScenario } from '../hooks/useXwingSetup'
 import { makeMatchMediaMock } from './setup'
 
 const EMPIRE: XwingList = {
@@ -36,14 +37,13 @@ const MINE: XwingTournamentList = {
   deficit: 1,
 }
 const opponent = (name: string): XwingTournamentList => ({ name, pilots: [], deficit: 0 })
-const round = (name: string, result: XwingTournamentRound['result'], playerScore = 0, opponentScore = 0): XwingTournamentRound =>
-  ({ opponent: opponent(name), result, playerScore, opponentScore })
+const round = (name: string, result: XwingTournamentRound['result'], playerScore = 0, opponentScore = 0, scenario: XwingScenario = 'None'): XwingTournamentRound =>
+  ({ opponent: opponent(name), scenario, result, playerScore, opponentScore })
 
 const TWO_PLAYED: XwingTournamentState = {
   totalRounds: 4,
-  scenario: 'None',
   player: MINE,
-  rounds: [round('Resistance aces', 'won', 23, 9), round('Phoenix Squadron', 'lost', 11, 20)],
+  rounds: [round('Resistance aces', 'won', 23, 9), round('Phoenix Squadron', 'lost', 11, 20, 'Salvage Mission')],
 }
 
 type Props = React.ComponentProps<typeof XwingTournamentScreen>
@@ -125,6 +125,13 @@ describe('XwingTournamentScreen: between rounds', () => {
     expect(rows[3]).toHaveTextContent('Round 4')
   })
 
+  it('a round played with a scenario names it on its row; one with None does not', () => {
+    renderHub()
+    const rows = within(screen.getByRole('list', { name: 'Rounds' })).getAllByRole('listitem')
+    expect(rows[1]).toHaveTextContent('vs Phoenix Squadron · Salvage Mission')
+    expect(rows[0]).not.toHaveTextContent('·')
+  })
+
   it('Start round N opens the opponent list sheet: each saved list and No list', async () => {
     const { user } = renderHub()
     await user.click(screen.getByRole('button', { name: 'Start round 3' }))
@@ -133,18 +140,46 @@ describe('XwingTournamentScreen: between rounds', () => {
     expect(within(sheet).getByText('No list')).toBeInTheDocument()
   })
 
+  it('the sheet offers the round’s scenario, the last round’s to start with', async () => {
+    const { user } = renderHub()
+    await user.click(screen.getByRole('button', { name: 'Start round 3' }))
+    const sheet = screen.getByRole('dialog', { name: 'Opponent’s list for round 3' })
+    expect(within(sheet).getByRole('button', { name: 'Scenario: Salvage Mission' })).toBeInTheDocument()
+  })
+
   it('choosing a saved list starts the round against it, the deficit from its points', async () => {
     const { user, onStartRound } = renderHub()
     await user.click(screen.getByRole('button', { name: 'Start round 3' }))
     await user.click(within(screen.getByRole('dialog')).getByText('Vader Wing'))
-    expect(onStartRound).toHaveBeenCalledWith({ name: 'Vader Wing', pilots: EMPIRE.pilots, deficit: 3 })
+    expect(onStartRound).toHaveBeenCalledWith({ name: 'Vader Wing', pilots: EMPIRE.pilots, deficit: 3 }, 'Salvage Mission')
   })
 
   it('choosing No list starts the round with no ships', async () => {
     const { user, onStartRound } = renderHub()
     await user.click(screen.getByRole('button', { name: 'Start round 3' }))
     await user.click(within(screen.getByRole('dialog')).getByText('No list'))
-    expect(onStartRound).toHaveBeenCalledWith({ name: 'No list', pilots: [], deficit: 0 })
+    expect(onStartRound).toHaveBeenCalledWith({ name: 'No list', pilots: [], deficit: 0 }, 'Salvage Mission')
+  })
+
+  it('a scenario chosen from its list is the one the round starts with', async () => {
+    const { user, onStartRound } = renderHub()
+    await user.click(screen.getByRole('button', { name: 'Start round 3' }))
+    await user.click(screen.getByRole('button', { name: 'Scenario: Salvage Mission' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Scenario' })).getByText('Chance Engagement'))
+    const sheet = screen.getByRole('dialog', { name: 'Opponent’s list for round 3' })
+    expect(within(sheet).getByRole('button', { name: 'Scenario: Chance Engagement' })).toBeInTheDocument()
+    await user.click(within(sheet).getByText('No list'))
+    expect(onStartRound).toHaveBeenCalledWith({ name: 'No list', pilots: [], deficit: 0 }, 'Chance Engagement')
+  })
+
+  it('rolling picks a named scenario for the round', async () => {
+    const { user, onStartRound } = renderHub()
+    await user.click(screen.getByRole('button', { name: 'Start round 3' }))
+    await user.click(screen.getByRole('button', { name: 'Roll a scenario' }))
+    const chosen = screen.getByRole('button', { name: /^Scenario: / }).getAttribute('aria-label')!.replace('Scenario: ', '')
+    expect(XWING_NAMED_SCENARIOS).toContain(chosen)
+    await user.click(within(screen.getByRole('dialog')).getByText('No list'))
+    expect(onStartRound).toHaveBeenCalledWith({ name: 'No list', pilots: [], deficit: 0 }, chosen)
   })
 
   it('Import XWS in the opponent sheet goes to Squad lists', async () => {

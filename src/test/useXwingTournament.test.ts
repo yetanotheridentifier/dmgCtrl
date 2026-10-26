@@ -31,32 +31,55 @@ describe('useXwingTournament', () => {
     const { result } = started()
     const t = result.current.tournament!
     expect(t.totalRounds).toBe(4)
-    expect(t.scenario).toBe('Chance Engagement')
     expect(t.player).toEqual(MINE)
-    expect(t.rounds).toEqual([{ opponent: ACES, result: null, playerScore: 0, opponentScore: 0 }])
+    expect(t.rounds).toEqual([{ opponent: ACES, scenario: 'Chance Engagement', result: null, playerScore: 0, opponentScore: 0 }])
     expect(result.current.roundInProgress).toBe(true)
   })
 
   it('records each round from the game: result and scores', () => {
     const { result } = started()
     act(() => result.current.completeRound('won', 23, 9))
-    expect(result.current.tournament!.rounds[0]).toEqual({ opponent: ACES, result: 'won', playerScore: 23, opponentScore: 9 })
+    expect(result.current.tournament!.rounds[0]).toEqual({ opponent: ACES, scenario: 'Chance Engagement', result: 'won', playerScore: 23, opponentScore: 9 })
     expect(result.current.roundInProgress).toBe(false)
   })
 
   it('the next round is played against the opponent chosen for it, No list included', () => {
     const { result } = started()
     act(() => result.current.completeRound('won', 23, 9))
-    act(() => result.current.startRound(PHOENIX))
+    act(() => result.current.startRound(PHOENIX, 'Chance Engagement'))
     act(() => result.current.completeRound('lost', 11, 20))
-    act(() => result.current.startRound(NO_LIST))
+    act(() => result.current.startRound(NO_LIST, 'Chance Engagement'))
     expect(result.current.tournament!.rounds.map(r => r.opponent.name)).toEqual(['Resistance aces', 'Phoenix Squadron', 'No list'])
+    expect(result.current.roundInProgress).toBe(true)
+  })
+
+  it('each round keeps the scenario chosen for it', () => {
+    const { result } = started()
+    act(() => result.current.completeRound('won', 23, 9))
+    act(() => result.current.startRound(PHOENIX, 'Salvage Mission'))
+    act(() => result.current.completeRound('lost', 11, 20))
+    act(() => result.current.startRound(NO_LIST, 'None'))
+    expect(result.current.tournament!.rounds.map(r => r.scenario)).toEqual(['Chance Engagement', 'Salvage Mission', 'None'])
+  })
+
+  it('a tournament saved with one scenario for every round reopens with it on each round', () => {
+    localStorage.setItem('xwing_tournament', JSON.stringify({
+      totalRounds: 3,
+      scenario: 'Ancient Knowledge',
+      player: MINE,
+      rounds: [
+        { opponent: ACES, result: 'won', playerScore: 23, opponentScore: 9 },
+        { opponent: PHOENIX, result: null, playerScore: 0, opponentScore: 0 },
+      ],
+    }))
+    const { result } = renderHook(() => useXwingTournament())
+    expect(result.current.tournament!.rounds.map(r => r.scenario)).toEqual(['Ancient Knowledge', 'Ancient Knowledge'])
     expect(result.current.roundInProgress).toBe(true)
   })
 
   it('a round under way is not replaced by starting another', () => {
     const { result } = started()
-    act(() => result.current.startRound(PHOENIX))
+    act(() => result.current.startRound(PHOENIX, 'None'))
     expect(result.current.tournament!.rounds).toHaveLength(1)
     expect(result.current.tournament!.rounds[0].opponent).toEqual(ACES)
   })
@@ -64,7 +87,7 @@ describe('useXwingTournament', () => {
   it('counts the record and the margin, the total of the score differences', () => {
     const { result } = started()
     act(() => result.current.completeRound('won', 23, 9))
-    act(() => result.current.startRound(PHOENIX))
+    act(() => result.current.startRound(PHOENIX, 'None'))
     act(() => result.current.completeRound('lost', 11, 20))
     expect(result.current.totals).toEqual({ won: 1, lost: 1, drawn: 0 })
     expect(result.current.margin).toBe(5)
@@ -82,17 +105,17 @@ describe('useXwingTournament', () => {
     act(() => hook.result.current.startTournament(2, 'None', MINE, ACES))
     act(() => hook.result.current.completeRound('won', 30, 10))
     expect(hook.result.current.isComplete).toBe(false)
-    act(() => hook.result.current.startRound(PHOENIX))
+    act(() => hook.result.current.startRound(PHOENIX, 'None'))
     act(() => hook.result.current.completeRound('won', 25, 12))
     expect(hook.result.current.isComplete).toBe(true)
-    act(() => hook.result.current.startRound(ACES))
+    act(() => hook.result.current.startRound(ACES, 'None'))
     expect(hook.result.current.tournament!.rounds).toHaveLength(2)
   })
 
   it('survives closing the app: a new instance reopens it as left', () => {
     const { result } = started()
     act(() => result.current.completeRound('won', 23, 9))
-    act(() => result.current.startRound(PHOENIX))
+    act(() => result.current.startRound(PHOENIX, 'Salvage Mission'))
     const reopened = renderHook(() => useXwingTournament())
     expect(reopened.result.current.tournament).toEqual(result.current.tournament)
     expect(reopened.result.current.roundInProgress).toBe(true)

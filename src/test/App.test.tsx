@@ -1450,6 +1450,35 @@ describe('App X-Wing tournament', () => {
     expect(saved().rounds[1]).toMatchObject({ opponent: { name: 'No list' }, result: null })
   })
 
+  it('the next round is played with the scenario chosen for it', async () => {
+    const user = userEvent.setup()
+    storeTournament([{ opponent: FIFTY, scenario: 'None', result: 'won', playerScore: 50, opponentScore: 0 }])
+    render(<App />)
+    await waitFor(() => expect(hub()).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Start round 2' }))
+    await user.click(screen.getByRole('button', { name: 'Scenario: None' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Scenario' })).getByText('Salvage Mission'))
+    await user.click(within(screen.getByRole('dialog', { name: /Opponent’s list/ })).getByText('No list'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    expect(screen.getByTestId('scenario-name')).toHaveTextContent('Salvage Mission')
+    expect(saved().rounds[1]).toMatchObject({ scenario: 'Salvage Mission', result: null })
+  })
+
+  it('a round reopened after the app was closed is played with its own scenario', async () => {
+    const user = userEvent.setup()
+    storeTournament([
+      { opponent: FIFTY, scenario: 'Salvage Mission', result: 'won', playerScore: 50, opponentScore: 0 },
+      { opponent: FIFTY, scenario: 'Chance Engagement', result: null, playerScore: 0, opponentScore: 0 },
+    ])
+    render(<App />)
+    await waitFor(() => expect(hub()).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to round 2' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    expect(screen.getByTestId('scenario-name')).toHaveTextContent('Chance Engagement')
+  })
+
   it('back from a tournament game goes to the tournament, and Return to round keeps the game as it was', async () => {
     const user = userEvent.setup()
     storeTournament([{ opponent: FIFTY, result: null, playerScore: 0, opponentScore: 0 }])

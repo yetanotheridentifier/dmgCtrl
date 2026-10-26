@@ -1,4 +1,4 @@
-import { useXwingSetup, XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
+import { rollScenario, useXwingSetup } from '../hooks/useXwingSetup'
 import type { XwingMatchType, XwingScenario, XwingPlayerChoice } from '../hooks/useXwingSetup'
 import { useXwingLists } from '../hooks/useXwingLists'
 import type { XwingList } from '../hooks/useXwingLists'
@@ -46,11 +46,6 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, 
   // Last game's opponent is offered only while that list still exists.
   const lastOpponentList = lists.find(l => l.id === setup.lastOpponentListId) ?? null
 
-  const handleScenarioRandom = () => {
-    const idx = Math.floor(Math.random() * XWING_NAMED_SCENARIOS.length)
-    setup.setScenario(XWING_NAMED_SCENARIOS[idx])
-  }
-
   const handleStart = () => {
     if (!playerChoice || !opponentChoice) return
     const [pDeficit, pPilots] = deficitAndPilots(playerChoice, setup.playerDeficit)
@@ -71,7 +66,7 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings, 
       onRoundsChange={setup.setRounds}
       scenario={setup.scenario}
       onScenarioChange={setup.setScenario}
-      onScenarioRandom={handleScenarioRandom}
+      onScenarioRandom={() => setup.setScenario(rollScenario())}
       lists={lists}
       playerChoice={playerChoice}
       onPlayerChoose={setup.setPlayerChoice}

@@ -17,6 +17,12 @@ export const XWING_NAMED_SCENARIOS: XwingScenario[] = [
   'Ancient Knowledge',
 ]
 
+export const XWING_SCENARIOS: XwingScenario[] = ['None', ...XWING_NAMED_SCENARIOS]
+
+// The dice button: one of the named scenarios at random, never None.
+export const rollScenario = (): XwingScenario =>
+  XWING_NAMED_SCENARIOS[Math.floor(Math.random() * XWING_NAMED_SCENARIOS.length)]
+
 interface PersistedSetup {
   ruleset: XwingRuleset
   matchType: XwingMatchType

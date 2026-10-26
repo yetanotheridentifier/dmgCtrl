@@ -16,6 +16,7 @@ export type XwingRoundResult = 'won' | 'lost' | 'drawn'
 
 export interface XwingTournamentRound {
   opponent: XwingTournamentList
+  scenario: XwingScenario
   // Null while the round is under way.
   result: XwingRoundResult | null
   playerScore: number
@@ -24,23 +25,27 @@ export interface XwingTournamentRound {
 
 export interface XwingTournamentState {
   totalRounds: number
-  scenario: XwingScenario
-  // Your list is fixed for the tournament; the opponent is chosen each round.
+  // Your list is fixed for the tournament; the opponent and the scenario are chosen each round.
   player: XwingTournamentList
   rounds: XwingTournamentRound[]
 }
 
+// A tournament saved before rounds had their own scenario held one for every round.
+type SavedTournament = XwingTournamentState & { scenario?: XwingScenario }
+
 function load(): XwingTournamentState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as XwingTournamentState) : null
+    if (!raw) return null
+    const { scenario = 'None', ...saved } = JSON.parse(raw) as SavedTournament
+    return { ...saved, rounds: saved.rounds.map(r => ({ ...r, scenario: r.scenario ?? scenario })) }
   } catch {
     return null
   }
 }
 
-const newRound = (opponent: XwingTournamentList): XwingTournamentRound =>
-  ({ opponent, result: null, playerScore: 0, opponentScore: 0 })
+const newRound = (opponent: XwingTournamentList, scenario: XwingScenario): XwingTournamentRound =>
+  ({ opponent, scenario, result: null, playerScore: 0, opponentScore: 0 })
 
 // An X-Wing tournament: games are best of 1, so a round is one game and its result comes from the
 // game's scores. Saved on every change, so it survives closing the app.
@@ -61,14 +66,14 @@ export function useXwingTournament() {
   // The running margin: the total of the score differences of the rounds played.
   const margin = rounds.reduce((sum, r) => sum + (r.result ? r.playerScore - r.opponentScore : 0), 0)
 
-  // Round 1 starts with the tournament, against the opponent chosen on setup.
+  // Round 1 starts with the tournament, against the opponent and with the scenario chosen on setup.
   const startTournament = (totalRounds: number, scenario: XwingScenario, player: XwingTournamentList, opponent: XwingTournamentList) => {
-    save({ totalRounds, scenario, player, rounds: [newRound(opponent)] })
+    save({ totalRounds, player, rounds: [newRound(opponent, scenario)] })
   }
 
-  const startRound = (opponent: XwingTournamentList) => {
+  const startRound = (opponent: XwingTournamentList, scenario: XwingScenario) => {
     if (!tournament || roundInProgress || isComplete) return
-    save({ ...tournament, rounds: [...tournament.rounds, newRound(opponent)] })
+    save({ ...tournament, rounds: [...tournament.rounds, newRound(opponent, scenario)] })
   }
 
   const completeRound = (result: XwingRoundResult, playerScore: number, opponentScore: number) => {
