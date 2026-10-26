@@ -17,367 +17,218 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+// Stores `settings` under the settings key (raw text when a string), and `others` under their own keys.
+function stored(settings: Record<string, unknown> | string | null, others: Record<string, string> = {}) {
+  vi.mocked(localStorage.getItem).mockImplementation((key) => {
+    if (key === STORAGE_KEY) {
+      if (settings === null) return null
+      return typeof settings === 'string' ? settings : JSON.stringify(settings)
+    }
+    return others[key] ?? null
+  })
+}
+
+const render = () => renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+
+const lastSaved = () => JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
+
 describe('useUserSettings', () => {
 
   // --- Defaults ---
 
   it('defaults useHyperspace to true when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.useHyperspace).toBe(true)
+    expect(render().result.current.useHyperspace).toBe(true)
   })
 
   it('defaults forceTokenDisplay to lof-only when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.forceTokenDisplay).toBe('lof-only')
+    expect(render().result.current.forceTokenDisplay).toBe('lof-only')
   })
 
-  it('defaults enableEpicActions to true when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableEpicActions).toBe(true)
-  })
-
-  it('defaults enableWakeLock to true when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableWakeLock).toBe(true)
-  })
-
-  it('defaults enableFavourites to true when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableFavourites).toBe(true)
-  })
-
-  it('defaults enableActionLog to true when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableActionLog).toBe(true)
-  })
-
-  it('defaults enableInitiativeBar to true when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableInitiativeBar).toBe(true)
-  })
-
-  it('defaults enableXwingPhases to true when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableXwingPhases).toBe(true)
+  it('defaults Initiative (enableInitiativeBar) to on when storage is empty', () => {
+    expect(render().result.current.enableInitiativeBar).toBe(true)
   })
 
   it('defaults enableXwingAlwaysIncDec to false when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableXwingAlwaysIncDec).toBe(false)
+    expect(render().result.current.enableXwingAlwaysIncDec).toBe(false)
+  })
+
+  it('defaults enableDamageButtons to false when storage is empty', () => {
+    expect(render().result.current.enableDamageButtons).toBe(false)
+  })
+
+  it('defaults startScreen to gameSelect when storage is empty', () => {
+    expect(render().result.current.startScreen).toBe('gameSelect')
+  })
+
+  // --- Phase tracker: off for a new install, kept for an existing one ---
+
+  it('turns the phase tracker off for a new install (nothing stored at all)', () => {
+    expect(render().result.current.enableXwingPhases).toBe(false)
+  })
+
+  it('saves a new install\'s settings at first load, so the phase tracker stays off once other data exists', () => {
+    render()
+    expect(lastSaved().enableXwingPhases).toBe(false)
+  })
+
+  it('keeps the phase tracker on for an existing player with app data but no stored settings', () => {
+    stored(null, { xwing_setup: '{}' })
+    expect(render().result.current.enableXwingPhases).toBe(true)
+  })
+
+  it('saves an existing player\'s phase tracker at first load, so it is pinned', () => {
+    stored(null, { swu_setup: '{}' })
+    render()
+    expect(lastSaved().enableXwingPhases).toBe(true)
+  })
+
+  it('keeps the phase tracker on when stored settings predate the key', () => {
+    stored({ useHyperspace: false })
+    expect(render().result.current.enableXwingPhases).toBe(true)
+  })
+
+  it('keeps a stored phase tracker value, on or off', () => {
+    stored({ enableXwingPhases: false })
+    expect(render().result.current.enableXwingPhases).toBe(false)
+    stored({ enableXwingPhases: true })
+    expect(render().result.current.enableXwingPhases).toBe(true)
+  })
+
+  // --- Initiative: on by default, a stored value kept ---
+
+  it('keeps a stored Initiative value of off', () => {
+    stored({ enableInitiativeBar: false })
+    expect(render().result.current.enableInitiativeBar).toBe(false)
+  })
+
+  it('turns Initiative on when stored settings predate the key', () => {
+    stored({ useHyperspace: false })
+    expect(render().result.current.enableInitiativeBar).toBe(true)
   })
 
   // --- Load from storage ---
 
   it('loads useHyperspace=false from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.useHyperspace).toBe(false)
+    stored({ useHyperspace: false })
+    expect(render().result.current.useHyperspace).toBe(false)
   })
 
   it('loads forceTokenDisplay=always-on from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ forceTokenDisplay: 'always-on' }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.forceTokenDisplay).toBe('always-on')
+    stored({ forceTokenDisplay: 'always-on' })
+    expect(render().result.current.forceTokenDisplay).toBe('always-on')
   })
 
   it('loads forceTokenDisplay=always-off from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ forceTokenDisplay: 'always-off' }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.forceTokenDisplay).toBe('always-off')
+    stored({ forceTokenDisplay: 'always-off' })
+    expect(render().result.current.forceTokenDisplay).toBe('always-off')
   })
 
   it('migrates stored enableForceToken:false to always-off', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ enableForceToken: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.forceTokenDisplay).toBe('always-off')
+    stored({ enableForceToken: false })
+    expect(render().result.current.forceTokenDisplay).toBe('always-off')
   })
 
   it('migrates stored enableForceToken:true to lof-only (new default)', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ enableForceToken: true }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.forceTokenDisplay).toBe('lof-only')
+    stored({ enableForceToken: true })
+    expect(render().result.current.forceTokenDisplay).toBe('lof-only')
   })
 
   it('falls back to lof-only for an invalid forceTokenDisplay value', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ forceTokenDisplay: 'bad-value' }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.forceTokenDisplay).toBe('lof-only')
+    stored({ forceTokenDisplay: 'bad-value' })
+    expect(render().result.current.forceTokenDisplay).toBe('lof-only')
   })
 
-  it('loads enableEpicActions=false from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ enableEpicActions: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableEpicActions).toBe(false)
+  it('loads enableDamageButtons=true from stored JSON', () => {
+    stored({ enableDamageButtons: true })
+    expect(render().result.current.enableDamageButtons).toBe(true)
   })
 
-  it('loads enableWakeLock=false from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ enableWakeLock: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableWakeLock).toBe(false)
-  })
-
-  it('loads enableFavourites=true from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ enableFavourites: true }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableFavourites).toBe(true)
-  })
-
-  it('loads enableActionLog=false from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ enableActionLog: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableActionLog).toBe(false)
-  })
-
-  it('loads enableInitiativeBar=false from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ enableInitiativeBar: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableInitiativeBar).toBe(false)
-  })
-
-  it('loads enableXwingPhases=false from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ enableXwingPhases: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableXwingPhases).toBe(false)
+  it('loads the timer lengths the game screens set', () => {
+    stored({ bo1TimerMinutes: 30, bo3TimerMinutes: 60, xwingTimerMinutes: 80 })
+    const { result } = render()
+    expect(result.current.bo1TimerMinutes).toBe(30)
+    expect(result.current.bo3TimerMinutes).toBe(60)
+    expect(result.current.xwingTimerMinutes).toBe(80)
   })
 
   // --- Saving ---
 
   it('saves to localStorage when setUseHyperspace is called', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    const { result } = render()
     act(() => result.current.setUseHyperspace(false))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.useHyperspace).toBe(false)
+    expect(lastSaved().useHyperspace).toBe(false)
   })
 
   it('saves to localStorage when setForceTokenDisplay is called', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    const { result } = render()
     act(() => result.current.setForceTokenDisplay('always-off'))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.forceTokenDisplay).toBe('always-off')
-  })
-
-  it('saves to localStorage when setEnableEpicActions is called', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    act(() => result.current.setEnableEpicActions(false))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.enableEpicActions).toBe(false)
-  })
-
-  it('saves to localStorage when setEnableWakeLock is called', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    act(() => result.current.setEnableWakeLock(false))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.enableWakeLock).toBe(false)
-  })
-
-  it('saves to localStorage when setEnableFavourites is called', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    act(() => result.current.setEnableFavourites(true))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.enableFavourites).toBe(true)
-  })
-
-  it('saves to localStorage when setEnableActionLog is called', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    act(() => result.current.setEnableActionLog(false))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.enableActionLog).toBe(false)
+    expect(lastSaved().forceTokenDisplay).toBe('always-off')
   })
 
   it('saves to localStorage when setEnableInitiativeBar is called', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    const { result } = render()
     act(() => result.current.setEnableInitiativeBar(false))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.enableInitiativeBar).toBe(false)
-  })
-
-  it('defaults enableDamageButtons to false when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableDamageButtons).toBe(false)
-  })
-
-  it('loads enableDamageButtons=true from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ enableDamageButtons: true }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableDamageButtons).toBe(true)
+    expect(lastSaved().enableInitiativeBar).toBe(false)
   })
 
   it('saves to localStorage when setEnableDamageButtons is called', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    const { result } = render()
     act(() => result.current.setEnableDamageButtons(true))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.enableDamageButtons).toBe(true)
+    expect(lastSaved().enableDamageButtons).toBe(true)
   })
 
   it('saves to localStorage when setEnableXwingPhases is called', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    stored({})
+    const { result } = render()
     act(() => result.current.setEnableXwingPhases(false))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.enableXwingPhases).toBe(false)
+    expect(lastSaved().enableXwingPhases).toBe(false)
   })
 
   // --- Resilience ---
 
-  it('falls back to all defaults when stored JSON is corrupt', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? 'not-valid-json{{{' : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+  it('falls back to defaults when stored JSON is corrupt', () => {
+    stored('not-valid-json{{{')
+    const { result } = render()
     expect(result.current.useHyperspace).toBe(true)
     expect(result.current.forceTokenDisplay).toBe('lof-only')
-    expect(result.current.enableEpicActions).toBe(true)
-    expect(result.current.enableWakeLock).toBe(true)
+    expect(result.current.startScreen).toBe('gameSelect')
   })
 
   it('falls back to defaults for a missing key in otherwise valid stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    stored({ useHyperspace: false })
+    const { result } = render()
     expect(result.current.useHyperspace).toBe(false)
     expect(result.current.forceTokenDisplay).toBe('lof-only')
-    expect(result.current.enableEpicActions).toBe(true)
-    expect(result.current.enableWakeLock).toBe(true)
+    expect(result.current.startScreen).toBe('gameSelect')
   })
 
-  it('falls back to true for enableFavourites when stored JSON is corrupt', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? 'not-valid-json{{{' : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableFavourites).toBe(true)
-  })
+  // --- Retired keys: the feature is always on, or nothing used it ---
 
-  it('falls back to true for enableFavourites when missing from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableFavourites).toBe(true)
-  })
+  const RETIRED = {
+    enableGameSelect: false,
+    enableEpicActions: false,
+    enableWakeLock: false,
+    enableActionLog: false,
+    enableFavourites: false,
+    enableCompetitiveMode: false,
+    enableLongPress: false,
+  }
 
-  it('falls back to true for enableActionLog when stored JSON is corrupt', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? 'not-valid-json{{{' : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableActionLog).toBe(true)
-  })
-
-  it('falls back to true for enableActionLog when missing from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableActionLog).toBe(true)
-  })
-
-  it('defaults enableCompetitiveMode to true when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableCompetitiveMode).toBe(true)
-  })
-
-  it('loads enableCompetitiveMode=true from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ enableCompetitiveMode: true }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableCompetitiveMode).toBe(true)
-  })
-
-  it('saves to localStorage when setEnableCompetitiveMode is called', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    act(() => result.current.setEnableCompetitiveMode(true))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.enableCompetitiveMode).toBe(true)
-  })
-
-  it('falls back to true for enableCompetitiveMode when stored JSON is corrupt', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? 'not-valid-json{{{' : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableCompetitiveMode).toBe(true)
-  })
-
-  it('falls back to true for enableCompetitiveMode when missing from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableCompetitiveMode).toBe(true)
-  })
-
-  // --- Retired keys ---
-
-  it('loads stored settings that still carry the retired enableGameSelect key', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY
-        ? JSON.stringify({ enableGameSelect: false, useHyperspace: false, startScreen: 'xwing' })
-        : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+  it('loads stored settings that still carry the retired keys', () => {
+    stored({ ...RETIRED, useHyperspace: false, startScreen: 'xwing' })
+    const { result } = render()
     expect(result.current.useHyperspace).toBe(false)
     expect(result.current.startScreen).toBe('xwing')
-    expect('enableGameSelect' in result.current).toBe(false)
+    for (const key of Object.keys(RETIRED)) expect(key in result.current).toBe(false)
   })
 
-  it('drops the retired enableGameSelect key on the next save', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ enableGameSelect: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+  it('drops the retired keys on the next save', () => {
+    stored({ ...RETIRED })
+    const { result } = render()
     act(() => result.current.setUseHyperspace(false))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
+    const saved = lastSaved()
     expect(saved.useHyperspace).toBe(false)
-    expect('enableGameSelect' in saved).toBe(false)
-  })
-
-  it('defaults startScreen to gameSelect when storage is empty', () => {
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.startScreen).toBe('gameSelect')
-  })
-
-  it('falls back to gameSelect for startScreen when stored JSON is corrupt', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? 'not-valid-json{{{' : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.startScreen).toBe('gameSelect')
-  })
-
-  it('falls back to gameSelect for startScreen when missing from stored JSON', () => {
-    vi.mocked(localStorage.getItem).mockImplementation((key) =>
-      key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
-    )
-    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.startScreen).toBe('gameSelect')
+    for (const key of Object.keys(RETIRED)) expect(key in saved).toBe(false)
   })
 
 })

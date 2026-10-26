@@ -264,15 +264,15 @@ describe('XwingGameScreen game over', () => {
 
 describe('XwingGameScreen log button', () => {
 
-  it('shows log button when enableActionLog is true', () => {
+  it('always shows the log button (the action log is no longer a setting)', () => {
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('log-btn')).toBeInTheDocument()
   })
 
-  it('hides log button when enableActionLog is false', () => {
-    mockUserSettings.enableActionLog = false
+  it('shows the log button even when stored settings still say the log was off', () => {
+    (mockUserSettings as Record<string, unknown>).enableActionLog = false
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.queryByTestId('log-btn')).not.toBeInTheDocument()
+    expect(screen.getByTestId('log-btn')).toBeInTheDocument()
   })
 
 })
@@ -422,15 +422,17 @@ describe('XwingGameScreen timer', () => {
 
 describe('XwingGameScreen wake lock', () => {
 
-  it('calls useWakeLock with enableWakeLock=true by default', () => {
+  it('always holds the wake lock on the game screen', () => {
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(vi.mocked(useWakeLock)).toHaveBeenCalledWith(true)
   })
 
-  it('calls useWakeLock with enableWakeLock=false when setting is disabled', () => {
-    mockUserSettings.enableWakeLock = false
+  it('holds the wake lock even when stored settings still say it was off', () => {
+    (mockUserSettings as Record<string, unknown>).enableWakeLock = false
+    vi.mocked(useWakeLock).mockClear()
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(vi.mocked(useWakeLock)).toHaveBeenCalledWith(false)
+    expect(vi.mocked(useWakeLock)).toHaveBeenCalledWith(true)
+    expect(vi.mocked(useWakeLock)).not.toHaveBeenCalledWith(false)
   })
 
 })

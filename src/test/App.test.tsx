@@ -378,14 +378,13 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Start round 1' })).toBeInTheDocument()
   })
 
-  it('Clicking help from settings screen shows settings-specific content', async () => {
+  it('Settings has no Help button', async () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
     await openFromMore(user, 'Settings')
-    await user.click(screen.getByRole('button', { name: 'Help' }))
-    expect(screen.getByRole('heading', { level: 2, name: 'General' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Help' })).not.toBeInTheDocument()
   })
 
   it('Passes useHyperspace=true to game screen when user settings preference is true', async () => {
@@ -457,28 +456,16 @@ describe('App', () => {
     expect(screen.getByText('30 HP left')).toBeInTheDocument()
   })
 
-  it('Clicking back from settings returns to setup after settings -> help -> back', async () => {
+  it('Clicking back from settings returns to setup after settings -> squad lists -> back', async () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
     await openFromMore(user, 'Settings')
-    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(setupMarker()).toBeInTheDocument()
-  })
-
-  it('Clicking back from settings returns to game after settings -> help -> back', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await waitForSetup()
-    await chooseBaseAndGo(user, 'Catacombs of Cadera')
-    await user.click(screen.getByText('Start'))
-    await openFromMore(user, 'Settings')
-    await user.click(screen.getByRole('button', { name: 'Help' }))
-    await user.click(screen.getByRole('button', { name: 'Back' }))
-    await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('30 HP left')).toBeInTheDocument()
   })
 
 })
