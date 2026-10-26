@@ -4,7 +4,7 @@ Settings is one page, in three groups. Every change is saved straight away and k
 
 ## General
 
-**Start screen**: where the app opens: Game select, Star Wars: Unlimited or X-Wing. Tap it to choose from a sheet.
+**Start screen**: where the app opens. *Last game played* (the default): the setup of the game you played last, or game select before you have played either. *Game select*, *Star Wars: Unlimited* or *X-Wing*: that screen every time. Tap it to choose from a sheet. A tournament in progress, or opening the app at dmgctrl.app/swu or dmgctrl.app/xwing, comes first.
 
 ## Star Wars: Unlimited
 

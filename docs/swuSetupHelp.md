@@ -2,11 +2,11 @@
 
 ## About
 
-dmgCtrl is a damage tracker for Star Wars Unlimited. For the best experience, install it on your iPhone via Safari, tap the Share button, then **Add to Home Screen**.
+dmgCtrl is a damage tracker for Star Wars Unlimited. For the best experience, install it: from your second visit a banner on this screen shows how.
 
 ## Getting Started
 
-Open the app and the loading screen appears for a moment while base data is fetched from the internet. Once ready, the **Star Wars: Unlimited** setup screen opens.
+The **Star Wars: Unlimited** setup screen opens from game select, at dmgctrl.app/swu, or on its own when SWU is the game you played last. The first time, it shows a splash for a moment while it gets the card data from the internet; after that it keeps the data for playing offline. Opened offline before it has the data, it says so: **Try again**, or **Play X-Wing** instead.
 
 Setup has four things: **Mode**, **Your base** (and **Their base** with 2 players), **Match**, and the button that starts play.
 

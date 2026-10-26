@@ -82,7 +82,7 @@ function GameSelectScreen({ lastGame, onSelectSwu, onSelectXwing, onHelp, onSett
                 <img
                   src={`${import.meta.env.BASE_URL}${logo}`}
                   alt={alt}
-                  style={{ maxWidth: game === 'xwing' ? '300px' : '260px', width: '80%', maxHeight: '100%', objectFit: 'contain' }}
+                  style={{ maxWidth: game === 'xwing' ? '300px' : '200px', width: '80%', maxHeight: '100%', objectFit: 'contain' }}
                 />
               </button>
             )

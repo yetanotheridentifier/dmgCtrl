@@ -9,7 +9,9 @@
 **dmgCtrl** is a mobile-first progressive web app (PWA) designed to assist players of tabletop games with game-state tracking. The current implementation supports **Star Wars Unlimited (SWU)** and **Star Wars X-Wing**.
 
 Core functionality:
-- **Loading screen** — splash screen (icon + "LOADING") while base data is fetched; transitions to a screen determined by the `startScreen` setting: 'gameSelect' (default) → game select screen; 'swu' → SWU setup screen; 'xwing' → X-Wing setup screen; back from either game entry point always returns to game select
+- **App start**: the app opens at the first that applies: a tournament in progress; the game named by the address (`/swu`, `/xwing`, also the manifest shortcuts); the `startScreen` setting: 'lastGame' (default) → the setup of the game played last (a game counts as played once its setup opens), or game select before either is played; 'swu' or 'xwing' → that setup; 'gameSelect' → game select. Back from either game's setup always returns to game select
+- **Card data gate**: only SWU setup waits for SWU card data, and only when there is none cached: a splash while it loads, an offline screen (Try again, Play X-Wing, Back) when it could not be fetched. Game select and X-Wing never wait
+- **Install banner**: on game select and the setup screens (never a game screen) from the second launch; Android opens the browser's install prompt, iPhone shows the Safari steps; Not now hides it for 30 days
 - **Base selection** — your base is kept between games and launches; the base sheet offers favourites and the last 6 bases played, a search over every base by name with four aspect filters, and an SWUDB deck link that brings its base
 - **Damage tracking**: on the SWU game screen the base card is the control: tap it for 1 damage, drag up to add several and down to remove several; the damage and HP left show in the card's open art
 - **Hyperspace art** — optionally display the premium "hyperspace" variant of a base card
@@ -74,8 +76,11 @@ The app is served at the root of `dmgctrl.app` and is designed to be added to an
 
 ```
 App
-├── SwuLoadingScreen      (standalone screen — icon + LOADING text; transitions as soon as data is ready)
-├── GameSelectScreen   (standalone screen — game selector; two logo buttons: Star Wars Unlimited and Star Wars X-Wing (both enabled); no help button)
+├── launchScreen()        (pure: the screen App opens at, from the tournament, the address, Start screen and the last game played; `src/utils/appStart.ts`)
+├── useInstallPrompt      (hook: install banner state: second launch, 30-day Not now, standalone detection, platform, deferred prompt)
+├── SwuSplash / SwuOffline (standalone screens in place of SWU setup while it has no card data: loading, or the fetch failed)
+├── GameSelectScreen      (standalone screen: header with Help and Settings buttons; a tile per game, the one played last marked Last played; the install banner under the tiles)
+├── InstallBanner         (view: one row: Android Install, iPhone Safari steps, Not now; floats at the foot of the setup screens)
 ├── XwingSetupScreen      (standalone screen, kept mounted by App while in X-Wing — X-Wing game setup built from the shared controls; portrait + landscape layouts; top bar Back / "X-Wing" / More (sheet: Squad lists, Help, Settings); a card per player — your remembered list pre-filled, the opponent's asking "Choose opponent's list" with last game's opponent one tap away — each opening a list sheet of saved lists, Import XWS and No list last (manual deficit stepper 0–4, the only deficit shown); Match segmented control (Casual/Tournament) with Rounds stepper (2–10) for Tournament; Scenario select sheet (None + 5 named) with a roll button; primary "Go to game" disabled until both have chosen; match, rounds, your list and the last opponent persisted to `xwing_setup`, the opponent's choice, deficits and scenario session-only but kept across Squad Lists, Help, Settings and a game)
 │   ├── useXwingSetup     (hook — ruleset, matchType, rounds, your list and the last opponent persisted to localStorage; the opponent's choice, No list, playerDeficit/opponentDeficit (clamped 0–4) and scenario session-only)
 │   ├── useXwingLists (hook — shared via XwingListsProvider, which App wraps around its screens; saved squad lists {id,name,pilots,faction?,createdAt?} persisted to `xwing_favourites`; save (replaces same name)/rename/remove/clear)
@@ -95,11 +100,9 @@ App
 │   ├── useSwuSetup       (hook — kept base, recent bases, match, mode (1 or 2 players), their base; persisted under `swu_setup`)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
 │   ├── useFavourites     (hook — favourites list, add/remove)
-│   ├── useInstallPrompt  (hook — PWA install banner state: standalone detection, platform, deferred prompt)
 │   ├── SwuSetupScreenView (view — shared controls: top bar with More (Help, Settings), Your base card, Their base card in 2 players, Mode, Match, Go to game / Start tournament / Go to tournament; the Start a tournament sheet: Format, Match, Rounds, base legality)
 │   │   └── SwuBaseSheet  (view: the base sheet, with favourites, recent, search with aspect filters, SWUDB link)
 │   │   └── ImagePreview  (pure view — renders art or error message from props)
-│   └── InstallBanner  (conditional — fixed bottom sheet for non-standalone users; iOS shows step-by-step instructions, Android shows Install button)
 ├── SwuGameScreen         (container)
 │   ├── useSwuGame        (hook — damage counter, epic action used, Force active, Mystic Monastery uses, round)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
@@ -160,7 +163,9 @@ The exception is `SettingsScreenView`, which calls `useOrientation()` directly t
 | **HistoryEntry** | The record stored by `useGameHistory<TSnapshot>` for each action. Fields: `id` (UUID), `type` (string tag for styling: `hit`, `heal`, `epic`, `force-gain`, `force-use`, `monastery`, `round`, `game-result`), `message`, `color` (left strip accent), `snapshot` (full game state before the action — typed as `TSnapshot`), optional `undoable` (defaults to true; set false to suppress the Undo button). `GameLogOverlay` accepts `LogEntryLike[]` (the common structural subset) so both `HistoryEntry<SwuGameSnapshot>` and `HistoryEntry<XwingGameSnapshot>` can be passed without casting. |
 | **UserSettingsProvider** | The React Context provider from `useUserSettings.ts`. Wraps the app in `main.tsx` so all screens share one settings instance. Updates propagate immediately to all mounted consumers. |
 | **Hyperspace** | A premium variant of a card with alternate artwork. In this app, the `useHyperspace` setting (in `useUserSettings`) controls whether the Hyperspace variant is preferred on the game screen. |
-| **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Transitions to the screen determined by `startScreen` in user settings ('gameSelect' by default) as soon as `useBases()` resolves — there is no minimum display time. |
+| **Splash** | `SwuSplash`: the app icon, a progress bar and "Getting SWU card data", shown in place of SWU setup only while `useBases()` is loading with nothing cached. `useBases()` reads its cache, of any age, on the first render, so with card data on hand there is no splash at all. |
+| **Last game played** | The game whose setup opened last, stored under `last_game` (`swu` or `xwing`). The default Start screen opens its setup; game select marks its tile. |
+| **Game addresses** | `/swu` and `/xwing`. The build writes the app's page at `swu/index.html` and `xwing/index.html` (GitHub Pages has no fallback), the service worker precaches both, and the manifest's `shortcuts` point at them. One install, started at the root. |
 | **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |
 | **hyperspaceArt** | The reliable low-res hyperspace image URL from swuapi.com (`cdn.starwarsunlimited.com`, 400×286). `null` for SOR/SHD/TWI (no longer in swuapi.com). |
 | **hyperspaceArtHiRes** | A constructed hi-res hyperspace image URL from swu-db.com (`cdn.swu-db.com`, 1560×1120). Derived from card number for active sets, or from the static offset map for SOR/SHD/TWI. May 403 for a small number of unindexed cards. |

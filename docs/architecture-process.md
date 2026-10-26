@@ -425,7 +425,7 @@ Tests verify behaviour, not implementation. Hook tests cover logic in isolation;
 - All mocks are torn down with `vi.unstubAllGlobals()` in `afterEach`
 - `useUserSettings` is mocked with `vi.mock('../hooks/useUserSettings', ...)` in tests that exercise preference-gated behaviour; `vi.hoisted` is used for mock values that need per-test control
 - `useFavourites` is mocked with `vi.mock('../hooks/useFavourites', ...)` in setup screen tests; `vi.hoisted` provides per-test control over `favourites`, `addFavourite`, `removeFavourite`
-- `App.test.tsx` mocks `useBases` at the module level (`vi.mock('../hooks/useBases', ...)`) so data is available synchronously; this allows the tests to focus on navigation logic rather than data loading. The loading screen transitions immediately when data is ready; `waitFor` with the default timeout handles any async React batching.
+- `App.test.tsx` mocks `useBases` at the module level (`vi.mock('../hooks/useBases', ...)`) so data is available synchronously; this allows the tests to focus on navigation logic rather than data loading. A test that needs the splash or the offline screen sets the mock's `loading` or `error` with no bases; `waitFor` with the default timeout handles any async React batching.
 
 ### Running tests
 
