@@ -11,7 +11,7 @@ import { sectionLabelStyle, mutedStyle } from '../styles/sectionLabel'
 import type { SwudbImportControls } from './swuBaseSheet'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon, DotsIcon, PlusIcon, StarIcon } from './icons'
-import { Button, IconButton, SegmentedControl, Sheet, Stepper } from './shared/controls'
+import { Button, IconButton, SegmentedControl, SetupHeaderMark, Sheet, Stepper } from './shared/controls'
 import type { SetupMode } from '../utils/playMode'
 import { FORMAT_LABELS, formatValidationError, isBaseValidForFormat } from '../utils/formatFilter'
 
@@ -168,7 +168,7 @@ export default function SwuSetupScreenView({
   const topBar = (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
       {onBack && <IconButton label="Back" onClick={onBack}><BackIcon /></IconButton>}
-      <img src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`} alt="" style={{ width: '30px', height: '30px', flexShrink: 0 }} />
+      <SetupHeaderMark />
       <h1 style={{
         flex: 1,
         minWidth: 0,
