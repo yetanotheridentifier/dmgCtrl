@@ -7,7 +7,7 @@ import mkcert from 'vite-plugin-mkcert'
 
 import { cloudflare } from "@cloudflare/vite-plugin";
 import type { Plugin } from 'vite'
-import type { ManifestOptions } from 'vite-plugin-pwa'
+import type { ManifestOptions, VitePWAOptions } from 'vite-plugin-pwa'
 
 /** The games with an address of their own: dmgctrl.app/swu and dmgctrl.app/xwing. */
 const GAME_ADDRESSES = ['swu', 'xwing']
@@ -41,6 +41,18 @@ export const PWA_MANIFEST: Partial<ManifestOptions> = {
     { name: 'Star Wars: Unlimited', short_name: 'SWU', url: 'swu/', icons: [{ src: 'dmgCtrl-icon-192.png', sizes: '192x192', type: 'image/png' }] },
     { name: 'X-Wing', short_name: 'X-Wing', url: 'xwing/', icons: [{ src: 'dmgCtrl-icon-192.png', sizes: '192x192', type: 'image/png' }] },
   ],
+}
+
+/**
+ * The service worker precaches the app's code and pages and every image it ships in `public/`
+ * (logos, aspect icons, the Force token), so they show offline after one visit. Workbox's
+ * default patterns stop at js, css and html. Base card art comes from the CDN and is not here.
+ */
+export const PWA_WORKBOX: Partial<VitePWAOptions['workbox']> = {
+  globPatterns: ['**/*.{js,css,html,png,svg}'],
+  // The sealed app lives under /sealed as a separate build: the PWA's
+  // service worker must not rewrite its navigations to the PWA index.
+  navigateFallbackDenylist: [/^\/sealed/],
 }
 
 /**
@@ -107,11 +119,9 @@ export default defineConfig(({ command, mode }) => {
     }, ...(localDevServer ? [mkcert()] : []), react(), VitePWA({
       registerType: 'autoUpdate',
       devOptions: { enabled: false },
-      workbox: {
-        // The sealed app lives under /sealed as a separate build — the PWA's
-        // service worker must not rewrite its navigations to the PWA index.
-        navigateFallbackDenylist: [/^\/sealed/],
-      },
+      workbox: PWA_WORKBOX,
+      // The manifest icons are in public/ and already matched by PWA_WORKBOX's patterns.
+      includeManifestIcons: false,
       manifest: PWA_MANIFEST,
     }), gameAddresses(), cloudflare()],
     test: {
