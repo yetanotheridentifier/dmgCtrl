@@ -9,7 +9,7 @@ import { IconButton, OptionRow } from './shared/controls'
 
 // One page per game plus a short app page. Each `##` in a page's markdown is a section, listed in
 // the section links; help opens at the section for the screen it was opened from.
-export type HelpSource = 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' | 'gameSelect'
+export type HelpSource = 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'xwingLists' | 'xwingTournament' | 'gameSelect'
 
 const OPENS_AT: Record<HelpSource,{ html: string; section: string }> = {
   setup: { html: swuHelpHtml, section: 'Setup' },
@@ -18,6 +18,7 @@ const OPENS_AT: Record<HelpSource,{ html: string; section: string }> = {
   xwingSetup: { html: xwingHelpHtml, section: 'Setup' },
   xwingLists: { html: xwingHelpHtml, section: 'Squad lists' },
   xwing: { html: xwingHelpHtml, section: 'Game' },
+  xwingTournament: { html: xwingHelpHtml, section: 'Tournament' },
   gameSelect: { html: appHelpHtml, section: 'Starting the app' },
 }
 

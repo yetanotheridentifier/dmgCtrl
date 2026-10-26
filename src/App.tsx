@@ -14,6 +14,7 @@ import { Base, useBases } from './hooks/useBases'
 import type { XwingMatchType, XwingScenario } from './hooks/useXwingSetup'
 import type { XwingPilot } from './utils/parseXwsText'
 import { useTournament } from './hooks/useTournament'
+import { useXwingTournament, type XwingRoundResult, type XwingTournamentList } from './hooks/useXwingTournament'
 import { useUserSettings } from './hooks/useUserSettings'
 import { onAppStart, onAppInstall, onAppResume, onTournamentRoundCompleted, onTournamentStarted } from './services/analytics'
 import type { PlayMode, SetupMode } from './utils/playMode'
@@ -26,8 +27,9 @@ import { limitedBaseOptions } from './utils/formatFilter'
 const XwingSetupScreen = lazy(() => import('./components/xwingSetupScreen'))
 const XwingGameScreen = lazy(() => import('./components/xwingGameScreen'))
 const XwingListsScreen = lazy(() => import('./components/xwingListsScreen'))
+const XwingTournamentScreen = lazy(() => import('./components/xwingTournamentScreen'))
 
-type Screen = 'gameSelect' | 'xwingSetup' | 'xwing' | 'xwingLists' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
+type Screen = 'gameSelect' | 'xwingSetup' | 'xwing' | 'xwingLists' | 'xwingTournament' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
 
 // The install banner shows only on these: never over a game.
 const BANNER_SCREENS: Screen[] = ['gameSelect', 'setup', 'xwingSetup']
@@ -45,10 +47,12 @@ function AppScreens() {
     completeMatch,
     dropTournament,
   } = useTournament()
+  const xwingTournament = useXwingTournament()
   // Where the app opens is settled once, at launch. SWU setup that has no card data yet shows the
   // splash or the offline screen in its place (below), so nothing else waits for SWU card data.
   const [screen, setScreen] = useState<Screen>(() => launchScreen({
     tournamentInProgress: tournament !== null,
+    xwingTournamentInProgress: xwingTournament.tournament !== null,
     route: gameFromPath(window.location.pathname, import.meta.env.BASE_URL),
     startScreen,
     lastGame: readLastGame(),
@@ -67,6 +71,9 @@ function AppScreens() {
   const [xwingMatchType, setXwingMatchType] = useState<XwingMatchType>('Casual')
   const [xwingPlayerPilots, setXwingPlayerPilots] = useState<XwingPilot[]>([])
   const [xwingOpponentPilots, setXwingOpponentPilots] = useState<XwingPilot[]>([])
+  // Each game started is a fresh game screen, whatever was mounted before it.
+  const [xwingGameKey, setXwingGameKey] = useState(0)
+  const [isXwingTournamentGame, setIsXwingTournamentGame] = useState(false)
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
   const [helpSource, setHelpSource] = useState<HelpSource>('setup')
@@ -192,6 +199,7 @@ function AppScreens() {
       screen === 'xwing' ? 'xwing' :
       screen === 'xwingSetup' ? 'xwingSetup' :
       screen === 'xwingLists' ? 'xwingLists' :
+      screen === 'xwingTournament' ? 'xwingTournament' :
       'setup'
     setHelpSource(source)
     setBackStack(prev => [...prev, screen])
@@ -208,18 +216,61 @@ function AppScreens() {
     setScreen('xwingLists')
   }
 
-  const handleXwingStart = (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario, playerPilots: XwingPilot[], opponentPilots: XwingPilot[], matchType: XwingMatchType) => {
+  const handleXwingStart = (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario, playerPilots: XwingPilot[], opponentPilots: XwingPilot[], matchType: XwingMatchType, inTournament = false) => {
     setXwingMatchType(matchType)
     setXwingPlayerDeficit(playerDeficit)
     setXwingOpponentDeficit(opponentDeficit)
     setXwingScenario(scenario)
     setXwingPlayerPilots(playerPilots)
     setXwingOpponentPilots(opponentPilots)
+    setIsXwingTournamentGame(inTournament)
+    setXwingGameKey(k => k + 1)
     setIsInXwing(true)
     setScreen('xwing')
   }
 
   const handleXwingBack = () => {
+    setIsInXwing(false)
+    enterXwingSetup()
+  }
+
+  // A tournament round's game: your list for the tournament against the round's opponent.
+  const playXwingRound = (player: XwingTournamentList, opponent: XwingTournamentList, scenario: XwingScenario) => {
+    handleXwingStart(player.deficit, opponent.deficit, scenario, player.pilots, opponent.pilots, 'Tournament', true)
+  }
+
+  // Start round 1 goes straight to the game: the tournament and its first round start together.
+  const handleXwingStartTournament = (totalRounds: number, scenario: XwingScenario, player: XwingTournamentList, opponent: XwingTournamentList) => {
+    xwingTournament.startTournament(totalRounds, scenario, player, opponent)
+    playXwingRound(player, opponent, scenario)
+  }
+
+  const handleXwingNextRound = (opponent: XwingTournamentList) => {
+    const t = xwingTournament.tournament
+    if (!t) return
+    xwingTournament.startRound(opponent)
+    playXwingRound(t.player, opponent, t.scenario)
+  }
+
+  // The game is still mounted unless the app was closed mid-round; then the round starts afresh.
+  const handleXwingReturnToRound = () => {
+    const t = xwingTournament.tournament
+    if (isInXwing && isXwingTournamentGame) {
+      setScreen('xwing')
+    } else if (t && t.rounds.length > 0) {
+      playXwingRound(t.player, t.rounds[t.rounds.length - 1].opponent, t.scenario)
+    }
+  }
+
+  const handleXwingRoundComplete = (result: XwingRoundResult, playerScore: number, opponentScore: number) => {
+    xwingTournament.completeRound(result, playerScore, opponentScore)
+    setIsInXwing(false)
+    setScreen('xwingTournament')
+  }
+
+  // Drop and Finish both clear the tournament and return to setup.
+  const handleXwingTournamentEnd = () => {
+    xwingTournament.dropTournament()
     setIsInXwing(false)
     enterXwingSetup()
   }
@@ -291,6 +342,9 @@ function AppScreens() {
               onHelp={handleHelp}
               onSettings={handleSettings}
               onLists={handleXwingLists}
+              tournamentInProgress={xwingTournament.tournament !== null}
+              onStartTournament={handleXwingStartTournament}
+              onGoToTournament={() => setScreen('xwingTournament')}
             />
             {floatingBanner}
           </div>
@@ -299,7 +353,9 @@ function AppScreens() {
         {isInXwing && (
           <div style={screen === 'xwing' ? undefined : { display: 'none' }}>
             <XwingGameScreen
-              onBack={handleXwingBack}
+              key={xwingGameKey}
+              onBack={isXwingTournamentGame ? () => setScreen('xwingTournament') : handleXwingBack}
+              onRoundComplete={isXwingTournamentGame ? handleXwingRoundComplete : undefined}
               onHelp={handleHelp}
               onSettings={handleSettings}
               playerDeficit={xwingPlayerDeficit}
@@ -310,6 +366,23 @@ function AppScreens() {
               opponentPilots={xwingOpponentPilots}
             />
           </div>
+        )}
+        {screen === 'xwingTournament' && xwingTournament.tournament && (
+          <XwingTournamentScreen
+            tournament={xwingTournament.tournament}
+            roundInProgress={xwingTournament.roundInProgress}
+            isComplete={xwingTournament.isComplete}
+            totals={xwingTournament.totals}
+            margin={xwingTournament.margin}
+            onStartRound={handleXwingNextRound}
+            onReturnToRound={handleXwingReturnToRound}
+            onDrop={handleXwingTournamentEnd}
+            onFinish={handleXwingTournamentEnd}
+            onBack={enterXwingSetup}
+            onHelp={handleHelp}
+            onSettings={handleSettings}
+            onLists={handleXwingLists}
+          />
         )}
       </Suspense>
       {isInGame && gameBase && (

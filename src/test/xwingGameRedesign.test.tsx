@@ -216,6 +216,41 @@ describe('game over', () => {
     expect(screen.getByRole('button', { name: 'One more round' })).toBeInTheDocument()
   })
 
+  it('in a tournament game, the only way on is Back to tournament, which records the result from the scores', async () => {
+    const onRoundComplete = vi.fn()
+    const { user } = await start({ matchType: 'Tournament', onRoundComplete })
+    await user.click(screen.getByTestId('opponent-ship-btn-0'))
+    mockTimerState.isExpired = true
+    await tapPhase(user, 5)
+    const panel = screen.getByTestId('result-banner').parentElement!
+    expect(within(panel).queryByRole('button', { name: 'Rematch' })).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: 'One more round' })).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: 'New setup' })).not.toBeInTheDocument()
+    await user.click(within(panel).getByRole('button', { name: 'Back to tournament' }))
+    expect(onRoundComplete).toHaveBeenCalledWith('won', 6, 0)
+  })
+
+  it.each([
+    ['lost', 'player-ship-btn-0', 0, 4],
+    ['drawn', null, 0, 0],
+  ] as const)('a tournament game records a %s game', async (result, ship, mine, theirs) => {
+    const onRoundComplete = vi.fn()
+    const { user } = await start({ matchType: 'Tournament', onRoundComplete })
+    if (ship) await user.click(screen.getByTestId(ship))
+    mockTimerState.isExpired = true
+    await tapPhase(user, 5)
+    await user.click(within(screen.getByTestId('result-banner').parentElement!).getByRole('button', { name: 'Back to tournament' }))
+    expect(onRoundComplete).toHaveBeenCalledWith(result, mine, theirs)
+  })
+
+  it('in a tournament game, the header back button goes back to the tournament without recording', async () => {
+    const onRoundComplete = vi.fn()
+    const { user, onBack } = await start({ matchType: 'Tournament', onRoundComplete })
+    await user.click(screen.getByRole('button', { name: 'Back to tournament' }))
+    expect(onBack).toHaveBeenCalled()
+    expect(onRoundComplete).not.toHaveBeenCalled()
+  })
+
   it('does not offer One more round when a side has no ships left', async () => {
     const { user } = await start({ matchType: 'Casual', opponentPilots: [ACADEMY] })
     await user.click(screen.getByTestId('opponent-ship-btn-0'))

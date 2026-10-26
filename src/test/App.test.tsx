@@ -1341,3 +1341,135 @@ describe('App start', () => {
   })
 
 })
+
+describe('App X-Wing tournament', () => {
+
+  const XWING_TOURNAMENT = 'xwing_tournament'
+  const FIFTY = { name: 'Big Ship', pilots: [{ name: 'bigship', ship: 'yv666lightfreighter', points: 50 }], deficit: 0 }
+  const hub = () => screen.queryByRole('region', { name: 'Record' })
+  const saved = () => JSON.parse(store.get(XWING_TOURNAMENT) ?? 'null')
+
+  beforeEach(() => {
+    Object.assign(mockUserSettings, { xwingTimerMinutes: 75 })
+    mockUserSettings.startScreen = 'xwing'
+  })
+
+  function storeTournament(rounds: object[], totalRounds = 3) {
+    store.set(XWING_TOURNAMENT, JSON.stringify({ totalRounds, scenario: 'None', player: { name: 'No list', pilots: [], deficit: 0 }, rounds }))
+  }
+
+  async function chooseNoList(user: User, side: 'player' | 'opponent') {
+    await user.click(within(screen.getByTestId(`${side}-card`)).getByRole('button', { name: /choose a list|change list/i }))
+    await user.click(screen.getByTestId(`${side}-no-list-btn`))
+  }
+
+  // The opponent's 50-point ship destroyed, then the round scored: the game ends won 50–0.
+  async function winByDestroyingTheirShip(user: User) {
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await user.click(screen.getByTestId('opponent-ship-btn-0'))
+    await user.click(screen.getByTestId('opponent-ship-btn-0'))
+    await user.click(screen.getByTestId('round-btn'))
+    await user.click(screen.getByTestId('next-round-btn'))
+    await waitFor(() => expect(screen.getByTestId('result-banner')).toBeInTheDocument())
+  }
+
+  it('Start tournament on X-Wing setup takes the rounds from its sheet and goes straight to round 1’s game', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Scenario: / })).toBeInTheDocument())
+    await user.click(within(screen.getByRole('group', { name: 'Match' })).getByRole('button', { name: 'Tournament' }))
+    await chooseNoList(user, 'player')
+    await chooseNoList(user, 'opponent')
+    await user.click(screen.getByRole('button', { name: 'Start tournament' }))
+    await user.click(screen.getByRole('button', { name: 'Decrease rounds' }))
+    await user.click(screen.getByRole('button', { name: 'Start round 1' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).toBeInTheDocument())
+    expect(saved().totalRounds).toBe(5)
+    expect(saved().rounds).toHaveLength(1)
+  })
+
+  it('reopens the tournament on launch, and records the round from the game at Back to tournament', async () => {
+    const user = userEvent.setup()
+    storeTournament([{ opponent: FIFTY, result: null, playerScore: 0, opponentScore: 0 }])
+    render(<App />)
+    await waitFor(() => expect(hub()).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
+    await waitFor(() => expect(screen.getByTestId('opponent-ship-btn-0')).toHaveTextContent('YV-666 Light Freighter'))
+    await winByDestroyingTheirShip(user)
+    await user.click(within(screen.getByTestId('result-banner').parentElement!).getByRole('button', { name: 'Back to tournament' }))
+    await waitFor(() => expect(hub()).toBeInTheDocument())
+    expect(within(hub()!).getByText('1–0')).toBeInTheDocument()
+    expect(within(hub()!).getByText('Margin +50')).toBeInTheDocument()
+    expect(saved().rounds[0]).toMatchObject({ result: 'won', playerScore: 50, opponentScore: 0 })
+  })
+
+  it('the next round is played against the opponent chosen for it, in a fresh game', async () => {
+    const user = userEvent.setup()
+    storeTournament([{ opponent: FIFTY, result: 'won', playerScore: 50, opponentScore: 0 }])
+    render(<App />)
+    await waitFor(() => expect(hub()).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Start round 2' }))
+    await user.click(within(screen.getByRole('dialog')).getByText('No list'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).toBeInTheDocument())
+    expect(screen.queryByTestId('opponent-ship-btn-0')).not.toBeInTheDocument()
+    expect(saved().rounds[1]).toMatchObject({ opponent: { name: 'No list' }, result: null })
+  })
+
+  it('back from a tournament game goes to the tournament, and Return to round keeps the game as it was', async () => {
+    const user = userEvent.setup()
+    storeTournament([{ opponent: FIFTY, result: null, playerScore: 0, opponentScore: 0 }])
+    render(<App />)
+    await waitFor(() => expect(hub()).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await user.click(screen.getByTestId('opponent-ship-btn-0'))
+    await user.click(screen.getByRole('button', { name: 'Back to tournament' }))
+    await waitFor(() => expect(hub()).toBeVisible())
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
+    await waitFor(() => expect(screen.getByTestId('player-score')).toHaveTextContent('25'))
+  })
+
+  it('Back from the tournament goes to X-Wing setup, where Go to tournament returns to it', async () => {
+    const user = userEvent.setup()
+    storeTournament([{ opponent: FIFTY, result: 'won', playerScore: 50, opponentScore: 0 }])
+    render(<App />)
+    await waitFor(() => expect(hub()).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Scenario: / })).toBeInTheDocument())
+    await user.click(within(screen.getByRole('group', { name: 'Match' })).getByRole('button', { name: 'Tournament' }))
+    await user.click(screen.getByRole('button', { name: 'Go to tournament' }))
+    await waitFor(() => expect(hub()).toBeInTheDocument())
+  })
+
+  it('Drop clears the tournament and returns to X-Wing setup', async () => {
+    const user = userEvent.setup()
+    storeTournament([{ opponent: FIFTY, result: 'won', playerScore: 50, opponentScore: 0 }])
+    render(<App />)
+    await waitFor(() => expect(hub()).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Drop' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Drop' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Scenario: / })).toBeInTheDocument())
+    expect(store.has(XWING_TOURNAMENT)).toBe(false)
+  })
+
+  it('Finish on a complete tournament clears it and returns to X-Wing setup', async () => {
+    const user = userEvent.setup()
+    storeTournament([{ opponent: FIFTY, result: 'won', playerScore: 50, opponentScore: 0 }], 1)
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Tournament complete' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Finish' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Scenario: / })).toBeInTheDocument())
+    expect(store.has(XWING_TOURNAMENT)).toBe(false)
+  })
+
+  it('Help on the tournament opens the X-Wing help at Tournament', async () => {
+    const user = userEvent.setup()
+    storeTournament([])
+    render(<App />)
+    await waitFor(() => expect(hub()).toBeInTheDocument())
+    await openFromMore(user, 'Help')
+    expectHelpAt('X-Wing help', 'Tournament')
+  })
+
+})

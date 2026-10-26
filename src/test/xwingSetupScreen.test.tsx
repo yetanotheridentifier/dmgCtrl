@@ -134,12 +134,12 @@ describe('XwingSetupScreen', () => {
     expect(within(match).getByRole('button', { name: 'Casual' })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('shows the rounds stepper only for a Tournament match', async () => {
+  it('has no rounds stepper on the screen, for either match type', async () => {
     const user = userEvent.setup()
     renderSetup()
     expect(screen.queryByRole('button', { name: 'Increase rounds' })).not.toBeInTheDocument()
     await user.click(within(screen.getByRole('group', { name: 'Match' })).getByRole('button', { name: 'Tournament' }))
-    expect(screen.getByRole('button', { name: 'Increase rounds' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Increase rounds' })).not.toBeInTheDocument()
   })
 
   it('scenario defaults to None, and its sheet offers None and all 5 named scenarios', async () => {
@@ -338,6 +338,104 @@ describe('XwingSetupScreen', () => {
     await choose(user, 'opponent', 'list-option-empire')
     await user.click(goToGame())
     expect(onStart).toHaveBeenCalledWith(2, 3, 'None', [], EMPIRE.pilots, 'Casual')
+  })
+
+  // --- Tournament ---
+
+  async function chooseTournament(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(within(screen.getByRole('group', { name: 'Match' })).getByRole('button', { name: 'Tournament' }))
+  }
+
+  it('with Tournament chosen, the primary reads Start tournament and needs both lists', async () => {
+    const user = userEvent.setup()
+    mockXwingLists.lists = [SCUM, EMPIRE]
+    renderSetup()
+    await chooseTournament(user)
+    expect(screen.queryByRole('button', { name: 'Go to game' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start tournament' })).toBeDisabled()
+    await choose(user, 'player', 'list-option-scum')
+    await choose(user, 'opponent', 'list-option-empire')
+    expect(screen.getByRole('button', { name: 'Start tournament' })).toBeEnabled()
+  })
+
+  it('Start tournament opens a sheet with your list and Rounds only, 2 to 10, defaulting to the last used', async () => {
+    const user = userEvent.setup()
+    mockXwingLists.lists = [SCUM, EMPIRE]
+    renderSetup()
+    await chooseTournament(user)
+    await choose(user, 'player', 'list-option-scum')
+    await choose(user, 'opponent', 'list-option-empire')
+    await user.click(screen.getByRole('button', { name: 'Start tournament' }))
+    const sheet = screen.getByRole('dialog', { name: 'Start a tournament' })
+    expect(within(sheet).getByText('Scum Squad')).toBeInTheDocument()
+    expect(within(sheet).getByText('6')).toBeInTheDocument()
+    expect(within(sheet).getByText('Fixed once round 1 starts.')).toBeInTheDocument()
+    expect(within(sheet).queryByRole('group')).not.toBeInTheDocument()
+    for (let i = 0; i < 5; i++) await user.click(within(sheet).getByRole('button', { name: 'Increase rounds' }))
+    expect(within(sheet).getByText('10')).toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Increase rounds' })).toBeDisabled()
+    for (let i = 0; i < 8; i++) await user.click(within(sheet).getByRole('button', { name: 'Decrease rounds' }))
+    expect(within(sheet).getByText('2')).toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Decrease rounds' })).toBeDisabled()
+  })
+
+  it('Start round 1 starts the tournament with the rounds, scenario and both lists', async () => {
+    const user = userEvent.setup()
+    const onStartTournament = vi.fn()
+    mockXwingLists.lists = [SCUM, EMPIRE]
+    renderSetup({ onStartTournament })
+    await chooseTournament(user)
+    await user.click(screen.getByRole('button', { name: 'Scenario: None' }))
+    await user.click(screen.getByRole('button', { name: 'Salvage Mission' }))
+    await choose(user, 'player', 'list-option-scum')
+    await choose(user, 'opponent', 'list-option-empire')
+    await user.click(screen.getByRole('button', { name: 'Start tournament' }))
+    const sheet = screen.getByRole('dialog', { name: 'Start a tournament' })
+    await user.click(within(sheet).getByRole('button', { name: 'Decrease rounds' }))
+    await user.click(within(sheet).getByRole('button', { name: 'Start round 1' }))
+    expect(onStartTournament).toHaveBeenCalledWith(5, 'Salvage Mission',
+      { name: 'Scum Squad', pilots: SCUM.pilots, deficit: 0 },
+      { name: 'Vader Wing', pilots: EMPIRE.pilots, deficit: 3 })
+    expect(screen.queryByRole('dialog', { name: 'Start a tournament' })).not.toBeInTheDocument()
+    expect(JSON.parse(store.get('xwing_setup')!).rounds).toBe(5)
+  })
+
+  it('a No list side starts the tournament as No list with its stepper deficit', async () => {
+    const user = userEvent.setup()
+    const onStartTournament = vi.fn()
+    renderSetup({ onStartTournament })
+    await chooseTournament(user)
+    await choose(user, 'player', 'no-list-btn')
+    await user.click(within(card('player')).getByRole('button', { name: 'Increase deficit' }))
+    await choose(user, 'opponent', 'no-list-btn')
+    await user.click(screen.getByRole('button', { name: 'Start tournament' }))
+    await user.click(screen.getByRole('button', { name: 'Start round 1' }))
+    expect(onStartTournament).toHaveBeenCalledWith(6, 'None',
+      { name: 'No list', pilots: [], deficit: 1 },
+      { name: 'No list', pilots: [], deficit: 0 })
+  })
+
+  it('Cancel closes the start sheet without starting', async () => {
+    const user = userEvent.setup()
+    const onStartTournament = vi.fn()
+    renderSetup({ onStartTournament })
+    await chooseTournament(user)
+    await choose(user, 'player', 'no-list-btn')
+    await choose(user, 'opponent', 'no-list-btn')
+    await user.click(screen.getByRole('button', { name: 'Start tournament' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Start a tournament' })).not.toBeInTheDocument()
+    expect(onStartTournament).not.toHaveBeenCalled()
+  })
+
+  it('with a tournament under way, the primary is Go to tournament, needing no lists', async () => {
+    const user = userEvent.setup()
+    const onGoToTournament = vi.fn()
+    renderSetup({ tournamentInProgress: true, onGoToTournament })
+    await chooseTournament(user)
+    await user.click(screen.getByRole('button', { name: 'Go to tournament' }))
+    expect(onGoToTournament).toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: 'Start a tournament' })).not.toBeInTheDocument()
   })
 
   // --- Layout ---

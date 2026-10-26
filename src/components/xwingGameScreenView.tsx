@@ -72,6 +72,8 @@ interface Props {
   onRematch: () => void
   // Offered only in a Casual game that ended on time or after its last round.
   onOneMoreRound?: () => void
+  // A tournament game: game over offers only this, which records the round.
+  onBackToTournament?: () => void
   playerBreakdown: ScoreBreakdown
   opponentBreakdown: ScoreBreakdown
 }
@@ -450,7 +452,7 @@ export default function XwingGameScreenView(props: Props) {
     scenario, scenarioScoringActive = false, scenarioAlreadyScoredThisRound = false,
     pendingPlayerScenario = null, pendingOpponentScenario = null, onPlayerScenarioSelect, onOpponentScenarioSelect,
     playerShips, opponentShips, playerNames, opponentNames, onPlayerShipAdvance, onOpponentShipAdvance,
-    onRematch, onOneMoreRound, playerBreakdown, opponentBreakdown,
+    onRematch, onOneMoreRound, onBackToTournament, playerBreakdown, opponentBreakdown,
   } = props
   const [openSheet, setOpenSheet] = useState<null | 'more' | 'timer'>(null)
   const close = () => setOpenSheet(null)
@@ -465,7 +467,7 @@ export default function XwingGameScreenView(props: Props) {
 
   const header = (side: 'player' | 'opponent') => (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '44px', flexShrink: 0 }}>
-      {side === 'player' && <IconButton label="Back to setup" onClick={onBack}><BackIcon /></IconButton>}
+      {side === 'player' && <IconButton label={onBackToTournament ? 'Back to tournament' : 'Back to setup'} onClick={onBack}><BackIcon /></IconButton>}
       <div style={{ ...CAPS, fontSize: '12px', flex: 1, textAlign: side === 'player' ? 'left' : 'right' }}>
         {side === 'player' ? 'YOUR SHIPS' : "OPPONENT'S SHIPS"}
       </div>
@@ -499,9 +501,13 @@ export default function XwingGameScreenView(props: Props) {
           </div>
           <Breakdown player={playerBreakdown} opponent={opponentBreakdown} result={result} />
           <div style={{ flex: 1 }} />
-          <Button variant="primary" onClick={onRematch}>Rematch</Button>
-          {onOneMoreRound && <Button onClick={onOneMoreRound}>One more round</Button>}
-          <Button onClick={onBack}>New setup</Button>
+          {onBackToTournament ? <Button variant="primary" onClick={onBackToTournament}>Back to tournament</Button> : (
+            <>
+              <Button variant="primary" onClick={onRematch}>Rematch</Button>
+              {onOneMoreRound && <Button onClick={onOneMoreRound}>One more round</Button>}
+              <Button onClick={onBack}>New setup</Button>
+            </>
+          )}
         </>
       )
     }
