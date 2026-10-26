@@ -33,6 +33,11 @@ describe('launchScreen: the first that applies', () => {
     expect(launchScreen({ ...none, tournamentInProgress: true, route: 'xwing', startScreen: 'xwing', lastGame: 'xwing' })).toBe('tournament')
   })
 
+  it('an X-Wing tournament in progress opens it, unless an SWU one is in progress too', () => {
+    expect(launchScreen({ ...none, xwingTournamentInProgress: true, route: 'swu', startScreen: 'swu', lastGame: 'swu' })).toBe('xwingTournament')
+    expect(launchScreen({ ...none, tournamentInProgress: true, xwingTournamentInProgress: true })).toBe('tournament')
+  })
+
   it('/swu or /xwing opens that game’s setup ahead of the start screen', () => {
     expect(launchScreen({ ...none, route: 'swu', startScreen: 'xwing', lastGame: 'xwing' })).toBe('setup')
     expect(launchScreen({ ...none, route: 'xwing', startScreen: 'gameSelect' })).toBe('xwingSetup')

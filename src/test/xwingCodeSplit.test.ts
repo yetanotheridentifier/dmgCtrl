@@ -7,7 +7,7 @@ import app from '../App.tsx?raw'
 // anywhere in App would fold them back in, so App must only reach them through import().
 
 describe('X-Wing code split', () => {
-  for (const screen of ['xwingSetupScreen', 'xwingGameScreen', 'xwingListsScreen']) {
+  for (const screen of ['xwingSetupScreen', 'xwingGameScreen', 'xwingListsScreen', 'xwingTournamentScreen']) {
     it(`App loads ${screen} with a dynamic import`, () => {
       expect(app).not.toMatch(new RegExp(`^import [^\\n]* from '\\./components/${screen}'`, 'm'))
       expect(app).toContain(`import('./components/${screen}')`)
