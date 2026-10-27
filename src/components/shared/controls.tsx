@@ -307,9 +307,11 @@ export function Sheet({ open, title, onClose, children, wide = false, action }: 
     full: { top: `${10 + visibleTop}px`, left: '10px', right: '10px', bottom: 0, borderRadius: '16px 16px 0 0' },
     side: { top: `${visibleTop}px`, right: 0, bottom: 0, width: 'min(420px, 90vw)', borderRadius: '20px 0 0 20px' },
   }[where]
+  // A scroll bounce stays in the sheet rather than moving the page under it.
+  const contained: React.CSSProperties = keyboard ? { overscrollBehavior: 'contain' } : {}
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 30 }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 30, ...contained }}>
       <div data-testid="sheet-backdrop" onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'var(--color-backdrop)' }} />
       <div
         ref={dialogRef}
@@ -328,6 +330,7 @@ export function Sheet({ open, title, onClose, children, wide = false, action }: 
           flexDirection: 'column',
           gap: '10px',
           overflowY: 'auto',
+          ...contained,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minHeight: '44px' }}>
@@ -337,6 +340,9 @@ export function Sheet({ open, title, onClose, children, wide = false, action }: 
         </div>
         {children}
       </div>
+      {/* With the keyboard up, iOS can pan or bounce the page past the foot of the screen: the
+          sheet's colour runs on below it, so the page never shows there. */}
+      {keyboard && <div data-testid="sheet-overhang" style={{ position: 'absolute', left: placement.left, right: placement.right, width: placement.width, top: '100%', height: '100vh', background: 'var(--color-sheet)' }} />}
     </div>
   )
 }

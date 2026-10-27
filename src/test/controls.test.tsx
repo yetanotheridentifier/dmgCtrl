@@ -230,6 +230,24 @@ describe('Sheet', () => {
       expect(screen.getByRole('dialog')).toHaveStyle({ bottom: '0px', background: 'var(--color-sheet)' })
     })
 
+    it('runs on in its colour past the foot of the screen, and keeps a scroll bounce to itself', () => {
+      render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      resize(400, 120)
+      expect(screen.getByTestId('sheet-overhang')).toHaveStyle({ top: '100%', height: '100vh', background: 'var(--color-sheet)' })
+      expect(screen.getByRole('dialog')).toHaveStyle({ overscrollBehavior: 'contain' })
+      expect(screen.getByTestId('sheet-backdrop').parentElement).toHaveStyle({ overscrollBehavior: 'contain' })
+    })
+
+    it('follows the visible area as the browser pans it', () => {
+      render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      resize(400, 120)
+      act(() => {
+        viewport.offsetTop = 200
+        viewport.dispatchEvent(new Event('scroll'))
+      })
+      expect(screen.getByRole('dialog')).toHaveStyle({ maxHeight: 'calc(100% - 200px)' })
+    })
+
     it('scrolls the field being typed in to its top', () => {
       render(<Sheet open title="Choose your base" onClose={vi.fn()}><input aria-label="Search bases" /></Sheet>)
       const dialog = screen.getByRole('dialog')
