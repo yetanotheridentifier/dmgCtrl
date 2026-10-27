@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Button, IconButton, SegmentedControl, SelectButton, Stepper, Sheet } from '../components/shared/controls'
 
@@ -193,5 +193,69 @@ describe('Sheet', () => {
     mockOrientation.isPortrait = true
     rerender(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
     expect(screen.getByRole('dialog')).toHaveAttribute('data-placement', 'bottom')
+  })
+
+  describe('with the on-screen keyboard', () => {
+    // A stand-in for window.visualViewport, which jsdom lacks: the keyboard shrinks it.
+    const viewport = Object.assign(new EventTarget(), { height: 844, offsetTop: 0, scale: 1 })
+    const resize = (height: number, offsetTop = 0) => act(() => {
+      Object.assign(viewport, { height, offsetTop })
+      viewport.dispatchEvent(new Event('resize'))
+    })
+
+    beforeEach(() => {
+      Object.assign(viewport, { height: 844, offsetTop: 0, scale: 1 })
+      vi.stubGlobal('innerHeight', 844)
+      vi.stubGlobal('visualViewport', viewport)
+      mockOrientation.isPortrait = true
+    })
+    afterEach(() => vi.unstubAllGlobals())
+
+    const area = () => screen.getByRole('dialog').parentElement!
+
+    it('fits the area above the keyboard, and its content scrolls inside it', () => {
+      render(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
+      resize(400, 120)
+      expect(area()).toHaveStyle({ top: '120px', height: '400px' })
+      expect(screen.getByRole('dialog')).toHaveStyle({ maxHeight: '100%', overflowY: 'auto' })
+    })
+
+    it('scrolls the field being typed in to its top', () => {
+      render(<Sheet open title="Choose your base" onClose={vi.fn()}><input aria-label="Search bases" /></Sheet>)
+      const dialog = screen.getByRole('dialog')
+      const field = screen.getByRole('textbox', { name: 'Search bases' })
+      vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue({ top: 100 } as DOMRect)
+      vi.spyOn(field, 'getBoundingClientRect').mockReturnValue({ top: 176 } as DOMRect)
+      field.focus()
+      resize(400)
+      expect(dialog.scrollTop).toBe(60)
+    })
+
+    it('goes back to the full screen when the keyboard closes', () => {
+      render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      resize(400)
+      resize(844)
+      expect(area().getAttribute('style')).not.toMatch(/height/)
+      expect(screen.getByRole('dialog')).toHaveStyle({ maxHeight: '85vh' })
+    })
+
+    it('is unchanged when the visible area is the whole screen, in either placement', () => {
+      const { rerender } = render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      const before = area().outerHTML
+      resize(844)
+      expect(area().outerHTML).toBe(before)
+      mockOrientation.isPortrait = false
+      rerender(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      expect(area().getAttribute('style')).not.toMatch(/height/)
+    })
+
+    it('ignores a zoomed-in view, which is smaller but not covered', () => {
+      render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      act(() => {
+        Object.assign(viewport, { height: 422, scale: 2 })
+        viewport.dispatchEvent(new Event('resize'))
+      })
+      expect(area().getAttribute('style')).not.toMatch(/height/)
+    })
   })
 })

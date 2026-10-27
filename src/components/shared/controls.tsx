@@ -1,4 +1,4 @@
-import { useEffect, useId } from 'react'
+import { useEffect, useId, useRef, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { useOrientation } from '../../hooks/useOrientation'
 import { ChevronDownIcon, CloseIcon } from '../icons'
@@ -249,11 +249,47 @@ interface SheetProps {
   action?: ReactNode
 }
 
+// An on-screen keyboard that does not resize the page (iOS) covers its lower part, which shows as a
+// visual viewport shorter than the window. A zoomed-in view is shorter too but not covered, so the
+// covered height is measured at the zoom. The keyboard covers far more than this; less is browser chrome.
+const KEYBOARD_MIN_HEIGHT = 120
+const SHEET_PADDING = 16
+
+function subscribeToViewport(onChange: () => void) {
+  const viewport = window.visualViewport
+  viewport?.addEventListener('resize', onChange)
+  viewport?.addEventListener('scroll', onChange)
+  return () => {
+    viewport?.removeEventListener('resize', onChange)
+    viewport?.removeEventListener('scroll', onChange)
+  }
+}
+
+// The area left above the keyboard as "top height", or '' with no keyboard up: a string, so an
+// unchanged area is an unchanged snapshot.
+function keyboardAreaSnapshot() {
+  const viewport = window.visualViewport
+  if (!viewport || window.innerHeight - viewport.height * viewport.scale < KEYBOARD_MIN_HEIGHT) return ''
+  return `${viewport.offsetTop} ${viewport.height}`
+}
+
 // Choices open over the screen rather than replacing it: from the right in landscape, where height
-// is short, and from the bottom in portrait, where the thumb is.
+// is short, and from the bottom in portrait, where the thumb is. While the on-screen keyboard is up,
+// the sheet fits the area above it, scrolled to put the field being typed in at its top.
 export function Sheet({ open, title, onClose, children, wide = false, action }: SheetProps) {
   const { isPortrait } = useOrientation()
   const titleId = useId()
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const keyboard = useSyncExternalStore(subscribeToViewport, keyboardAreaSnapshot, () => '')
+  const [keyboardTop, keyboardHeight] = keyboard.split(' ')
+  const keyboardArea: React.CSSProperties | null = keyboard ? { top: `${keyboardTop}px`, left: 0, right: 0, height: `${keyboardHeight}px` } : null
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const field = document.activeElement
+    if (!keyboard || !dialog || !(field instanceof HTMLElement) || !dialog.contains(field)) return
+    dialog.scrollTop += field.getBoundingClientRect().top - dialog.getBoundingClientRect().top - SHEET_PADDING
+  }, [keyboard])
 
   useEffect(() => {
     if (!open) return
@@ -266,15 +302,16 @@ export function Sheet({ open, title, onClose, children, wide = false, action }: 
 
   const where = isPortrait ? 'bottom' : wide ? 'full' : 'side'
   const placement: React.CSSProperties = {
-    bottom: { left: 0, right: 0, bottom: 0, maxHeight: '85vh', borderRadius: '20px 20px 0 0' },
+    bottom: { left: 0, right: 0, bottom: 0, maxHeight: keyboardArea ? '100%' : '85vh', borderRadius: '20px 20px 0 0' },
     full: { top: '10px', left: '10px', right: '10px', bottom: 0, borderRadius: '16px 16px 0 0' },
     side: { top: 0, right: 0, bottom: 0, width: 'min(420px, 90vw)', borderRadius: '20px 0 0 20px' },
   }[where]
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 30 }}>
+    <div style={{ position: 'fixed', ...(keyboardArea ?? { inset: 0 }), zIndex: 30 }}>
       <div data-testid="sheet-backdrop" onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'var(--color-backdrop)' }} />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -283,7 +320,7 @@ export function Sheet({ open, title, onClose, children, wide = false, action }: 
           position: 'absolute',
           ...placement,
           boxSizing: 'border-box',
-          padding: '16px',
+          padding: `${SHEET_PADDING}px`,
           background: 'var(--color-sheet)',
           color: 'var(--color-text-primary)',
           display: 'flex',
