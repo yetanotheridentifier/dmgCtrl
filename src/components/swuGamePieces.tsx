@@ -6,7 +6,7 @@ import { baseKey } from '../hooks/useSwuSetup'
 import SwuBaseSheet from './swuBaseSheet'
 import TimerDisplay from './shared/timerDisplay'
 import { Button, SegmentedControl, Sheet, Stepper } from './shared/controls'
-import { CARD_ASPECT_RATIO, CARD_NATURAL_HEIGHT, CARD_NATURAL_WIDTH, DISABLED_BTN, RESULT_WORD, marginButton, mutedText, scaled } from './swuGameStyles'
+import { CARD_ASPECT_RATIO, CARD_NATURAL_HEIGHT, CARD_NATURAL_WIDTH, DISABLED_BTN, EPIC_TEXT_TOP, READOUT_BOTTOM, READOUT_MIDDLE, RESULT_WORD,marginButton, mutedText, scaled } from './swuGameStyles'
 
 // The pieces the one-player and two-player SWU game screens share: the base card as the damage
 // control, the epic action and Force buttons, and the sheets. Both screens change together here.
@@ -172,15 +172,15 @@ export function BaseCard({ base, art, face, label: labelOverride, disabled, epic
         </>
       )}
 
-      {/* Shading behind the number, fading out before the top band and the text box */}
+      {/* Shading behind the number, fading out by the text box */}
       {!art.failed && (
-        <span aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none', background: 'radial-gradient(ellipse 40% 26% at 50% 39%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 45%, transparent 100%)' }} />
+        <span data-testid="card-shading" aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: `${2 * READOUT_MIDDLE - EPIC_TEXT_TOP}%`, bottom: `${100 - EPIC_TEXT_TOP}%`, zIndex: 1, pointerEvents: 'none', background: 'radial-gradient(ellipse 40% 50% at 50% 50%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 45%, transparent 100%)' }} />
       )}
 
-      {/* The open art between the top band (HP, name, aspect) and the text box */}
+      {/* The open art below the top band (HP, name, aspect), standing on the line above the text box */}
       <span
         data-testid="game-counter"
-        style={{ position: 'absolute', left: 0, right: 0, top: '17%', height: '45%', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textShadow: SHADOW }}
+        style={{ position: 'absolute', left: 0, right: 0, top: '17%', bottom: `${100 - READOUT_BOTTOM}%`, zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', textShadow: SHADOW }}
       >
         {centre}
       </span>
@@ -199,7 +199,7 @@ export function BaseCard({ base, art, face, label: labelOverride, disabled, epic
         <span
           data-testid="drag-amount"
           aria-live="polite"
-          style={{ position: 'absolute', left: '64%', top: '22%', zIndex: 4, padding: '4px 12px', borderRadius: '10px', background: 'var(--color-accent)', color: 'var(--color-on-accent)', fontSize: `max(18px, ${u(6.7)})`, fontWeight: 700, pointerEvents: 'none' }}
+          style={{ position: 'absolute', left: '64%', top: `${READOUT_MIDDLE - 17}%`, zIndex: 4, padding: '4px 12px', borderRadius: '10px', background: 'var(--color-accent)', color: 'var(--color-on-accent)', fontSize: `max(18px, ${u(6.7)})`, fontWeight: 700, pointerEvents: 'none' }}
         >
           {`${dragAmount.type === '+' ? '+' : '−'}${dragAmount.value}`}
         </span>
