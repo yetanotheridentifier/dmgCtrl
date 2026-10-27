@@ -16,7 +16,7 @@ interface Props {
 
 // Both logos are drawn with the same on-screen area (pt²), so they carry the same visual weight
 // whatever their shapes. Each width follows from this and the logo's aspect ratio (its native size).
-const LOGO_AREA = 20_000
+const LOGO_AREA = 15_000
 
 const TILES: { game: Game; label: string; logo: string; size: [number, number]; alt: string }[] = [
   { game: 'swu', label: 'Star Wars: Unlimited', logo: 'Star-Wars-Unlimited-logo-white.png', size: [959, 686], alt: 'Star Wars Unlimited' },
