@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react'
-import { useOrientation } from '../hooks/useOrientation'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useXwingGame, reachesTarget } from '../hooks/useXwingGame'
 import { useGameHistory } from '../hooks/useGameHistory'
@@ -8,7 +7,7 @@ import { useWakeLock } from '../hooks/useWakeLock'
 import { useInitiative } from '../hooks/useInitiative'
 import { usePhaseTracker, XWING_PHASES } from '../hooks/usePhaseTracker'
 import XwingGameScreenView, { type ScoreBreakdown, type GameOverReason } from './xwingGameScreenView'
-import RotatePrompt from './layout/rotatePrompt'
+import { LandscapeScreen } from './layout/fixedOrientation'
 import { onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced } from '../services/analytics'
 import type { XwingMatchType, XwingScenario } from '../hooks/useXwingSetup'
 import type { XwingPilot } from '../utils/parseXwsText'
@@ -57,7 +56,6 @@ const allDestroyed = (ships: ShipEntry[]) => ships.length > 0 && ships.every(s =
 
 export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario = 'None', matchType = 'Casual', playerPilots = [], opponentPilots = [], onRoundComplete }: Props) {
   const { enableXwingPhases, enableXwingAlwaysIncDec, xwingTimerMinutes, setXwingTimerMinutes } = useUserSettings()
-  const { isPortrait } = useOrientation()
 
   const [gameStarted, setGameStarted] = useState(false)
   const [pendingPlayerScenario, setPendingPlayerScenario] = useState<number | null>(null)
@@ -347,11 +345,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
     return { mission, ships, deficit: deficitScored, adjustments: score - ships - deficitScored, total: score + mission }
   }
 
-  if (isPortrait) {
-    return <RotatePrompt onBack={handleBack} />
-  }
-
-  return (
+  const view = (
     <XwingGameScreenView
       gameStarted={gameStarted}
       gameOver={game.gameOver}
@@ -406,4 +400,5 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
       opponentBreakdown={breakdown(playerShips, game.opponentScore, game.opponentScenarioScore, playerDeficit)}
     />
   )
+  return <LandscapeScreen>{view}</LandscapeScreen>
 }

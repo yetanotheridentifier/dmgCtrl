@@ -70,8 +70,9 @@ const COUNTERS: { counter: Counter; name: string; colour: string }[] = [
 const COUNTER_NAME: Record<Counter, string> = { initiative: 'Initiative', plan: 'Plan', blast: 'Blast' }
 const COUNTER_COLOUR: Record<Counter, string> = { initiative: 'var(--color-accent)', plan: PLAN, blast: BLAST }
 
-// A tablet lying flat: the bar's controls grow to 94px squares and the cards with them.
-const LARGE_QUERY = '(min-height: 600px)'
+// A tablet lying flat: the bar's controls grow to 94px squares and the cards with them. Its short side
+// decides, so a phone held in portrait (its screen turned to landscape) stays a phone.
+const LARGE_QUERY = '(min-width: 600px) and (min-height: 600px)'
 function useLarge() {
   const [large, setLarge] = useState(() => window.matchMedia(LARGE_QUERY).matches)
   useEffect(() => {

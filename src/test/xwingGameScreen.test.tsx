@@ -79,16 +79,17 @@ async function endRound(user: ReturnType<typeof userEvent.setup>) {
 
 describe('XwingGameScreen portrait', () => {
 
-  it('shows rotate prompt in portrait', () => {
+  it('keeps its landscape layout and controls in portrait, turned a quarter, with no rotate prompt', () => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByText(/rotate/i)).toBeInTheDocument()
+    expect(screen.getByTestId('turned-frame').style.transform).toMatch(/rotate\(90deg\)/)
+    expect(screen.getByTestId('turned-frame')).toContainElement(screen.getByTestId('start-game-btn'))
+    expect(screen.queryByText(/rotate/i)).not.toBeInTheDocument()
   })
 
-  it('hides game controls in portrait', () => {
-    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
+  it('is upright in landscape', () => {
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.queryByTestId('start-game-btn')).not.toBeInTheDocument()
+    expect(screen.getByTestId('turned-frame').style.transform).not.toMatch(/rotate/)
   })
 
 })

@@ -31,9 +31,19 @@ describe('the edge tokens', () => {
   it('are the larger of the inset and a 16px margin on every edge', () => {
     expect(declared('edge-margin')).toBe('16px')
     for (const side of ['left', 'right', 'bottom']) {
-      expect(declared(`edge-${side}`)).toBe(`max(env(safe-area-inset-${side}, 0px), var(--edge-margin))`)
+      expect(declared(`screen-edge-${side}`)).toBe(`max(env(safe-area-inset-${side}, 0px), var(--edge-margin))`)
     }
-    expect(declared('edge-top')).toBe('max(var(--top-clearance), var(--edge-margin))')
+    expect(declared('screen-edge-top')).toBe('max(var(--top-clearance), var(--edge-margin))')
+  })
+
+  // A screen turned against the phone (layout/fixedOrientation.tsx) points each edge token at the
+  // screen edge its side lies along; everywhere else each token is its own screen edge.
+  it('are the screen edges, and only the turned frame points them elsewhere', () => {
+    for (const side of ['top', 'right', 'bottom', 'left']) expect(declared(`edge-${side}`)).toBe(`var(--screen-edge-${side})`)
+    const readers = Object.entries(sources)
+      .filter(([, text]) => /--screen-edge-/.test(String(text)))
+      .map(([file]) => file)
+    expect(readers).toEqual(['../components/layout/fixedOrientation.tsx'])
   })
 
   it('are the only way components reach the screen edges', () => {

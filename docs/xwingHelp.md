@@ -80,7 +80,7 @@ Points totals on Squad Lists and setup are the costs the list was saved with. Th
 
 ## Game
 
-The game screen has three columns: **your ships** on the left, the centre panel, and **your opponent's ships** on the right. **Back** (to setup) sits above your ships; **Log** and **More** (Help and Settings) sit above your opponent's.
+The game screen is landscape only: held in portrait it stays landscape on the phone, turned on its side, so turn the phone to read it. It has three columns: **your ships** on the left, the centre panel, and **your opponent's ships** on the right. **Back** (to setup) sits above your ships; **Log** and **More** (Help and Settings) sit above your opponent's.
 
 ### Ships
 

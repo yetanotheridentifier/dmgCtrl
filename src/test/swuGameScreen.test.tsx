@@ -381,12 +381,19 @@ describe('SwuGameScreen: back', () => {
     expect(mockOnGameEnd).toHaveBeenCalledOnce()
   })
 
-  it('shows the rotate prompt, and no game controls, in portrait', () => {
+  it('keeps its landscape layout in portrait, turned a quarter, with no rotate prompt', () => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
     const { onBack } = renderGame()
-    expect(screen.queryByTestId('game-card')).not.toBeInTheDocument()
+    expect(screen.getByTestId('turned-frame').style.transform).toMatch(/rotate\(90deg\)/)
+    expect(screen.getByTestId('turned-frame')).toContainElement(card())
+    expect(screen.queryByText(/rotate/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(onBack).toHaveBeenCalled()
+  })
+
+  it('is upright in landscape', () => {
+    renderGame()
+    expect(screen.getByTestId('turned-frame').style.transform).not.toMatch(/rotate/)
   })
 
   it('keeps the screen awake, whatever the old setting said', () => {

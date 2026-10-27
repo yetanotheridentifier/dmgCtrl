@@ -565,7 +565,7 @@ export default function XwingGameScreenView(props: Props) {
 
   return (
     <AppScreenLayout>
-      <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) clamp(180px, 24vw, 240px) minmax(0, 1fr)', gap: '12px', color: 'var(--color-text-primary)' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) clamp(180px, 24cqw, 240px) minmax(0, 1fr)', gap: '12px', color: 'var(--color-text-primary)' }}>
         <div data-testid="player-column" style={{ display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
           {header('player')}
           {!gameStarted && <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', textAlign: 'center' }}>{PRE_GAME_HINT}</div>}
