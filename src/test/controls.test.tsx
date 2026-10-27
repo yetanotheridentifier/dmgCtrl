@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Button, IconButton, SegmentedControl, SelectButton, Stepper, Sheet } from '../components/shared/controls'
 
@@ -193,5 +193,77 @@ describe('Sheet', () => {
     mockOrientation.isPortrait = true
     rerender(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
     expect(screen.getByRole('dialog')).toHaveAttribute('data-placement', 'bottom')
+  })
+
+  describe('with the on-screen keyboard', () => {
+    // A stand-in for window.visualViewport, which jsdom lacks: the keyboard shrinks it.
+    const viewport = Object.assign(new EventTarget(), { height: 844, offsetTop: 0, scale: 1 })
+    const resize = (height: number, offsetTop = 0) => act(() => {
+      Object.assign(viewport, { height, offsetTop })
+      viewport.dispatchEvent(new Event('resize'))
+    })
+
+    beforeEach(() => {
+      Object.assign(viewport, { height: 844, offsetTop: 0, scale: 1 })
+      vi.stubGlobal('innerHeight', 844)
+      vi.stubGlobal('visualViewport', viewport)
+      mockOrientation.isPortrait = true
+    })
+    afterEach(() => vi.unstubAllGlobals())
+
+    const sheet = () => screen.getByRole('dialog').parentElement!.outerHTML
+
+    // Visible area 120 to 520 of an 844 high window: the keyboard covers the 324 below it.
+    it('starts at the top of the visible area, following it as the browser pans, and its content scrolls to the top of the keyboard', () => {
+      const { rerender } = render(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
+      resize(400, 120)
+      expect(screen.getByRole('dialog')).toHaveStyle({ maxHeight: 'calc(100% - 120px)', paddingBottom: '340px', overflowY: 'auto' })
+      mockOrientation.isPortrait = false
+      rerender(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
+      expect(screen.getByRole('dialog')).toHaveStyle({ top: '130px', paddingBottom: '340px' })
+      act(() => {
+        viewport.offsetTop = 200
+        viewport.dispatchEvent(new Event('scroll'))
+      })
+      expect(screen.getByRole('dialog')).toHaveStyle({ top: '210px' })
+    })
+
+    it('covers the screen behind the keyboard and past its foot, and keeps a scroll bounce to itself', () => {
+      render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      resize(400, 120)
+      const layer = screen.getByTestId('sheet-backdrop').parentElement
+      expect(layer).toHaveStyle({ position: 'fixed', inset: '0', overscrollBehavior: 'contain' })
+      expect(screen.getByRole('dialog')).toHaveStyle({ bottom: '0px', background: 'var(--color-sheet)', overscrollBehavior: 'contain' })
+      expect(screen.getByTestId('sheet-overhang')).toHaveStyle({ top: '100%', height: '100vh', background: 'var(--color-sheet)' })
+    })
+
+    it('scrolls the field being typed in to its top', () => {
+      render(<Sheet open title="Choose your base" onClose={vi.fn()}><input aria-label="Search bases" /></Sheet>)
+      const dialog = screen.getByRole('dialog')
+      const field = screen.getByRole('textbox', { name: 'Search bases' })
+      vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue({ top: 100 } as DOMRect)
+      vi.spyOn(field, 'getBoundingClientRect').mockReturnValue({ top: 176 } as DOMRect)
+      field.focus()
+      resize(400)
+      expect(dialog.scrollTop).toBe(60)
+    })
+
+    it('is unchanged with no keyboard: a full visible area, a closed keyboard or a zoomed-in view', () => {
+      const { rerender } = render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      const before = sheet()
+      resize(844)
+      expect(sheet()).toBe(before)
+      resize(400)
+      resize(844)
+      expect(sheet()).toBe(before)
+      act(() => {
+        Object.assign(viewport, { height: 422, scale: 2 })
+        viewport.dispatchEvent(new Event('resize'))
+      })
+      expect(sheet()).toBe(before)
+      mockOrientation.isPortrait = false
+      rerender(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      expect(screen.getByRole('dialog').getAttribute('style')).not.toMatch(/padding-bottom/)
+    })
   })
 })
