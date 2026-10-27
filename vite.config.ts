@@ -136,6 +136,8 @@ export default defineConfig(({ command, mode }) => {
       // same (the same 8 files run in node either way) but needed a docblock on 36 files
       // instead of 8.
       environment: 'jsdom',
+      // index.css holds the edge tokens, which a test reads as written.
+      css: { include: [/index\.css/] },
       setupFiles: './src/test/setup.ts',
       exclude: ['proxy/**', 'sealed/**', 'node_modules/**'],
     },

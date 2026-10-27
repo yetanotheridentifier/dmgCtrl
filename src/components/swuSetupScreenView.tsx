@@ -443,7 +443,7 @@ export default function SwuSetupScreenView({
   if (isPortrait) {
     return (
       <AppScreenLayout>
-        <div data-testid="swu-setup" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px 16px 24px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
+        <div data-testid="swu-setup" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
           {topBar}
           {twinSuns ? twinSunsGrid : (
             <>
@@ -464,7 +464,7 @@ export default function SwuSetupScreenView({
 
   return (
     <AppScreenLayout>
-      <div data-testid="swu-setup" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px', overflow: 'hidden', color: 'var(--color-text-primary)' }}>
+      <div data-testid="swu-setup" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', overflow: 'hidden', color: 'var(--color-text-primary)' }}>
         {topBar}
         <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: `${twoPlayers ? 'minmax(0, 1fr) ' : ''}minmax(0, 1fr) ${CONTROLS_WIDTH}`, gap: '12px' }}>
           {twinSuns ? twinSunsGrid : <>{baseCard}{theirBaseCard}</>}

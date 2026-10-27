@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Button, IconButton, SegmentedControl, SelectButton, Stepper, Sheet } from '../components/shared/controls'
+import { FIELD_STYLE } from '../styles/field'
 
 const mockOrientation = { isPortrait: false, vmin: 390 }
 vi.mock('../hooks/useOrientation', () => ({
@@ -138,6 +139,24 @@ describe('Stepper', () => {
   })
 })
 
+describe('FIELD_STYLE', () => {
+  // iOS zooms the page in when a field under 16px takes focus, and stays zoomed: the screen's edges
+  // are then cut off and its margins shrink to a few points.
+  const sources = import.meta.glob(['../components/**/*.tsx'], { query: '?raw', import: 'default', eager: true })
+
+  it('sets text in a field at 16px', () => {
+    expect(FIELD_STYLE.fontSize).toBe('16px')
+  })
+
+  it('is the style of every text field', () => {
+    const fields = Object.entries(sources).flatMap(([file, text]) =>
+      [...String(text).matchAll(/<(input|textarea)\b[\s\S]*?\/>/g)].map(([tag]) => ({ file, tag })))
+    expect(fields.length).toBeGreaterThan(5)
+    expect(fields.filter(({ tag }) => !tag.includes('...FIELD_STYLE')).map(({ file }) => file)).toEqual([])
+    expect(fields.filter(({ tag }) => /fontSize/.test(tag)).map(({ file }) => file)).toEqual([])
+  })
+})
+
 describe('Sheet', () => {
   it('renders nothing when closed', () => {
     render(<Sheet open={false} title="Opponent's list" onClose={vi.fn()}>content</Sheet>)
@@ -195,6 +214,20 @@ describe('Sheet', () => {
     expect(screen.getByRole('dialog')).toHaveAttribute('data-placement', 'bottom')
   })
 
+  // Content keeps clear of the screen's rounded corners: by the edge token on each side the sheet runs
+  // to the screen edge, and by 16px on a side that faces into the screen.
+  it('pads each side that meets a screen edge by its edge token', () => {
+    const padding = () => ['top', 'right', 'bottom', 'left'].map(side => screen.getByRole('dialog').style.getPropertyValue(`padding-${side}`))
+    const { rerender } = render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+    expect(padding()).toEqual(['var(--edge-top)', 'var(--edge-right)', 'var(--edge-bottom)', '16px'])
+    rerender(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
+    expect(screen.getByRole('dialog')).toHaveStyle({ left: '0px', right: '0px' })
+    expect(padding()).toEqual(['16px', 'var(--edge-right)', 'var(--edge-bottom)', 'var(--edge-left)'])
+    mockOrientation.isPortrait = true
+    rerender(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+    expect(padding()).toEqual(['16px', 'var(--edge-right)', 'var(--edge-bottom)', 'var(--edge-left)'])
+  })
+
   describe('with the on-screen keyboard', () => {
     // A stand-in for window.visualViewport, which jsdom lacks: the keyboard shrinks it.
     const viewport = Object.assign(new EventTarget(), { height: 844, offsetTop: 0, scale: 1 })
@@ -211,16 +244,21 @@ describe('Sheet', () => {
     })
     afterEach(() => vi.unstubAllGlobals())
 
+    // The sheet as markup, each style's declarations sorted: a value set back can return in another order.
     const sheet = () => screen.getByRole('dialog').parentElement!.outerHTML
+      .replace(/style="([^"]*)"/g, (_, css: string) => `style="${css.split(/;\s*/).filter(Boolean).sort().join('; ')}"`)
 
     // Visible area 120 to 520 of an 844 high window: the keyboard covers the 324 below it.
     it('starts at the top of the visible area, following it as the browser pans, and its content scrolls to the top of the keyboard', () => {
       const { rerender } = render(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
       resize(400, 120)
-      expect(screen.getByRole('dialog')).toHaveStyle({ maxHeight: 'calc(100% - 120px)', paddingBottom: '340px', overflowY: 'auto' })
+      // jsdom computes no padding from a shorthand holding var(), so the padding is read as written.
+      expect(screen.getByRole('dialog')).toHaveStyle({ maxHeight: 'calc(100% - 120px)', overflowY: 'auto' })
+      expect(screen.getByRole('dialog').style.paddingBottom).toBe('340px')
       mockOrientation.isPortrait = false
       rerender(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
-      expect(screen.getByRole('dialog')).toHaveStyle({ top: '130px', paddingBottom: '340px' })
+      expect(screen.getByRole('dialog')).toHaveStyle({ top: '130px' })
+      expect(screen.getByRole('dialog').style.paddingBottom).toBe('340px')
       act(() => {
         viewport.offsetTop = 200
         viewport.dispatchEvent(new Event('scroll'))
@@ -263,7 +301,7 @@ describe('Sheet', () => {
       expect(sheet()).toBe(before)
       mockOrientation.isPortrait = false
       rerender(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
-      expect(screen.getByRole('dialog').getAttribute('style')).not.toMatch(/padding-bottom/)
+      expect(screen.getByRole('dialog').style.paddingBottom).toBe('var(--edge-bottom)')
     })
   })
 })

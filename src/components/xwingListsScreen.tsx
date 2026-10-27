@@ -6,6 +6,7 @@ import AppScreenLayout from './layout/appScreenLayout'
 import { BackIcon, HelpIcon } from './icons'
 import { Button, IconButton } from './shared/controls'
 import { FactionIcon } from './factionIcon'
+import { FIELD_STYLE } from '../styles/field'
 import XwingListBuilder from './xwingListBuilder'
 import type { BuilderStart } from './xwingListBuilder'
 import { XwingSaveListSheet } from './xwingSaveListSheet'
@@ -38,10 +39,6 @@ function checkXws(text: string): Checked {
 
 const mutedStyle: React.CSSProperties = { fontSize: '0.8rem', color: 'var(--color-text-muted)' }
 const panelStyle: React.CSSProperties = { background: 'var(--color-surface)', borderRadius: '16px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }
-const inputStyle: React.CSSProperties = {
-  height: '44px', boxSizing: 'border-box', border: '2px solid var(--color-accent)', borderRadius: '12px', background: 'var(--color-bg-deep)',
-  color: 'var(--color-text-primary)', fontFamily: 'inherit', fontSize: '16px', padding: '0 12px', outline: 'none', minWidth: 0,
-}
 
 export default function XwingListsScreen({ onBack, onHelp, startWith }: Props) {
   const { isPortrait } = useOrientation()
@@ -79,7 +76,7 @@ export default function XwingListsScreen({ onBack, onHelp, startWith }: Props) {
 
   return (
     <AppScreenLayout>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0, flexWrap: 'wrap' }}>
           <IconButton label="Back" onClick={onBack}><BackIcon /></IconButton>
           <h1 style={{ flex: 1, margin: 0, fontSize: '1.4rem', fontWeight: 300, letterSpacing: '0.12em', whiteSpace: 'nowrap' }}>Squad Lists</h1>
@@ -144,7 +141,7 @@ function ListCard({ list, lists, onEdit, onRename, onDelete }: {
               aria-label="New name"
               value={renaming}
               onChange={e => { setRenaming(e.target.value); setRenameError(false) }}
-              style={{ ...inputStyle, width: '100%', marginTop: '6px', letterSpacing: 'normal' }}
+              style={{ ...FIELD_STYLE, width: '100%', marginTop: '6px', letterSpacing: 'normal', border: '2px solid var(--color-accent)', background: 'var(--color-bg-deep)', padding: '0 12px' }}
             />
           </label>
           {renameError && <div data-testid={t('rename-error')} style={{ ...mutedStyle, color: 'var(--color-error)' }}>Another list already has that name.</div>}
@@ -230,7 +227,7 @@ function ImportXws({ isPortrait, lists, text, onText, onBack, onSave, onFix }: {
 
   return (
     <AppScreenLayout>
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', overflowY: isPortrait ? 'auto' : undefined, color: 'var(--color-text-primary)' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '12px', overflowY: isPortrait ? 'auto' : undefined, color: 'var(--color-text-primary)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
           <IconButton label="Back" onClick={onBack}><BackIcon /></IconButton>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -247,9 +244,8 @@ function ImportXws({ isPortrait, lists, text, onText, onBack, onSave, onFix }: {
               value={text}
               onChange={e => onText(e.target.value)}
               style={{
-                flex: 1, minHeight: isPortrait ? '30vh' : 0, resize: 'none', boxSizing: 'border-box', border: '2px solid var(--color-surface-raised)', borderRadius: '12px',
-                background: 'var(--color-bg-deep)', color: 'var(--color-text-body)', fontFamily: "Consolas, 'Courier New', monospace", fontSize: '16px',
-                padding: '10px 12px', outline: 'none', wordBreak: 'break-all',
+                ...FIELD_STYLE, flex: 1, height: 'auto', minHeight: isPortrait ? '30vh' : 0, resize: 'none', border: '2px solid var(--color-surface-raised)',
+                background: 'var(--color-bg-deep)', color: 'var(--color-text-body)', fontFamily: "Consolas, 'Courier New', monospace", padding: '10px 12px', wordBreak: 'break-all',
               }}
             />
             <div style={{ display: 'flex', gap: '8px' }}>

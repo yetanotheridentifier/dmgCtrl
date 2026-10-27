@@ -8,6 +8,7 @@ import AppScreenLayout from './layout/appScreenLayout'
 import { BackIcon, CloseIcon, SearchIcon } from './icons'
 import { Button, IconButton, OptionRow, SelectButton, Sheet } from './shared/controls'
 import { FactionIcon } from './factionIcon'
+import { FIELD_STYLE } from '../styles/field'
 import { XwingSaveListSheet } from './xwingSaveListSheet'
 import type { XwingPilot } from '../utils/parseXwsText'
 import { FACTIONS, factionName, listPoints } from '../utils/xwingListInfo'
@@ -109,7 +110,7 @@ export default function XwingListBuilder({ editing, start, side, onBack, onSaved
   if (faction === undefined) {
     return (
       <AppScreenLayout>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
           <Header onBack={onBack} title={<h1 style={titleStyle}>New list</h1>} subtitle={forWhom ? `${forWhom[0].toUpperCase()}${forWhom.slice(1)} · choose a faction` : 'Choose a faction'} />
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isPortrait ? 2 : 4}, minmax(0, 1fr))`, gap: '8px' }}>
             {FACTIONS.map(f => (
@@ -202,7 +203,7 @@ export default function XwingListBuilder({ editing, start, side, onBack, onSaved
           placeholder={`Search ${shownShip?.pilots.length ?? 0} pilots`}
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', color: 'var(--color-text-primary)', fontFamily: 'inherit', fontSize: '16px', outline: 'none' }}
+          style={{ ...FIELD_STYLE, flex: 1, height: 'auto', padding: 0, background: 'transparent' }}
         />
       </label>
       {atCap && <div role="status" style={{ fontSize: '0.8rem', color: 'var(--color-warning)', padding: '4px 4px' }}>{SHIPS_MAX} ships is the most a list can have. Remove one to add another.</div>}
@@ -303,7 +304,7 @@ export default function XwingListBuilder({ editing, start, side, onBack, onSaved
   if (isPortrait) {
     return (
       <AppScreenLayout>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px 16px 24px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
           {header}
           <div style={{ background: 'var(--color-surface)', borderRadius: '16px', padding: '8px 16px', flexShrink: 0 }}>
             <Status total={total} ships={pilots.length} message={message} ready={status.ready} />
@@ -329,7 +330,7 @@ export default function XwingListBuilder({ editing, start, side, onBack, onSaved
 
   return (
     <AppScreenLayout>
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', color: 'var(--color-text-primary)' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '12px', color: 'var(--color-text-primary)' }}>
         {header}
         <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: '12px' }}>
           <div style={{ width: '188px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}>

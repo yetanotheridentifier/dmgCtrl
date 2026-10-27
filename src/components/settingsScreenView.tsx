@@ -4,6 +4,7 @@ import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon } from './icons'
 import { Button, IconButton, OptionRow, SegmentedControl, SelectButton, Sheet } from './shared/controls'
 import { sectionLabelStyle } from '../styles/sectionLabel'
+import { FIELD_STYLE } from '../styles/field'
 import type { ForceTokenDisplay, StartScreen } from '../hooks/useUserSettings'
 import type { Game } from '../utils/appStart'
 
@@ -151,7 +152,7 @@ export default function SettingsScreenView(props: Props) {
           value={props.meleePlayerGuid}
           onChange={e => props.onMeleePlayerGuidChange(e.target.value)}
           placeholder="Optional"
-          style={{ flex: 1, minWidth: 0, height: '44px', boxSizing: 'border-box', border: 'none', borderRadius: '12px', background: 'var(--color-surface-raised)', color: 'var(--color-text-primary)', fontFamily: 'inherit', fontSize: '15px', padding: '0 14px', outline: 'none' }}
+          style={{ ...FIELD_STYLE, flex: 1 }}
         />
       </FieldRow>
       <SwitchRow label="Damage −/+ buttons" checked={props.enableDamageButtons} onChange={props.onEnableDamageButtonsChange} />
@@ -185,7 +186,7 @@ export default function SettingsScreenView(props: Props) {
   )
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', boxSizing: 'border-box', padding: '16px', display: 'flex', flexDirection: 'column', gap: isPortrait ? '14px' : '12px', color: 'var(--color-text-primary)' }}>
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: isPortrait ? '14px' : '12px', color: 'var(--color-text-primary)' }}>
       {header}
       {isPortrait ? (
         <>

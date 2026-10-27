@@ -156,7 +156,8 @@ function Half({ side, owner, round, playing, centreProps, onStartGame, showDamag
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
+      {/* Takes the height the row leaves, so the row sits at the foot of the half. */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
         <BaseCard
           base={base}
           art={side.art}
@@ -172,7 +173,6 @@ function Half({ side, owner, round, playing, centreProps, onStartGame, showDamag
           dimmed={result !== null}
         />
       </div>
-      <div style={{ flex: 1 }} />
       {row}
       {log}
     </>

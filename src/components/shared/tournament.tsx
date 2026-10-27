@@ -148,7 +148,7 @@ export function TournamentLayout({ testId, isPortrait, isComplete, summary, onBa
   if (isPortrait) {
     return (
       <AppScreenLayout>
-        <div data-testid={testId} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px 16px 24px', overflow: 'hidden', color: 'var(--color-text-primary)' }}>
+        <div data-testid={testId} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', overflow: 'hidden', color: 'var(--color-text-primary)' }}>
           {header}
           <div style={{ ...mutedSmall, marginTop: '-8px' }}>{summary}</div>
           {record}
@@ -168,7 +168,7 @@ export function TournamentLayout({ testId, isPortrait, isComplete, summary, onBa
 
   return (
     <AppScreenLayout>
-      <div data-testid={testId} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px', overflow: 'hidden', color: 'var(--color-text-primary)' }}>
+      <div data-testid={testId} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '14px', overflow: 'hidden', color: 'var(--color-text-primary)' }}>
         {header}
         <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 300px) minmax(0, 1fr)', gap: '16px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0 }}>

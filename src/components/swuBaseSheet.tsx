@@ -4,6 +4,7 @@ import { filterBases, baseKey } from '../hooks/useSwuSetup'
 import { useOrientation } from '../hooks/useOrientation'
 import { CheckIcon, SearchIcon } from './icons'
 import { Button, Sheet } from './shared/controls'
+import { FIELD_STYLE } from '../styles/field'
 import { FILTER_ASPECTS, aspectIconSrc, baseAspect, baseMeta } from '../utils/baseAspect'
 import { sectionLabelStyle, mutedStyle } from '../styles/sectionLabel'
 
@@ -117,7 +118,7 @@ function BaseSheetBody({ bases, favouriteBases, recentBases, recentLabel = 'Rece
             placeholder="Search bases"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            style={{ width: '100%', height: '44px', boxSizing: 'border-box', border: 'none', borderRadius: '12px', background: 'var(--color-surface-raised)', color: 'var(--color-text-primary)', fontSize: '0.95rem', fontFamily: 'inherit', padding: '0 14px 0 42px', outline: 'none' }}
+            style={{ ...FIELD_STYLE, width: '100%', paddingLeft: '42px' }}
           />
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -175,7 +176,7 @@ function BaseSheetBody({ bases, favouriteBases, recentBases, recentLabel = 'Rece
           value={deck.url}
           onChange={e => swudb.onChange(e.target.value)}
           onFocus={swudb.onFocus}
-          style={{ flex: 1, minWidth: 0, height: '44px', boxSizing: 'border-box', border: deck.error ? '2px solid var(--color-error)' : 'none', borderRadius: '12px', background: 'var(--color-surface-raised)', color: 'var(--color-text-primary)', fontSize: '0.95rem', fontFamily: 'inherit', padding: '0 14px', outline: 'none' }}
+          style={{ ...FIELD_STYLE, flex: 1, ...(deck.error ? { border: '2px solid var(--color-error)' } : {}) }}
         />
         <Button onClick={swudb.onLoad} disabled={!canLoad}>{deck.loading ? '...' : 'Load'}</Button>
       </div>
