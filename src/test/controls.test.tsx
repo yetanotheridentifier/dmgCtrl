@@ -214,38 +214,27 @@ describe('Sheet', () => {
     const sheet = () => screen.getByRole('dialog').parentElement!.outerHTML
 
     // Visible area 120 to 520 of an 844 high window: the keyboard covers the 324 below it.
-    it('starts at the top of the visible area, and its content scrolls to the top of the keyboard', () => {
+    it('starts at the top of the visible area, following it as the browser pans, and its content scrolls to the top of the keyboard', () => {
       const { rerender } = render(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
       resize(400, 120)
       expect(screen.getByRole('dialog')).toHaveStyle({ maxHeight: 'calc(100% - 120px)', paddingBottom: '340px', overflowY: 'auto' })
       mockOrientation.isPortrait = false
       rerender(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
       expect(screen.getByRole('dialog')).toHaveStyle({ top: '130px', paddingBottom: '340px' })
-    })
-
-    it('covers the screen down to its bottom edge, behind the keyboard, so nothing shows through', () => {
-      render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
-      resize(400, 120)
-      expect(screen.getByTestId('sheet-backdrop').parentElement).toHaveStyle({ position: 'fixed', inset: '0' })
-      expect(screen.getByRole('dialog')).toHaveStyle({ bottom: '0px', background: 'var(--color-sheet)' })
-    })
-
-    it('runs on in its colour past the foot of the screen, and keeps a scroll bounce to itself', () => {
-      render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
-      resize(400, 120)
-      expect(screen.getByTestId('sheet-overhang')).toHaveStyle({ top: '100%', height: '100vh', background: 'var(--color-sheet)' })
-      expect(screen.getByRole('dialog')).toHaveStyle({ overscrollBehavior: 'contain' })
-      expect(screen.getByTestId('sheet-backdrop').parentElement).toHaveStyle({ overscrollBehavior: 'contain' })
-    })
-
-    it('follows the visible area as the browser pans it', () => {
-      render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
-      resize(400, 120)
       act(() => {
         viewport.offsetTop = 200
         viewport.dispatchEvent(new Event('scroll'))
       })
-      expect(screen.getByRole('dialog')).toHaveStyle({ maxHeight: 'calc(100% - 200px)' })
+      expect(screen.getByRole('dialog')).toHaveStyle({ top: '210px' })
+    })
+
+    it('covers the screen behind the keyboard and past its foot, and keeps a scroll bounce to itself', () => {
+      render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      resize(400, 120)
+      const layer = screen.getByTestId('sheet-backdrop').parentElement
+      expect(layer).toHaveStyle({ position: 'fixed', inset: '0', overscrollBehavior: 'contain' })
+      expect(screen.getByRole('dialog')).toHaveStyle({ bottom: '0px', background: 'var(--color-sheet)', overscrollBehavior: 'contain' })
+      expect(screen.getByTestId('sheet-overhang')).toHaveStyle({ top: '100%', height: '100vh', background: 'var(--color-sheet)' })
     })
 
     it('scrolls the field being typed in to its top', () => {
