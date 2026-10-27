@@ -211,13 +211,23 @@ describe('Sheet', () => {
     })
     afterEach(() => vi.unstubAllGlobals())
 
-    const area = () => screen.getByRole('dialog').parentElement!
+    const sheet = () => screen.getByRole('dialog').parentElement!.outerHTML
 
-    it('fits the area above the keyboard, and its content scrolls inside it', () => {
-      render(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
+    // Visible area 120 to 520 of an 844 high window: the keyboard covers the 324 below it.
+    it('starts at the top of the visible area, and its content scrolls to the top of the keyboard', () => {
+      const { rerender } = render(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
       resize(400, 120)
-      expect(area()).toHaveStyle({ top: '120px', height: '400px' })
-      expect(screen.getByRole('dialog')).toHaveStyle({ maxHeight: '100%', overflowY: 'auto' })
+      expect(screen.getByRole('dialog')).toHaveStyle({ maxHeight: 'calc(100% - 120px)', paddingBottom: '340px', overflowY: 'auto' })
+      mockOrientation.isPortrait = false
+      rerender(<Sheet open wide title="Choose your base" onClose={vi.fn()}>content</Sheet>)
+      expect(screen.getByRole('dialog')).toHaveStyle({ top: '130px', paddingBottom: '340px' })
+    })
+
+    it('covers the screen down to its bottom edge, behind the keyboard, so nothing shows through', () => {
+      render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      resize(400, 120)
+      expect(screen.getByTestId('sheet-backdrop').parentElement).toHaveStyle({ position: 'fixed', inset: '0' })
+      expect(screen.getByRole('dialog')).toHaveStyle({ bottom: '0px', background: 'var(--color-sheet)' })
     })
 
     it('scrolls the field being typed in to its top', () => {
@@ -231,31 +241,22 @@ describe('Sheet', () => {
       expect(dialog.scrollTop).toBe(60)
     })
 
-    it('goes back to the full screen when the keyboard closes', () => {
-      render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+    it('is unchanged with no keyboard: a full visible area, a closed keyboard or a zoomed-in view', () => {
+      const { rerender } = render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      const before = sheet()
+      resize(844)
+      expect(sheet()).toBe(before)
       resize(400)
       resize(844)
-      expect(area().getAttribute('style')).not.toMatch(/height/)
-      expect(screen.getByRole('dialog')).toHaveStyle({ maxHeight: '85vh' })
-    })
-
-    it('is unchanged when the visible area is the whole screen, in either placement', () => {
-      const { rerender } = render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
-      const before = area().outerHTML
-      resize(844)
-      expect(area().outerHTML).toBe(before)
-      mockOrientation.isPortrait = false
-      rerender(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
-      expect(area().getAttribute('style')).not.toMatch(/height/)
-    })
-
-    it('ignores a zoomed-in view, which is smaller but not covered', () => {
-      render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      expect(sheet()).toBe(before)
       act(() => {
         Object.assign(viewport, { height: 422, scale: 2 })
         viewport.dispatchEvent(new Event('resize'))
       })
-      expect(area().getAttribute('style')).not.toMatch(/height/)
+      expect(sheet()).toBe(before)
+      mockOrientation.isPortrait = false
+      rerender(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+      expect(screen.getByRole('dialog').getAttribute('style')).not.toMatch(/padding-bottom/)
     })
   })
 })

@@ -265,24 +265,25 @@ function subscribeToViewport(onChange: () => void) {
   }
 }
 
-// The area left above the keyboard as "top height", or '' with no keyboard up: a string, so an
-// unchanged area is an unchanged snapshot.
-function keyboardAreaSnapshot() {
+// With the keyboard up, "<top of the visible area> <height of the window below it>", or '' with no
+// keyboard: a string, so an unchanged area is an unchanged snapshot.
+function keyboardSnapshot() {
   const viewport = window.visualViewport
   if (!viewport || window.innerHeight - viewport.height * viewport.scale < KEYBOARD_MIN_HEIGHT) return ''
-  return `${viewport.offsetTop} ${viewport.height}`
+  return `${viewport.offsetTop} ${window.innerHeight - viewport.offsetTop - viewport.height}`
 }
 
 // Choices open over the screen rather than replacing it: from the right in landscape, where height
 // is short, and from the bottom in portrait, where the thumb is. While the on-screen keyboard is up,
-// the sheet fits the area above it, scrolled to put the field being typed in at its top.
+// the sheet starts at the top of the visible area and still runs to the foot of the screen behind
+// the keyboard, so nothing shows through, but its content scrolls to the top of the keyboard; it
+// scrolls to put the field being typed in at its top.
 export function Sheet({ open, title, onClose, children, wide = false, action }: SheetProps) {
   const { isPortrait } = useOrientation()
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
-  const keyboard = useSyncExternalStore(subscribeToViewport, keyboardAreaSnapshot, () => '')
-  const [keyboardTop, keyboardHeight] = keyboard.split(' ')
-  const keyboardArea: React.CSSProperties | null = keyboard ? { top: `${keyboardTop}px`, left: 0, right: 0, height: `${keyboardHeight}px` } : null
+  const keyboard = useSyncExternalStore(subscribeToViewport, keyboardSnapshot, () => '')
+  const [visibleTop, covered] = keyboard ? keyboard.split(' ').map(Number) : [0, 0]
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -302,13 +303,13 @@ export function Sheet({ open, title, onClose, children, wide = false, action }: 
 
   const where = isPortrait ? 'bottom' : wide ? 'full' : 'side'
   const placement: React.CSSProperties = {
-    bottom: { left: 0, right: 0, bottom: 0, maxHeight: keyboardArea ? '100%' : '85vh', borderRadius: '20px 20px 0 0' },
-    full: { top: '10px', left: '10px', right: '10px', bottom: 0, borderRadius: '16px 16px 0 0' },
-    side: { top: 0, right: 0, bottom: 0, width: 'min(420px, 90vw)', borderRadius: '20px 0 0 20px' },
+    bottom: { left: 0, right: 0, bottom: 0, maxHeight: keyboard ? `calc(100% - ${visibleTop}px)` : '85vh', borderRadius: '20px 20px 0 0' },
+    full: { top: `${10 + visibleTop}px`, left: '10px', right: '10px', bottom: 0, borderRadius: '16px 16px 0 0' },
+    side: { top: `${visibleTop}px`, right: 0, bottom: 0, width: 'min(420px, 90vw)', borderRadius: '20px 0 0 20px' },
   }[where]
 
   return (
-    <div style={{ position: 'fixed', ...(keyboardArea ?? { inset: 0 }), zIndex: 30 }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 30 }}>
       <div data-testid="sheet-backdrop" onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'var(--color-backdrop)' }} />
       <div
         ref={dialogRef}
@@ -320,7 +321,7 @@ export function Sheet({ open, title, onClose, children, wide = false, action }: 
           position: 'absolute',
           ...placement,
           boxSizing: 'border-box',
-          padding: `${SHEET_PADDING}px`,
+          padding: `${SHEET_PADDING}px ${SHEET_PADDING}px ${SHEET_PADDING + covered}px`,
           background: 'var(--color-sheet)',
           color: 'var(--color-text-primary)',
           display: 'flex',
