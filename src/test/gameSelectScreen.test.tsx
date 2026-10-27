@@ -22,6 +22,32 @@ describe('GameSelectScreen', () => {
     expect(screen.getByAltText('Star Wars X-Wing')).toBeInTheDocument()
   })
 
+  describe('logos', () => {
+    // Native pixel size from the PNG header (width and height are big-endian at bytes 16 and 20).
+    const pngs = import.meta.glob<string>('../../public/*.png', { query: '?inline', import: 'default', eager: true })
+    const native = (alt: string) => {
+      const file = screen.getByAltText(alt).getAttribute('src')!.split('/').pop()!
+      const header = new DataView(Uint8Array.from(atob(pngs[`../../public/${file}`].split(',')[1]), c => c.charCodeAt(0)).buffer)
+      return { width: header.getUint32(16), height: header.getUint32(20) }
+    }
+    const rendered = (alt: string) => parseFloat(screen.getByAltText(alt).style.width)
+    const alts = ['Star Wars Unlimited', 'Star Wars X-Wing']
+
+    it('draws both logos with the same on-screen area', () => {
+      show()
+      const [swu, xwing] = alts.map(alt => {
+        const { width, height } = native(alt)
+        return rendered(alt) ** 2 * height / width
+      })
+      expect(Math.abs(swu - xwing) / xwing).toBeLessThan(0.02)
+    })
+
+    it('never draws a logo above its native pixels on a 3x screen', () => {
+      show()
+      for (const alt of alts) expect(rendered(alt) * 3).toBeLessThanOrEqual(native(alt).width)
+    })
+  })
+
   it('marks no tile Last played before a game has been played', () => {
     show()
     expect(screen.queryByText(/last played/i)).not.toBeInTheDocument()

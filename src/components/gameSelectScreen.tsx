@@ -14,10 +14,16 @@ interface Props {
   banner?: ReactNode
 }
 
-const TILES: { game: Game; label: string; logo: string; alt: string }[] = [
-  { game: 'swu', label: 'Star Wars: Unlimited', logo: 'Star-Wars-Unlimited-logo-white.png', alt: 'Star Wars Unlimited' },
-  { game: 'xwing', label: 'X-Wing', logo: 'Star-Wars-X-wing-logo.png', alt: 'Star Wars X-Wing' },
+// Both logos are drawn with the same on-screen area (pt²), so they carry the same visual weight
+// whatever their shapes. Each width follows from this and the logo's aspect ratio (its native size).
+const LOGO_AREA = 20_000
+
+const TILES: { game: Game; label: string; logo: string; size: [number, number]; alt: string }[] = [
+  { game: 'swu', label: 'Star Wars: Unlimited', logo: 'Star-Wars-Unlimited-logo-white.png', size: [959, 686], alt: 'Star Wars Unlimited' },
+  { game: 'xwing', label: 'X-Wing', logo: 'Star-Wars-X-wing-logo.png', size: [1830, 750], alt: 'Star Wars X-Wing' },
 ]
+
+const logoWidth = ([width, height]: [number, number]) => Math.round(Math.sqrt(LOGO_AREA * width / height))
 
 function GameSelectScreen({ lastGame, onSelectSwu, onSelectXwing, onHelp, onSettings, banner }: Props) {
   const { isPortrait } = useOrientation()
@@ -51,7 +57,7 @@ function GameSelectScreen({ lastGame, onSelectSwu, onSelectXwing, onHelp, onSett
           gap: '16px',
           ...(isPortrait ? { gridTemplateRows: '1fr 1fr' } : { gridTemplateColumns: '1fr 1fr' }),
         }}>
-          {TILES.map(({ game, label, logo, alt }) => {
+          {TILES.map(({ game, label, logo, size, alt }) => {
             const last = game === lastGame
             return (
               <button
@@ -82,7 +88,7 @@ function GameSelectScreen({ lastGame, onSelectSwu, onSelectXwing, onHelp, onSett
                 <img
                   src={`${import.meta.env.BASE_URL}${logo}`}
                   alt={alt}
-                  style={{ maxWidth: game === 'xwing' ? '300px' : '200px', width: '80%', maxHeight: '100%', objectFit: 'contain' }}
+                  style={{ width: `${logoWidth(size)}px`, maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
                 />
               </button>
             )
