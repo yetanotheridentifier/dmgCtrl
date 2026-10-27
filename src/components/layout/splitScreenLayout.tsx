@@ -66,7 +66,7 @@ function SplitScreenLayout({ top, topLabel, middle, bottom, bottomLabel }: Props
           height: turned ? '100vw' : '100vh',
           transform: angle ? `translate(-50%, -50%) rotate(-${angle}deg)` : 'translate(-50%, -50%)',
           boxSizing: 'border-box',
-          paddingTop: 'env(safe-area-inset-top)',
+          paddingTop: 'var(--top-clearance)',
           paddingBottom: 'env(safe-area-inset-bottom)',
           display: 'flex',
           flexDirection: 'column',

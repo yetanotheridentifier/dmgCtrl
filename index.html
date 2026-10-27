@@ -10,28 +10,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>dmgCtrl</title>
     <style>html,body{background-color:#000510}</style>
-    <!--
-      iOS 26.1 and later draw a scroll-edge fade over the top of an installed web app that uses
-      the black-translucent status bar. WebKit skips it when a fixed box with a solid background
-      covers the top edge (taller than 10px, at least 90% of the width). .ios-top-edge gives WebKit
-      that box in the page colour but paints nothing itself (a text-clipped background with no
-      text), so the starfield still shows under the status bar. Reported to work on iPad;
-      unconfirmed on iPhone iOS 27.
-    -->
-    <style>
-      .ios-top-edge { display: none; }
-      @media (display-mode: standalone) {
-        .ios-top-edge {
-          display: block; position: fixed; top: 0; left: 0; right: 0; height: 12px;
-          background-color: #000510; -webkit-background-clip: text; background-clip: text;
-          pointer-events: none; z-index: 2147483647;
-        }
-      }
-    </style>
     <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "019fc29a88ac474bab2170fe6a1f8424"}'></script><!-- End Cloudflare Web Analytics -->
   </head>
   <body>
-    <div class="ios-top-edge" aria-hidden="true"></div>
     <div id="root"></div>
     <script>
       window.addEventListener('beforeinstallprompt', function(e) {

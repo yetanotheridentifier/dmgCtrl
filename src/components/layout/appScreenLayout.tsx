@@ -13,7 +13,7 @@ function AppScreenLayout({ children }: Props) {
         fontFamily: "'Segoe UI', system-ui, sans-serif",
         paddingLeft: 'env(safe-area-inset-left)',
         paddingRight: 'env(safe-area-inset-right)',
-        paddingTop: 'env(safe-area-inset-top)',
+        paddingTop: 'var(--top-clearance)',
         paddingBottom: 'env(safe-area-inset-bottom)',
         boxSizing: 'border-box',
         zIndex: 1,
