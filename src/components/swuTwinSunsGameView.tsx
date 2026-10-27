@@ -510,7 +510,7 @@ function SwuTwinSunsGameView(props: Props) {
     <div
       data-testid="twin-suns"
       data-players={players.length}
-      style={{ position: 'fixed', inset: 0, overflow: 'hidden', boxSizing: 'border-box', padding: 'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)', background: BG, color: 'var(--color-text-primary)', fontFamily: "'Segoe UI', system-ui, sans-serif", display: 'flex', flexDirection: 'column' }}
+      style={{ position: 'fixed', inset: 0, overflow: 'hidden', boxSizing: 'border-box', padding: 'var(--top-clearance) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)', background: BG, color: 'var(--color-text-primary)', fontFamily: "'Segoe UI', system-ui, sans-serif", display: 'flex', flexDirection: 'column' }}
     >
       {layout}
       <Sheet open={moreOpen} title="More" onClose={() => setMoreOpen(false)}>

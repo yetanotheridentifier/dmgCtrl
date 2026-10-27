@@ -485,10 +485,12 @@ Favourites have no setting: the star on SWU setup adds and removes them, and Set
 Every screen is wrapped in `AppScreenLayout`, which provides:
 - Full-screen fixed container (fills viewport)
 - Dark background gradient
-- CSS safe area insets (for iOS notch/home indicator)
+- CSS safe area insets (for iOS notch/home indicator), with `--top-clearance` (`index.css`) in place of the top inset
 - Animated star field background
 
 This ensures visual consistency across screens without each screen needing to re-implement the full-screen container.
+
+The page draws under the iPhone status bar (`viewport-fit=cover`, status bar `black-translucent`), and the starfield on `html` runs up through the top inset. In the installed app in portrait, iOS fades the top of the page about 20pt past the inset, and no setting turns that off, so content starts at `--top-clearance` (1.5 times the top inset) rather than at the inset. It is the only value to tune, and no component reads `safe-area-inset-top` directly (a test enforces it). Where the inset is 0 (landscape, Android, desktop) the clearance is 0 too.
 
 ### Styling approach
 
@@ -528,7 +530,7 @@ Cons: no media query support in inline styles (workaround: derive breakpoint-bas
 
 All navigation icon buttons (Back `<`, Help `?`, Settings `⚙`, Log `☰`) share a single style constant — `NAV_BTN_STYLE` in `src/styles/navButton.ts` — which defines `5vw × 5vw`, `minWidth/minHeight: 36px`, transparent background, `--color-ui-border` border, and `borderRadius: 8px`.
 
-All non-game screens (Help, Settings, Game Select, SWU Setup, Tournament, RotatePrompt) use an outer container with `2vw` padding on the top and horizontal edges, placing buttons `2vw` from the `AppScreenLayout` safe-area boundary. Game screens position their buttons absolutely at `calc(env(safe-area-inset-*) + 2vw)`, which resolves to the same visual position since `AppScreenLayout` already pads the container by the safe-area insets. This ensures nav buttons do not jump during screen transitions.
+All non-game screens (Help, Settings, Game Select, SWU Setup, Tournament, RotatePrompt) use an outer container with `2vw` padding on the top and horizontal edges, placing buttons `2vw` from the `AppScreenLayout` safe-area boundary. Game screens position their buttons absolutely at `calc(env(safe-area-inset-*) + 2vw)` (`var(--top-clearance)` at the top), which resolves to the same visual position since `AppScreenLayout` already pads the container by the safe-area insets. This ensures nav buttons do not jump during screen transitions.
 
 Title `h1` elements on all header screens use `lineHeight: 0.8` to keep header row height consistent across screens. The app icon on the Game Select screen is sized to `5vw × 5vw` (matching the `NAV_BTN_STYLE` footprint) with the same gap as the setup screen back button, so the `dmgCtrl` title text lands at the same horizontal position on both screens.
 
