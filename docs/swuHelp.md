@@ -75,7 +75,7 @@ Tap ⋯ at the top right for **Help** and **Settings**. Tap <svg width="0.8em" h
 
 ## Game
 
-Your phone stands in for your base. The card fills the screen from top to bottom, and the controls sit in the narrow margins either side of it. Nothing covers the card's top band (HP, name, aspect) or its text box; the damage goes in the open art between them.
+Your phone stands in for your base. The card fills the screen from top to bottom, and the controls sit in the narrow margins either side of it. Nothing covers the card's top band (HP, name, aspect) or its text box; the damage goes in the open art between them. The 1-player screen is landscape only: held in portrait it stays landscape on the phone, turned on its side, so turn the phone to read it.
 
 **Starting a game:** the card shows **Start**. Tap the card to begin round 1. Between games of a best of 3 it shows the last result and **Start game N**.
 
@@ -155,7 +155,7 @@ Log entries name the base ("Their base: 3 damage"), and the log opens over your 
 
 ### Twin Suns
 
-With **Twin Suns** chosen in setup, one phone or tablet lies flat in landscape with two players along each long side. Each base sits in its setup cell; the top row is turned round to face the players across, and so is the bar, which faces you (top left). With 4 players the bar runs between the side-by-side bases; with 3 it sits between the two bases on one side and the single base is centred on the other. Hold the device in landscape: in portrait it asks you to turn it.
+With **Twin Suns** chosen in setup, one phone or tablet lies flat in landscape with two players along each long side. Each base sits in its setup cell; the top row is turned round to face the players across, and so is the bar, which faces you (top left). With 4 players the bar runs between the side-by-side bases; with 3 it sits between the two bases on one side and the single base is centred on the other. The screen is landscape only: held in portrait it stays landscape on the device, turned on its side, so turn the device to read it.
 
 The game starts at round 1 as the screen opens. Each card is its player's damage control: tap for 1, drag up (from that player's side) to add several, drag down to remove. A base with an epic action has a round yellow button on its text box: tap it when used, and the **Epic action used** plate covers the text box. Tap the plate to take it back.
 

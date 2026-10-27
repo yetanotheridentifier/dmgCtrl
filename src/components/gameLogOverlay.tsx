@@ -29,8 +29,8 @@ function GameLogOverlay({ entries, onUndo, position }: Props) {
         ...(position ?? {
           top: 'var(--edge-top)',
           bottom: 'var(--edge-bottom)',
-          left: 'calc(var(--edge-left) + 8vw)',
-          width: 'clamp(120px, 18vw, 240px)',
+          left: 'calc(var(--edge-left) + 8cqw)',
+          width: 'clamp(120px, 18cqw, 240px)',
         }),
         overflowY: 'auto',
         background: 'rgba(0,0,0,0.85)',
@@ -44,7 +44,7 @@ function GameLogOverlay({ entries, onUndo, position }: Props) {
       }}
     >
       {entries.length === 0 && (
-        <span style={{ color: 'var(--color-text-muted)', fontSize: 'clamp(0.7rem, 1.5vw, 0.9rem)', padding: '0.25rem' }}>
+        <span style={{ color: 'var(--color-text-muted)', fontSize: 'clamp(0.7rem, 1.5cqw, 0.9rem)', padding: '0.25rem' }}>
           No actions yet
         </span>
       )}
@@ -66,7 +66,7 @@ function GameLogOverlay({ entries, onUndo, position }: Props) {
             background: entry.type === 'round' ? 'linear-gradient(to bottom, rgba(59,130,246,0.2) 0%, rgba(59,130,246,0) 100%)' : i === entries.length - 1 ? 'rgba(255,255,255,0.08)' : 'transparent',
           }}
         >
-          <span style={{ color: entry.color, fontSize: 'clamp(0.7rem, 1.5vw, 0.9rem)', flex: 1 }}>
+          <span style={{ color: entry.color, fontSize: 'clamp(0.7rem, 1.5cqw, 0.9rem)', flex: 1 }}>
             {entry.message}
           </span>
           {i === entries.length - 1 && entry.undoable !== false && (
@@ -78,7 +78,7 @@ function GameLogOverlay({ entries, onUndo, position }: Props) {
                 border: '1px solid var(--color-ui-border)',
                 borderRadius: '4px',
                 color: 'var(--color-text-muted)',
-                fontSize: 'clamp(0.6rem, 1.2vw, 0.8rem)',
+                fontSize: 'clamp(0.6rem, 1.2cqw, 0.8rem)',
                 cursor: 'pointer',
                 padding: '0.1rem 0.4rem',
                 flexShrink: 0,

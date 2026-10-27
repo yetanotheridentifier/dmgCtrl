@@ -122,7 +122,8 @@ function SwuGameScreenView(props: SwuGameViewProps) {
   const buttons = useDragScrubber(onIncrement, onDecrement, hpLeft, count, gameStarted)
   const dragAmount = cardDrag.amount ?? (buttons.dragIndicator && { type: buttons.dragIndicator.type, value: buttons.dragIndicator.value })
 
-  // The card fills the height between the edges, leaving each margin room; its sizes scale from 1vh.
+  // The card fills the height between the edges, leaving each margin room; its sizes scale from 1% of
+  // the screen's height (cqh: the screen's frame, which may be turned against the phone).
   const card = (
     <BaseCard
       base={base}
@@ -132,8 +133,8 @@ function SwuGameScreenView(props: SwuGameViewProps) {
       epicActionToken={showEpicAction && epicActionUsed}
       dragAmount={dragAmount}
       drag={cardDrag}
-      width={`min(calc((100vh - var(--edge-top) - var(--edge-bottom)) * ${CARD_ASPECT_RATIO}), calc(100vw - var(--edge-left) - var(--edge-right) - ${2 * MARGIN_MIN}px))`}
-      unit="1vh"
+      width={`min(calc((100cqh - var(--edge-top) - var(--edge-bottom)) * ${CARD_ASPECT_RATIO}), calc(100cqw - var(--edge-left) - var(--edge-right) - ${2 * MARGIN_MIN}px))`}
+      unit="1cqh"
     />
   )
 

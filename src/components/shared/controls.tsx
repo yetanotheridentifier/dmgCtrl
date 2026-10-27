@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { useOrientation } from '../../hooks/useOrientation'
+import { useFrameTurn } from '../../hooks/useFrameTurn'
 import { ChevronDownIcon, CloseIcon } from '../icons'
 
 // The X-Wing control set agreed in #853: every control filled (never an empty outline), radius 12,
@@ -282,7 +283,11 @@ export function Sheet({ open, title, onClose, children, wide = false, action }: 
   const { isPortrait } = useOrientation()
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
-  const keyboard = useSyncExternalStore(subscribeToViewport, keyboardSnapshot, () => '')
+  // On a screen turned against the phone the keyboard rises along one of the sheet's sides, not its
+  // foot, so the sheet leaves it be.
+  const turned = useFrameTurn() !== 0
+  const onScreenKeyboard = useSyncExternalStore(subscribeToViewport, keyboardSnapshot, () => '')
+  const keyboard = turned ? '' : onScreenKeyboard
   const [visibleTop, covered] = keyboard ? keyboard.split(' ').map(Number) : [0, 0]
 
   useEffect(() => {
@@ -307,9 +312,9 @@ export function Sheet({ open, title, onClose, children, wide = false, action }: 
   const foot = keyboard ? `${SHEET_PADDING + covered}px` : 'var(--edge-bottom)'
   const fromBottom = { paddingTop: `${SHEET_PADDING}px`, paddingRight: 'var(--edge-right)', paddingBottom: foot, paddingLeft: 'var(--edge-left)' }
   const placement: React.CSSProperties = {
-    bottom: { left: 0, right: 0, bottom: 0, maxHeight: keyboard ? `calc(100% - ${visibleTop}px)` : '85vh', borderRadius: '20px 20px 0 0', ...fromBottom },
+    bottom: { left: 0, right: 0, bottom: 0, maxHeight: keyboard ? `calc(100% - ${visibleTop}px)` : '85%', borderRadius: '20px 20px 0 0', ...fromBottom },
     full: { top: `${10 + visibleTop}px`, left: 0, right: 0, bottom: 0, borderRadius: '16px 16px 0 0', ...fromBottom },
-    side: { top: `${visibleTop}px`, right: 0, bottom: 0, width: 'min(420px, 90vw)', borderRadius: '20px 0 0 20px', paddingTop: 'var(--edge-top)', paddingRight: 'var(--edge-right)', paddingBottom: foot, paddingLeft: `${SHEET_PADDING}px` },
+    side: { top: `${visibleTop}px`, right: 0, bottom: 0, width: 'min(420px, 90%)', borderRadius: '20px 0 0 20px', paddingTop: 'var(--edge-top)', paddingRight: 'var(--edge-right)', paddingBottom: foot, paddingLeft: `${SHEET_PADDING}px` },
   }[where]
   // A scroll bounce stays in the sheet rather than moving the page under it.
   const contained: React.CSSProperties = keyboard ? { overscrollBehavior: 'contain' } : {}

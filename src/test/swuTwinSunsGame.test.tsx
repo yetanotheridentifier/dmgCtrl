@@ -127,29 +127,47 @@ describe('SwuTwinSunsGame: layout', () => {
       .toEqual(['var(--edge-top)', 'var(--edge-right)', 'var(--edge-bottom)', 'var(--edge-left)'])
   })
 
-  it('asks to rotate the phone in portrait', () => {
+  it('in portrait keeps its landscape layout, turned a quarter, with no rotate prompt', () => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
     renderGame()
-    expect(screen.queryByTestId('twin-suns')).not.toBeInTheDocument()
-    expect(screen.getByText(/rotate/i)).toBeInTheDocument()
+    expect(screen.getByTestId('turned-frame').style.transform).toMatch(/rotate\(90deg\)/)
+    expect(screen.getByTestId('turned-frame')).toContainElement(screen.getByTestId('twin-suns'))
+    expect(screen.queryByText(/rotate/i)).not.toBeInTheDocument()
   })
 
-  it('on a tablet every bar control is a 94px square', () => {
+  it('in landscape is upright', () => {
+    renderGame()
+    expect(screen.getByTestId('turned-frame').style.transform).not.toMatch(/rotate/)
+  })
+
+  // A viewport of the given size answering min-width and min-height queries.
+  const withViewport = (width: number, height: number, run: () => void) => {
     const original = window.matchMedia
     window.matchMedia = ((query: string) => ({
-      matches: query === '(min-height: 600px)',
+      matches: [...query.matchAll(/min-(width|height): (\d+)px/g)].every(([, side, px]) => (side === 'width' ? width : height) >= Number(px)),
       media: query,
       addEventListener: () => {},
       removeEventListener: () => {},
     })) as unknown as typeof window.matchMedia
-    try {
+    try { run() } finally { window.matchMedia = original }
+  }
+  const barSquares = (size: string) => ['Back to setup', 'Log', 'More', 'End game', claimInitiative, claimPlan, claimBlast, /^Round 1/]
+    .every(name => within(bar()).getByRole('button', { name }).style.width === size)
+
+  it.each([[1024, 768], [768, 1024]])('on a tablet (%ix%i) every bar control is a 94px square', (width, height) => {
+    withViewport(width, height, () => {
       renderGame()
-      for (const name of ['Back to setup', 'Log', 'More', 'End game', claimInitiative, claimPlan, claimBlast, /^Round 1/]) {
-        expect(within(bar()).getByRole('button', { name })).toHaveStyle({ width: '94px', height: '94px' })
-      }
-    } finally {
-      window.matchMedia = original
-    }
+      expect(barSquares('94px')).toBe(true)
+    })
+  })
+
+  // A phone held in portrait is tall, but its turned screen is a phone's landscape one.
+  it('on a phone held in portrait the bar keeps its phone size', () => {
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
+    withViewport(390, 844, () => {
+      renderGame()
+      expect(within(bar()).getByRole('button', { name: 'Log' }).style.width).not.toBe('94px')
+    })
   })
 })
 

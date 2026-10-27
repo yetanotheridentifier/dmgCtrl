@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Base } from '../hooks/useBases'
 import { useGameHistory } from '../hooks/useGameHistory'
-import { useOrientation } from '../hooks/useOrientation'
 import { useWakeLock } from '../hooks/useWakeLock'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { TWIN_SUNS_SEATS } from '../hooks/useSwuSetup'
-import RotatePrompt from './layout/rotatePrompt'
+import { LandscapeScreen } from './layout/fixedOrientation'
 import SwuTwinSunsGameView from './swuTwinSunsGameView'
 import type { Seat, TwinSunsPlayer } from './swuTwinSunsGameView'
 import {
@@ -38,7 +37,6 @@ const seatName =(where: string) => (where.charAt(0).toUpperCase() + where.slice(
 // log that undoes it, and what is being chosen.
 function SwuTwinSunsGame({ base, seats, onBack, onHelp, onSettings }: Props) {
   const { useHyperspace } = useUserSettings()
-  const { isPortrait } = useOrientation()
   useWakeLock(true)
 
   const players: TwinSunsPlayer[] = [
@@ -147,37 +145,37 @@ function SwuTwinSunsGame({ base, seats, onBack, onHelp, onSettings }: Props) {
     onBack()
   }
 
-  if (isPortrait) return <RotatePrompt onBack={leave} />
-
   return (
-    <SwuTwinSunsGameView
-      players={players}
-      state={state}
-      placings={state.finished ? placings(state, hp) : null}
-      picking={picking}
-      confirmEnd={confirmEnd}
-      onTap={onTap}
-      onIncrement={onIncrement}
-      onDecrement={onDecrement}
-      onEpic={onEpic}
-      onPick={c => { setPicking(c); setConfirmEnd(false) }}
-      onCancelPick={() => setPicking(null)}
-      onRound={onRound}
-      onOpenEnd={() => { setConfirmEnd(true); setPicking(null) }}
-      onKeepPlaying={() => setConfirmEnd(false)}
-      onFinish={onFinish}
-      onNoOne={onNoOne}
-      onUndoDamage={onUndo}
-      onRematch={onRematch}
-      onNewSetup={onBack}
-      onBack={leave}
-      onHelp={onHelp}
-      onSettings={onSettings}
-      logEntries={log.entries}
-      onUndo={onUndo}
-      showLog={showLog}
-      onLogToggle={() => setShowLog(v => !v)}
-    />
+    <LandscapeScreen>
+      <SwuTwinSunsGameView
+        players={players}
+        state={state}
+        placings={state.finished ? placings(state, hp) : null}
+        picking={picking}
+        confirmEnd={confirmEnd}
+        onTap={onTap}
+        onIncrement={onIncrement}
+        onDecrement={onDecrement}
+        onEpic={onEpic}
+        onPick={c => { setPicking(c); setConfirmEnd(false) }}
+        onCancelPick={() => setPicking(null)}
+        onRound={onRound}
+        onOpenEnd={() => { setConfirmEnd(true); setPicking(null) }}
+        onKeepPlaying={() => setConfirmEnd(false)}
+        onFinish={onFinish}
+        onNoOne={onNoOne}
+        onUndoDamage={onUndo}
+        onRematch={onRematch}
+        onNewSetup={onBack}
+        onBack={leave}
+        onHelp={onHelp}
+        onSettings={onSettings}
+        logEntries={log.entries}
+        onUndo={onUndo}
+        showLog={showLog}
+        onLogToggle={() => setShowLog(v => !v)}
+      />
+    </LandscapeScreen>
   )
 }
 

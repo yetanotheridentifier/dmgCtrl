@@ -1,4 +1,14 @@
 import React, { useState, useRef } from 'react'
+import { distanceUp, useFrameTurn } from './useFrameTurn'
+
+type Point = { clientX: number; clientY: number }
+
+// How far a pointer moved up the screen as its player sees it: along the turned frame's up, and the
+// other way on a half turned round to face the far player.
+function useUpFrom(flipped: boolean) {
+  const turn = useFrameTurn() + (flipped ? 180 : 0)
+  return (start: Point, now: Point) => distanceUp(turn, now.clientX - start.clientX, now.clientY - start.clientY)
+}
 
 const DEAD_ZONE = 15
 const PX_PER_STEP = 14
@@ -20,7 +30,8 @@ export function useDragScrubber(
   // Turned round (the far half of a shared phone): up for its player is down the screen.
   flipped = false,
 ) {
-  const dragRef = useRef<{ type: '+' | '-'; startY: number; value: number; active: boolean } | null>(null)
+  const upFrom = useUpFrom(flipped)
+  const dragRef = useRef<{ type: '+' | '-'; start: Point; value: number; active: boolean } | null>(null)
   const [indicator, setIndicator] = useState<DragIndicator | null>(null)
   const dragApplied = useRef(false)
 
@@ -34,13 +45,13 @@ export function useDragScrubber(
     const max = type === '+' ? maxIncrement : maxDecrement
     if (max < 2) return
     if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId)
-    dragRef.current = { type, startY: e.clientY, value: 1, active: false }
+    dragRef.current = { type, start: { clientX: e.clientX, clientY: e.clientY }, value: 1, active: false }
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
     const dr = dragRef.current
     if (!dr) return
-    const delta = (dr.startY - e.clientY) * (flipped ? -1 : 1)
+    const delta = upFrom(dr.start, e)
     if (delta < DEAD_ZONE) {
       dr.value = 1
       dr.active = false
@@ -95,7 +106,8 @@ export function useCardDrag(
   enabled: boolean,
   flipped = false,
 ) {
-  const dragRef = useRef<{ startY: number; type: '+' | '-' | null; value: number } | null>(null)
+  const upFrom = useUpFrom(flipped)
+  const dragRef = useRef<{ start: Point; type: '+' | '-' | null; value: number } | null>(null)
   const [amount, setAmount] = useState<{ type: '+' | '-'; value: number } | null>(null)
   const dragApplied = useRef(false)
 
@@ -107,13 +119,13 @@ export function useCardDrag(
   const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
     if (!enabled) return
     if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId)
-    dragRef.current = { startY: e.clientY, type: null, value: 0 }
+    dragRef.current = { start: { clientX: e.clientX, clientY: e.clientY }, type: null, value: 0 }
   }
 
   const onPointerMove = (e: React.PointerEvent<HTMLElement>) => {
     const dr = dragRef.current
     if (!dr) return
-    const delta = (dr.startY - e.clientY) * (flipped ? -1 : 1)
+    const delta = upFrom(dr.start, e)
     if (Math.abs(delta) < DEAD_ZONE) {
       dr.type = null
       if (amount !== null) setAmount(null)

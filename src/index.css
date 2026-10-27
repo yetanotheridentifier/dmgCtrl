@@ -37,12 +37,18 @@
   --top-clearance: calc(env(safe-area-inset-top, 0px) * 1.5);
   /* How far content keeps from each screen edge, clear of the rounded corners: the inset or the
      margin, whichever is larger, so an inset already wider than the margin is not added to. The top
-     is the top clearance or the margin. Layouts pad by these; nothing else reads an inset. */
+     is the top clearance or the margin. Layouts pad by the --edge-* tokens; nothing else reads an inset.
+     Each is its own screen edge, except inside a screen turned against the phone
+     (layout/fixedOrientation.tsx), which points each at the screen edge that side lies along. */
   --edge-margin: 16px;
-  --edge-top: max(var(--top-clearance), var(--edge-margin));
-  --edge-right: max(env(safe-area-inset-right, 0px), var(--edge-margin));
-  --edge-bottom: max(env(safe-area-inset-bottom, 0px), var(--edge-margin));
-  --edge-left: max(env(safe-area-inset-left, 0px), var(--edge-margin));
+  --screen-edge-top: max(var(--top-clearance), var(--edge-margin));
+  --screen-edge-right: max(env(safe-area-inset-right, 0px), var(--edge-margin));
+  --screen-edge-bottom: max(env(safe-area-inset-bottom, 0px), var(--edge-margin));
+  --screen-edge-left: max(env(safe-area-inset-left, 0px), var(--edge-margin));
+  --edge-top: var(--screen-edge-top);
+  --edge-right: var(--screen-edge-right);
+  --edge-bottom: var(--screen-edge-bottom);
+  --edge-left: var(--screen-edge-left);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;

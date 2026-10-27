@@ -4,7 +4,6 @@ import { useSwuGame } from '../hooks/useSwuGame'
 import type { GameState } from '../hooks/useSwuGame'
 import { useGameHistory } from '../hooks/useGameHistory'
 import { useBaseArt } from '../hooks/useBaseArt'
-import { useOrientation } from '../hooks/useOrientation'
 import { useWakeLock } from '../hooks/useWakeLock'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useMatch } from '../hooks/useMatch'
@@ -17,7 +16,7 @@ import SwuGame2pView from './swuGame2pView'
 import type { SwuSide } from './swuGame2pView'
 import { hasEpicAction } from './swuGameStyles'
 import type { LastGame } from './swuGamePieces'
-import RotatePrompt from './layout/rotatePrompt'
+import { LandscapeScreen } from './layout/fixedOrientation'
 import { onGameStart, onGameEnd, onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
 import type { ForceTokenDisplay } from '../hooks/useUserSettings'
 import type { PlayMode } from '../utils/playMode'
@@ -73,7 +72,6 @@ function SwuGameScreen({ base, theirBase, playMode = 'casual', format, isInTourn
   const theirGame = useSwuGame(theirs.hp)
   const twoPlayers = theirBase !== undefined
   const log = useGameHistory<SwuGameSnapshot>()
-  const { isPortrait } = useOrientation()
   // The game screen always keeps the phone awake.
   useWakeLock(true)
 
@@ -283,11 +281,6 @@ function SwuGameScreen({ base, theirBase, playMode = 'casual', format, isInTourn
     onBack(gamesPlayed)
   }
 
-  // Two players lie the phone flat between them: their screen stays portrait whatever the phone reports.
-  if (isPortrait && !twoPlayers) {
-    return <RotatePrompt onBack={handleReset} />
-  }
-
   // Draws, including an intentional one before game 1 of a match, go through End game.
   const canEndGame = !match.matchOver && (gameStarted || (!isCasual && isPreFirstGame))
   const canChangeBase = !!changeBaseOptions && !!onChangeBase && !gameStarted && gamesPlayed > 0 && !match.matchOver
@@ -333,11 +326,13 @@ function SwuGameScreen({ base, theirBase, playMode = 'casual', format, isInTourn
     onChangeBase,
   }
 
+  // Two players lie the phone flat between them: their screen stays portrait on the phone. One player's
+  // screen stays landscape on the phone.
   if (twoPlayers) {
     const destroyedNote = yoursDestroyed ? 'Your base is destroyed' : theirsDestroyed ? 'Their base is destroyed' : null
     return <SwuGame2pView {...viewProps} them={them} destroyedNote={destroyedNote} />
   }
-  return <SwuGameScreenView {...viewProps} />
+  return <LandscapeScreen><SwuGameScreenView {...viewProps} /></LandscapeScreen>
 }
 
 export default SwuGameScreen
