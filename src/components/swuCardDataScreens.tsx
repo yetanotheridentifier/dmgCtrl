@@ -44,7 +44,7 @@ interface OfflineProps {
 export function SwuOffline({ onRetry, onPlayXwing, onBack }: OfflineProps) {
   return (
     <AppScreenLayout>
-      <div style={{ position: 'absolute', left: '16px', top: '16px' }}>
+      <div style={{ position: 'absolute', left: 'var(--edge-left)', top: 'var(--edge-top)' }}>
         <IconButton label="Back to game select" onClick={onBack}><BackIcon /></IconButton>
       </div>
       <div style={{ ...centred, gap: '16px' }}>

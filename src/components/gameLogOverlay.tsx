@@ -27,9 +27,9 @@ function GameLogOverlay({ entries, onUndo, position }: Props) {
       style={{
         position: 'absolute',
         ...(position ?? {
-          top: 'calc(var(--top-clearance) + 2vw)',
-          bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
-          left: 'calc(env(safe-area-inset-left) + 8vw)',
+          top: 'var(--edge-top)',
+          bottom: 'var(--edge-bottom)',
+          left: 'calc(var(--edge-left) + 8vw)',
           width: 'clamp(120px, 18vw, 240px)',
         }),
         overflowY: 'auto',

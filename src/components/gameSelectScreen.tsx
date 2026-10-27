@@ -31,7 +31,7 @@ function GameSelectScreen({ lastGame, onSelectSwu, onSelectXwing, onHelp, onSett
 
   return (
     <AppScreenLayout>
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: banner ? '12px' : '16px', padding: '16px', boxSizing: 'border-box' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: banner ? '12px' : '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '44px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: isPortrait ? '8px' : '10px' }}>
             <img

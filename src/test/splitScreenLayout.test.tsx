@@ -65,4 +65,20 @@ describe('SplitScreenLayout', () => {
     s.turnTo(0)
     expect(frame().style.transform).not.toMatch(/rotate/)
   })
+
+  // The frame is turned, so each of its sides lies along a different screen edge: it pads each side by
+  // the edge token of the screen edge it lies along, and the halves add space only towards the middle.
+  it('pads each side by the edge token of the screen edge it lies along', () => {
+    const s = mockScreenAngle(0)
+    renderLayout()
+    const padding = () => ['Top', 'Right', 'Bottom', 'Left'].map(side => frame().style.getPropertyValue(`padding-${side.toLowerCase()}`))
+    expect(padding()).toEqual(['var(--edge-top)', 'var(--edge-right)', 'var(--edge-bottom)', 'var(--edge-left)'])
+    s.turnTo(90)
+    expect(padding()).toEqual(['var(--edge-left)', 'var(--edge-top)', 'var(--edge-right)', 'var(--edge-bottom)'])
+    s.turnTo(270)
+    expect(padding()).toEqual(['var(--edge-right)', 'var(--edge-bottom)', 'var(--edge-left)', 'var(--edge-top)'])
+    for (const name of ['Theirs', 'Yours']) {
+      expect(screen.getByRole('region', { name })).toHaveStyle({ paddingTop: '8px', paddingLeft: '0px', paddingRight: '0px', paddingBottom: '0px' })
+    }
+  })
 })

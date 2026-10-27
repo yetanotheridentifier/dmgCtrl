@@ -243,7 +243,7 @@ export default function XwingSetupScreenView({
   if (isPortrait) {
     return (
       <AppScreenLayout>
-        <div data-testid="xwing-setup" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px 16px 24px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
+        <div data-testid="xwing-setup" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
           {topBar}
           {renderCard('player')}
           {renderCard('opponent')}
@@ -261,7 +261,7 @@ export default function XwingSetupScreenView({
 
   return (
     <AppScreenLayout>
-      <div data-testid="xwing-setup" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
+      <div data-testid="xwing-setup" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', color: 'var(--color-text-primary)' }}>
         {topBar}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px', alignItems: 'start' }}>
           {renderCard('player')}

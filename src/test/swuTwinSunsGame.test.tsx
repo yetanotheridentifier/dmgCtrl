@@ -120,6 +120,13 @@ describe('SwuTwinSunsGame: layout', () => {
     expect(screen.getByTestId('twin-suns-row-top')).toHaveStyle({ justifyContent: 'center' })
   })
 
+  it('keeps the bases and the bar off the screen edges by the edge tokens', () => {
+    renderGame()
+    const { style } = screen.getByTestId('twin-suns')
+    expect([style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft])
+      .toEqual(['var(--edge-top)', 'var(--edge-right)', 'var(--edge-bottom)', 'var(--edge-left)'])
+  })
+
   it('asks to rotate the phone in portrait', () => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
     renderGame()

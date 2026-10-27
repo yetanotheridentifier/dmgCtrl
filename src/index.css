@@ -30,11 +30,19 @@
   --color-tonal-text: #e6f6fe;
   --color-sheet: #10172a;
   --color-backdrop: rgba(0, 5, 16, 0.72);
-  /* Where content starts below the status bar. iOS fades the top of the installed app about
+  /* The top edge below the status bar. iOS fades the top of the installed app about
      20pt past the inset in portrait, and no setting turns that off, so content clears it by half
      the inset again. Scaled off the inset, it is 0 wherever the inset is 0 (landscape, Android,
      desktop). The starfield on html still runs up through the inset. */
   --top-clearance: calc(env(safe-area-inset-top, 0px) * 1.5);
+  /* How far content keeps from each screen edge, clear of the rounded corners: the inset or the
+     margin, whichever is larger, so an inset already wider than the margin is not added to. The top
+     is the top clearance or the margin. Layouts pad by these; nothing else reads an inset. */
+  --edge-margin: 16px;
+  --edge-top: max(var(--top-clearance), var(--edge-margin));
+  --edge-right: max(env(safe-area-inset-right, 0px), var(--edge-margin));
+  --edge-bottom: max(env(safe-area-inset-bottom, 0px), var(--edge-margin));
+  --edge-left: max(env(safe-area-inset-left, 0px), var(--edge-margin));
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;

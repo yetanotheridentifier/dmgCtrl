@@ -15,8 +15,8 @@ export default function RotatePrompt({ onBack }: Props) {
         style={{
           ...NAV_BTN_STYLE,
           position: 'absolute',
-          top: 'calc(var(--top-clearance) + 2vw)',
-          left: 'calc(env(safe-area-inset-left) + 2vw)',
+          top: 'var(--edge-top)',
+          left: 'var(--edge-left)',
           zIndex: 10,
         }}
       >

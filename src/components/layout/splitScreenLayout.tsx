@@ -37,7 +37,8 @@ const half = (turned: boolean): React.CSSProperties => ({
   flex: 1,
   minHeight: 0,
   boxSizing: 'border-box',
-  padding: '8px',
+  // The frame keeps the screen edges; a half adds space only towards the middle (its own top).
+  paddingTop: '8px',
   display: 'flex',
   flexDirection: 'column',
   gap: '8px',
@@ -45,6 +46,14 @@ const half = (turned: boolean): React.CSSProperties => ({
   containerType: 'size',
   ...(turned ? { transform: 'rotate(180deg)' } : {}),
 })
+
+// Screen edges in the order of CSS sides (top, right, bottom, left). Turned by -angle, the frame's side i
+// lies along screen edge i - angle / 90, and is padded by that edge's token.
+const EDGES = ['top', 'right', 'bottom', 'left']
+function framePadding(angle: number): React.CSSProperties {
+  const edge = (i: number) => `var(--edge-${EDGES[(i - Math.round(angle / 90) + 8) % 4]})`
+  return { paddingTop: edge(0), paddingRight: edge(1), paddingBottom: edge(2), paddingLeft: edge(3) }
+}
 
 // One phone shared between two players facing each other: the screen splits into two halves with a
 // strip between them, and the top half is turned round to face the far player. The split stays put on
@@ -66,8 +75,7 @@ function SplitScreenLayout({ top, topLabel, middle, bottom, bottomLabel }: Props
           height: turned ? '100vw' : '100vh',
           transform: angle ? `translate(-50%, -50%) rotate(-${angle}deg)` : 'translate(-50%, -50%)',
           boxSizing: 'border-box',
-          paddingTop: 'var(--top-clearance)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
+          ...framePadding(angle),
           display: 'flex',
           flexDirection: 'column',
         }}

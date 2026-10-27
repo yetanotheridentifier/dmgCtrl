@@ -2,30 +2,44 @@ import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import AppScreenLayout from '../components/layout/appScreenLayout'
 
+const indexCss = String(Object.values(import.meta.glob('../index.css', { query: '?raw', import: 'default', eager: true }))[0])
+
 describe('AppScreenLayout', () => {
   it('Renders children', () => {
     render(<AppScreenLayout><p>Hello</p></AppScreenLayout>)
     expect(screen.getByText('Hello')).toBeInTheDocument()
   })
 
-  it('Pads the content by the safe area, with the top clearance at the top', () => {
+  it('Pads the content to the edge tokens', () => {
     render(<AppScreenLayout><p>content</p></AppScreenLayout>)
     expect(screen.getByTestId('content-wrapper')).toHaveStyle({
-      paddingTop: 'var(--top-clearance)',
-      paddingBottom: 'env(safe-area-inset-bottom)',
-      paddingLeft: 'env(safe-area-inset-left)',
-      paddingRight: 'env(safe-area-inset-right)',
+      paddingTop: 'var(--edge-top)',
+      paddingBottom: 'var(--edge-bottom)',
+      paddingLeft: 'var(--edge-left)',
+      paddingRight: 'var(--edge-right)',
     })
   })
 })
 
-describe('the top clearance', () => {
-  // On iPhone, iOS fades the top of the installed app below the status bar, so content clears
-  // the top inset by --top-clearance (index.css). One value to tune: no component reads the inset.
+describe('the edge tokens', () => {
+  // Content keeps clear of the screen's rounded corners: each edge is the safe-area inset or the edge
+  // margin, whichever is larger (never the two added), and the top is the top clearance (index.css)
+  // or the margin. One place to tune: no component reads an inset itself.
   const sources = import.meta.glob(['../**/*.{ts,tsx}', '!../test/**', '!../**/*.test.*'], { query: '?raw', import: 'default', eager: true })
+  const declared = (name: string) => indexCss.match(new RegExp(`--${name}:\\s*([^;]+);`))?.[1].trim()
 
-  it('is the only way components reach the top inset', () => {
-    const direct = Object.entries(sources).filter(([, text]) => String(text).includes('safe-area-inset-top')).map(([file]) => file)
+  it('are the larger of the inset and a 16px margin on every edge', () => {
+    expect(declared('edge-margin')).toBe('16px')
+    for (const side of ['left', 'right', 'bottom']) {
+      expect(declared(`edge-${side}`)).toBe(`max(env(safe-area-inset-${side}, 0px), var(--edge-margin))`)
+    }
+    expect(declared('edge-top')).toBe('max(var(--top-clearance), var(--edge-margin))')
+  })
+
+  it('are the only way components reach the screen edges', () => {
+    const direct = Object.entries(sources)
+      .filter(([, text]) => /safe-area-inset-|--top-clearance/.test(String(text)))
+      .map(([file]) => file)
     expect(Object.keys(sources).length).toBeGreaterThan(50)
     expect(direct).toEqual([])
   })

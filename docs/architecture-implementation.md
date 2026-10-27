@@ -18,7 +18,7 @@ src/
     layout/
       appScreenLayout.tsx  Shared full-screen layout wrapper (background, safe area)
       splitScreenLayout.tsx One phone shared by two players facing each other: `top`, `middle` and `bottom` in a portrait column, each half a `<section>` named by `topLabel` / `bottomLabel` and a size container (`container-type: size`, so its contents size with `cq` units); the top half is turned 180°. Chosen by mode, not by `isPortrait`: when `screen.orientation.angle` (or the legacy `window.orientation`) reports a landscape turn, the whole frame (`split-screen`) swaps to 100vh × 100vw and turns back by that angle, so the halves stay put on the phone. Knows nothing about SWU
-      rotatePrompt.tsx     Landscape-only prompt — renders a full-screen "Please rotate to landscape" message with a Back button; used by swuGameScreen and xwingGameScreen when isPortrait is true; Back button uses `NAV_BTN_STYLE` spread with `position: absolute` at `calc(env(safe-area-inset-*) + 2vw)`, matching the game screen button positions
+      rotatePrompt.tsx     Landscape-only prompt — renders a full-screen "Please rotate to landscape" message with a Back button; used by swuGameScreen and xwingGameScreen when isPortrait is true; Back button uses `NAV_BTN_STYLE` spread with `position: absolute` at the top and left edge tokens
     icons.tsx               Reusable SVG icon components (BackIcon, ForwardIcon, HelpIcon, CogIcon, LogIcon, ShareIcon, HomeScreenIcon, DotsIcon, ChevronDownIcon, DiceIcon, CheckIcon, EditIcon, ListIcon, CloseIcon, StarIcon, SearchIcon, PlusIcon)
     imagePreview.tsx        Pure view — renders card art or error message from props; fill='width' (default) constrains by width with aspect-ratio height; fill='height' constrains by height with aspect-ratio width, right-aligned via marginLeft:auto, or centred with `centred`; uses useLayoutEffect to check img.complete on mount so cached images show immediately without waiting for a load event that the browser may not re-fire
     gameLogOverlay.tsx      Game screen action log overlay — scrollable entry list; auto-scrolls to bottom; undo button on last entry (hidden when `undoable === false`); `round`-type entries get a blue gradient (`rgba(59,130,246,0.2) → rgba(59,130,246,0)` — explicit zero-alpha endpoint avoids the CSS `transparent`/black-interpolation rendering artefact), a `1px solid rgba(147,197,253,0.4)` top border, `borderRadius: '4px 4px 0 0'` (flat bottom corners so the gradient is never clipped mid-fade), and `paddingTop: 0.35rem`; all three apply to every round entry including the first (`i > 0` guard removed); non-first round entries additionally get `marginTop: 0.35rem` for visual separation from preceding content; last entry gets `rgba(255,255,255,0.08)` highlight unless it is a round entry; accepts `LogEntryLike[]` (id, type, message, color, optional undoable) so it works with `HistoryEntry<unknown>[]` from both SWU and X-Wing without casting; an optional `position` replaces its place on the left of the screen
@@ -487,12 +487,16 @@ Favourites have no setting: the star on SWU setup adds and removes them, and Set
 Every screen is wrapped in `AppScreenLayout`, which provides:
 - Full-screen fixed container (fills viewport)
 - Dark background gradient
-- CSS safe area insets (for iOS notch/home indicator), with `--top-clearance` (`index.css`) in place of the top inset
+- Padding by the edge tokens (below), so screens add no outer padding of their own
 - Animated star field background
 
 This ensures visual consistency across screens without each screen needing to re-implement the full-screen container.
 
-The page draws under the iPhone status bar (`viewport-fit=cover`, status bar `black-translucent`), and the starfield on `html` runs up through the top inset. In the installed app in portrait, iOS fades the top of the page about 20pt past the inset, and no setting turns that off, so content starts at `--top-clearance` (1.5 times the top inset) rather than at the inset. It is the only value to tune, and no component reads `safe-area-inset-top` directly (a test enforces it). Where the inset is 0 (landscape, Android, desktop) the clearance is 0 too.
+The page draws under the iPhone status bar (`viewport-fit=cover`, status bar `black-translucent`), and the starfield on `html` runs up through the top inset. In the installed app in portrait, iOS fades the top of the page about 20pt past the inset, and no setting turns that off, so the top edge is `--top-clearance` (1.5 times the top inset) rather than the inset. Where the inset is 0 (landscape, Android, desktop) the clearance is 0 too.
+
+**Edge tokens.** Content keeps clear of the screen's rounded corners by `--edge-top`, `--edge-right`, `--edge-bottom` and `--edge-left` (`index.css`). Each is the safe-area inset (the top clearance at the top) or `--edge-margin` (16px), whichever is larger: an inset wider than the margin, such as the landscape notch side or the home indicator, is not added to. The layouts pad by them: `AppScreenLayout`, `SplitScreenLayout` (each side of its turned frame by the token of the screen edge it lies along), the Twin Suns game, and the shared `Sheet` on each side it runs to the screen edge. No component reads `safe-area-inset-*` or `--top-clearance` directly (a test enforces it).
+
+**Text fields** spread `FIELD_STYLE` (`src/styles/field.ts`), whose text is 16px. iOS zooms the page in when a smaller field takes focus and stays zoomed, which cuts off the screen's edges; a test checks every input and textarea uses it.
 
 ### Styling approach
 
@@ -532,7 +536,7 @@ Cons: no media query support in inline styles (workaround: derive breakpoint-bas
 
 All navigation icon buttons (Back `<`, Help `?`, Settings `⚙`, Log `☰`) share a single style constant — `NAV_BTN_STYLE` in `src/styles/navButton.ts` — which defines `5vw × 5vw`, `minWidth/minHeight: 36px`, transparent background, `--color-ui-border` border, and `borderRadius: 8px`.
 
-All non-game screens (Help, Settings, Game Select, SWU Setup, Tournament, RotatePrompt) use an outer container with `2vw` padding on the top and horizontal edges, placing buttons `2vw` from the `AppScreenLayout` safe-area boundary. Game screens position their buttons absolutely at `calc(env(safe-area-inset-*) + 2vw)` (`var(--top-clearance)` at the top), which resolves to the same visual position since `AppScreenLayout` already pads the container by the safe-area insets. This ensures nav buttons do not jump during screen transitions.
+Every screen's first row starts at the `AppScreenLayout` edge, and buttons positioned absolutely (RotatePrompt's Back, the SWU offline screen's Back) sit at `var(--edge-top)` and `var(--edge-left)`, the same place. This ensures nav buttons do not jump during screen transitions.
 
 Title `h1` elements on all header screens use `lineHeight: 0.8` to keep header row height consistent across screens. The app icon on the Game Select screen is sized to `5vw × 5vw` (matching the `NAV_BTN_STYLE` footprint) with the same gap as the setup screen back button, so the `dmgCtrl` title text lands at the same horizontal position on both screens.
 

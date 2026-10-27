@@ -296,7 +296,7 @@ function AppScreens() {
     : null
   // Over a setup screen the banner floats at the foot; game select makes room for it under its tiles.
   const floatingBanner = banner && (
-    <div style={{ position: 'fixed', left: 'calc(16px + env(safe-area-inset-left))', right: 'calc(16px + env(safe-area-inset-right))', bottom: 'calc(16px + env(safe-area-inset-bottom))', zIndex: 200 }}>
+    <div style={{ position: 'fixed', left: 'var(--edge-left)', right: 'var(--edge-right)', bottom: 'var(--edge-bottom)', zIndex: 200 }}>
       {banner}
     </div>
   )

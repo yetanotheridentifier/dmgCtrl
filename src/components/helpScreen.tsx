@@ -75,7 +75,7 @@ function HelpScreen({ onBack, source = 'setup' }: Props) {
 
   return (
     <AppScreenLayout>
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', boxSizing: 'border-box' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
           <IconButton label="Back" onClick={onBack}><BackIcon /></IconButton>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 300, letterSpacing: '0.12em', color: 'var(--color-text-primary)' }}>

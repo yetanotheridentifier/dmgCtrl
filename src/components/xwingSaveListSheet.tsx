@@ -1,5 +1,6 @@
 import { useId, useState } from 'react'
 import { Button, Sheet } from './shared/controls'
+import { FIELD_STYLE } from '../styles/field'
 import type { XwingList } from '../hooks/useXwingLists'
 import type { XwingPilot } from '../utils/parseXwsText'
 import { listDetail, listMeta, pilotSummary } from '../utils/xwingListInfo'
@@ -55,18 +56,7 @@ function SaveListForm({ pilots, faction, lists, initialName, editing, onSave }: 
           value={draft}
           placeholder={fallback}
           onChange={e => setDraft(e.target.value)}
-          style={{
-            height: '48px',
-            boxSizing: 'border-box',
-            border: `2px solid ${replaces ? 'var(--color-warning)' : 'var(--color-accent)'}`,
-            borderRadius: '12px',
-            background: 'var(--color-surface)',
-            color: 'var(--color-text-primary)',
-            fontFamily: 'inherit',
-            fontSize: '16px', // 16px minimum prevents iOS zoom on focus
-            padding: '0 14px',
-            outline: 'none',
-          }}
+          style={{ ...FIELD_STYLE, height: '48px', border: `2px solid ${replaces ? 'var(--color-warning)' : 'var(--color-accent)'}`, background: 'var(--color-surface)' }}
         />
         {note ? (
           <div role="status" style={{ ...noteStyle, background: note.warn ? 'rgba(var(--color-warning-rgb), 0.18)' : 'var(--color-tonal)', color: note.warn ? 'var(--color-warning)' : 'var(--color-tonal-text)' }}>

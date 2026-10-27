@@ -302,10 +302,14 @@ export function Sheet({ open, title, onClose, children, wide = false, action }: 
   if (!open) return null
 
   const where = isPortrait ? 'bottom' : wide ? 'full' : 'side'
+  // A side the sheet runs to the screen edge on keeps its content clear by the edge token; the keyboard
+  // is the foot of the screen while it is up.
+  const foot = keyboard ? `${SHEET_PADDING + covered}px` : 'var(--edge-bottom)'
+  const fromBottom = { paddingTop: `${SHEET_PADDING}px`, paddingRight: 'var(--edge-right)', paddingBottom: foot, paddingLeft: 'var(--edge-left)' }
   const placement: React.CSSProperties = {
-    bottom: { left: 0, right: 0, bottom: 0, maxHeight: keyboard ? `calc(100% - ${visibleTop}px)` : '85vh', borderRadius: '20px 20px 0 0' },
-    full: { top: `${10 + visibleTop}px`, left: '10px', right: '10px', bottom: 0, borderRadius: '16px 16px 0 0' },
-    side: { top: `${visibleTop}px`, right: 0, bottom: 0, width: 'min(420px, 90vw)', borderRadius: '20px 0 0 20px' },
+    bottom: { left: 0, right: 0, bottom: 0, maxHeight: keyboard ? `calc(100% - ${visibleTop}px)` : '85vh', borderRadius: '20px 20px 0 0', ...fromBottom },
+    full: { top: `${10 + visibleTop}px`, left: 0, right: 0, bottom: 0, borderRadius: '16px 16px 0 0', ...fromBottom },
+    side: { top: `${visibleTop}px`, right: 0, bottom: 0, width: 'min(420px, 90vw)', borderRadius: '20px 0 0 20px', paddingTop: 'var(--edge-top)', paddingRight: 'var(--edge-right)', paddingBottom: foot, paddingLeft: `${SHEET_PADDING}px` },
   }[where]
   // A scroll bounce stays in the sheet rather than moving the page under it.
   const contained: React.CSSProperties = keyboard ? { overscrollBehavior: 'contain' } : {}
@@ -323,7 +327,6 @@ export function Sheet({ open, title, onClose, children, wide = false, action }: 
           position: 'absolute',
           ...placement,
           boxSizing: 'border-box',
-          padding: `${SHEET_PADDING}px ${SHEET_PADDING}px ${SHEET_PADDING + covered}px`,
           background: 'var(--color-sheet)',
           color: 'var(--color-text-primary)',
           display: 'flex',
