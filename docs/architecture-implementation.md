@@ -490,6 +490,8 @@ Every screen is wrapped in `AppScreenLayout`, which provides:
 
 This ensures visual consistency across screens without each screen needing to re-implement the full-screen container.
 
+The page draws under the iPhone status bar (`viewport-fit=cover`, status bar style `black-translucent`), and the starfield on `html` reaches up through the top inset. In an installed app, iOS 26.1 and later fade the top of such a page unless a fixed, full-width box with a solid background covers the top edge. `index.html` carries that box and its style from the first frame (`.ios-top-edge`, standalone only): 12px tall, in the page colour `#000510`, but clipped to text it does not have, so it paints nothing.
+
 ### Styling approach
 
 All styling is done with **inline styles** (React `style` prop). There is no CSS framework, no CSS Modules, and no styled-components. `index.css` contains a minimal global reset, the CSS custom property palette (including the filled-surface tokens used by `shared/controls.tsx`), and styles for the help screen's rendered HTML content.
