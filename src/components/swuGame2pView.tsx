@@ -10,7 +10,7 @@ import { IconButton } from './shared/controls'
 import { BackIcon, DotsIcon, LogIcon } from './icons'
 import { BaseCard, EpicActionButton, ForceButton, GameSheets } from './swuGamePieces'
 import type { Art, CardFace, OpenSheet } from './swuGamePieces'
-import { CARD_ASPECT_RATIO, DISABLED_BTN, marginButton } from './swuGameStyles'
+import { CARD_ASPECT_RATIO, DISABLED_BTN, initiativeLook, marginButton } from './swuGameStyles'
 import type { SwuGameViewProps } from './swuGameScreenView'
 
 // One player's half: their base and what acts on it.
@@ -139,9 +139,7 @@ function Half({ side, owner, round, playing, centreProps, onStartGame, showDamag
                 letterSpacing: '0.12em',
                 cursor: 'pointer',
                 WebkitTapHighlightColor: 'transparent',
-                ...(holdsInitiative
-                  ? { border: 'none', background: 'var(--color-accent)', color: 'var(--color-on-accent)', fontWeight: 700 }
-                  : { border: '2px solid var(--color-surface-raised)', background: 'transparent', color: 'var(--color-text-muted)', fontWeight: 500 }),
+                ...initiativeLook(holdsInitiative),
               }}
             >
               {holdsInitiative ? 'INITIATIVE' : 'TAKE INITIATIVE'}

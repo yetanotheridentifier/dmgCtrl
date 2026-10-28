@@ -12,7 +12,7 @@ import { Button, IconButton, Sheet } from './shared/controls'
 import { BackIcon, DotsIcon, LogIcon } from './icons'
 import { BaseCard, EpicActionButton, ForceButton, GameSheets, SheetActions } from './swuGamePieces'
 import type { Art, LastGame, OpenSheet } from './swuGamePieces'
-import { CARD_ASPECT_RATIO, DISABLED_BTN, RESULT_WORD, marginButton, mutedText } from './swuGameStyles'
+import { CARD_ASPECT_RATIO, DISABLED_BTN, RESULT_WORD, initiativeLook, marginButton, mutedText } from './swuGameStyles'
 
 // Each margin keeps at least this much for its 60px column of buttons.
 const MARGIN_MIN = 76
@@ -167,16 +167,14 @@ function SwuGameScreenView(props: SwuGameViewProps) {
           width: '50px',
           height: '50px',
           flexShrink: 0,
-          border: 'none',
+          boxSizing: 'border-box',
           borderRadius: '10px',
           fontFamily: 'inherit',
           fontSize: '11px',
           letterSpacing: '0.1em',
-          fontWeight: held ? 700 : 500,
-          background: held ? 'var(--color-accent)' : 'var(--color-surface-raised)',
-          color: held ? 'var(--color-on-accent)' : 'var(--color-text-body)',
           cursor: 'pointer',
           WebkitTapHighlightColor: 'transparent',
+          ...initiativeLook(held),
         }}
       >
         {side === 'opponent' ? 'OPP' : 'YOU'}
@@ -195,9 +193,8 @@ function SwuGameScreenView(props: SwuGameViewProps) {
         padding: '5px',
         boxSizing: 'border-box',
         borderRadius: '12px',
-        // Outlined until someone takes it.
-        background: initiative === null ? 'transparent' : 'var(--color-surface)',
-        border: initiative === null ? '2px dashed var(--color-surface-raised)' : '2px solid transparent',
+        // One bar ties OPP and YOU to INIT between them.
+        background: 'var(--color-surface)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',

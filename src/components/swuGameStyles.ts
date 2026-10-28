@@ -53,4 +53,9 @@ export const DISABLED_BTN: React.CSSProperties = {
   boxShadow: 'none',
 }
 
+// An initiative control, in one player and two: outlined until its side takes the initiative, then filled.
+export const initiativeLook = (held: boolean): React.CSSProperties => (held
+  ? { border: 'none', background: 'var(--color-accent)', color: 'var(--color-on-accent)', fontWeight: 700 }
+  : { border: '2px solid var(--color-surface-raised)', background: 'transparent', color: 'var(--color-text-muted)', fontWeight: 500 })
+
 export const mutedText: React.CSSProperties = { fontSize: '0.85rem', lineHeight: 1.45, color: 'var(--color-text-muted)' }

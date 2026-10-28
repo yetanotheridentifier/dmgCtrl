@@ -52,14 +52,18 @@ const outpost = make('034', 'Fragile Outpost', 3)
 type Seats = (Base | null)[]
 const FOUR: Seats = [tomb, colossus, thermal]
 
-function renderGame(seats: Seats = FOUR, base: Base = jediTemple) {
+type Seat = 'Top left' | 'Top right' | 'Bottom left' | 'Bottom right'
+
+// The game starts once someone has the initiative: by default you take it, null leaves the question open.
+function renderGame(seats: Seats = FOUR, base: Base = jediTemple, initiative: Seat | null = 'Top left') {
   const onBack = vi.fn()
   const onHelp = vi.fn()
   render(<SwuTwinSunsGame base={base} seats={seats} onBack={onBack} onHelp={onHelp} onSettings={vi.fn()} />)
+  if (initiative) hit(cell(initiative))
   return { onBack, onHelp }
 }
 
-const cell = (seat: 'Top left' | 'Top right' | 'Bottom left' | 'Bottom right') => screen.getByRole('region', { name: seat })
+const cell = (seat: Seat) => screen.getByRole('region', { name: seat })
 type Cell = ReturnType<typeof cell>
 const cardIn = (c: Cell) => within(c).getByTestId('game-card')
 const hit = (c: Cell, times = 1) => { for (let i = 0; i < times; i++) fireEvent.click(cardIn(c)) }
@@ -168,6 +172,51 @@ describe('SwuTwinSunsGame: layout', () => {
       renderGame()
       expect(within(bar()).getByRole('button', { name: 'Log' }).style.width).not.toBe('94px')
     })
+  })
+})
+
+describe('SwuTwinSunsGame: deciding the initiative', () => {
+  it('the game opens asking who has the initiative, with no round, counters or End game yet', () => {
+    renderGame(FOUR, jediTemple, null)
+    expect(within(bar()).getByText('Who has the initiative?')).toBeInTheDocument()
+    expect(within(bar()).getByText('Tap the base of the player who takes it')).toBeInTheDocument()
+    for (const name of [/^Round/, 'End game', claimInitiative, claimPlan, claimBlast, 'Cancel']) {
+      expect(within(bar()).queryByRole('button', { name })).not.toBeInTheDocument()
+    }
+    expect(within(cell('Bottom right')).getByRole('button', { name: 'Thermal Oscillator: takes the initiative' })).toBeInTheDocument()
+    expect(mockOnGameStart).not.toHaveBeenCalled()
+  })
+
+  it('tapping a base gives it the initiative, takes no damage and starts the game', () => {
+    renderGame(FOUR, jediTemple, 'Bottom right')
+    expect(within(cell('Bottom right')).getByRole('button', { name: 'Initiative, Thermal Oscillator: tap to move it' })).toBeInTheDocument()
+    expect(damageIn(cell('Bottom right'))).toHaveTextContent('0')
+    expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
+    expect(mockOnGameStart).toHaveBeenCalledTimes(1)
+  })
+
+  it('undoing the choice asks again, and choosing again does not start a second game', () => {
+    renderGame(FOUR, jediTemple, 'Bottom right')
+    openLog()
+    undo()
+    expect(within(bar()).getByText('Who has the initiative?')).toBeInTheDocument()
+    hit(cell('Top right'))
+    expect(within(cell('Top right')).getByRole('button', { name: /^Initiative, Tomb of Eilram/ })).toBeInTheDocument()
+    expect(mockOnGameStart).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaving before anyone has it records no game', () => {
+    const { onBack } = renderGame(FOUR, jediTemple, null)
+    press('Back to setup')
+    expect(onBack).toHaveBeenCalled()
+    expect(mockOnGameEnd).not.toHaveBeenCalled()
+  })
+
+  it('the Initiative button in the bar is outlined solid, not dashed', () => {
+    renderGame()
+    const style = within(bar()).getByRole('button', { name: claimInitiative }).style
+    expect(style.border).toMatch(/^2px solid /)
+    expect(style.background).not.toBe('transparent')
   })
 })
 
@@ -392,7 +441,7 @@ describe('SwuTwinSunsGame: game over', () => {
     expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
   })
 
-  it('Rematch keeps the bases and seats and resets the damage', () => {
+  it('Rematch keeps the bases and seats, resets the damage and asks who has the initiative', () => {
     renderGame()
     hit(cell('Top right'), 4)
     press('End game')
@@ -400,7 +449,11 @@ describe('SwuTwinSunsGame: game over', () => {
     press('Rematch')
     expect(damageIn(cell('Top right'))).toHaveTextContent('0')
     expect(within(cell('Top right')).getByRole('button', { name: /^Tomb of Eilram/ })).toBeEnabled()
+    expect(within(bar()).getByText('Who has the initiative?')).toBeInTheDocument()
+    expect(mockOnGameStart).toHaveBeenCalledTimes(1)
+    hit(cell('Bottom left'))
     expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
+    expect(mockOnGameStart).toHaveBeenCalledTimes(2)
   })
 
   it('New setup goes back to setup', () => {

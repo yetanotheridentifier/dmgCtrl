@@ -610,6 +610,21 @@ describe('SwuGameScreen: initiative', () => {
     expect(you()).toHaveAttribute('aria-checked', 'false')
   })
 
+  // The same look as the two-player game's: outlined solid until taken, then filled.
+  it('has no dashed outline: each side is outlined solid until it takes the initiative, then filled', () => {
+    renderGame()
+    // One bar behind OPP, INIT and YOU ties the buttons to the label, whoever holds it.
+    const bar = () => screen.getByRole('radiogroup', { name: 'Initiative' })
+    expect(bar().style.border).not.toMatch(/dashed/)
+    expect(bar().style.background).toBe('var(--color-surface)')
+    expect(opp().style.border).toMatch(/^2px solid /)
+    expect(opp().style.background).toBe('transparent')
+    fireEvent.click(opp())
+    expect(opp().style.background).toBe('var(--color-accent)')
+    expect(you().style.border).toMatch(/^2px solid /)
+    expect(bar().style.background).toBe('var(--color-surface)')
+  })
+
   it('tapping OPP or YOU gives that side the initiative', () => {
     renderGame()
     fireEvent.click(opp())
