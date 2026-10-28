@@ -947,6 +947,31 @@ describe('SwuSetupScreen: their base', () => {
     expect(screen.getByRole('group', { name: 'Mode' })).toBeInTheDocument()
     expect(primary('Go to game')).toBeEnabled()
   })
+
+  // The two cards share the height, so each card's art sits beside its name and Change base rather than
+  // over them: the art takes the card's full height, larger than it could be above a row of its own.
+  it('in portrait each card puts its art beside the name and Change base', () => {
+    makeMatchMediaMock(true)
+    keep2p(jediTemple, { theirBaseKey: key(catacombs) })
+    renderSetup()
+    for (const [card, name] of [[baseCard(), 'Jedi Temple'], [theirCard(), 'Catacombs of Cadera']] as const) {
+      const body = within(card).getByTestId('base-body')
+      expect(body).toHaveStyle({ flexDirection: 'row' })
+      expect(within(body).getByText(name)).toBeInTheDocument()
+      expect(within(body).getByRole('button', { name: 'Change base' })).toBeInTheDocument()
+    }
+  })
+
+  it('in landscape, and with 1 player, the art stays above the name', () => {
+    keep2p(jediTemple, { theirBaseKey: key(catacombs) })
+    const { unmount } = renderSetup()
+    expect(within(baseCard()).getByTestId('base-body')).toHaveStyle({ flexDirection: 'column' })
+    unmount()
+    makeMatchMediaMock(true)
+    keep(jediTemple)
+    renderSetup()
+    expect(within(baseCard()).getByTestId('base-body')).toHaveStyle({ flexDirection: 'column' })
+  })
 })
 
 describe('SwuSetupScreen: Twin Suns', () => {
@@ -989,6 +1014,23 @@ describe('SwuSetupScreen: Twin Suns', () => {
     expect(within(grid()).getByText('Jedi Temple')).toBeInTheDocument()
     expect(within(grid()).getByText('LOF · 28 HP')).toBeInTheDocument()
     expect(within(grid()).getAllByText('Add base')).toHaveLength(3)
+  })
+
+  // The whole card, fitted inside the tile, with the label above it and the name below: no crop of
+  // the card's own title bar or rules text shows behind them.
+  it('each base shows its whole card fitted between its label and its name, not cropped behind them', () => {
+    keepTwinSuns(jediTemple, [catacombs, null, null])
+    renderSetup()
+    for (const [name, b] of [['Your base: Jedi Temple', jediTemple], ['Opponent, top right: Catacombs of Cadera', catacombs]] as const) {
+      const tile = seatButton(name)
+      expect(tile.style.background).not.toMatch(/url\(/)
+      const card = tile.querySelector('img[data-card]') as HTMLImageElement
+      expect(card.src).toBe(b.frontArt)
+      expect(card).toHaveStyle({ objectFit: 'contain' })
+      const parts = [...tile.children]
+      expect(parts.indexOf(within(tile).getByText(name.startsWith('Your') ? 'Your base' : 'Opponent'))).toBeLessThan(parts.findIndex(p => p.contains(card)))
+      expect(parts.findIndex(p => p.contains(card))).toBeLessThan(parts.findIndex(p => p.contains(within(tile).getByText(b.name))))
+    }
   })
 
   it('with only your base, Go to game is disabled and the hint says what Twin Suns needs', () => {

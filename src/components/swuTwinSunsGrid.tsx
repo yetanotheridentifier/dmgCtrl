@@ -36,18 +36,20 @@ function BaseCell({ b, label, labelColor, ariaLabel, border, compact, onClick }:
   onClick: () => void
 }) {
   const aspect = baseAspect(b)
-  // The base's art behind its name, darkened at the head and foot so the label and name read over the
-  // card's own text; the plain surface shows through when the art can't load.
+  // The whole card, fitted between the label and the name: cropped to the cell, its own title bar and
+  // rules text would show behind them.
   const art = b.frontArtLowRes ?? b.frontArt
-  const background = `linear-gradient(rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.35) 40%, rgba(0, 0, 0, 0.9)),${art ? `url("${art}") center / cover no-repeat, ` : ''}var(--color-surface)`
   return (
     <button
       type="button"
       aria-label={ariaLabel}
       onClick={onClick}
-      style={{ ...cellStyle, width: '100%', height: '100%', border, background, color: 'var(--color-text-primary)', padding: '10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', textAlign: 'left' }}
+      style={{ ...cellStyle, width: '100%', height: '100%', border, background: 'var(--color-surface)', color: 'var(--color-text-primary)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}
     >
-      <span style={labelStyle(labelColor)}>{label}</span>
+      <span style={{ ...labelStyle(labelColor), lineHeight: '20px' }}>{label}</span>
+      <span style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        {art && <img data-card src={art} alt="" style={{ width: '100%', height: '100%', minHeight: 0, objectFit: 'contain' }} />}
+      </span>
       <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
         {aspect && <img src={aspectIconSrc(aspect)} alt="" style={{ width: '24px', height: '24px', flexShrink: 0 }} />}
         <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
