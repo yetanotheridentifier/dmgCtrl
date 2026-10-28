@@ -54,3 +54,22 @@ describe('the edge tokens', () => {
     expect(direct).toEqual([])
   })
 })
+
+describe('the app font', () => {
+  // Set once on body, so a sheet or overlay outside a screen's layout wrapper still has it rather
+  // than the browser's serif default.
+  const sources = import.meta.glob(['../**/*.{ts,tsx}', '!../test/**', '!../**/*.test.*'], { query: '?raw', import: 'default', eager: true })
+
+  it('is declared once, on body', () => {
+    expect(indexCss.match(/body\s*\{[^}]*font-family:\s*([^;]+);/)?.[1].trim()).toBe("'Segoe UI', system-ui, sans-serif")
+    expect(indexCss.match(/Segoe UI/g)).toHaveLength(1)
+  })
+
+  it('is set by no component', () => {
+    const setters = Object.entries(sources)
+      .filter(([, text]) => /Segoe UI/.test(String(text)))
+      .map(([file]) => file)
+    expect(Object.keys(sources).length).toBeGreaterThan(50)
+    expect(setters).toEqual([])
+  })
+})
