@@ -26,7 +26,6 @@ function InstallBanner({ platform, onInstall, onDismiss }: Props) {
         borderRadius: '12px',
         background: 'var(--color-surface-raised)',
         color: 'var(--color-text-primary)',
-        fontFamily: "'Segoe UI', system-ui, sans-serif",
         WebkitTextSizeAdjust: '100%',
         flexShrink: 0,
       }}

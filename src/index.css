@@ -84,8 +84,10 @@ html, body {
   overflow: hidden;
 }
 
+/* The app's one font: on body, so sheets and overlays outside a screen's layout have it too. */
 body {
   background: transparent;
+  font-family: 'Segoe UI', system-ui, sans-serif;
 }
 
 input[type=number]::-webkit-inner-spin-button,
@@ -100,7 +102,6 @@ input[type=number] {
 
 /* Help screen content — styled to match app aesthetic */
 .help-content {
-  font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }

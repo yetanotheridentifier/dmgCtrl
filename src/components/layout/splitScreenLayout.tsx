@@ -37,7 +37,6 @@ function SplitScreenLayout({ top, topLabel, middle, bottom, bottomLabel }: Props
       turn={-angle}
       testId="split-screen"
       style={{
-        fontFamily: "'Segoe UI', system-ui, sans-serif",
         paddingTop: 'var(--edge-top)',
         paddingRight: 'var(--edge-right)',
         paddingBottom: 'var(--edge-bottom)',
