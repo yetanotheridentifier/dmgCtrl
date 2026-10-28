@@ -1076,6 +1076,12 @@ describe('SwuGameScreen: two players, layout', () => {
     }
     expect(within(strip).getByRole('button', { name: /^Round/ })).toBeInTheDocument()
   })
+
+  // One background behind both halves and the strip, as on the other game screens.
+  it('the middle strip has no band of its own: no background and no separator lines', () => {
+    render2p()
+    expect(screen.getByRole('navigation', { name: 'Game' }).getAttribute('style')).not.toMatch(/background|border(-top|-bottom)?:/)
+  })
 })
 
 describe('SwuGameScreen: two players, starting', () => {
@@ -1227,6 +1233,7 @@ describe('SwuGameScreen: two players, ending a game', () => {
     const strip = screen.getByRole('navigation', { name: 'Game over' })
     expect(within(strip).getByRole('button', { name: 'New setup' })).toBeInTheDocument()
     expect(within(strip).getByRole('button', { name: 'Rematch' })).toBeInTheDocument()
+    expect(strip.getAttribute('style')).not.toMatch(/background|border(-top|-bottom)?:/)
   })
 
   it('Rematch keeps both bases and resets both damage counters', () => {
