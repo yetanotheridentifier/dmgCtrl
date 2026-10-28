@@ -214,13 +214,14 @@ export default function SwuSetupScreenView({
   )
 
   // Under the art rather than over it: the art is the whole card, with its own text.
-  const baseInfo = (b: Base) => {
+  // Beside the art the column is narrow, so the name may take two lines rather than one.
+  const baseInfo = (b: Base, narrow: boolean) => {
     const aspect = baseAspect(b)
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
         {aspect && <img src={aspectIconSrc(aspect)} alt="" style={{ width: '28px', height: '28px', flexShrink: 0 }} />}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-          <span style={{ fontSize: '1.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
+          <span style={{ fontSize: '1.1rem', overflow: 'hidden', ...(narrow ? { lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } : { textOverflow: 'ellipsis', whiteSpace: 'nowrap' }) }}>{b.name}</span>
           <span style={{ fontSize: '0.8rem', color: 'var(--color-text-body)' }}>{baseMeta(b)}</span>
         </div>
       </div>
@@ -252,10 +253,10 @@ export default function SwuSetupScreenView({
     </button>
   )
 
-  // In 2 players the cards share the space: in portrait each takes a share of the height, and in
-  // landscape Change base goes under the name, as the card is too narrow for both on one line.
+  // In 2 players the cards share the space, and Change base goes under the name, as there is no room
+  // for both on one line: in portrait each card takes a share of the height, with the art beside the
+  // name so it can take the card's full height, and in landscape the art sits above them.
   const shareHeight = isPortrait && twoPlayers
-  const stackActions = !isPortrait && twoPlayers
 
   const baseCardFor = ({ testId, who, b, baseArt, labelColor, headerExtra, onOpen, alert }: {
     testId: string
@@ -273,8 +274,8 @@ export default function SwuSetupScreenView({
         {b && headerExtra}
       </div>
       {b ? (
-        <>
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div data-testid="base-body" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: shareHeight ? 'row' : 'column', gap: shareHeight ? '12px' : '10px' }}>
+          <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <ImagePreview
               base={b}
               src={baseArt.src}
@@ -289,11 +290,11 @@ export default function SwuSetupScreenView({
               onError={baseArt.onError}
             />
           </div>
-          <div style={{ display: 'flex', flexDirection: stackActions ? 'column' : 'row', alignItems: stackActions ? 'stretch' : 'center', gap: stackActions ? '8px' : '12px' }}>
-            {baseInfo(b)}
+          <div style={{ display: 'flex', flexDirection: twoPlayers ? 'column' : 'row', alignItems: twoPlayers ? 'stretch' : 'center', gap: twoPlayers ? '8px' : '12px', ...(shareHeight ? { width: '40%', flexShrink: 0 } : {}) }}>
+            {baseInfo(b, shareHeight)}
             <Button onClick={onOpen} style={{ flexShrink: 0 }}>Change base</Button>
           </div>
-        </>
+        </div>
       ) : (
         <>
           {alert}
