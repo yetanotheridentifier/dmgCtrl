@@ -296,13 +296,16 @@ function SwuTwinSunsGameView(props: Props) {
   // --- the bar ---
 
   const square = large ? '94px' : null
-  const head = large ? { width: '94px', height: '94px', borderRadius: '16px', fontSize: '13px' } : { width: '40px', height: '40px' }
+  // Back, Log and More are the counters' size, their icons centred in the counters' icon box.
   const counterSize = large ? { width: '94px', height: '94px', borderRadius: '16px', fontSize: '13px' } : { width: '60px', height: '60px', fontSize: '11px' }
   const iconSize = large ? '36px' : '26px'
+  const iconBox = (icon: ReactNode) => (
+    <span style={{ width: iconSize, height: iconSize, fontSize: iconSize, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</span>
+  )
 
-  const back = <button type="button" aria-label="Back to setup" onClick={onBack} style={barButton(head)}><span style={{ width: '24px', height: '24px', display: 'flex' }}><BackIcon /></span>{large && <span>Back</span>}</button>
-  const logButton = <button type="button" aria-label="Log" onClick={onLogToggle} style={barButton(head)}><span style={{ width: '24px', height: '24px', display: 'flex' }}><LogIcon /></span>{large && <span>Log</span>}</button>
-  const more = <button type="button" aria-label="More" onClick={() => setMoreOpen(true)} style={barButton(head)}><span style={{ width: '24px', height: '24px', display: 'flex' }}><DotsIcon /></span>{large && <span>More</span>}</button>
+  const back = <button type="button" aria-label="Back to setup" onClick={onBack} style={barButton(counterSize)}>{iconBox(<BackIcon />)}{large && <span>Back</span>}</button>
+  const logButton = <button type="button" aria-label="Log" onClick={onLogToggle} style={barButton(counterSize)}>{iconBox(<LogIcon />)}{large && <span>Log</span>}</button>
+  const more = <button type="button" aria-label="More" onClick={() => setMoreOpen(true)} style={barButton(counterSize)}>{iconBox(<DotsIcon />)}{large && <span>More</span>}</button>
 
   const counterButton = ({ counter, name, colour }: typeof COUNTERS[number]) => {
     if (counter === 'initiative') {
