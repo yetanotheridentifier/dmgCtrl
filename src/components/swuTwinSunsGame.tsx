@@ -49,10 +49,14 @@ function SwuTwinSunsGame({ base, seats, onBack, onHelp, onSettings }: Props) {
   const [state, setState] = useState<TwinSunsState>(() => startState(players.length))
   const log = useGameHistory<TwinSunsState>()
   // A counter waiting for the base that claimed it, and End game waiting for its confirmation.
-  const [picking, setPicking] = useState<Counter | null>(null)
+  const [picked, setPicked] = useState<Counter | null>(null)
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [showLog, setShowLog] = useState(false)
+  // Zero until the game starts.
   const startedAt = useRef(0)
+
+  // The game opens on choosing who has the initiative, and starts once someone does.
+  const picking = picked ?? (state.initiative === null && !state.finished ? 'initiative' : null)
 
   const yourKey = `${base.set}-${base.number}`
   const startGame = () => {
@@ -62,14 +66,16 @@ function SwuTwinSunsGame({ base, seats, onBack, onHelp, onSettings }: Props) {
   const endGame = () => {
     void onGameEnd(yourKey, base.set, useHyperspace, secondsSince(startedAt.current), PLAY_MODE, PLAY_MODE)
   }
-  // The game starts as the screen opens: the design has no Start step.
+  // Once only: undoing the choice and making it again is the same game.
+  useEffect(() => {
+    if (state.initiative !== null && startedAt.current === 0) startGame()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { startGame() }, [])
+  }, [state.initiative])
 
   const apply = (next: TwinSunsState, type: string, message: string, color: string) => {
     log.add({ type, message, color, snapshot: state })
     setState(next)
-    setPicking(null)
+    setPicked(null)
     setConfirmEnd(false)
   }
 
@@ -127,7 +133,7 @@ function SwuTwinSunsGame({ base, seats, onBack, onHelp, onSettings }: Props) {
     const entry = log.undoLast()
     if (!entry) return
     setState(entry.snapshot)
-    setPicking(null)
+    setPicked(null)
     setConfirmEnd(false)
     void onUndoUsed(yourKey, base.set, entry.type)
   }
@@ -135,13 +141,13 @@ function SwuTwinSunsGame({ base, seats, onBack, onHelp, onSettings }: Props) {
   const onRematch = () => {
     setState(startState(players.length))
     log.reset()
-    setPicking(null)
+    setPicked(null)
     setConfirmEnd(false)
-    startGame()
+    startedAt.current = 0
   }
 
   const leave = () => {
-    if (!state.finished) endGame()
+    if (!state.finished && startedAt.current !== 0) endGame()
     onBack()
   }
 
@@ -157,10 +163,10 @@ function SwuTwinSunsGame({ base, seats, onBack, onHelp, onSettings }: Props) {
         onIncrement={onIncrement}
         onDecrement={onDecrement}
         onEpic={onEpic}
-        onPick={c => { setPicking(c); setConfirmEnd(false) }}
-        onCancelPick={() => setPicking(null)}
+        onPick={c => { setPicked(c); setConfirmEnd(false) }}
+        onCancelPick={() => setPicked(null)}
         onRound={onRound}
-        onOpenEnd={() => { setConfirmEnd(true); setPicking(null) }}
+        onOpenEnd={() => { setConfirmEnd(true); setPicked(null) }}
         onKeepPlaying={() => setConfirmEnd(false)}
         onFinish={onFinish}
         onNoOne={onNoOne}

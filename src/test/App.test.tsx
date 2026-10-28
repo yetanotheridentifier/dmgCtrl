@@ -275,9 +275,10 @@ describe('App', () => {
     render(<App />)
     await waitForSetup()
     await user.click(screen.getByRole('button', { name: 'Go to game' }))
-    expect(within(screen.getByRole('region', { name: 'Top left' })).getByRole('button', { name: /^Catacombs of Cadera, your base/ })).toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Top right' })).getByRole('button', { name: /^Energy Conversion Lab: tap/ })).toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Bottom right' })).getByRole('button', { name: /^Catacombs of Cadera: tap/ })).toBeInTheDocument()
+    // The game opens on choosing who has the initiative.
+    expect(within(screen.getByRole('region', { name: 'Top left' })).getByRole('button', { name: 'Catacombs of Cadera: takes the initiative' })).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Top right' })).getByRole('button', { name: 'Energy Conversion Lab: takes the initiative' })).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Bottom right' })).getByRole('button', { name: 'Catacombs of Cadera: takes the initiative' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Bottom left' })).not.toBeInTheDocument()
   })
 

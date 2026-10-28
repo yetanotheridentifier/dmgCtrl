@@ -307,7 +307,7 @@ function SwuTwinSunsGameView(props: Props) {
   const counterButton = ({ counter, name, colour }: typeof COUNTERS[number]) => {
     if (counter === 'initiative') {
       return (
-        <button key={counter} type="button" aria-label="Claim initiative: tap, then the base of the player who takes it" onClick={() => onPick('initiative')} style={barButton({ ...counterSize, background: 'transparent', color: colour, border: `2px dashed var(--color-surface-raised)` })}>
+        <button key={counter} type="button" aria-label="Claim initiative: tap, then the base of the player who takes it" onClick={() => onPick('initiative')} style={barButton({ ...counterSize, background: 'var(--color-surface)', color: colour, border: `2px solid ${colour}` })}>
           <FlagIcon size={iconSize} /><span>{name}</span>
         </button>
       )
@@ -401,12 +401,15 @@ function SwuTwinSunsGameView(props: Props) {
     )
   } else if (picking) {
     const colour = COUNTER_COLOUR[picking]
-    const who = picking === 'initiative' ? 'takes the initiative' : `claimed ${COUNTER_NAME[picking]}`
+    // Nobody has the initiative until the game starts: choosing who does is how it starts.
+    const opening = state.initiative === null
+    const who = opening ? 'takes it' : picking === 'initiative' ? 'takes the initiative' : `claimed ${COUNTER_NAME[picking]}`
     body = (
       <>
         {headRow}
         {status(
           <>
+            {opening && <div style={{ fontSize: '15px', fontWeight: 600 }}>Who has the initiative?</div>}
             <span aria-hidden="true" style={{ ...barButton({ ...counterSize, background: colour, color: '#1a0505', fontWeight: 700 }), cursor: 'default' }}>
               {picking === 'initiative' ? <FlagIcon size={iconSize} /> : picking === 'plan' ? <PlanIcon size={iconSize} /> : <MarkIcon size={iconSize} />}
               <span>{COUNTER_NAME[picking]}</span>
@@ -415,7 +418,7 @@ function SwuTwinSunsGameView(props: Props) {
           </>,
         )}
         {spacer}
-        <button type="button" onClick={onCancelPick} style={wide()}>Cancel</button>
+        {!opening && <button type="button" onClick={onCancelPick} style={wide()}>Cancel</button>}
       </>
     )
   } else if (confirmEnd) {

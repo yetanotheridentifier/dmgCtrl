@@ -97,7 +97,7 @@ From the top:
 - **Back** returns to setup (or to the tournament). In casual play the damage resets
 - The **epic action** button, on a base with an epic action: greyed until the game starts, then gold. Tap it once you've used the epic action: it greys out with **USED**, and an **EPIC ACTION USED** token covers the card's text box, as the physical token does
 - The **Force** button, on a base that creates the Force (see below)
-- The **initiative bar**: **OPP** at the top, **YOU** at the bottom. Tap the side that has the initiative; it fills in. The bar is outlined until someone takes it. Initiative doesn't reset between rounds
+- The **initiative bar**: **OPP** at the top, **YOU** at the bottom. Tap the side that has the initiative; it fills in. Initiative doesn't reset between rounds
 
 ### Right margin
 
@@ -157,7 +157,7 @@ Log entries name the base ("Their base: 3 damage"), and the log opens over your 
 
 With **Twin Suns** chosen in setup, one phone or tablet lies flat in landscape with two players along each long side. Each base sits in its setup cell; the top row is turned round to face the players across, and so is the bar, which faces you (top left). With 4 players the bar runs between the side-by-side bases; with 3 it sits between the two bases on one side and the single base is centred on the other. The screen is landscape only: held in portrait it stays landscape on the device, turned on its side, so turn the device to read it.
 
-The game starts at round 1 as the screen opens. Each card is its player's damage control: tap for 1, drag up (from that player's side) to add several, drag down to remove. A base with an epic action has a round yellow button on its text box: tap it when used, and the **Epic action used** plate covers the text box. Tap the plate to take it back.
+The screen opens asking **Who has the initiative?**: the bases light up, and tapping the base of the player who takes it starts the game at round 1. Undo takes the choice back and asks again. Each card is its player's damage control: tap for 1, drag up (from that player's side) to add several, drag down to remove. A base with an epic action has a round yellow button on its text box: tap it when used, and the **Epic action used** plate covers the text box. Tap the plate to take it back.
 
 The bar holds **Back**, **Log** and **More**, the three counters, **Round** and **End game**. The counters are always shown in Twin Suns, whatever the Initiative setting (that setting applies to 1 and 2 players):
 
@@ -166,7 +166,7 @@ The bar holds **Back**, **Log** and **More**, the three counters, **Round** and 
 
 **A base destroyed:** a base reaching 0 shows **Destroyed** over its card, and the bar asks who destroyed it. Tap that player's base to heal it 5 ("+5 healed"), or **No one** to skip the heal. **Undo the damage** takes back the last hit instead. A destroyed base is out: its card stays covered and takes no input. The bar then shows **Last phase**, and **Finish game** replaces Round; the counters still work until then.
 
-**Game over:** **Finish game**, or **End game** then **End game now** at any point, ends the game. Each base shows its place over its card, facing its player: **1st · Won**, then 2nd and 3rd with their HP left. A tie for most HP left is a draw between those players (**1st · Draw**). The bar lists the result, with **Rematch** (same bases and seats, damage reset) and **New setup**. The result is recorded from your side, as in 1 and 2 players.
+**Game over:** **Finish game**, or **End game** then **End game now** at any point, ends the game. Each base shows its place over its card, facing its player: **1st · Won**, then 2nd and 3rd with their HP left. A tie for most HP left is a draw between those players (**1st · Draw**). The bar lists the result, with **Rematch** (same bases and seats, damage reset) and **New setup**. The result is recorded from your side, as in 1 and 2 players. A rematch asks who has the initiative again.
 
 Log entries name the base, the log opens over your base, and Undo takes back the newest entry, a whole Blast included.
 
