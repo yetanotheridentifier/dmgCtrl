@@ -165,6 +165,20 @@ describe('SwuTwinSunsGame: layout', () => {
     })
   })
 
+  it('on a phone Back, Log and More are the counters\' 60px squares, each icon centred in a 26px box', () => {
+    withViewport(844, 390, () => {
+      renderGame()
+      for (const name of ['Back to setup', 'Log', 'More', claimInitiative, claimPlan, claimBlast]) {
+        const { style } = within(bar()).getByRole('button', { name })
+        expect([style.width, style.height]).toEqual(['60px', '60px'])
+      }
+      for (const name of ['Back to setup', 'Log', 'More']) {
+        const box = (within(bar()).getByRole('button', { name }).firstElementChild as HTMLElement).style
+        expect([box.width, box.height, box.alignItems, box.justifyContent]).toEqual(['26px', '26px', 'center', 'center'])
+      }
+    })
+  })
+
   // A phone held in portrait is tall, but its turned screen is a phone's landscape one.
   it('on a phone held in portrait the bar keeps its phone size', () => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
