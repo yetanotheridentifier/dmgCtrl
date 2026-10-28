@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
 import SwuGameScreen from '../components/swuGameScreen'
+import { EPIC_TEXT_TOP, READOUT_BOTTOM } from '../components/swuGameStyles'
 import { Base } from '../hooks/useBases'
 import { useOrientation } from '../hooks/useOrientation'
 import { useWakeLock } from '../hooks/useWakeLock'
@@ -210,6 +211,61 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 // The card
 // ---------------------------------------------------------------------------
+
+describe('SwuGameScreen: the card’s readout keeps clear of the epic action text', () => {
+  const pct = (v: string) => Number(/^(-?[\d.]+)%$/.exec(v)?.[1] ?? NaN)
+  const readoutBox = () => {
+    const s = counter().style
+    return { top: pct(s.top), bottom: 100 - pct(s.bottom), align: s.justifyContent }
+  }
+
+  it('the epic text line is where the card prints the text box: measured at 62.6% to 62.8% of the card', () => {
+    expect(EPIC_TEXT_TOP).toBeGreaterThanOrEqual(62)
+    expect(EPIC_TEXT_TOP).toBeLessThanOrEqual(62.6)
+  })
+
+  it('the readout’s bottom is pinned at or above the epic text line and it grows upward, below the top band', () => {
+    renderGame({ base: mockBaseWithEpicAction })
+    const box = readoutBox()
+    expect(box.bottom).toBe(READOUT_BOTTOM)
+    expect(box.bottom).toBeLessThanOrEqual(EPIC_TEXT_TOP)
+    expect(box.align).toBe('flex-end')
+    expect(box.top).toBeGreaterThanOrEqual(17)
+  })
+
+  it('every base, with or without an epic action, before and after the start, puts it in the same place', () => {
+    const boxes = [mockBase, mockBaseWithEpicAction].flatMap(base => {
+      const { unmount } = render(<SwuGameScreen base={base} onBack={vi.fn()} onHelp={vi.fn()} />)
+      const before = readoutBox()
+      startGame()
+      const after = readoutBox()
+      unmount()
+      return [before, after]
+    })
+    for (const box of boxes) expect(box).toEqual(boxes[0])
+  })
+
+  it('the shading behind it ends at the epic text line', () => {
+    renderGame({ base: mockBaseWithEpicAction })
+    const s = screen.getByTestId('card-shading').style
+    const [top, bottom] = [pct(s.top), 100 - pct(s.bottom)]
+    const centre = (top + bottom) / 2
+    expect(bottom).toBeLessThanOrEqual(EPIC_TEXT_TOP)
+    expect(top).toBeGreaterThanOrEqual(17)
+    expect(centre).toBeLessThan(READOUT_BOTTOM)
+    expect(centre).toBeGreaterThan(READOUT_BOTTOM - 20)
+  })
+
+  it('the drag amount sits beside the readout, clear of the epic text', () => {
+    renderGame({ base: mockBaseWithEpicAction })
+    startGame()
+    fireEvent.pointerDown(card(), { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(card(), { clientY: 240, pointerId: 1 })
+    const top = pct(screen.getByTestId('drag-amount').style.top)
+    expect(top).toBeGreaterThan(readoutBox().top)
+    expect(top).toBeLessThan(READOUT_BOTTOM - 20)
+  })
+})
 
 describe('SwuGameScreen: the card', () => {
   it('shows Start before the game', () => {
