@@ -212,9 +212,6 @@ function SwuGame2pView(props: SwuGame2pViewProps) {
     padding: '8px',
     display: 'flex',
     gap: '6px',
-    background: 'var(--color-bg-deep)',
-    borderTop: '1px solid var(--color-surface-raised)',
-    borderBottom: '1px solid var(--color-surface-raised)',
   }
 
   const logButton = <IconButton label="Log" onClick={onLogToggle} style={STRIP_BTN}><LogIcon /></IconButton>
