@@ -10,11 +10,27 @@ export const CARD_ASPECT_RATIO = CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT
 // Where a base prints its text box (the epic action), in percent of the card's height: its top border
 // measures 62.6% to 62.8% on the printed art. The readout on the open art (Start, the damage and HP left)
 // stands on a line just above it and grows upward, in the same place on every base, so it never covers
-// an epic action's text. The shading behind the readout and the drag amount beside it follow it.
+// an epic action's text. The shading behind the readout follows it.
 export const EPIC_TEXT_TOP = 62
 export const READOUT_BOTTOM = EPIC_TEXT_TOP - 1
-// Where the damage readout's middle falls, for the shading and the drag amount.
+// Where the damage readout's middle falls, for the shading.
 export const READOUT_MIDDLE = READOUT_BOTTOM - 15
+
+// How far beyond the finger a drag's amount floats, and how close it may come to the screen's edge.
+export const FINGER_GAP = 70
+export const AMOUNT_MARGIN = 32
+
+const clamp = (n: number, low: number, high: number) => Math.round(Math.min(high, Math.max(low, n)))
+
+// Where on the screen a drag's amount has its middle: a finger's gap along its player's up (the view
+// turned `turn` degrees clockwise) from the finger, kept on a screen `width` by `height`.
+export function aboveFinger(clientX: number, clientY: number, turn: number, width: number, height: number) {
+  const radians = (turn * Math.PI) / 180
+  return {
+    left: clamp(clientX + FINGER_GAP * Math.sin(radians), AMOUNT_MARGIN, width - AMOUNT_MARGIN),
+    top: clamp(clientY - FINGER_GAP * Math.cos(radians), AMOUNT_MARGIN, height - AMOUNT_MARGIN),
+  }
+}
 
 export const RESULT_WORD: Record<MatchResult, string> = { won: 'won', lost: 'lost', drawn: 'drawn' }
 

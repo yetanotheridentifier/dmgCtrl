@@ -269,6 +269,20 @@ describe('SwuTwinSunsGame: damage', () => {
     expect(damageIn(cell('Top right'))).toHaveTextContent('3')
   })
 
+  it('while dragging, only that base lights, red adding and green removing', () => {
+    renderGame()
+    hit(cell('Top right'), 5)
+    fireEvent.pointerDown(cardIn(cell('Top right')), { clientY: 100, pointerId: 1 })
+    fireEvent.pointerMove(cardIn(cell('Top right')), { clientY: 140, pointerId: 1 })
+    expect(outlineIn(cell('Top right'))).toBe('var(--color-error)')
+    for (const seat of ['Top left', 'Bottom left', 'Bottom right'] as const) expect(outlineIn(cell(seat))).toBe('var(--color-accent)')
+    expect(screen.getByTestId('drag-amount').style.transform).toContain('rotate(180deg)')
+    fireEvent.pointerMove(cardIn(cell('Top right')), { clientY: 60, pointerId: 1 })
+    expect(outlineIn(cell('Top right'))).toBe('var(--color-success)')
+    fireEvent.pointerUp(cardIn(cell('Top right')), { clientY: 60, pointerId: 1 })
+    expect(outlineIn(cell('Top right'))).toBe('var(--color-accent)')
+  })
+
   it('Undo in the log takes damage back', () => {
     renderGame()
     hit(cell('Top right'))

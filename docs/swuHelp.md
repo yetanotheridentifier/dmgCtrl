@@ -84,7 +84,7 @@ Your phone stands in for your base. The card fills the screen from top to bottom
 The card is the damage control:
 
 - **Tap the card** to add 1 damage
-- **Drag up** on the card to add several, **drag down** to remove several. The amount shows on the card while you drag and is applied when you let go. It grows by 1 for roughly every 14px you move, and stops at what your base can take (up) or the damage it has (down)
+- **Drag up** on the card to add several, **drag down** to remove several. While you drag, the amount floats just above your finger and the card's border turns red for damage or green for healing; the amount is applied when you let go. It grows by 1 for roughly every 14px you move, and stops at what your base can take (up) or the damage it has (down)
 
 The big number is the damage taken; **HP left** under it is your base's HP minus that damage.
 

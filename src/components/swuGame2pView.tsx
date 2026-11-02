@@ -73,7 +73,7 @@ function Half({ side, owner, round, playing, centreProps, onStartGame, showDamag
   const hpLeft = base.hp - count
   const cardDrag = useCardDrag(gameStarted ? () => onIncrement(1) : onStartGame, onIncrement, onDecrement, hpLeft, count, playing, flipped)
   const buttons = useDragScrubber(onIncrement, onDecrement, hpLeft, count, gameStarted, flipped)
-  const dragAmount = cardDrag.amount ?? (buttons.dragIndicator && { type: buttons.dragIndicator.type, value: buttons.dragIndicator.value })
+  const dragAmount = cardDrag.amount ?? buttons.dragIndicator
 
   const whose = owner === 'yours' ? 'your base' : 'their base'
   const who = owner === 'yours' ? { group: 'Your initiative', held: 'You hold the initiative', take: 'You: take the initiative' }
