@@ -94,12 +94,17 @@ interface SegmentedControlProps<T extends string> {
   onChange: (v: T) => void
 }
 
+const SEGMENT_LABEL: React.CSSProperties = { gridArea: '1 / 1', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }
+
 export function SegmentedControl<T extends string>({ label, options, value, onChange }: SegmentedControlProps<T>) {
   return (
     <div
       role="group"
       aria-label={label}
-      style={{ display: 'flex', gap: '4px', height: '44px', padding: '4px', boxSizing: 'border-box', borderRadius: '12px', background: 'var(--color-surface)' }}
+      // Each option is as wide as its label, with any spare width shared out. Short of room, the
+      // options shrink from their labels, so the longest is the one cut short, and the control never
+      // spills out of its row.
+      style={{ display: 'grid', gridTemplateColumns: `repeat(${options.length}, minmax(0, auto))`, gap: '4px', height: '44px', padding: '4px', boxSizing: 'border-box', borderRadius: '12px', background: 'var(--color-surface)' }}
     >
       {options.map(o => {
         const selected = o.value === value
@@ -111,19 +116,21 @@ export function SegmentedControl<T extends string>({ label, options, value, onCh
             onClick={() => onChange(o.value)}
             style={{
               ...TAP,
-              flex: 1,
-              minWidth: 0,
-              // One line, so three options fit the 284px controls column.
-              padding: '0 4px',
+              padding: '0 6px',
               whiteSpace: 'nowrap',
               borderRadius: '9px',
               fontSize: '0.95rem',
               background: selected ? 'var(--color-accent)' : 'transparent',
               color: selected ? 'var(--color-on-accent)' : 'var(--color-text-body)',
-              fontWeight: selected ? 600 : 400,
+              minWidth: 0,
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr)',
+              placeItems: 'center',
             }}
           >
-            {o.label}
+            {/* The label, over a hidden bold copy that keeps the option as wide as its label selected. */}
+            <span style={{ ...SEGMENT_LABEL, fontWeight: selected ? 600 : 400 }}>{o.label}</span>
+            <span data-testid="segment-sizer" aria-hidden="true" style={{ ...SEGMENT_LABEL, fontWeight: 600, visibility: 'hidden' }}>{o.label}</span>
           </button>
         )
       })}

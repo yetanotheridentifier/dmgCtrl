@@ -795,7 +795,7 @@ describe('SwuSetupScreen: mode', () => {
 
   it('offers 1 player, 2 players and Twin Suns, 1 player the first time', () => {
     renderSetup()
-    expect(within(mode()).getAllByRole('button').map(b => b.textContent)).toEqual(['1 player', '2 players', 'Twin Suns'])
+    expect(within(mode()).getAllByRole('button')).toEqual(['1 player', '2 players', 'Twin Suns'].map(name => within(mode()).getByRole('button', { name })))
     expect(within(mode()).getByRole('button', { name: '1 player' })).toHaveAttribute('aria-pressed', 'true')
   })
 
@@ -996,7 +996,7 @@ describe('SwuSetupScreen: Twin Suns', () => {
     keep(jediTemple)
     renderSetup()
     const mode = screen.getByRole('group', { name: 'Mode' })
-    expect(within(mode).getAllByRole('button').map(b => b.textContent)).toEqual(['1 player', '2 players', 'Twin Suns'])
+    expect(within(mode).getAllByRole('button')).toEqual(['1 player', '2 players', 'Twin Suns'].map(name => within(mode).getByRole('button', { name })))
     await userEvent.setup().click(within(mode).getByRole('button', { name: 'Twin Suns' }))
     expect(grid()).toBeInTheDocument()
     expect(screen.queryByTestId('base-card')).not.toBeInTheDocument()
