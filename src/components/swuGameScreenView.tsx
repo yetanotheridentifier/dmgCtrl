@@ -120,7 +120,7 @@ function SwuGameScreenView(props: SwuGameViewProps) {
     gameStarted && !matchOver,
   )
   const buttons = useDragScrubber(onIncrement, onDecrement, hpLeft, count, gameStarted)
-  const dragAmount = cardDrag.amount ?? (buttons.dragIndicator && { type: buttons.dragIndicator.type, value: buttons.dragIndicator.value })
+  const dragAmount = cardDrag.amount ?? buttons.dragIndicator
 
   // The card fills the height between the edges, leaving each margin room; its sizes scale from 1% of
   // the screen's height (cqh: the screen's frame, which may be turned against the phone).

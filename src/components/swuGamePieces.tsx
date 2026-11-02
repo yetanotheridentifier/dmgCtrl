@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Base } from '../hooks/useBases'
+import type { DragAmount } from '../hooks/useDragScrubber'
 import type { MatchResult } from '../hooks/useMatch'
 import type { PlayMode } from '../utils/playMode'
 import { baseKey } from '../hooks/useSwuSetup'
 import SwuBaseSheet from './swuBaseSheet'
 import TimerDisplay from './shared/timerDisplay'
 import { Button, SegmentedControl, Sheet, Stepper } from './shared/controls'
-import { CARD_ASPECT_RATIO, CARD_NATURAL_HEIGHT, CARD_NATURAL_WIDTH, DISABLED_BTN, EPIC_TEXT_TOP, READOUT_BOTTOM, READOUT_MIDDLE, RESULT_WORD,marginButton, mutedText, scaled } from './swuGameStyles'
+import { CARD_ASPECT_RATIO, CARD_NATURAL_HEIGHT, CARD_NATURAL_WIDTH, DISABLED_BTN, EPIC_TEXT_TOP, READOUT_BOTTOM, READOUT_MIDDLE, RESULT_WORD, aboveFinger, marginButton, mutedText, scaled } from './swuGameStyles'
 
 // The pieces the one-player and two-player SWU game screens share: the base card as the damage
 // control, the epic action and Force buttons, and the sheets. Both screens change together here.
@@ -86,18 +88,20 @@ interface BaseCardProps {
   label?: string
   disabled: boolean
   epicActionToken: boolean
-  dragAmount: { type: '+' | '-'; value: number } | null | undefined
+  dragAmount: DragAmount | null | undefined
   drag: CardDrag
   // The card's width, and one hundredth of its height: every size on it scales from that.
   width: string
   unit: string
   dimmed?: boolean
-  // The colour of the border and its glow, when the card is marked out (as a base to choose).
+  // The colour of the border and its glow, when the card is marked out (as a base to choose). A drag
+  // on the card shows its own.
   outline?: string
 }
 
-export function BaseCard({ base, art, face, label: labelOverride, disabled, epicActionToken, dragAmount, drag, width, unit, dimmed = false, outline = 'var(--color-accent)' }: BaseCardProps) {
+export function BaseCard({ base, art, face, label: labelOverride, disabled, epicActionToken, dragAmount, drag, width, unit, dimmed = false, outline: marked = 'var(--color-accent)' }: BaseCardProps) {
   const u = (n: number) => scaled(unit, n)
+  const outline = dragAmount ? AMOUNT_COLOUR[dragAmount.type] : marked
   const { label: faceLabel, centre } = cardCentre({ ...face, base, unit })
   const label = labelOverride ?? faceLabel
   return (
@@ -197,16 +201,49 @@ export function BaseCard({ base, art, face, label: labelOverride, disabled, epic
         </span>
       )}
 
-      {dragAmount && (
-        <span
-          data-testid="drag-amount"
-          aria-live="polite"
-          style={{ position: 'absolute', left: '64%', top: `${READOUT_MIDDLE - 17}%`, zIndex: 4, padding: '4px 12px', borderRadius: '10px', background: 'var(--color-accent)', color: 'var(--color-on-accent)', fontSize: `max(18px, ${u(6.7)})`, fontWeight: 700, pointerEvents: 'none' }}
-        >
-          {`${dragAmount.type === '+' ? '+' : '−'}${dragAmount.value}`}
-        </span>
-      )}
+      {dragAmount && <FloatingAmount amount={dragAmount} />}
     </button>
+  )
+}
+
+// --- the running amount of a drag ---
+
+// Adding damage is red and removing it green: on the card's border while dragging, and round the
+// amount. The amount itself is white on a dark pill, so it reads on any art.
+const AMOUNT_COLOUR = { '+': 'var(--color-error)', '-': 'var(--color-success)' } as const
+
+// Drawn on the page itself, over everything, so neither the card's edge nor the finger covers it,
+// and turned to read upright for the player dragging.
+function FloatingAmount({ amount }: { amount: DragAmount }) {
+  const { left, top } = aboveFinger(amount.clientX, amount.clientY, amount.turn, window.innerWidth, window.innerHeight)
+  return createPortal(
+    <span
+      data-testid="drag-amount"
+      aria-live="polite"
+      style={{
+        position: 'fixed',
+        left: `${left}px`,
+        top: `${top}px`,
+        zIndex: 1000,
+        transform: `translate(-50%, -50%) rotate(${amount.turn}deg)`,
+        padding: '4px 14px',
+        borderRadius: '999px',
+        borderWidth: '2px',
+        borderStyle: 'solid',
+        borderColor: AMOUNT_COLOUR[amount.type],
+        background: 'rgba(0,0,0,0.7)',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
+        lineHeight: 1.1,
+        whiteSpace: 'nowrap',
+        fontSize: 'clamp(1.5rem, 7vmin, 2.2rem)',
+        fontWeight: 600,
+        color: 'var(--color-text-primary)',
+        pointerEvents: 'none',
+      }}
+    >
+      {`${amount.type === '+' ? '+' : '−'}${amount.value}`}
+    </span>,
+    document.body,
   )
 }
 

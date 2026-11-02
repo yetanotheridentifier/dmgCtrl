@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
 import SwuGameScreen from '../components/swuGameScreen'
-import { EPIC_TEXT_TOP, READOUT_BOTTOM } from '../components/swuGameStyles'
+import { AMOUNT_MARGIN, EPIC_TEXT_TOP, FINGER_GAP, READOUT_BOTTOM, aboveFinger } from '../components/swuGameStyles'
 import { Base } from '../hooks/useBases'
 import { useOrientation } from '../hooks/useOrientation'
 import { useWakeLock } from '../hooks/useWakeLock'
@@ -256,14 +256,67 @@ describe('SwuGameScreen: the card’s readout keeps clear of the epic action tex
     expect(centre).toBeGreaterThan(READOUT_BOTTOM - 20)
   })
 
-  it('the drag amount sits beside the readout, clear of the epic text', () => {
-    renderGame({ base: mockBaseWithEpicAction })
+})
+
+describe('SwuGameScreen: the drag amount', () => {
+  const amount = () => screen.getByTestId('drag-amount')
+  const outline = () => screen.getByTestId('card-outline').style.borderColor
+
+  // Drawn over everything, so the card's edge cannot clip it, and above the finger so it is not covered.
+  it('floats above the finger, not on the card', () => {
+    renderGame()
     startGame()
+    fireEvent.pointerDown(card(), { clientX: 400, clientY: 400, pointerId: 1 })
+    fireEvent.pointerMove(card(), { clientX: 400, clientY: 340, pointerId: 1 })
+    expect(card()).not.toContainElement(amount())
+    expect(amount().style.position).toBe('fixed')
+    expect(amount().style.left).toBe('400px')
+    expect(amount().style.top).toBe(`${340 - FINGER_GAP}px`)
+  })
+
+  it('the card lights red while adding damage and green while removing it, then goes back', () => {
+    renderGame()
+    startGame()
+    dragCard(300, 146)
     fireEvent.pointerDown(card(), { clientY: 300, pointerId: 1 })
-    fireEvent.pointerMove(card(), { clientY: 240, pointerId: 1 })
-    const top = pct(screen.getByTestId('drag-amount').style.top)
-    expect(top).toBeGreaterThan(readoutBox().top)
-    expect(top).toBeLessThan(READOUT_BOTTOM - 20)
+    fireEvent.pointerMove(card(), { clientY: 260, pointerId: 1 })
+    expect(outline()).toBe('var(--color-error)')
+    expect(amount().style.borderColor).toBe('var(--color-error)')
+    fireEvent.pointerMove(card(), { clientY: 340, pointerId: 1 })
+    expect(outline()).toBe('var(--color-success)')
+    expect(amount().style.borderColor).toBe('var(--color-success)')
+    fireEvent.pointerUp(card(), { clientY: 340, pointerId: 1 })
+    expect(outline()).toBe('var(--color-accent)')
+  })
+
+  it('holding and dragging a damage button floats the amount above the finger too, and lights the card', () => {
+    mockUserSettings.enableDamageButtons = true
+    renderGame()
+    startGame()
+    const plus = screen.getByRole('button', { name: 'Add 1 damage, hold and drag for more' })
+    fireEvent.pointerDown(plus, { clientX: 900, clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plus, { clientX: 900, clientY: 272, pointerId: 1 })
+    expect(amount()).toHaveTextContent('+3')
+    expect(amount().style.top).toBe(`${272 - FINGER_GAP}px`)
+    expect(outline()).toBe('var(--color-error)')
+  })
+})
+
+describe('aboveFinger: where the drag amount goes', () => {
+  // Along the player's up: up the screen unturned, towards its right on a frame turned a quarter
+  // clockwise, and down it on a half turned round to face the far player.
+  it.each([
+    [0, 500, 400 - FINGER_GAP],
+    [90, 500 + FINGER_GAP, 400],
+    [180, 500, 400 + FINGER_GAP],
+    [270, 500 - FINGER_GAP, 400],
+  ])('turned %i, it sits a finger’s gap along the player’s up', (turn, left, top) => {
+    expect(aboveFinger(500, 400, turn, 1000, 800)).toEqual({ left, top })
+  })
+
+  it('stays on the screen near its edge', () => {
+    expect(aboveFinger(5, 30, 0, 1000, 800)).toEqual({ left: AMOUNT_MARGIN, top: AMOUNT_MARGIN })
+    expect(aboveFinger(995, 790, 180, 1000, 800)).toEqual({ left: 1000 - AMOUNT_MARGIN, top: 800 - AMOUNT_MARGIN })
   })
 })
 
@@ -1129,6 +1182,19 @@ describe('SwuGameScreen: two players, damage', () => {
     expect(damageIn(yourHalf())).toHaveTextContent('2')
     expect(damageIn(theirHalf())).toHaveTextContent('1')
     expect(within(theirHalf()).getByTestId('game-counter')).toHaveTextContent('24 HP left')
+  })
+
+  it('on their half the amount is turned to face them, beyond their finger, and only their card lights', () => {
+    render2p()
+    hit(theirHalf())
+    fireEvent.pointerDown(cardIn(theirHalf()), { clientX: 400, clientY: 100, pointerId: 1 })
+    fireEvent.pointerMove(cardIn(theirHalf()), { clientX: 400, clientY: 140, pointerId: 1 })
+    const amount = screen.getByTestId('drag-amount')
+    expect(amount).toHaveTextContent('+3')
+    expect(amount.style.top).toBe(`${140 + FINGER_GAP}px`)
+    expect(amount.style.transform).toContain('rotate(180deg)')
+    expect(within(theirHalf()).getByTestId('card-outline').style.borderColor).toBe('var(--color-error)')
+    expect(within(yourHalf()).getByTestId('card-outline').style.borderColor).toBe('var(--color-accent)')
   })
 
   it('dragging up on your card adds damage', () => {
