@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Button, IconButton, SegmentedControl, SelectButton, Stepper, Sheet } from '../components/shared/controls'
 import { FIELD_STYLE } from '../styles/field'
@@ -76,6 +76,30 @@ describe('SegmentedControl', () => {
     render(<SegmentedControl label="Match" options={options} value="Casual" onChange={onChange} />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Tournament' }))
     expect(onChange).toHaveBeenCalledWith('Tournament')
+  })
+
+  // jsdom does no layout, so these pin how the fit is made: columns sized up to each label, so a
+  // long label takes the room it needs; short of room, a label ends in an ellipsis inside its option
+  // rather than spilling; and the bold width is held by a hidden copy, so selecting never squeezes it.
+  it('sizes each option to its label, and short of room cuts a label short inside its option', () => {
+    render(<SegmentedControl label="Match" options={options} value="Casual" onChange={vi.fn()} />)
+    expect(screen.getByRole('group', { name: 'Match' })).toHaveStyle({ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, auto))' })
+    for (const name of ['Casual', 'Tournament']) {
+      const button = screen.getByRole('button', { name })
+      for (const span of button.querySelectorAll('span')) {
+        expect(span).toHaveStyle({ overflow: 'hidden', textOverflow: 'ellipsis' })
+      }
+    }
+  })
+
+  it('every option keeps room for its label in bold, selected or not', () => {
+    render(<SegmentedControl label="Match" options={options} value="Casual" onChange={vi.fn()} />)
+    for (const name of ['Casual', 'Tournament']) {
+      const sizer = within(screen.getByRole('button', { name })).getByTestId('segment-sizer')
+      expect(sizer).toHaveTextContent(name)
+      expect(sizer).toHaveAttribute('aria-hidden', 'true')
+      expect(sizer).toHaveStyle({ fontWeight: '600', visibility: 'hidden' })
+    }
   })
 
   it('can have nothing selected', () => {
