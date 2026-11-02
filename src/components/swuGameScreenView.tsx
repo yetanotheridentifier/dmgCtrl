@@ -273,7 +273,6 @@ function SwuGameScreenView(props: SwuGameViewProps) {
         display: 'grid',
         gridTemplateColumns: '1fr auto 1fr',
         alignItems: 'center',
-        overflow: 'hidden',
         color: 'var(--color-text-primary)',
       }}>
         <div style={column}>

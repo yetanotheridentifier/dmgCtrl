@@ -206,7 +206,7 @@ function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDe
         ...style,
       }}
     >
-      <div style={{ position: 'relative', width: CARD_WIDTH, aspectRatio: `${CARD_ASPECT_RATIO}`, borderRadius: '3.5%', boxShadow: highlight ? `0 0 0 3px ${highlight}, 0 0 14px ${highlight}` : undefined }}>
+      <div style={{ position: 'relative', width: CARD_WIDTH, aspectRatio: `${CARD_ASPECT_RATIO}`, borderRadius: '3.5%' }}>
         <BaseCard
           base={base}
           art={{ src: art.src, rotationDeg: art.rotationDeg, loaded: art.imageLoaded, failed: art.allFailed, onLoad: art.onLoad, onError: art.onError }}
@@ -218,6 +218,7 @@ function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDe
           drag={drag}
           width="100%"
           unit={CARD_UNIT}
+          outline={highlight ?? undefined}
         />
 
         {/* The counters this player holds, down the card's left edge */}
