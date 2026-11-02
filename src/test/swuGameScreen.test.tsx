@@ -268,6 +268,16 @@ describe('SwuGameScreen: the card’s readout keeps clear of the epic action tex
 })
 
 describe('SwuGameScreen: the card', () => {
+  // The card fills the height between the edges, so a clipping box inside them would cut its glow off
+  // at the top and bottom while the edges still have room for it. The screen's own frame may clip.
+  it('nothing inside the screen edges clips the card’s glow', () => {
+    renderGame()
+    const edges = screen.getByTestId('content-wrapper')
+    for (let el = card().parentElement; el && el !== edges.parentElement; el = el.parentElement) {
+      expect(el.style.overflow).not.toBe('hidden')
+    }
+  })
+
   it('shows Start before the game', () => {
     renderGame()
     expect(counter()).toHaveTextContent('Start')

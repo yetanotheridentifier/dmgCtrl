@@ -68,6 +68,8 @@ type Cell = ReturnType<typeof cell>
 const cardIn = (c: Cell) => within(c).getByTestId('game-card')
 const hit = (c: Cell, times = 1) => { for (let i = 0; i < times; i++) fireEvent.click(cardIn(c)) }
 const damageIn = (c: Cell) => within(c).getByTestId('damage')
+// The colour of the card's border, as written (jsdom gives a hex colour back as rgb()).
+const outlineIn = (c: Cell) => within(c).getByTestId('card-outline').style.borderColor
 const bar = () => screen.getByRole('navigation', { name: /facing you/ })
 const press = (name: string | RegExp) => fireEvent.click(within(bar()).getByRole('button', { name }))
 const claimPlan = /^Plan: tap/
@@ -201,6 +203,16 @@ describe('SwuTwinSunsGame: deciding the initiative', () => {
     expect(mockOnGameStart).not.toHaveBeenCalled()
   })
 
+  it('a base you can choose keeps its single border, with no ring drawn outside it', () => {
+    renderGame(FOUR, jediTemple, null)
+    for (const seat of ['Top left', 'Top right', 'Bottom left', 'Bottom right'] as const) {
+      for (let el = cardIn(cell(seat)).parentElement; el && el !== cell(seat); el = el.parentElement) {
+        expect(el.style.boxShadow).toBe('')
+      }
+      expect(outlineIn(cell(seat))).toBe('var(--color-accent)')
+    }
+  })
+
   it('tapping a base gives it the initiative, takes no damage and starts the game', () => {
     renderGame(FOUR, jediTemple, 'Bottom right')
     expect(within(cell('Bottom right')).getByRole('button', { name: 'Initiative, Thermal Oscillator: tap to move it' })).toBeInTheDocument()
@@ -284,6 +296,14 @@ describe('SwuTwinSunsGame: counters', () => {
     expect(within(bar()).getByRole('button', { name: 'Plan is claimed this round' })).toBeDisabled()
     // Choosing the base took no damage.
     expect(damageIn(cell('Top right'))).toHaveTextContent('0')
+  })
+
+  it('while choosing who claimed Plan, each base’s border takes the Plan colour, and goes back after', () => {
+    renderGame()
+    press(claimPlan)
+    expect(outlineIn(cell('Top right'))).toBe('rgb(91, 140, 255)')
+    hit(cell('Top right'))
+    expect(outlineIn(cell('Top right'))).toBe('var(--color-accent)')
   })
 
   it('Cancel leaves the counter unclaimed', () => {
@@ -372,6 +392,11 @@ describe('SwuTwinSunsGame: a base destroyed', () => {
     expect(within(cell('Top right')).getByRole('img', { name: 'Fragile Outpost is destroyed' })).toBeInTheDocument()
     expect(within(bar()).getByText('Fragile Outpost is destroyed')).toBeInTheDocument()
     expect(within(bar()).getByText('Tap the base of the player who destroyed it. That base heals 5.')).toBeInTheDocument()
+  })
+
+  it('while choosing who destroyed it, the bases that can heal have a green border', () => {
+    destroyOutpost()
+    expect(outlineIn(cell('Bottom left'))).toBe('var(--color-success)')
   })
 
   it('tapping the base that destroyed it heals that base 5', () => {

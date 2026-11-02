@@ -92,9 +92,11 @@ interface BaseCardProps {
   width: string
   unit: string
   dimmed?: boolean
+  // The colour of the border and its glow, when the card is marked out (as a base to choose).
+  outline?: string
 }
 
-export function BaseCard({ base, art, face, label: labelOverride, disabled, epicActionToken, dragAmount, drag, width, unit, dimmed = false }: BaseCardProps) {
+export function BaseCard({ base, art, face, label: labelOverride, disabled, epicActionToken, dragAmount, drag, width, unit, dimmed = false, outline = 'var(--color-accent)' }: BaseCardProps) {
   const u = (n: number) => scaled(unit, n)
   const { label: faceLabel, centre } = cardCentre({ ...face, base, unit })
   const label = labelOverride ?? faceLabel
@@ -126,12 +128,12 @@ export function BaseCard({ base, art, face, label: labelOverride, disabled, epic
         userSelect: 'none',
         WebkitUserSelect: 'none',
         WebkitTapHighlightColor: 'transparent',
-        boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.3)',
+        boxShadow: `0 0 20px color-mix(in srgb, ${outline} 30%, transparent)`,
         opacity: dimmed ? 0.55 : 1,
       }}
     >
       {/* Border overlay: above the art, to cover its edge fringe */}
-      <span aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: 10, border: '2px solid var(--color-accent)', borderRadius: 'inherit', pointerEvents: 'none' }} />
+      <span aria-hidden="true" data-testid="card-outline" style={{ position: 'absolute', inset: 0, zIndex: 10, borderWidth: '2px', borderStyle: 'solid', borderColor: outline, borderRadius: 'inherit', pointerEvents: 'none' }} />
 
       <img
         src={art.src ?? undefined}
