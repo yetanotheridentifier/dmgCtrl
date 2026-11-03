@@ -1,8 +1,6 @@
 import { useRef, useLayoutEffect } from 'react'
 import { Base } from '../hooks/useBases'
-
-const CARD_W = 1560
-const CARD_H = 1120
+import { CARD_NATURAL_HEIGHT as CARD_H, CARD_NATURAL_WIDTH as CARD_W, cardBorder, cardGlow } from './swuGameStyles'
 
 interface ImagePreviewProps {
   overlay?: React.ReactNode
@@ -27,8 +25,8 @@ const wrapperStyleWidth: React.CSSProperties = {
   position: 'relative',
   overflow: 'hidden',
   borderRadius: '12px',
-  border: '2px solid var(--color-accent)',
-  boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.3)',
+  ...cardBorder(),
+  boxShadow: cardGlow(),
 }
 
 // In fill='height' mode the outer container owns height/aspectRatio/marginLeft so that both
@@ -40,8 +38,8 @@ const wrapperStyleHeightInner: React.CSSProperties = {
   position: 'relative',
   overflow: 'hidden',
   borderRadius: '12px',
-  border: '2px solid var(--color-accent)',
-  boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.3)',
+  ...cardBorder(),
+  boxShadow: cardGlow(),
 }
 
 const imgStyleNormal: React.CSSProperties = {
@@ -105,10 +103,10 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
   if (allFailed || !src) {
     return (
       <div style={{
-        border: '2px solid var(--color-accent)',
+        ...cardBorder(),
         borderRadius: '12px',
         boxSizing: 'border-box',
-        boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.3)',
+        boxShadow: cardGlow(),
         height: 'max(44px, 8vh)',
         display: 'flex',
         alignItems: 'center',
@@ -129,7 +127,7 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
 
   const imageWrapperStyle: React.CSSProperties = {
     ...baseWrapperStyle,
-    ...(imageLoaded ? {} : { opacity: 0, boxShadow: 'none', border: 'none' }),
+    ...(imageLoaded ? {} : { opacity: 0, boxShadow: 'none', borderStyle: 'none' }),
     ...(message ? {
       borderBottomLeftRadius: 0,
       borderBottomRightRadius: 0,

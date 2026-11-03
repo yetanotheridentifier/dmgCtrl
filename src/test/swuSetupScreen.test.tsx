@@ -5,6 +5,9 @@ import SwuSetupScreen from '../components/swuSetupScreen'
 import { useBases, Base } from '../hooks/useBases'
 import type { FavouriteBase } from '../hooks/useFavourites'
 import { makeMatchMediaMock } from './setup'
+import { CARD_ASPECT_RATIO, cardGlow } from '../components/swuGameStyles'
+import { baseMetaStyle, baseNameStyle } from '../styles/sectionLabel'
+import { baseMeta as baseMetaText } from '../utils/baseAspect'
 
 const mockOnFavouriteAdded = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnFavouriteRemoved = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
@@ -118,6 +121,13 @@ function keep(base: Base, recent: Base[] = [], matchType = 'casual') {
     recentBaseKeys: recent.map(b => `${b.set}-${b.number}`),
     matchType,
   }))
+}
+
+// One rule for a base's name, and its set and HP, wherever setup shows them: one line, cut short with …
+function expectOneLine(name: HTMLElement, meta: HTMLElement) {
+  expect(name.style.fontSize).toBe(baseNameStyle.fontSize)
+  expect(meta.style.fontSize).toBe(baseMetaStyle.fontSize)
+  for (const el of [name, meta]) expect(el.style).toMatchObject({ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })
 }
 
 const baseCard = () => screen.getByTestId('base-card')
@@ -962,6 +972,18 @@ describe('SwuSetupScreen: their base', () => {
     }
   })
 
+  it('in portrait and landscape each name, and its set and HP, is one line ending in … when too long', () => {
+    for (const portrait of [true, false]) {
+      makeMatchMediaMock(portrait)
+      keep2p(jediTemple, { theirBaseKey: key(catacombs) })
+      const { unmount } = renderSetup()
+      for (const [card, b] of [[baseCard(), jediTemple], [theirCard(), catacombs]] as const) {
+        expectOneLine(within(card).getByText(b.name), within(card).getByText(baseMetaText(b)))
+      }
+      unmount()
+    }
+  })
+
   it('in landscape, and with 1 player, the art stays above the name', () => {
     keep2p(jediTemple, { theirBaseKey: key(catacombs) })
     const { unmount } = renderSetup()
@@ -1031,6 +1053,51 @@ describe('SwuSetupScreen: Twin Suns', () => {
       expect(parts.indexOf(within(tile).getByText(name.startsWith('Your') ? 'Your base' : 'Opponent'))).toBeLessThan(parts.findIndex(p => p.contains(card)))
       expect(parts.findIndex(p => p.contains(card))).toBeLessThan(parts.findIndex(p => p.contains(within(tile).getByText(b.name))))
     }
+  })
+
+  // One frame for a base wherever setup draws it: Twin Suns' cards look like 1 and 2 players'.
+  it('each card has the same frame as in 1 and 2 players: a 2px accent border and its glow', () => {
+    keepTwinSuns(jediTemple, [catacombs, null, null])
+    renderSetup()
+    for (const name of ['Your base: Jedi Temple', 'Opponent, top right: Catacombs of Cadera']) {
+      const tile = seatButton(name)
+      const frame = within(tile).getByTestId('card-frame')
+      expect(frame).toContainElement(tile.querySelector('img[data-card]') as HTMLElement)
+      expect(frame.style).toMatchObject({ borderWidth: '2px', borderStyle: 'solid', borderColor: 'var(--color-accent)', boxShadow: cardGlow() })
+      expect(frame.style.aspectRatio).toBe(`${CARD_ASPECT_RATIO} / 1`)
+    }
+  })
+
+  it('each name, and its set and HP, is one line ending in … when too long, in portrait and landscape', () => {
+    for (const portrait of [true, false]) {
+      makeMatchMediaMock(portrait)
+      keepTwinSuns(jediTemple, [catacombs, null, null])
+      const { unmount } = renderSetup()
+      for (const [name, b] of [['Your base: Jedi Temple', jediTemple], ['Opponent, top right: Catacombs of Cadera', catacombs]] as const) {
+        const tile = seatButton(name)
+        expectOneLine(within(tile).getByText(b.name), within(tile).getByText(baseMetaText(b)))
+      }
+      unmount()
+    }
+  })
+
+  it('1 player’s name, and its set and HP, follow the same rule', () => {
+    for (const portrait of [true, false]) {
+      makeMatchMediaMock(portrait)
+      keep(jediTemple)
+      const { unmount } = renderSetup()
+      expectOneLine(within(baseCard()).getByText('Jedi Temple'), within(baseCard()).getByText(baseMetaText(jediTemple)))
+      unmount()
+    }
+  })
+
+  it('1 player’s card has that frame too', () => {
+    keep(jediTemple)
+    renderSetup()
+    const art = within(screen.getByTestId('base-card')).getByRole('img', { name: 'Jedi Temple' })
+    fireEvent.load(art)
+    const frame = art.parentElement as HTMLElement
+    expect(frame.style).toMatchObject({ borderWidth: '2px', borderStyle: 'solid', borderColor: 'var(--color-accent)', boxShadow: cardGlow() })
   })
 
   it('with only your base, Go to game is disabled and the hint says what Twin Suns needs', () => {
