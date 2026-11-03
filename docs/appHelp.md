@@ -18,7 +18,7 @@ A game counts as played once its setup opens.
 
 ### Game select
 
-Game select has a tile for each game. Tap one to open that game's setup. The game you played last is marked **Last played**. **Back** on either game's setup returns here. **Help** opens this page, and **Settings** opens Settings. Each game's own help is under **More** on its screens.
+Game select has a tile for each game. Tap one to open that game's setup. The game you played last is marked **Last played**. **Back** on either game's setup returns here. **Help** opens this page, and **Settings** opens Settings with every game's settings. Each game's own help and settings are under **More** on its screens: Settings opened there shows General and that game's settings only.
 
 ### Card data
 

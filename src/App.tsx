@@ -3,7 +3,7 @@ import { SwuSplash, SwuOffline } from './components/swuCardDataScreens'
 import GameSelectScreen from './components/gameSelectScreen'
 import InstallBanner from './components/installBanner'
 import { useInstallPrompt } from './hooks/useInstallPrompt'
-import { gameFromPath, launchScreen, readLastGame, recordLastGame } from './utils/appStart'
+import { gameFromPath, launchScreen, readLastGame, recordLastGame, type Game } from './utils/appStart'
 import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
 import SwuTwinSunsGame from './components/swuTwinSunsGame'
@@ -34,6 +34,10 @@ type Screen = 'gameSelect' | 'xwingSetup' | 'xwing' | 'xwingLists' | 'xwingTourn
 
 // The install banner shows only on these: never over a game.
 const BANNER_SCREENS: Screen[] = ['gameSelect', 'setup', 'xwingSetup']
+
+// Settings shows the settings of the game it was opened from, and every game's from game select.
+const gameOfScreen = (screen: Screen | undefined): Game | undefined =>
+  screen === 'gameSelect' || screen === undefined ? undefined : screen.startsWith('xwing') ? 'xwing' : 'swu'
 
 function AppScreens() {
   const { startScreen } = useUserSettings()
@@ -442,7 +446,7 @@ function AppScreens() {
         />
       )}
       {screen === 'help' && <HelpScreen onBack={handleOverlayBack} source={helpSource} />}
-      {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onManageXwingLists={() => handleXwingLists()} />}
+      {screen === 'settings' && <SettingsScreen game={gameOfScreen(backStack[backStack.length - 1])} onBack={handleOverlayBack} onManageXwingLists={() => handleXwingLists()} />}
     </>
   )
 }

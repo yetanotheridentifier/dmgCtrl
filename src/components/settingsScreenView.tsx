@@ -101,6 +101,7 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
 }
 
 interface Props {
+  game?: Game
   startScreen: StartScreen
   onStartScreenChange: (v: StartScreen) => void
   lastGame: Game | null
@@ -185,23 +186,27 @@ export default function SettingsScreenView(props: Props) {
     </div>
   )
 
+  // Opened from a game, General and that game's group; from game select, every group.
+  const showSwu = props.game !== 'xwing'
+  const showXwing = props.game !== 'swu'
+
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: isPortrait ? '14px' : '12px', color: 'var(--color-text-primary)' }}>
       {header}
       {isPortrait ? (
         <>
           {general}
-          {swu}
-          {xwing}
+          {showSwu && swu}
+          {showXwing && xwing}
         </>
       ) : (
         // SWU's column is a little wider, so Force tokens' three choices fit on one line each.
         <div style={{ display: 'grid', gridTemplateColumns: '5fr 6fr', gap: '16px', alignItems: 'start' }}>
           <div data-testid="settings-left" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {general}
-            {xwing}
+            {showSwu && showXwing && xwing}
           </div>
-          <div data-testid="settings-right">{swu}</div>
+          <div data-testid="settings-right">{showSwu ? swu : xwing}</div>
         </div>
       )}
       <Sheet open={startSheetOpen} title="Start screen" onClose={() => setStartSheetOpen(false)}>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import HelpScreen from '../components/helpScreen'
 import { makeMatchMediaMock } from './setup'
@@ -77,13 +77,70 @@ describe('HelpScreen', () => {
     expect(screen.getByTestId('help-content')).toHaveStyle({ overflowY: 'auto' })
   })
 
-  it('section links are a column in landscape and a row across the top in portrait', () => {
-    const { unmount } = render(<HelpScreen onBack={vi.fn()} source="game" />)
-    expect(screen.getByRole('navigation', { name: 'Sections' })).toHaveStyle({ flexDirection: 'column' })
-    unmount()
-    makeMatchMediaMock(true)
+  it('the content has no fill of its own: each section is a block of its own on the surface fill', () => {
     render(<HelpScreen onBack={vi.fn()} source="game" />)
-    expect(screen.getByRole('navigation', { name: 'Sections' })).toHaveStyle({ flexDirection: 'row' })
+    const content = screen.getByTestId('help-content')
+    expect(content.style.background).toBe('')
+    const blocks = within(content).getAllByRole('region')
+    expect(blocks.map(b => b.getAttribute('aria-label'))).toEqual(['Setup', 'Game', 'Tournament', 'Rules'])
+    for (const block of blocks) {
+      expect(block).toHaveStyle({ background: 'var(--color-surface)' })
+      expect(within(block).getAllByRole('heading', { level: 2 })).toHaveLength(1)
+    }
+  })
+
+  // jsdom has no layout: four 300px blocks with 12px gaps (tops 0, 312, 624, 936) in a 200px view.
+  const layOut = () => {
+    const content = screen.getByTestId('help-content')
+    within(content).getAllByRole('region').forEach((block, i) => {
+      Object.defineProperty(block, 'offsetTop', { configurable: true, value: i * 312 })
+      Object.defineProperty(block, 'offsetHeight', { configurable: true, value: 300 })
+    })
+    Object.defineProperty(content, 'clientHeight', { configurable: true, value: 200 })
+    Object.defineProperty(content, 'scrollHeight', { configurable: true, value: 1236 })
+    return content
+  }
+  const scrollTo = (content: HTMLElement, top: number) => {
+    content.scrollTop = top
+    fireEvent.scroll(content)
+  }
+
+  it.each<[string, number, string]>([
+    ['at the top of the first section, only the bottom fades', 0, 'bottom'],
+    ['mid-section at both edges, both fade', 150, 'top bottom'],
+    ['the bottom edge in the gap between sections, only the top fades', 106, 'top'],
+    ['the top edge at the top of a section, only the bottom fades', 312, 'bottom'],
+    ['at the bottom of the last section, only the top fades', 1036, 'top'],
+  ])('%s', (_, top, fade) => {
+    render(<HelpScreen onBack={vi.fn()} source="game" />)
+    const content = layOut()
+    scrollTo(content, top)
+    expect(content.getAttribute('data-fade')).toBe(fade)
+  })
+
+  it('with every section whole in view, nothing fades', () => {
+    render(<HelpScreen onBack={vi.fn()} source="game" />)
+    const content = layOut()
+    Object.defineProperty(content, 'clientHeight', { configurable: true, value: 1236 })
+    scrollTo(content, 0)
+    expect(content.getAttribute('data-fade')).toBe('')
+  })
+
+  it('section links are a column in landscape', () => {
+    render(<HelpScreen onBack={vi.fn()} source="game" />)
+    expect(screen.getByRole('navigation', { name: 'Sections' })).toHaveStyle({ flexDirection: 'column' })
+  })
+
+  it.each<[Source, number]>([
+    ['game', 2],
+    ['xwing', 3],
+    ['gameSelect', 2],
+  ])('in portrait, the links from %s sit in two rows across the top (%i columns), with no sideways scroll', (source, columns) => {
+    makeMatchMediaMock(true)
+    render(<HelpScreen onBack={vi.fn()} source={source} />)
+    const nav = screen.getByRole('navigation', { name: 'Sections' })
+    expect(nav).toHaveStyle({ display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` })
+    expect(nav.style.overflowX).toBe('')
   })
 
   it('Back calls onBack', async () => {

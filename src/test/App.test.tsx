@@ -493,17 +493,23 @@ describe('App', () => {
     expect(screen.getByText('30 HP left')).toBeInTheDocument()
   })
 
-  it('Clicking back from settings returns to setup after settings -> squad lists -> back', async () => {
+  it('Settings opened from SWU setup shows General and SWU only', async () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
     await openFromMore(user, 'Settings')
-    await user.click(screen.getByRole('button', { name: 'Squad lists' }))
-    expect(await screen.findByRole('heading', { name: 'Squad Lists' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(setupMarker()).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Star Wars: Unlimited' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'X-Wing' })).not.toBeInTheDocument()
+  })
+
+  it('Settings opened from the SWU game shows General and SWU only', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
+    await openFromMore(user, 'Settings')
+    expect(screen.getByRole('region', { name: 'Star Wars: Unlimited' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'X-Wing' })).not.toBeInTheDocument()
   })
 
 })
@@ -1170,7 +1176,24 @@ describe('App game select', () => {
     await waitFor(() => expect(within(screen.getByTestId('player-card')).getByRole('button', { name: 'Choose a list' })).toBeVisible())
   })
 
-  // ── Settings tab defaults per source screen ───────────────────────────────
+  // ── Settings per source screen ────────────────────────────────────────────
+
+  it('Settings opened from game select shows every group', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.startScreen = 'gameSelect'
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /settings/i }))
+    for (const name of ['General', 'Star Wars: Unlimited', 'X-Wing']) expect(screen.getByRole('region', { name })).toBeInTheDocument()
+  })
+
+  it('Settings opened from X-Wing setup shows General and X-Wing only', async () => {
+    const user = userEvent.setup()
+    await openXwingSetup(user)
+    await openFromMore(user, 'Settings')
+    expect(screen.getByRole('region', { name: 'X-Wing' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Star Wars: Unlimited' })).not.toBeInTheDocument()
+  })
 
   it('settings button is visible on game select screen', async () => {
     mockUserSettings.startScreen = 'gameSelect'

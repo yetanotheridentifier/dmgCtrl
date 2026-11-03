@@ -106,9 +106,14 @@ input[type=number] {
   text-size-adjust: 100%;
 }
 
-/* Each `##` of a help page is its own section, headed in small capitals as in the design. */
+/* Each `##` of a help page is its own block, headed in small capitals as in the design, with the
+   gap between blocks that Settings has between its groups. */
 .help-content section + section {
-  margin-top: 1.75em;
+  margin-top: 12px;
+}
+
+.help-content section > :last-child {
+  margin-bottom: 0;
 }
 
 .help-content h2 {
