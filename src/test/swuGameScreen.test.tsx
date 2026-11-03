@@ -184,6 +184,9 @@ const recordResult = (result: 'Won' | 'Lost' | 'Draw') => {
 
 const openLog = () => fireEvent.click(screen.getByRole('button', { name: 'Log' }))
 const undo = () => fireEvent.click(screen.getByTestId('log-undo-btn'))
+const logDrawer = () => screen.getByRole('dialog', { name: 'Log' })
+// The drawer as read top to bottom: round titles and entries.
+const logText = () => within(logDrawer()).getAllByTestId(/^log-(round|message)$/).map(el => el.textContent)
 
 beforeEach(() => {
   vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
@@ -673,6 +676,16 @@ describe('SwuGameScreen: the Force', () => {
     undo()
     expect(gain()).toBeEnabled()
   })
+
+  it('each log entry is marked in the colour of what it logs', () => {
+    renderGame({ base: mockBaseForce })
+    startGame()
+    tapCard()
+    fireEvent.click(gain())
+    openLog()
+    const marks = within(logDrawer()).getAllByTestId('log-entry').map(e => within(e).getByTestId('log-colour').style.background)
+    expect(marks).toEqual(['var(--color-force)', 'var(--color-error)'])
+  })
 })
 
 describe('SwuGameScreen: Mystic Monastery', () => {
@@ -875,13 +888,13 @@ describe('SwuGameScreen: Damage −/+ buttons setting', () => {
 // ---------------------------------------------------------------------------
 
 describe('SwuGameScreen: log, More, round', () => {
-  it('Log opens and closes the log', () => {
+  it('Log opens the log drawer, and Close closes it', () => {
     renderGame()
-    expect(screen.queryByTestId('log-overlay')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Log' })).not.toBeInTheDocument()
     openLog()
-    expect(screen.getByTestId('log-overlay')).toBeInTheDocument()
-    openLog()
-    expect(screen.queryByTestId('log-overlay')).not.toBeInTheDocument()
+    expect(logDrawer()).toHaveTextContent('No actions yet')
+    fireEvent.click(within(logDrawer()).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog', { name: 'Log' })).not.toBeInTheDocument()
   })
 
   it('More holds Help and Settings', () => {
@@ -913,7 +926,9 @@ describe('SwuGameScreen: log, More, round', () => {
   it('the round stops at 99', () => {
     renderGame()
     startGame()
-    for (let i = 0; i < 100; i++) fireEvent.click(screen.getByRole('button', { name: /^Round \d+:/ }))
+    // Found once: a role query per click is slow enough to time the test out with the whole suite running.
+    const round = screen.getByRole('button', { name: /^Round \d+:/ })
+    for (let i = 0; i < 100; i++) fireEvent.click(round)
     expect(screen.getByRole('button', { name: /^Round 99/ })).toBeInTheDocument()
   })
 
@@ -936,11 +951,9 @@ describe('SwuGameScreen: log, More, round', () => {
     dragCard(300, 260)
     fireEvent.click(screen.getByRole('button', { name: /^Round 1/ }))
     openLog()
-    const log = screen.getByTestId('log-overlay')
-    expect(log).toHaveTextContent('Round 1')
-    expect(log).toHaveTextContent('Hit +1')
-    expect(log).toHaveTextContent('Hit +3')
-    expect(log).toHaveTextContent('Round 2')
+    // Newest first, each entry under the round it happened in, Undo only on the newest.
+    expect(logText()).toEqual(['Round 2', 'Round 1', 'Hit +3', 'Hit +1'])
+    expect(screen.getAllByTestId('log-undo-btn')).toHaveLength(1)
     undo()
     undo()
     expect(screen.getByTestId('damage')).toHaveTextContent('1')
@@ -1086,9 +1099,9 @@ describe('SwuGameScreen: casual game over', () => {
     recordResult('Won')
     fireEvent.click(within(gameOver()).getByRole('button', { name: 'Close' }))
     openLog()
-    expect(screen.getByTestId('log-overlay')).toHaveTextContent('Game won')
+    expect(logDrawer()).toHaveTextContent('Game won')
     undo()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: /^Game / })).not.toBeInTheDocument()
     expect(screen.getByTestId('damage')).toHaveTextContent('2')
     expect(screen.getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
   })
@@ -1514,9 +1527,8 @@ describe('SwuGameScreen: two players, log', () => {
     hit(theirHalf(), 3)
     hit(yourHalf())
     openLog()
-    const log = screen.getByTestId('log-overlay')
-    expect(log).toHaveTextContent('Their base: 1 damage')
-    expect(log).toHaveTextContent('Your base: 1 damage')
+    // The first tap starts the game.
+    expect(logText()).toEqual(['Round 1', 'Your base: 1 damage', 'Their base: 1 damage', 'Their base: 1 damage', 'Their base: 1 damage'])
   })
 
   it('undo takes back the newest entry, on the half it was on', () => {

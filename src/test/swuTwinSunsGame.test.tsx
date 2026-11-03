@@ -409,6 +409,16 @@ describe('SwuTwinSunsGame: deciding the initiative', () => {
     expect(mockOnGameStart).toHaveBeenCalledTimes(1)
   })
 
+  it('the choice opens Round 1 in the log, naming who took the initiative', () => {
+    renderGame(FOUR, jediTemple, 'Top left')
+    hit(cell('Bottom left'))
+    openLog()
+    const drawer = screen.getByRole('dialog', { name: 'Log' })
+    expect(within(drawer).getAllByTestId(/^log-(round|detail|message)$/).map(el => el.textContent)).toEqual([
+      'Round 1', 'Initiative: Thermal Oscillator', 'Tomb of Eilram: 1 damage',
+    ])
+  })
+
   it('undoing the choice asks again, and choosing again does not start a second game', () => {
     renderGame(FOUR, jediTemple, 'Top left')
     openLog()

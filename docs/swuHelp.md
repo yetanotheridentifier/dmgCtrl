@@ -101,7 +101,7 @@ From the top:
 
 ### Right margin
 
-- **Log** opens the action log, a list of everything that happened this game. The newest entry has **Undo**, which takes it back; repeat to step further back. Tap Log again to close it
+- **Log** opens the log drawer: everything that happened this game, newest first, under the round it happened in, each entry marked in the colour of what it logs (red for damage, green for a heal, gold for the epic action, blue for the Force). The newest entry has **Undo**, which takes it back; repeat to step further back. Close it with its close button or a tap outside it
 - **More** holds **Help** and **Settings**, and between games of a Limited best of 3, **Change base**
 - In a best of 1 or 3: the **timer**, and the **Games** chip with the score so far (you first)
 - **Round** (once the game has started): the current round. Tap it for the next round
@@ -151,7 +151,7 @@ Each half has its player's base as the damage control, exactly as in 1 player: t
 
 The strip across the middle holds **Back**, **Log**, **Round**, **End game** and **More**, and in a best of 1 or 3 the timer with the games score. Before the game both cards say **Start**: tap either to begin. Round and End game wait for the game to start. The middle strip's text faces the bottom player.
 
-Log entries name the base ("Their base: 3 damage"), and the log opens over your half. Undo takes back the newest entry, on whichever half it was.
+Log entries name the base ("Their base: 3 damage"), and the log drawer faces you. Undo takes back the newest entry, on whichever half it was.
 
 **Ending a game:** when either base reaches 0 HP, End game opens by itself, worded for the bottom player: Won when their base is destroyed, Lost when yours is. Results are recorded from your side, in casual play, best of 1 and 3 and tournaments alike. After a casual game each half shows its own result (**Game won** or **Game lost**), and the middle strip offers **New setup** and **Rematch** (both bases kept, damage reset).
 
@@ -172,7 +172,7 @@ Each player takes one counter a round: while a counter is being claimed, a base 
 
 **Game over:** **Finish game**, or **End game** then **End game now** at any point, ends the game. Each base shows its place over its card, facing its player: **1st · Won**, then 2nd and 3rd with their HP left. A tie for most HP left is a draw between those players (**1st · Draw**). The bar lists the result, with **Rematch** (same bases and seats, damage reset) and **New setup**. The result is recorded from your side, as in 1 and 2 players. A rematch asks who has the initiative again.
 
-Log entries name the base, the log opens over your base, and Undo takes back the newest entry, a whole Blast included.
+Log entries name the base, the log drawer faces you, and Undo takes back the newest entry, a whole Blast included. The choice of who has the initiative opens Round 1 in the log.
 
 ### Troubleshooting
 

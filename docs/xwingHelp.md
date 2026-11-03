@@ -144,7 +144,7 @@ In a tournament game, **Back to tournament** takes the place of all three and re
 
 ### Log
 
-**Log** opens the drawer over your opponent's side: newest first, under the round it happened in. **Undo** takes back the newest entry; repeat to step further back. Undoing a game's end resumes the timer.
+**Log** opens the drawer over your opponent's side: newest first, under the round it happened in, each entry marked in the colour of what it logs (green for points to you, red for points to your opponent). **Undo** takes back the newest entry; repeat to step further back. Undoing a game's end resumes the timer.
 
 ## Tournament
 
