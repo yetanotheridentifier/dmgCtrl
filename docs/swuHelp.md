@@ -26,7 +26,7 @@ Their base is kept from your last 2-player game, and the card says **Same as las
 
 ### Twin Suns
 
-With Twin Suns, the bases sit in a 2×2 grid that is the seating round the table. **Your base** is always top left, with its Favourite star. Every other cell reads **Add base**: add each opponent's base in the cell where they sit. A base never moves once placed.
+With Twin Suns, the bases sit in a 2×2 grid that is the seating round the table. **Your base** is always bottom right, nearest you as you hold the phone, with its Favourite star. Every other cell reads **Add base**: add each opponent's base in the cell where they sit. A base never moves once placed.
 
 Tap any base to change it. An opponent's base sheet is titled **Opponent's base**: it lists the bases **Used for other players before** in place of your favourites and recent bases, and has **Remove base**, which empties that cell and moves nothing else. Opponents' bases have no Favourite and never join your Recent bases.
 
@@ -75,7 +75,7 @@ Tap ⋯ at the top right for **Help** and **Settings**. Tap <svg width="0.8em" h
 
 ## Game
 
-Your phone stands in for your base. The card fills the screen from top to bottom, and the controls sit in the narrow margins either side of it. Nothing covers the card's top band (HP, name, aspect); the damage goes in the open art below it, above the text box. Only the epic action and Force overlays cover the text box, as the physical tokens do. The 1-player screen is landscape only: held in portrait it stays landscape on the phone, turned on its side, so turn the phone to read it.
+Your phone stands in for your base. The card fills the screen from top to bottom, and the controls sit in the narrow margins either side of it. Nothing covers the card's top band (HP, name, aspect); the damage goes in the open art below it, above the text box. Only the epic action and Force overlays cover the text box, as the physical tokens do. The 1-player screen is landscape only: held in portrait it stays landscape on the phone, turned on its side, so turn the phone to read it. Once the game is open it stays put on the phone: turning the phone round does not turn the screen round with it.
 
 **Starting a game:** the card shows **Start**. Tap the card to begin round 1. Between games of a best of 3 it shows the last result and **Start game N**.
 
@@ -157,7 +157,7 @@ Log entries name the base ("Their base: 3 damage"), and the log opens over your 
 
 ### Twin Suns
 
-With **Twin Suns** chosen in setup, one phone or tablet lies flat in landscape with two players along each long side. Each base sits in its setup cell; the top row is turned round to face the players across, and so is the bar, which faces you (top left). With 4 players the bar runs between the side-by-side bases; with 3 it sits between the two bases on one side and the single base is centred on the other, with **Back**, **Log**, **More** and **End game** at the left of it, in line with the base above them. The screen is landscape only: held in portrait it stays landscape on the device, turned on its side, so turn the device to read it.
+With **Twin Suns** chosen in setup, one phone or tablet lies flat in landscape with two players along each long side. Each base sits in its setup cell: yours bottom right, facing you as you hold the device, and the top row turned round to face the players across. The bar faces you too. With 4 players the bar runs between the side-by-side bases; with 3 it sits between the two bases on one side and the single base is centred on the other, with **Back**, **Log**, **More** and **End game** at the right of it, in line with the base beside them. The screen is landscape only: held in portrait it stays landscape on the device, turned on its side, so turn the device to read it. Once the game is open it stays put on the device: turning the device round does not turn the screen round with it.
 
 The screen opens asking **Who has the initiative?**: the bases light up, and tapping the base of the player who takes it starts the game at round 1. Undo takes the choice back and asks again. Each card is its player's damage control: tap for 1, drag up (from that player's side) to add several, drag down to remove. A base with an epic action has a round yellow button at the right of its text box: tap it when used, and the **Epic Action Used** overlay covers the text box, as in 1 and 2 players (undo in the log takes it back). A base with the Force (by the same **Force tokens** setting) has a round blue button at the left: tap it to gain the Force and show the Force overlay, and tap the overlay when the Force is used. On **Mystic Monastery** the button shows the uses left and is disabled after the third.
 

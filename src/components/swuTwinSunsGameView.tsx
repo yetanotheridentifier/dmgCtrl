@@ -27,7 +27,7 @@ interface LogEntry {
 }
 
 interface Props {
-  // You first (top left), then the opponents in seat order.
+  // You first (bottom right, where you hold the phone), then the opponents in seat order.
   players: TwinSunsPlayer[]
   state: TwinSunsState
   // Each player's place, once the game is over.
@@ -508,7 +508,8 @@ function SwuTwinSunsGameView(props: Props) {
     if (over) {
       barBody = words
     } else if (!playing) {
-      barBody = <>{words}{spacer}{answers && <div style={{ display: 'flex', gap: '8px' }}>{answers}</div>}</>
+      // The answers side by side in equal shares of the bar's width, each filling its share.
+      barBody = <>{words}{spacer}{answers && <div style={{ display: 'grid', gridAutoFlow: 'column', gridAutoColumns: 'minmax(0, 1fr)', gap: '8px' }}>{answers}</div>}</>
     } else if (large) {
       // Two 94px squares across: the counters, then Round.
       barBody = <div style={{ margin: 'auto', display: 'grid', gridTemplateColumns: '94px 94px', gap: '8px' }}>{counters}{nextRound}</div>
@@ -530,15 +531,15 @@ function SwuTwinSunsGameView(props: Props) {
   const barWidth = large ? (four ? '110px' : '212px') : (four ? '210px' : '290px')
   const column: React.CSSProperties = { width: barWidth, flexShrink: 0, boxSizing: 'border-box', padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }
   const bar = (
-    <nav aria-label={over ? 'Game over, facing you' : 'Game, facing you'} style={{ ...column, overflowY: 'auto', transform: 'rotate(180deg)' }}>
+    <nav aria-label={over ? 'Game over, facing you' : 'Game, facing you'} style={{ ...column, overflowY: 'auto' }}>
       {barBody}
     </nav>
   )
-  // 3 players: at the left end of the single base's row, your seat's end, facing you like the bar. It is a
-  // base cell's size, in line with the pair's cell at that end, and its column is that base's width.
+  // 3 players: at the right end of the single base's row, your seat's end, facing you like the bar. It is
+  // a base cell's size, in line with the pair's cell at that end, and its column is that base's width.
   const cellWidth = `calc((100% - ${barWidth}) / 2)`
   const controls = (
-    <nav aria-label="Game controls, facing you" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: cellWidth, containerType: 'size', display: 'flex', alignItems: 'center', justifyContent: 'center', transform: 'rotate(180deg)' }}>
+    <nav aria-label="Game controls, facing you" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: cellWidth, containerType: 'size', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ ...column, width: CARD_WIDTH, padding: '8px 0' }}>{aside}</div>
     </nav>
   )
@@ -580,7 +581,7 @@ function SwuTwinSunsGameView(props: Props) {
     )
   } else {
     // Three players: the bar between the two bases on one side; on the other the single base, centred,
-    // with the controls over the row's left end.
+    // with the controls over the row's right end.
     const row = (side: 'top' | 'bottom', left: Seat, right: Seat) => {
       const pair = players.some(p => p.seat === left) && players.some(p => p.seat === right)
       const single: React.CSSProperties = { flex: `0 1 ${cellWidth}` }

@@ -101,7 +101,7 @@ App
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
 │   ├── useFavourites     (hook — favourites list, add/remove)
 │   ├── SwuSetupScreenView (view — shared controls: top bar with More (Help, Settings), Your base card, Their base card in 2 players, Mode, Match, Go to game / Start tournament / Go to tournament; the Start a tournament sheet: Format, Match, Rounds, base legality)
-│   │   └── SwuTwinSunsGrid (view: the Twin Suns 2×2 seating grid, your base top left, Add base in empty cells)
+│   │   └── SwuTwinSunsGrid (view: the Twin Suns 2×2 seating grid, your base bottom right, Add base in empty cells)
 │   │   └── SwuBaseSheet  (view: the base sheet, with favourites, recent, search with aspect filters, SWUDB link)
 │   │   └── ImagePreview  (pure view — renders art or error message from props)
 ├── SwuGameScreen         (container)

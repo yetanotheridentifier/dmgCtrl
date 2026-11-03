@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import type { Base } from '../hooks/useBases'
 import { TWIN_SUNS_SEATS } from '../hooks/useSwuSetup'
 import { aspectIconSrc, baseAspect, baseMeta } from '../utils/baseAspect'
@@ -90,8 +91,13 @@ function AddCell({ ariaLabel, text, compact, onClick }: { ariaLabel: string; tex
   )
 }
 
-// Twin Suns seating: a 2x2 grid with your base top left and each opponent's base in the cell where
-// they sit. A base never moves once placed; an empty cell is Add base.
+// The grid's cells in reading order, each the index of its seat in TWIN_SUNS_SEATS, or yours.
+const READING_ORDER = (['top left', 'top right', 'bottom left', 'bottom right'] as const)
+  .map(where => (TWIN_SUNS_SEATS as readonly string[]).indexOf(where))
+
+// Twin Suns seating: a 2x2 grid, the table seen from where you hold the phone, with your base bottom
+// right and each opponent's base in the cell where they sit. A base never moves once placed; an empty
+// cell is Add base.
 export default function SwuTwinSunsGrid({ base, isFavourite, onFavouriteToggle, seats, onOpenYours, onOpenSeat, compact }: Props) {
   const yours = base ? (
     // The star sits over the cell, beside its button rather than inside it: a button can't hold another.
@@ -111,8 +117,9 @@ export default function SwuTwinSunsGrid({ base, isFavourite, onFavouriteToggle, 
 
   return (
     <div role="group" aria-label="Bases" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: compact ? '8px' : '10px' }}>
-      {yours}
-      {TWIN_SUNS_SEATS.map((where, i) => {
+      {READING_ORDER.map(i => {
+        if (i < 0) return <Fragment key="yours">{yours}</Fragment>
+        const where = TWIN_SUNS_SEATS[i]
         const b = seats[i] ?? null
         return b
           ? <BaseCell key={where} b={b} label="Opponent" labelColor="var(--color-text-muted)" ariaLabel={`Opponent, ${where}: ${b.name}`} border="none" onClick={() => onOpenSeat(i)} />

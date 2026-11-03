@@ -276,10 +276,10 @@ describe('App', () => {
     await waitForSetup()
     await user.click(screen.getByRole('button', { name: 'Go to game' }))
     // The game opens on choosing who has the initiative.
-    expect(within(screen.getByRole('region', { name: 'Top left' })).getByRole('button', { name: 'Catacombs of Cadera: takes the initiative' })).toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Top right' })).getByRole('button', { name: 'Energy Conversion Lab: takes the initiative' })).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: 'Bottom right' })).getByRole('button', { name: 'Catacombs of Cadera: takes the initiative' })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Bottom left' })).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Bottom left' })).getByRole('button', { name: 'Energy Conversion Lab: takes the initiative' })).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Top left' })).getByRole('button', { name: 'Catacombs of Cadera: takes the initiative' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Top right' })).not.toBeInTheDocument()
   })
 
   it('Back from the Twin Suns game returns to setup, and 1 player then opens the one-player game', async () => {

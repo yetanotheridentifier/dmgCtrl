@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { useOrientation } from '../../hooks/useOrientation'
 import { FrameTurn, useScreenAngle } from '../../hooks/useFrameTurn'
@@ -46,12 +47,17 @@ export function TurnedFrame({ turn, children, testId = 'turned-frame', style }: 
   )
 }
 
-// A screen with a landscape layout only. Held in portrait, it stays landscape on the phone, turned a
-// quarter so the player turns the phone to read it: its top runs along the phone's right edge, or its
-// left edge when the phone is upside down, so a quarter turn either way puts it upright.
+// A screen with a landscape layout only, fixed to the phone where it opens. No web app on iOS can lock
+// the orientation, so the frame turns back against whatever the phone reports after that: opened in
+// landscape it stays that way up on the phone, and opened in portrait its top runs along the phone's
+// right edge, so a quarter turn puts it upright. A window that changes shape without reporting a turn
+// (a desktop browser) is upright whenever it is landscape.
 export function LandscapeScreen({ children }: { children: ReactNode }) {
   const { isPortrait } = useOrientation()
   const angle = useScreenAngle()
-  const turn = !isPortrait ? 0 : angle === 180 ? -90 : 90
+  // Where the layout's top sits on the phone, in degrees clockwise from the phone's own top.
+  const [fixed] = useState(() => (isPortrait ? 90 : angle))
+  const wanted = (((fixed - angle) % 360) + 360) % 360
+  const turn = isPortrait ? (wanted === 270 ? -90 : 90) : (wanted === 180 ? 180 : 0)
   return <TurnedFrame turn={turn}>{children}</TurnedFrame>
 }
