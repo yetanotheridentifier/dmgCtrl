@@ -767,6 +767,69 @@ describe('SwuGameScreen: initiative', () => {
     expect(opp()).toHaveAttribute('aria-checked', 'true')
   })
 
+  const nextRound = () => fireEvent.click(screen.getByRole('button', { name: /^Round \d/ }))
+
+  // Who has it before the game starts only records who starts with it.
+  it('taking it before the game starts does not take it in round 1', () => {
+    renderGame()
+    fireEvent.click(opp())
+    startGame()
+    expect(you()).toBeEnabled()
+    fireEvent.click(you())
+    expect(you()).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('once one side takes it in a round, the other side is disabled until the next round', () => {
+    renderGame()
+    startGame()
+    fireEvent.click(opp())
+    expect(you()).toBeDisabled()
+    expect(you()).toHaveStyle({ background: 'var(--color-surface)', color: 'var(--color-text-disabled)' })
+    fireEvent.click(you())
+    expect(opp()).toHaveAttribute('aria-checked', 'true')
+    nextRound()
+    expect(you()).toBeEnabled()
+    expect(opp()).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(you())
+    expect(you()).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('the holder taking it again keeps it, unchanged, and blocks the other side this round', () => {
+    renderGame()
+    fireEvent.click(opp())
+    startGame()
+    const look = opp().getAttribute('style')
+    fireEvent.click(opp())
+    expect(opp()).toHaveAttribute('aria-checked', 'true')
+    expect(opp().getAttribute('style')).toBe(look)
+    expect(opp()).toBeEnabled()
+    expect(you()).toBeDisabled()
+  })
+
+  it('taking it is a log entry, and undo takes it back with its once-per-round mark', () => {
+    renderGame()
+    fireEvent.click(opp())
+    startGame()
+    fireEvent.click(you())
+    openLog()
+    expect(screen.getByText('Initiative: you')).toBeInTheDocument()
+    undo()
+    expect(opp()).toHaveAttribute('aria-checked', 'true')
+    expect(you()).toBeEnabled()
+    expect(opp()).toBeEnabled()
+  })
+
+  it('the next game starts with it free to take', () => {
+    renderGame({ playMode: 'bo3' })
+    startGame()
+    fireEvent.click(opp())
+    recordResult('Won')
+    expect(you()).toBeEnabled()
+    startGame()
+    expect(you()).toBeEnabled()
+    expect(opp()).toHaveAttribute('aria-checked', 'true')
+  })
+
   it('is hidden when the Initiative setting is off', () => {
     mockUserSettings.enableInitiativeBar = false
     renderGame()
@@ -1329,6 +1392,34 @@ describe('SwuGameScreen: two players, initiative', () => {
     expect(initiativeIn(yourHalf())).toHaveAttribute('aria-checked', 'true')
     expect(initiativeIn(theirHalf())).toHaveAttribute('aria-checked', 'false')
     expect(initiativeIn(theirHalf())).toHaveTextContent('TAKE INITIATIVE')
+  })
+
+  it('taken on one half in a round, the other half’s Take initiative is disabled until Round', () => {
+    render2p()
+    fireEvent.click(initiativeIn(yourHalf()))
+    hit(yourHalf())
+    expect(initiativeIn(theirHalf())).toBeEnabled()
+    fireEvent.click(initiativeIn(theirHalf()))
+    expect(initiativeIn(yourHalf())).toBeDisabled()
+    expect(initiativeIn(yourHalf())).toHaveStyle({ background: 'var(--color-surface)', color: 'var(--color-text-disabled)' })
+    fireEvent.click(initiativeIn(yourHalf()))
+    expect(initiativeIn(theirHalf())).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(roundButton())
+    expect(initiativeIn(yourHalf())).toBeEnabled()
+  })
+
+  it('the holder taking it again blocks the other half, and undo takes it back', () => {
+    render2p()
+    fireEvent.click(initiativeIn(theirHalf()))
+    hit(yourHalf())
+    fireEvent.click(initiativeIn(theirHalf()))
+    expect(initiativeIn(theirHalf())).toHaveAttribute('aria-checked', 'true')
+    expect(initiativeIn(yourHalf())).toBeDisabled()
+    openLog()
+    expect(screen.getByText('Initiative: their base')).toBeInTheDocument()
+    undo()
+    expect(initiativeIn(yourHalf())).toBeEnabled()
+    expect(initiativeIn(theirHalf())).toHaveAttribute('aria-checked', 'true')
   })
 
   it('is hidden when the Initiative setting is off', () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  MYSTIC_USES, addDamage, claim, finish, gainForceByMonastery, lastPhase, nextRound, placings, removeDamage, resolveDestroyed, setEpicUsed, setForce,
-  startState, yourResult,
+  MYSTIC_USES, addDamage, claim, finish, gainForceByMonastery, lastPhase, nextRound, placings, removeDamage, resolveDestroyed, roundCanEnd, setEpicUsed, setForce,
+  startState, tookCounter, yourResult,
 } from '../utils/twinSuns'
 
 // Four players: you (0) and three opponents, every base 30 HP unless a test says otherwise.
@@ -91,6 +91,66 @@ describe('twinSuns: counters', () => {
   it('initiative moves to whoever claims it next', () => {
     const s = claim(claim(startState(4), HP, 'initiative', 2), HP, 'initiative', 0)
     expect(s.initiative).toBe(0)
+  })
+
+  // Choosing who starts with it is how the game starts, not taking it in round 1.
+  it('the opening choice of who has the initiative does not take it this round', () => {
+    expect(startState(4).initiativeTaken).toBe(false)
+    expect(claim(startState(4), HP, 'initiative', 2).initiativeTaken).toBe(false)
+  })
+
+  it('taking the initiative during a round is once per round: no one else can take it until Round', () => {
+    let s = claim(claim(startState(4), HP, 'initiative', 2), HP, 'initiative', 0)
+    expect(s.initiativeTaken).toBe(true)
+    s = claim(s, HP, 'initiative', 3)
+    expect(s.initiative).toBe(0)
+    s = nextRound(s)
+    expect(s.initiativeTaken).toBe(false)
+    expect(s.initiative).toBe(0)
+    s = claim(s, HP, 'initiative', 3)
+    expect(s.initiative).toBe(3)
+  })
+
+  it('a player takes at most one counter a round', () => {
+    let s = claim(claim(startState(4), HP, 'initiative', 2), HP, 'plan', 1)
+    expect(tookCounter(s, 1)).toBe(true)
+    s = claim(s, HP, 'blast', 1)
+    expect(s.blast).toBeNull()
+    expect(s.damage).toEqual([0, 0, 0, 0])
+    s = claim(s, HP, 'initiative', 1)
+    expect(s.initiative).toBe(2)
+    expect(s.initiativeTaken).toBe(false)
+    s = nextRound(s)
+    expect(tookCounter(s, 1)).toBe(false)
+    expect(claim(s, HP, 'blast', 1).blast).toBe(1)
+  })
+
+  // Holding the initiative from before is not taking it this round.
+  it('the player holding the initiative from before can still take a counter, and once they take it again, no other', () => {
+    let s = claim(startState(4), HP, 'initiative', 2)
+    expect(tookCounter(s, 2)).toBe(false)
+    expect(claim(s, HP, 'plan', 2).plan).toBe(2)
+    s = claim(s, HP, 'initiative', 2)
+    expect(tookCounter(s, 2)).toBe(true)
+    expect(claim(s, HP, 'plan', 2).plan).toBeNull()
+  })
+
+  it('the round can end once Plan and Blast are claimed and the initiative taken', () => {
+    let s = claim(startState(4), HP, 'initiative', 2)
+    expect(roundCanEnd(s)).toBe(false)
+    s = claim(claim(s, HP, 'plan', 1), HP, 'blast', 3)
+    expect(roundCanEnd(s)).toBe(false)
+    s = claim(s, HP, 'initiative', 2)
+    expect(roundCanEnd(s)).toBe(true)
+    expect(roundCanEnd(nextRound(s))).toBe(false)
+  })
+
+  it('the holder can take it again to keep it, and then no one else can take it this round', () => {
+    let s = claim(claim(startState(4), HP, 'initiative', 2), HP, 'initiative', 2)
+    expect(s.initiative).toBe(2)
+    expect(s.initiativeTaken).toBe(true)
+    s = claim(s, HP, 'initiative', 1)
+    expect(s.initiative).toBe(2)
   })
 })
 

@@ -59,6 +59,8 @@ interface HalfProps {
   showDamageButtons: boolean
   showInitiative: boolean
   holdsInitiative: boolean
+  // The other half took the initiative this round: this half cannot take it until Round.
+  initiativeRefused: boolean
   onTakeInitiative: () => void
   // Once a casual game is over: this player's result, and the game's round and damage.
   result: { result: MatchResult; round: number; damage: number } | null
@@ -66,7 +68,7 @@ interface HalfProps {
   log?: ReactNode
 }
 
-function Half({ side, owner, round, playing, centreProps, onStartGame, showDamageButtons, showInitiative, holdsInitiative, onTakeInitiative, result, log }: HalfProps) {
+function Half({ side, owner, round, playing, centreProps, onStartGame, showDamageButtons, showInitiative, holdsInitiative, initiativeRefused, onTakeInitiative, result, log }: HalfProps) {
   const { base, count, onIncrement, onDecrement } = side
   const flipped = owner === 'theirs'
   const gameStarted = round > 0
@@ -125,6 +127,7 @@ function Half({ side, owner, round, playing, centreProps, onStartGame, showDamag
             <button
               type="button"
               role="radio"
+              disabled={initiativeRefused}
               aria-checked={holdsInitiative}
               aria-label={holdsInitiative ? who.held : who.take}
               onClick={onTakeInitiative}
@@ -140,6 +143,7 @@ function Half({ side, owner, round, playing, centreProps, onStartGame, showDamag
                 cursor: 'pointer',
                 WebkitTapHighlightColor: 'transparent',
                 ...initiativeLook(holdsInitiative),
+                ...(initiativeRefused ? DISABLED_BTN : {}),
               }}
             >
               {holdsInitiative ? 'INITIATIVE' : 'TAKE INITIATIVE'}
@@ -183,7 +187,7 @@ function SwuGame2pView(props: SwuGame2pViewProps) {
     them, destroyedNote, base, art, count, onIncrement, onDecrement,
     showEpicAction, epicActionUsed, onEpicActionMark, showForce, showMysticMonastery, forceActive, mysticUsesRemaining, onForceToggle, onMysticAction,
     onBack, onHelp, onSettings, round, onStartGame, onRoundIncrement, showDamageButtons,
-    showInitiative, initiative, onInitiativeOpponent, onInitiativePlayer,
+    showInitiative, initiative, initiativeTaken, onInitiativeOpponent, onInitiativePlayer,
     logEntries, onUndo, showLog, onLogToggle,
     playMode, playerScore, opponentScore, matchResult, lastGame,
     timerRemaining, timerMinutes, onTimerMinutesChange, timerExpired,
@@ -266,6 +270,7 @@ function SwuGame2pView(props: SwuGame2pViewProps) {
             owner="theirs"
             {...common}
             holdsInitiative={initiative === 'opponent'}
+            initiativeRefused={initiativeTaken && initiative !== 'opponent'}
             onTakeInitiative={onInitiativeOpponent}
             result={over && { result: FLIP[over.result], round: over.round, damage: over.theirDamage ?? 0 }}
           />
@@ -278,6 +283,7 @@ function SwuGame2pView(props: SwuGame2pViewProps) {
             owner="yours"
             {...common}
             holdsInitiative={initiative === 'player'}
+            initiativeRefused={initiativeTaken && initiative !== 'player'}
             onTakeInitiative={onInitiativePlayer}
             result={over && { result: over.result, round: over.round, damage: over.damage }}
             log={showLog && <GameLogOverlay entries={logEntries} onUndo={onUndo} position={{ inset: '8px' }} />}

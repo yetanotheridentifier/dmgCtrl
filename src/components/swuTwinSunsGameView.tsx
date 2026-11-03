@@ -9,7 +9,7 @@ import { Button, Sheet } from './shared/controls'
 import { BackIcon, DotsIcon, FlagIcon, LogIcon, PlanIcon } from './icons'
 import { BaseCard, ForceIcon, MarkIcon } from './swuGamePieces'
 import { CARD_ASPECT_RATIO, baseControls, scaled } from './swuGameStyles'
-import { lastPhase } from '../utils/twinSuns'
+import { lastPhase, roundCanEnd, tookCounter } from '../utils/twinSuns'
 import type { Counter, Placing, TwinSunsState } from '../utils/twinSuns'
 
 export type Seat = 'Top left' | 'Top right' | 'Bottom left' | 'Bottom right'
@@ -207,7 +207,9 @@ function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDe
     top,
   )
 
-  const selectable = !state.finished && !out && choosing
+  // A counter goes only to a base that has not taken one this round; the base that heals can be any.
+  const refused = picking !== null && state.pending.length === 0 && tookCounter(state, index)
+  const selectable = !state.finished && !out && choosing && !refused
   const highlight = selectable ? (state.pending.length > 0 ? 'var(--color-success)' : COUNTER_COLOUR[picking as Counter]) : null
   const label = (() => {
     if (!selectable) return undefined
@@ -248,7 +250,7 @@ function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDe
           art={{ src: art.src, rotationDeg: art.rotationDeg, loaded: art.imageLoaded, failed: art.allFailed, onLoad: art.onLoad, onError: art.onError }}
           face={{ count: damage, gameStarted: true, isCasual: true, matchResult: null, lastGame: null, playerScore: 0, opponentScore: 0, owner: yours ? 'your base' : undefined }}
           label={label}
-          disabled={out || state.finished}
+          disabled={out || state.finished || refused}
           epicUsed={showEpic && used}
           force={showForce && forceActive ? { onClear: () => onForce(index, false) } : undefined}
           dragAmount={drag.amount}
@@ -260,11 +262,14 @@ function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDe
 
         {/* The counters this player holds, down the card's left edge */}
         <div style={{ position: 'absolute', left: '3%', top: '20%', zIndex: 5, display: 'flex', flexDirection: 'column', gap: u(2) }}>
-          {state.initiative === index && (
-            <button type="button" aria-label={`Initiative, ${base.name}: tap to move it`} onClick={() => onPick('initiative')} style={token('var(--color-accent)')}>
-              <FlagIcon size="55%" />
-            </button>
-          )}
+          {/* Once taken this round the token keeps its look, but no longer moves it */}
+          {state.initiative === index && (state.initiativeTaken
+            ? <span role="img" aria-label={`Initiative, ${base.name}`} style={token('var(--color-accent)')}><FlagIcon size="55%" /></span>
+            : (
+              <button type="button" aria-label={`Initiative, ${base.name}: tap to move it`} onClick={() => onPick('initiative')} style={token('var(--color-accent)')}>
+                <FlagIcon size="55%" />
+              </button>
+            ))}
           {state.plan === index && <span role="img" aria-label={`Plan, ${base.name}`} style={token(PLAN)}><PlanIcon size="55%" /></span>}
           {state.blast === index && <span role="img" aria-label={`Blast, ${base.name}`} style={token(BLAST)}><MarkIcon size="55%" /></span>}
         </div>
@@ -350,22 +355,20 @@ function SwuTwinSunsGameView(props: Props) {
   const logButton = <button type="button" aria-label="Log" onClick={onLogToggle} style={barButton(counterSize)}>{iconBox(<LogIcon />)}{large && <span>Log</span>}</button>
   const more = <button type="button" aria-label="More" onClick={() => setMoreOpen(true)} style={barButton(counterSize)}>{iconBox(<DotsIcon />)}{large && <span>More</span>}</button>
 
+  // Each counter once a round: Plan and Blast while claimed, the initiative once someone has taken it.
   const counterButton = ({ counter, name, colour }: typeof COUNTERS[number]) => {
-    if (counter === 'initiative') {
+    const initiative = counter === 'initiative'
+    const taken = initiative ? state.initiativeTaken : state[counter] !== null
+    const icon = initiative ? <FlagIcon size={iconSize} /> : counter === 'plan' ? <PlanIcon size={iconSize} /> : <MarkIcon size={iconSize} />
+    if (taken) {
       return (
-        <button key={counter} type="button" aria-label="Claim initiative: tap, then the base of the player who takes it" onClick={() => onPick('initiative')} style={barButton({ ...counterSize, background: 'var(--color-surface)', color: colour, border: `2px solid ${colour}` })}>
-          <FlagIcon size={iconSize} /><span>{name}</span>
+        <button key={counter} type="button" disabled aria-label={initiative ? 'Initiative is taken this round' : `${name} is claimed this round`} style={barButton({ ...counterSize, background: '#0d111a', color: '#3b4352', border: '2px solid var(--color-surface-raised)', cursor: 'default' })}>
+          {icon}<span>{name}</span>
         </button>
       )
     }
-    const taken = state[counter] !== null
-    const icon = counter === 'plan' ? <PlanIcon size={iconSize} /> : <MarkIcon size={iconSize} />
-    return taken ? (
-      <button key={counter} type="button" disabled aria-label={`${name} is claimed this round`} style={barButton({ ...counterSize, background: '#0d111a', color: '#3b4352', border: '2px solid var(--color-surface-raised)', cursor: 'default' })}>
-        {icon}<span>{name}</span>
-      </button>
-    ) : (
-      <button key={counter} type="button" aria-label={`${name}: tap, then the base of the player who claimed it`} onClick={() => onPick(counter)} style={barButton({ ...counterSize, background: 'var(--color-surface)', color: colour, border: `2px solid ${colour}` })}>
+    return (
+      <button key={counter} type="button" aria-label={initiative ? 'Claim initiative: tap, then the base of the player who takes it' : `${name}: tap, then the base of the player who claimed it`} onClick={() => onPick(counter)} style={barButton({ ...counterSize, background: 'var(--color-surface)', color: colour, border: `2px solid ${colour}` })}>
         {icon}<span>{name}</span>
       </button>
     )
@@ -388,6 +391,8 @@ function SwuTwinSunsGameView(props: Props) {
       {large ? <span style={{ textAlign: 'center', lineHeight: '18px' }}>End<br />game</span> : 'End game'}
     </button>
   )
+  // Finish game in the last phase; otherwise Round, shown only once every counter is taken this round.
+  const nextRound = last ? finishButton : roundCanEnd(state) ? roundButton : null
 
   const outNames = players.filter((_, i) => state.out[i]).map(p => p.base.name)
   const lastNote = last && (
@@ -492,19 +497,18 @@ function SwuTwinSunsGameView(props: Props) {
       // game at the foot. On a tablet every control is a 94px square, in one column.
       const middle = large ? (
         <div role="group" aria-label="This round" style={{ display: 'grid', gridTemplateColumns: '94px', gap: '8px', justifyContent: 'center' }}>
-          {counters}{last ? <>{noteBox}{finishButton}</> : roundButton}
+          {counters}{last && noteBox}{nextRound}
         </div>
       ) : (
         <div role="group" aria-label="This round" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div role="group" aria-label="Counters" style={{ display: 'flex', gap: '7px', justifyContent: 'space-between' }}>{counters}</div>
           {lastNote}
-          <div style={{ display: 'flex' }}>{last ? finishButton : roundButton}</div>
+          {nextRound && <div style={{ display: 'flex' }}>{nextRound}</div>}
         </div>
       )
       barBody = <>{large ? <div style={{ display: 'flex', justifyContent: 'center' }}>{headRow}</div> : headRow}{spacer}{middle}{spacer}{!last && endButton}</>
     }
   } else {
-    const nextRound = last ? finishButton : roundButton
     if (over) {
       barBody = words
     } else if (!playing) {
@@ -517,7 +521,7 @@ function SwuTwinSunsGameView(props: Props) {
       barBody = (
         <>
           <div role="group" aria-label="Counters" style={{ display: 'flex', gap: '7px', justifyContent: 'space-between' }}>{counters}</div>
-          <div style={{ display: 'flex' }}>{nextRound}</div>
+          {nextRound && <div style={{ display: 'flex' }}>{nextRound}</div>}
         </>
       )
     }
