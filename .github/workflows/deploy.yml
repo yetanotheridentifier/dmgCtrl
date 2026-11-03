@@ -23,10 +23,10 @@ jobs:
           node-version: 24
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps --ignore-scripts
 
       - name: Install sealed dependencies
-        run: npm install --prefix sealed
+        run: npm install --prefix sealed --ignore-scripts
 
       # Each package lints with its own config, and both run at --max-warnings 0, so a warning
       # left in place fails the build.
@@ -46,13 +46,13 @@ jobs:
           node-version: 24
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps --ignore-scripts
 
       - name: Install proxy dependencies
-        run: npm install --prefix proxy
+        run: npm install --prefix proxy --ignore-scripts
 
       - name: Install sealed dependencies
-        run: npm install --prefix sealed
+        run: npm install --prefix sealed --ignore-scripts
 
       # Run as three steps rather than one `npm test`, each writing its own heading to the job
       # summary first. Vitest's GitHub reporter hardcodes its "## Vitest Test Report" heading and
@@ -100,10 +100,10 @@ jobs:
           node-version: 24
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps --ignore-scripts
 
       - name: Install sealed dependencies
-        run: npm install --prefix sealed
+        run: npm install --prefix sealed --ignore-scripts
 
       - name: Build
         run: npm run build
@@ -168,7 +168,7 @@ jobs:
 
       # For wrangler, at the version the lockfile pins.
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps --ignore-scripts
 
       - uses: actions/download-artifact@v5
         with:

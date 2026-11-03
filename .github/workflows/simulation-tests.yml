@@ -38,7 +38,7 @@ jobs:
           node-version: 24
 
       - name: Install sealed dependencies
-        run: npm install --prefix sealed
+        run: npm install --prefix sealed --ignore-scripts
 
       # The heading is ours: Vitest's GitHub reporter hardcodes its own and would otherwise
       # leave an anonymous block that reads like any other suite's. The next step removes that
