@@ -4,8 +4,8 @@ import { Base } from '../hooks/useBases'
 import { useBaseArt } from '../hooks/useBaseArt'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useCardDrag } from '../hooks/useDragScrubber'
-import GameLogOverlay from './gameLogOverlay'
 import { Button, Sheet } from './shared/controls'
+import { LogDrawer, type LogEntry } from './shared/logDrawer'
 import { BackIcon, DotsIcon, FlagIcon, LogIcon, PlanIcon } from './icons'
 import { BaseCard, ForceIcon, MarkIcon } from './swuGamePieces'
 import { CARD_ASPECT_RATIO, baseControls, scaled } from './swuGameStyles'
@@ -17,13 +17,6 @@ export type Seat = 'Top left' | 'Top right' | 'Bottom left' | 'Bottom right'
 export interface TwinSunsPlayer {
   base: Base
   seat: Seat
-}
-
-interface LogEntry {
-  id: string
-  type: string
-  message: string
-  color: string
 }
 
 interface Props {
@@ -181,12 +174,10 @@ interface CellProps {
   onForce: (i: number, active: boolean) => void
   onMonastery: (i: number) => void
   onPick: (c: Counter) => void
-  // The log, over your cell, facing you.
-  log?: ReactNode
   style?: React.CSSProperties
 }
 
-function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDecrement, onEpic, onForce, onMonastery, onPick, log, style }: CellProps) {
+function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDecrement, onEpic, onForce, onMonastery, onPick, style }: CellProps) {
   const { base, seat } = player
   const { useHyperspace, forceTokenDisplay } = useUserSettings()
   const art = useBaseArt(base, useHyperspace)
@@ -324,7 +315,6 @@ function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDe
           </div>
         )}
       </div>
-      {log}
     </section>
   )
 }
@@ -568,7 +558,6 @@ function SwuTwinSunsGameView(props: Props) {
         onForce={onForce}
         onMonastery={onMonastery}
         onPick={onPick}
-        log={i === 0 && showLog ? <GameLogOverlay entries={logEntries} onUndo={onUndo} position={{ inset: '8px' }} /> : undefined}
         style={style}
       />
     )
@@ -605,6 +594,7 @@ function SwuTwinSunsGameView(props: Props) {
       style={{ position: 'fixed', inset: 0, overflow: 'hidden', boxSizing: 'border-box', paddingTop: 'var(--edge-top)', paddingRight: 'var(--edge-right)', paddingBottom: 'var(--edge-bottom)', paddingLeft: 'var(--edge-left)', background: BG, color: 'var(--color-text-primary)', display: 'flex', flexDirection: 'column' }}
     >
       {layout}
+      <LogDrawer open={showLog} entries={logEntries} onClose={onLogToggle} onUndo={onUndo} />
       <Sheet open={moreOpen} title="More" onClose={() => setMoreOpen(false)}>
         <Button onClick={() => { setMoreOpen(false); onHelp() }}>Help</Button>
         {onSettings && <Button onClick={() => { setMoreOpen(false); onSettings() }}>Settings</Button>}

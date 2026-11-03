@@ -188,7 +188,7 @@ describe('LandscapeScreen', () => {
 describe('sizes on a landscape screen', () => {
   const sources = import.meta.glob([
     '../components/swuGameScreenView.tsx', '../components/swuTwinSunsGameView.tsx', '../components/xwingGameScreenView.tsx',
-    '../components/swuGamePieces.tsx', '../components/gameLogOverlay.tsx', '../components/shared/controls.tsx',
+    '../components/swuGamePieces.tsx', '../components/shared/logDrawer.tsx', '../components/shared/controls.tsx',
   ], { query: '?raw', import: 'default', eager: true })
 
   it('never read the viewport', () => {

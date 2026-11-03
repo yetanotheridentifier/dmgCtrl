@@ -6,8 +6,8 @@ import type { MatchResult } from '../hooks/useMatch'
 import type { PlayMode } from '../utils/playMode'
 import { useCardDrag, useDragScrubber } from '../hooks/useDragScrubber'
 import AppScreenLayout from './layout/appScreenLayout'
-import GameLogOverlay from './gameLogOverlay'
 import TimerDisplay from './shared/timerDisplay'
+import { LogDrawer } from './shared/logDrawer'
 import { Button, IconButton, Sheet } from './shared/controls'
 import { BackIcon, DotsIcon, LogIcon } from './icons'
 import { BaseCard, EpicActionButton, ForceButton, GameSheets, SheetActions } from './swuGamePieces'
@@ -303,7 +303,7 @@ function SwuGameScreenView(props: SwuGameViewProps) {
         </div>
       </div>
 
-      {showLog && <GameLogOverlay entries={logEntries} onUndo={onUndo} />}
+      <LogDrawer open={showLog} entries={logEntries} onClose={onLogToggle} onUndo={onUndo} />
       <GameSheets
         openSheet={openSheet}
         setOpenSheet={setOpenSheet}

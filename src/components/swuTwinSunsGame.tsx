@@ -74,8 +74,8 @@ function SwuTwinSunsGame({ base, seats, onBack, onHelp, onSettings }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.initiative])
 
-  const apply = (next: TwinSunsState, type: string, message: string, color: string) => {
-    log.add({ type, message, color, snapshot: state })
+  const apply = (next: TwinSunsState, type: string, message: string, color: string, detail?: string) => {
+    log.add({ type, message, detail, color, snapshot: state })
     setState(next)
     setPicked(null)
     setConfirmEnd(false)
@@ -103,6 +103,11 @@ function SwuTwinSunsGame({ base, seats, onBack, onHelp, onSettings }: Props) {
     if (state.pending.length > 0) {
       const destroyed = name(state.pending[0])
       apply(resolveDestroyed(state, i), 'destroyed', `${destroyed} destroyed by ${name(i)}, who heals 5`, 'var(--color-success)')
+      return
+    }
+    // The first choice of the initiative starts the game, so it opens Round 1 in the log.
+    if (picking === 'initiative' && state.initiative === null) {
+      apply(claim(state, hp, picking, i), 'round', 'Round 1', '#ffffff', `${COUNTER_NAME.initiative}: ${name(i)}`)
       return
     }
     if (picking) {

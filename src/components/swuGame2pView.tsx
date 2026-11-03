@@ -4,8 +4,8 @@ import { Base } from '../hooks/useBases'
 import type { MatchResult } from '../hooks/useMatch'
 import { useCardDrag, useDragScrubber } from '../hooks/useDragScrubber'
 import SplitScreenLayout from './layout/splitScreenLayout'
-import GameLogOverlay from './gameLogOverlay'
 import TimerDisplay from './shared/timerDisplay'
+import { LogDrawer } from './shared/logDrawer'
 import { IconButton } from './shared/controls'
 import { BackIcon, DotsIcon, LogIcon } from './icons'
 import { BaseCard, EpicActionButton, ForceButton, GameSheets } from './swuGamePieces'
@@ -64,11 +64,9 @@ interface HalfProps {
   onTakeInitiative: () => void
   // Once a casual game is over: this player's result, and the game's round and damage.
   result: { result: MatchResult; round: number; damage: number } | null
-  // The log, over this half when open (yours: it reads the right way up for the phone's owner).
-  log?: ReactNode
 }
 
-function Half({ side, owner, round, playing, centreProps, onStartGame, showDamageButtons, showInitiative, holdsInitiative, initiativeRefused, onTakeInitiative, result, log }: HalfProps) {
+function Half({ side, owner, round, playing, centreProps, onStartGame, showDamageButtons, showInitiative, holdsInitiative, initiativeRefused, onTakeInitiative, result }: HalfProps) {
   const { base, count, onIncrement, onDecrement } = side
   const flipped = owner === 'theirs'
   const gameStarted = round > 0
@@ -177,7 +175,6 @@ function Half({ side, owner, round, playing, centreProps, onStartGame, showDamag
         />
       </div>
       {row}
-      {log}
     </>
   )
 }
@@ -286,10 +283,10 @@ function SwuGame2pView(props: SwuGame2pViewProps) {
             initiativeRefused={initiativeTaken && initiative !== 'player'}
             onTakeInitiative={onInitiativePlayer}
             result={over && { result: over.result, round: over.round, damage: over.damage }}
-            log={showLog && <GameLogOverlay entries={logEntries} onUndo={onUndo} position={{ inset: '8px' }} />}
           />
         )}
       />
+      <LogDrawer open={showLog} entries={logEntries} onClose={onLogToggle} onUndo={onUndo} />
       <GameSheets
         openSheet={openSheet}
         setOpenSheet={setOpenSheet}

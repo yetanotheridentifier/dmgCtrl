@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import AppScreenLayout from './layout/appScreenLayout'
 import { BackIcon, DotsIcon, LogIcon } from './icons'
 import TimerDisplay from './shared/timerDisplay'
+import { LogDrawer } from './shared/logDrawer'
 import { Button, IconButton, SegmentedControl, Sheet, Stepper } from './shared/controls'
 import type { HistoryEntry } from '../hooks/useGameHistory'
 import type { Initiative } from '../hooks/useInitiative'
@@ -400,52 +401,6 @@ function Breakdown({ player, opponent, result }: { player: ScoreBreakdown; oppon
 }
 
 const NEXT_PHASE: Record<string, string> = { Planning: 'System', System: 'Activation', Activation: 'Engagement', Engagement: 'End' }
-
-// Newest first, under the round each entry belongs to. A 'round' entry starts its round.
-function LogDrawer({ open, entries, onClose, onUndo }: {
-  open: boolean
-  entries: HistoryEntry<{ round: number }>[]
-  onClose: () => void
-  onUndo: () => void
-}) {
-  const groups: { title: string; entry?: HistoryEntry<{ round: number }>; items: HistoryEntry<{ round: number }>[] }[] = []
-  for (const e of entries) {
-    if (e.type === 'round') groups.push({ title: e.message, entry: e, items: [] })
-    else if (groups.length === 0) groups.push({ title: 'Before the game', items: [e] })
-    else groups[groups.length - 1].items.push(e)
-  }
-  const newest = entries[entries.length - 1]
-  const undo = (
-    <button type="button" data-testid="log-undo-btn" onClick={onUndo} style={{ height: '44px', padding: '0 14px', border: 'none', borderRadius: '10px', background: 'var(--color-accent)', color: 'var(--color-on-accent)', fontFamily: 'inherit', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
-      Undo
-    </button>
-  )
-  return (
-    <Sheet open={open} title="Log" onClose={onClose}>
-      {entries.length === 0 && <div style={{ color: 'var(--color-text-muted)' }}>No actions yet</div>}
-      {[...groups].reverse().map((g, gi) => (
-        <div key={g.entry?.id ?? `g${gi}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minHeight: '24px' }}>
-            <span style={{ ...MUTED_CAPS, flex: 1, textTransform: 'uppercase' }}><span>{g.title}</span>{gi === 0 && ' · newest first'}</span>
-            {g.entry && g.entry === newest && undo}
-          </div>
-          {[...g.items].reverse().map(e => (
-            <div key={e.id} data-testid="log-entry" style={{ display: 'flex', alignItems: 'center', gap: '10px', minHeight: '44px', padding: '4px 4px 4px 12px', boxSizing: 'border-box', borderRadius: '12px', background: e === newest ? 'var(--color-tonal)' : 'var(--color-surface)' }}>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span style={{ fontSize: '14px' }}>{e.message}</span>
-                {e.detail && <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{e.detail}</span>}
-              </div>
-              {e === newest && undo}
-            </div>
-          ))}
-        </div>
-      ))}
-      {entries.length > 0 && (
-        <div style={{ fontSize: '12px', lineHeight: '16px', color: 'var(--color-text-muted)' }}>Undo takes back the newest entry. Repeat to step further back.</div>
-      )}
-    </Sheet>
-  )
-}
 
 export default function XwingGameScreenView(props: Props) {
   const {
