@@ -80,11 +80,17 @@ const hit = (c: Cell, times = 1) => { for (let i = 0; i < times; i++) fireEvent.
 const damageIn = (c: Cell) => within(c).getByTestId('damage')
 // The colour of the card's border, as written (jsdom gives a hex colour back as rgb()).
 const outlineIn = (c: Cell) => within(c).getByTestId('card-outline').style.borderColor
-const bar = () => screen.getByRole('navigation', { name: /facing you/ })
+const bar = () => screen.getByRole('navigation', { name: /^Game( over)?, facing you$/ })
 const press = (name: string | RegExp) => fireEvent.click(within(bar()).getByRole('button', { name }))
 const claimPlan = /^Plan: tap/
 const claimBlast = /^Blast: tap/
 const claimInitiative = /^Claim initiative/
+// 3 players: Back, Log, More and End game beside the single base.
+const sideName = 'Game controls, facing you'
+const side = () => screen.getByRole('navigation', { name: sideName })
+const tapSide = (name: string | RegExp) => fireEvent.click(within(side()).getByRole('button', { name }))
+// The single base stays centred, the controls set over the row's left end out of its flow.
+const centred = (row: HTMLElement) => row.style.justifyContent === 'center' && side().style.position === 'absolute'
 const openLog = () => press('Log')
 const undo = () => fireEvent.click(screen.getByTestId('log-undo-btn'))
 
@@ -120,21 +126,83 @@ describe('SwuTwinSunsGame: layout', () => {
     expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
   })
 
-  it('3 players: the bar sits between the two bases on one side and the single base is centred on the other', () => {
+  it('3 players: the bar sits between the two bases on one side; the single base is centred on the other, the controls at its left', () => {
     renderGame([tomb, null, thermal])
     expect(screen.queryByRole('region', { name: 'Bottom left' })).not.toBeInTheDocument()
     const top = screen.getByTestId('twin-suns-row-top')
     const bottom = screen.getByTestId('twin-suns-row-bottom')
-    expect(within(top).getByRole('navigation', { name: /facing you/ })).toBeInTheDocument()
-    expect(within(bottom).queryByRole('navigation')).not.toBeInTheDocument()
-    expect(bottom).toHaveStyle({ justifyContent: 'center' })
+    expect(within(top).getByRole('navigation', { name: 'Game, facing you' })).toBeInTheDocument()
+    expect(within(top).queryByRole('navigation', { name: sideName })).not.toBeInTheDocument()
     expect(within(bottom).getByRole('region', { name: 'Bottom right' })).toBeInTheDocument()
+    expect(centred(bottom)).toBe(true)
+    // The left end of the screen, your seat's end, turned to face you like the bar.
+    expect(bottom.firstElementChild).toBe(side())
+    expect(side()).toHaveStyle({ transform: 'rotate(180deg)' })
   })
 
-  it('3 players with the top right seat empty: the bar sits between the two bottom bases', () => {
+  it('3 players: the controls are a base cell’s size, their column the width of the base above them', () => {
+    renderGame([tomb, null, thermal])
+    // In line with the pair's cells: the same share of the row, and the same card width within it.
+    const pairCell = cell('Top left')
+    const controlsStyle = side().style
+    expect(controlsStyle.position).toBe('absolute')
+    expect(controlsStyle.left).toBe('0px')
+    const bare = (s: string) => s.replace(/\s/g, '')
+    expect(bare(cell('Bottom right').style.flex)).toContain(bare(controlsStyle.width))
+    expect(controlsStyle.containerType).toBe('size')
+    const sizedCard = cardIn(pairCell).parentElement!.parentElement as HTMLElement
+    expect((side().firstElementChild as HTMLElement).style.width).toBe(sizedCard.style.width)
+  })
+
+  it('3 players with the top right seat empty: the bar sits between the two bottom bases, the controls beside yours', () => {
     renderGame([null, colossus, thermal])
-    expect(within(screen.getByTestId('twin-suns-row-bottom')).getByRole('navigation', { name: /facing you/ })).toBeInTheDocument()
-    expect(screen.getByTestId('twin-suns-row-top')).toHaveStyle({ justifyContent: 'center' })
+    const top = screen.getByTestId('twin-suns-row-top')
+    expect(within(screen.getByTestId('twin-suns-row-bottom')).getByRole('navigation', { name: 'Game, facing you' })).toBeInTheDocument()
+    expect(centred(top)).toBe(true)
+    expect(top.firstElementChild).toBe(side())
+  })
+
+  it('3 players: the counters and Round, used each round, are in the bar; Back, Log, More and End game beside the single base', () => {
+    renderGame([tomb, null, thermal])
+    for (const name of [claimInitiative, claimPlan, claimBlast, /^Round 1/]) {
+      expect(within(bar()).getByRole('button', { name })).toBeInTheDocument()
+      expect(within(side()).queryByRole('button', { name })).not.toBeInTheDocument()
+    }
+    for (const name of ['Back to setup', 'Log', 'More', 'End game']) {
+      expect(within(side()).getByRole('button', { name })).toBeInTheDocument()
+      expect(within(bar()).queryByRole('button', { name })).not.toBeInTheDocument()
+    }
+  })
+
+  it.each([['a phone', 844, 390], ['a tablet', 1024, 768]])('4 players on %s: Back, Log and More at the top, the counters and Round together in the middle, End game at the foot', (_, width, height) => {
+    withViewport(width, height, () => {
+      renderGame()
+      const parts = Array.from(bar().children) as HTMLElement[]
+      const middle = within(bar()).getByRole('group', { name: 'This round' })
+      const at = parts.indexOf(middle)
+      // Equal space either side of the middle group.
+      expect(parts[at - 1].style.flex).not.toBe('')
+      expect(parts[at - 1].style.flex).toBe(parts[at + 1].style.flex)
+      for (const name of [claimInitiative, claimPlan, claimBlast, /^Round 1/]) expect(within(middle).getByRole('button', { name })).toBeInTheDocument()
+      for (const name of ['Back to setup', 'Log', 'More']) expect(within(parts[0]).getByRole('button', { name })).toBeInTheDocument()
+      expect(parts[parts.length - 1]).toBe(within(bar()).getByRole('button', { name: 'End game' }))
+      expect(at).toBeGreaterThan(0)
+      expect(at).toBeLessThan(parts.length - 1)
+    })
+  })
+
+  it('4 players in the last phase: the note and Finish game in the middle group, in Round\'s place', () => {
+    renderGame([outpost, colossus, thermal])
+    hit(cell('Top right'), 3)
+    press('No one')
+    const middle = within(bar()).getByRole('group', { name: 'This round' })
+    expect(within(middle).getByRole('button', { name: /^Finish game/ })).toBeInTheDocument()
+    expect(within(middle).getByText('LAST PHASE')).toBeInTheDocument()
+  })
+
+  it('4 players keep every control in the bar, with no separate controls', () => {
+    renderGame()
+    expect(screen.queryByRole('navigation', { name: sideName })).not.toBeInTheDocument()
   })
 
   it('keeps the bases and the bar off the screen edges by the edge tokens', () => {
@@ -199,6 +267,68 @@ describe('SwuTwinSunsGame: layout', () => {
       renderGame()
       expect(within(bar()).getByRole('button', { name: 'Log' }).style.width).not.toBe('94px')
     })
+  })
+})
+
+describe('SwuTwinSunsGame: 3 players, the table’s controls in the bar and the rest beside the single base', () => {
+  const buttonsIn = (el: HTMLElement) => within(el).queryAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)
+  const ADMIN = ['Back to setup', 'Log', 'More']
+
+  it('while asking who has the initiative: the question in the bar; Back, Log and More beside, with no End game', () => {
+    renderGame([tomb, null, thermal], jediTemple, null)
+    expect(within(bar()).getByText('Who has the initiative?')).toBeInTheDocument()
+    expect(buttonsIn(side())).toEqual(ADMIN)
+  })
+
+  it('choosing a counter: the prompt and Cancel in the bar', () => {
+    renderGame([tomb, null, thermal])
+    press(claimPlan)
+    expect(within(bar()).getByText('Tap the base of the player who claimed Plan')).toBeInTheDocument()
+    expect(buttonsIn(bar())).toEqual(['Cancel'])
+    expect(buttonsIn(side())).toEqual(ADMIN)
+    press('Cancel')
+    expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
+  })
+
+  it('End game, from beside the single base: the question and its answers in the bar', () => {
+    renderGame([tomb, null, thermal])
+    tapSide('End game')
+    expect(within(bar()).getByText('End the game now? Most HP left wins.')).toBeInTheDocument()
+    expect(buttonsIn(bar())).toEqual(['Keep playing', 'End game now'])
+    expect(buttonsIn(side())).toEqual(ADMIN)
+  })
+
+  it('a base destroyed, the last phase and the result', () => {
+    renderGame([outpost, null, thermal])
+    hit(cell('Top right'), 3)
+    expect(within(bar()).getByText('Fragile Outpost is destroyed')).toBeInTheDocument()
+    expect(buttonsIn(bar())).toEqual(['No one', 'Undo the damage'])
+    press('No one')
+    // The last phase: Finish game in Round's place, and the note in End game's.
+    expect(within(bar()).getByRole('button', { name: /^Finish game/ })).toBeInTheDocument()
+    expect(within(bar()).getByRole('group', { name: 'Counters' })).toBeInTheDocument()
+    expect(within(side()).getByText('LAST PHASE')).toBeInTheDocument()
+    expect(buttonsIn(side())).toEqual(ADMIN)
+    press(/^Finish game/)
+    expect(bar()).toHaveTextContent('RESULT · ROUND 1')
+    expect(buttonsIn(bar())).toEqual([])
+    expect(buttonsIn(side())).toEqual([...ADMIN, 'New setup', 'Rematch'])
+  })
+
+  it('opening the log from beside the single base', () => {
+    renderGame([tomb, null, thermal])
+    tapSide('Log')
+    expect(screen.getByTestId('log-undo-btn')).toBeInTheDocument()
+  })
+
+  it('on a tablet every control is a 94px square, in both places', () => {
+    const original = window.matchMedia
+    window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia
+    try {
+      renderGame([tomb, null, thermal])
+      for (const name of [claimInitiative, claimPlan, claimBlast, /^Round 1/]) expect(within(bar()).getByRole('button', { name }).style.width).toBe('94px')
+      for (const name of [...ADMIN, 'End game']) expect(within(side()).getByRole('button', { name }).style.width).toBe('94px')
+    } finally { window.matchMedia = original }
   })
 })
 
