@@ -384,7 +384,7 @@ function SwuTwinSunsGameView(props: Props) {
     </button>
   )
   const endButton = (
-    <button type="button" aria-label="End game" onClick={onOpenEnd} style={barButton({ ...(large ? { width: '94px', height: '94px', borderRadius: '16px', fontSize: '15px' } : four ? { width: '100%', height: '38px', borderRadius: '10px' } : { width: '98px', height: '56px', borderRadius: '10px' }), background: 'var(--color-tonal)', color: 'var(--color-tonal-text)', fontWeight: 600 })}>
+    <button type="button" aria-label="End game" onClick={onOpenEnd} style={barButton({ ...(large ? { width: '94px', height: '94px', borderRadius: '16px', fontSize: '15px' } : { width: '100%', height: four ? '38px' : '44px', borderRadius: '10px' }), background: 'var(--color-tonal)', color: 'var(--color-tonal-text)', fontWeight: 600 })}>
       {large ? <span style={{ textAlign: 'center', lineHeight: '18px' }}>End<br />game</span> : 'End game'}
     </button>
   )
@@ -405,13 +405,17 @@ function SwuTwinSunsGameView(props: Props) {
     ? <div style={{ display: 'grid', gridTemplateColumns: four ? '94px' : '94px 94px', gap: '8px' }}>{back}{logButton}{more}</div>
     : <div style={{ display: 'flex', gap: '6px', justifyContent: 'space-between' }}>{back}{logButton}{more}</div>
 
-  let body: ReactNode
+  // Each state's words and its answers. In 4 players one bar holds Back, Log and More, the words, and the
+  // answers at its foot. In 3 the bar has only half the screen's height: it holds what the table uses each
+  // round (the counters and Round, or a state's words with its answers), and Back, Log, More and End game
+  // sit beside the single base.
+  let words: ReactNode = null
+  let answers: ReactNode = null
   if (over) {
     const order = players.map((p, i) => ({ p, i, placing: placings[i] }))
       .sort((a, b) => (a.placing.place ?? 99) - (b.placing.place ?? 99))
-    body = (
+    words = (
       <>
-        {headRow}
         <div style={{ fontSize: '11px', letterSpacing: '0.14em', color: 'var(--color-text-muted)' }}>{`RESULT · ROUND ${state.round}`}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
           {order.map(({ p, i, placing }) => (
@@ -424,23 +428,24 @@ function SwuTwinSunsGameView(props: Props) {
             </div>
           ))}
         </div>
-        {spacer}
+      </>
+    )
+    answers = (
+      <>
         <button type="button" onClick={onNewSetup} style={wide({ background: 'var(--color-tonal)', color: 'var(--color-tonal-text)' })}>New setup</button>
         <button type="button" onClick={onRematch} style={wide({ height: '56px', borderRadius: '12px', fontSize: '17px', fontWeight: 600, background: 'var(--color-accent)', color: 'var(--color-on-accent)' })}>Rematch</button>
       </>
     )
   } else if (state.pending.length > 0) {
     const destroyed = players[state.pending[0]].base.name
-    body = (
+    words = status(
       <>
-        {headRow}
-        {status(
-          <>
-            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-error)' }}>{`${destroyed} is destroyed`}</div>
-            <div>Tap the base of the player who destroyed it. That base heals 5.</div>
-          </>,
-        )}
-        {spacer}
+        <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-error)' }}>{`${destroyed} is destroyed`}</div>
+        <div>Tap the base of the player who destroyed it. That base heals 5.</div>
+      </>,
+    )
+    answers = (
+      <>
         <button type="button" onClick={onNoOne} style={wide()}>No one</button>
         <button type="button" onClick={onUndoDamage} style={wide({ background: 'var(--color-tonal)', color: 'var(--color-tonal-text)' })}>Undo the damage</button>
       </>
@@ -450,62 +455,91 @@ function SwuTwinSunsGameView(props: Props) {
     // Nobody has the initiative until the game starts: choosing who does is how it starts.
     const opening = state.initiative === null
     const who = opening ? 'takes it' : picking === 'initiative' ? 'takes the initiative' : `claimed ${COUNTER_NAME[picking]}`
-    body = (
-      <>
-        {headRow}
-        {status(
-          <>
-            {opening && <div style={{ fontSize: '15px', fontWeight: 600 }}>Who has the initiative?</div>}
-            <span aria-hidden="true" style={{ ...barButton({ ...counterSize, background: colour, color: '#1a0505', fontWeight: 700 }), cursor: 'default' }}>
-              {picking === 'initiative' ? <FlagIcon size={iconSize} /> : picking === 'plan' ? <PlanIcon size={iconSize} /> : <MarkIcon size={iconSize} />}
-              <span>{COUNTER_NAME[picking]}</span>
-            </span>
-            <span>{`Tap the base of the player who ${who}`}</span>
-          </>,
-        )}
-        {spacer}
-        {!opening && <button type="button" onClick={onCancelPick} style={wide()}>Cancel</button>}
-      </>
+    const chip = (
+      <span aria-hidden="true" style={{ ...barButton({ ...counterSize, background: colour, color: '#1a0505', fontWeight: 700 }), cursor: 'default' }}>
+        {picking === 'initiative' ? <FlagIcon size={iconSize} /> : picking === 'plan' ? <PlanIcon size={iconSize} /> : <MarkIcon size={iconSize} />}
+        <span>{COUNTER_NAME[picking]}</span>
+      </span>
     )
-  } else if (confirmEnd) {
-    body = (
+    const prompt = <span>{`Tap the base of the player who ${who}`}</span>
+    words = status(
       <>
-        {headRow}
-        {status(<span>End the game now? Most HP left wins.</span>)}
-        {spacer}
+        {opening && <div style={{ fontSize: '15px', fontWeight: 600 }}>Who has the initiative?</div>}
+        {/* 3 players: the counter beside its prompt, to keep within the bar's half height */}
+        {four ? <>{chip}{prompt}</> : <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>{chip}{prompt}</div>}
+      </>,
+    )
+    if (!opening) answers = <button type="button" onClick={onCancelPick} style={wide()}>Cancel</button>
+  } else if (confirmEnd) {
+    words = status(<span>End the game now? Most HP left wins.</span>)
+    answers = (
+      <>
         <button type="button" onClick={onKeepPlaying} style={wide()}>Keep playing</button>
         <button type="button" onClick={onFinish} style={wide({ background: 'var(--color-tonal)', color: 'var(--color-tonal-text)' })}>End game now</button>
       </>
     )
-  } else if (large) {
-    // Every control a 94px square: one column between the bases in 4 players, two in 3.
-    body = (
-      <div style={{ margin: 'auto', display: 'grid', gridTemplateColumns: four ? '94px' : '94px 94px', gap: '8px' }}>
-        {back}{logButton}
-        {four ? <>{more}{counters}</> : <>{counters}{more}</>}
-        {last ? finishButton : roundButton}
-        {last ? <div style={{ width: square ?? undefined, overflow: 'hidden' }}>{lastNote}</div> : endButton}
-      </div>
-    )
+  }
+  const playing = words === null
+  const noteBox = <div style={{ width: square ?? undefined, overflow: 'hidden' }}>{lastNote}</div>
+
+  let barBody: ReactNode
+  let aside: ReactNode = null
+  if (four) {
+    if (!playing) {
+      barBody = <>{headRow}{words}{spacer}{answers}</>
+    } else {
+      // What the table uses each round, together in the middle; Back, Log and More at the top and End
+      // game at the foot. On a tablet every control is a 94px square, in one column.
+      const middle = large ? (
+        <div role="group" aria-label="This round" style={{ display: 'grid', gridTemplateColumns: '94px', gap: '8px', justifyContent: 'center' }}>
+          {counters}{last ? <>{noteBox}{finishButton}</> : roundButton}
+        </div>
+      ) : (
+        <div role="group" aria-label="This round" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div role="group" aria-label="Counters" style={{ display: 'flex', gap: '7px', justifyContent: 'space-between' }}>{counters}</div>
+          {lastNote}
+          <div style={{ display: 'flex' }}>{last ? finishButton : roundButton}</div>
+        </div>
+      )
+      barBody = <>{large ? <div style={{ display: 'flex', justifyContent: 'center' }}>{headRow}</div> : headRow}{spacer}{middle}{spacer}{!last && endButton}</>
+    }
   } else {
-    body = (
-      <>
-        {headRow}
-        <div role="group" aria-label="Counters" style={{ display: 'flex', gap: '7px', justifyContent: 'space-between' }}>{counters}</div>
-        {lastNote}
-        {spacer}
-        {last ? finishButton : four ? <>{roundButton}{endButton}</> : <div style={{ display: 'flex', gap: '6px' }}>{roundButton}{endButton}</div>}
-      </>
-    )
+    const nextRound = last ? finishButton : roundButton
+    if (over) {
+      barBody = words
+    } else if (!playing) {
+      barBody = <>{words}{spacer}{answers && <div style={{ display: 'flex', gap: '8px' }}>{answers}</div>}</>
+    } else if (large) {
+      // Two 94px squares across: the counters, then Round.
+      barBody = <div style={{ margin: 'auto', display: 'grid', gridTemplateColumns: '94px 94px', gap: '8px' }}>{counters}{nextRound}</div>
+    } else {
+      barBody = (
+        <>
+          <div role="group" aria-label="Counters" style={{ display: 'flex', gap: '7px', justifyContent: 'space-between' }}>{counters}</div>
+          <div style={{ display: 'flex' }}>{nextRound}</div>
+        </>
+      )
+    }
+    // End game only while playing; the last phase's note in its place, and the result's answers at the end.
+    const after = over ? answers : playing ? (last ? (large ? noteBox : lastNote) : endButton) : null
+    aside = large
+      ? <div style={{ margin: 'auto', display: 'grid', gridTemplateColumns: '94px 94px', gap: '8px' }}>{back}{logButton}{more}{after}</div>
+      : <>{headRow}{after}</>
   }
 
   const barWidth = large ? (four ? '110px' : '212px') : (four ? '210px' : '290px')
+  const column: React.CSSProperties = { width: barWidth, flexShrink: 0, boxSizing: 'border-box', padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }
   const bar = (
-    <nav
-      aria-label={over ? 'Game over, facing you' : 'Game, facing you'}
-      style={{ width: barWidth, flexShrink: 0, boxSizing: 'border-box', padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', transform: 'rotate(180deg)' }}
-    >
-      {body}
+    <nav aria-label={over ? 'Game over, facing you' : 'Game, facing you'} style={{ ...column, overflowY: 'auto', transform: 'rotate(180deg)' }}>
+      {barBody}
+    </nav>
+  )
+  // 3 players: at the left end of the single base's row, your seat's end, facing you like the bar. It is a
+  // base cell's size, in line with the pair's cell at that end, and its column is that base's width.
+  const cellWidth = `calc((100% - ${barWidth}) / 2)`
+  const controls = (
+    <nav aria-label="Game controls, facing you" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: cellWidth, containerType: 'size', display: 'flex', alignItems: 'center', justifyContent: 'center', transform: 'rotate(180deg)' }}>
+      <div style={{ ...column, width: CARD_WIDTH, padding: '8px 0' }}>{aside}</div>
     </nav>
   )
 
@@ -545,13 +579,14 @@ function SwuTwinSunsGameView(props: Props) {
       </div>
     )
   } else {
-    // Three players: the bar between the two bases on one side, the single base centred on the other.
+    // Three players: the bar between the two bases on one side; on the other the single base, centred,
+    // with the controls over the row's left end.
     const row = (side: 'top' | 'bottom', left: Seat, right: Seat) => {
       const pair = players.some(p => p.seat === left) && players.some(p => p.seat === right)
-      const single: React.CSSProperties = { flex: `0 1 calc((100% - ${barWidth}) / 2)` }
+      const single: React.CSSProperties = { flex: `0 1 ${cellWidth}` }
       return (
-        <div data-testid={`twin-suns-row-${side}`} style={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: pair ? 'normal' : 'center' }}>
-          {pair ? <>{cellFor(left)}{bar}{cellFor(right)}</> : cellFor(left, single) ?? cellFor(right, single)}
+        <div data-testid={`twin-suns-row-${side}`} style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', justifyContent: pair ? 'normal' : 'center' }}>
+          {pair ? <>{cellFor(left)}{bar}{cellFor(right)}</> : <>{controls}{cellFor(left, single) ?? cellFor(right, single)}</>}
         </div>
       )
     }
