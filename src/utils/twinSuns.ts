@@ -10,6 +10,9 @@ export interface TwinSunsState {
   round: number
   damage: number[]
   epicUsed: boolean[]
+  // Who has the Force, until they use it; and Mystic Monastery's uses left, on whichever base is it.
+  force: boolean[]
+  mysticUses: number[]
   // Who holds each counter: initiative stays across rounds; Plan and Blast return at Round.
   initiative: number | null
   plan: number | null
@@ -25,12 +28,15 @@ export interface TwinSunsState {
 
 export const BLAST_DAMAGE = 1
 export const DESTROY_HEAL = 5
+export const MYSTIC_USES = 3
 
 export function startState(players: number): TwinSunsState {
   return {
     round: 1,
     damage: Array(players).fill(0),
     epicUsed: Array(players).fill(false),
+    force: Array(players).fill(false),
+    mysticUses: Array(players).fill(MYSTIC_USES),
     initiative: null,
     plan: null,
     blast: null,
@@ -68,6 +74,14 @@ export function removeDamage(s: TwinSunsState, i: number, n: number): TwinSunsSt
 
 export function setEpicUsed(s: TwinSunsState, i: number, used: boolean): TwinSunsState {
   return { ...s, epicUsed: set(s.epicUsed, i, used), healed: null }
+}
+
+export function setForce(s: TwinSunsState, i: number, active: boolean): TwinSunsState {
+  return { ...s, force: set(s.force, i, active), healed: null }
+}
+
+export function gainForceByMonastery(s: TwinSunsState, i: number): TwinSunsState {
+  return { ...setForce(s, i, true), mysticUses: set(s.mysticUses, i, s.mysticUses[i] - 1) }
 }
 
 // Blast also deals its damage to every other base at once.

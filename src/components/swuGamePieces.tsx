@@ -61,8 +61,8 @@ export function MarkIcon({ size = '22px' }: { size?: string }) {
   )
 }
 
-function ForceIcon({ faint }: { faint: boolean }) {
-  return <img src={FORCE_TOKEN_URL} alt="" style={{ width: '24px', height: '24px', objectFit: 'contain', opacity: faint ? 0.35 : 0.9 }} />
+export function ForceIcon({ faint, size = '24px' }: { faint: boolean; size?: string }) {
+  return <img src={FORCE_TOKEN_URL} alt="" style={{ width: size, height: size, objectFit: 'contain', opacity: faint ? 0.35 : 0.9 }} />
 }
 
 export function SheetActions({ children }: { children: ReactNode }) {
@@ -87,7 +87,10 @@ interface BaseCardProps {
   // In place of the label the face gives, such as once the game is over.
   label?: string
   disabled: boolean
-  epicActionToken: boolean
+  // The tokens over the text box (see CardOverlays): the epic action once used, and the Force while
+  // you have it (absent when off).
+  epicUsed?: boolean
+  force?: { onClear: () => void }
   dragAmount: DragAmount | null | undefined
   drag: CardDrag
   // The card's width, and one hundredth of its height: every size on it scales from that.
@@ -99,111 +102,205 @@ interface BaseCardProps {
   outline?: string
 }
 
-export function BaseCard({ base, art, face, label: labelOverride, disabled, epicActionToken, dragAmount, drag, width, unit, dimmed = false, outline: marked = 'var(--color-accent)' }: BaseCardProps) {
+export function BaseCard({ base, art, face, label: labelOverride, disabled, epicUsed, force, dragAmount, drag, width, unit, dimmed = false, outline: marked = 'var(--color-accent)' }: BaseCardProps) {
   const u = (n: number) => scaled(unit, n)
   const outline = dragAmount ? AMOUNT_COLOUR[dragAmount.type] : marked
   const { label: faceLabel, centre } = cardCentre({ ...face, base, unit })
   const label = labelOverride ?? faceLabel
+  // The overlays sit beside the card's button, not in it, so a tappable one is a button of its own.
   return (
-    <button
-      type="button"
-      data-testid="game-card"
-      aria-label={label}
-      disabled={disabled}
-      onClick={drag.onClick}
-      onPointerDown={drag.onPointerDown}
-      onPointerMove={drag.onPointerMove}
-      onPointerUp={drag.onPointerUp}
-      onPointerCancel={drag.onPointerCancel}
-      style={{
-        position: 'relative',
-        aspectRatio: `${CARD_ASPECT_RATIO}`,
-        width,
-        flexShrink: 0,
-        padding: 0,
-        border: 'none',
-        borderRadius: '3.5%',
-        overflow: 'hidden',
-        background: 'var(--color-surface)',
-        color: 'var(--color-text-primary)',
-        fontFamily: 'inherit',
-        cursor: disabled ? 'default' : 'pointer',
-        touchAction: 'none',
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        WebkitTapHighlightColor: 'transparent',
-        boxShadow: cardGlow(outline),
-        opacity: dimmed ? 0.55 : 1,
-      }}
-    >
-      {/* Border overlay: above the art, to cover its edge fringe */}
-      <span aria-hidden="true" data-testid="card-outline" style={{ position: 'absolute', inset: 0, zIndex: 10, ...cardBorder(outline), borderRadius: 'inherit', pointerEvents: 'none' }} />
-
-      <img
-        src={art.src ?? undefined}
-        alt={base.name}
-        onLoad={art.onLoad}
-        onError={art.onError}
-        data-testid="game-card-image"
-        draggable={false}
-        style={art.rotationDeg ? {
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          width: `${100 * CARD_NATURAL_HEIGHT / CARD_NATURAL_WIDTH}%`,
-          height: `${100 * CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT}%`,
-          objectFit: 'cover',
-          transform: `translate(-50%, -50%) rotate(${art.rotationDeg}deg)`,
-          display: art.loaded ? 'block' : 'none',
-          pointerEvents: 'none',
-        } : {
+    <div style={{ position: 'relative', aspectRatio: `${CARD_ASPECT_RATIO}`, width, flexShrink: 0, borderRadius: '3.5%', isolation: 'isolate', opacity: dimmed ? 0.55 : 1 }}>
+      <button
+        type="button"
+        data-testid="game-card"
+        aria-label={label}
+        disabled={disabled}
+        onClick={drag.onClick}
+        onPointerDown={drag.onPointerDown}
+        onPointerMove={drag.onPointerMove}
+        onPointerUp={drag.onPointerUp}
+        onPointerCancel={drag.onPointerCancel}
+        style={{
           position: 'absolute',
           inset: 0,
           width: '100%',
           height: '100%',
-          objectFit: 'cover',
-          display: art.loaded ? 'block' : 'none',
-          pointerEvents: 'none',
+          padding: 0,
+          border: 'none',
+          borderRadius: '3.5%',
+          overflow: 'hidden',
+          background: 'var(--color-surface)',
+          color: 'var(--color-text-primary)',
+          fontFamily: 'inherit',
+          cursor: disabled ? 'default' : 'pointer',
+          touchAction: 'none',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTapHighlightColor: 'transparent',
+          boxShadow: cardGlow(outline),
         }}
-      />
-
-      {/* No art: the card's own text, in the places the card prints it */}
-      {art.failed && (
-        <>
-          <span style={{ position: 'absolute', top: '5%', left: '8%', right: '8%', zIndex: 2, textAlign: 'center', fontSize: `clamp(1rem, ${u(7)}, 1.8rem)`, fontWeight: 300, letterSpacing: '0.05em' }}>{base.name}</span>
-          {base.epicAction && (
-            <span style={{ position: 'absolute', top: '66%', left: '8%', right: '8%', height: '24%', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontStyle: 'italic', fontWeight: 300, lineHeight: 1.4, fontSize: `clamp(0.6rem, ${u(4)}, 1.1rem)` }}>{base.epicAction}</span>
-          )}
-          <span style={{ position: 'absolute', bottom: '3%', left: '8%', right: '8%', zIndex: 2, textAlign: 'center', fontSize: `clamp(0.7rem, ${u(2.5)}, 1.2rem)`, fontWeight: 300, color: 'var(--color-text-muted)' }}>{base.subtitle}</span>
-        </>
-      )}
-
-      {/* Shading behind the number, fading out by the text box */}
-      {!art.failed && (
-        <span data-testid="card-shading" aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: `${2 * READOUT_MIDDLE - EPIC_TEXT_TOP}%`, bottom: `${100 - EPIC_TEXT_TOP}%`, zIndex: 1, pointerEvents: 'none', background: 'radial-gradient(ellipse 40% 50% at 50% 50%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 45%, transparent 100%)' }} />
-      )}
-
-      {/* The open art below the top band (HP, name, aspect), standing on the line above the text box */}
-      <span
-        data-testid="game-counter"
-        style={{ position: 'absolute', left: 0, right: 0, top: '17%', bottom: `${100 - READOUT_BOTTOM}%`, zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', textShadow: SHADOW }}
       >
-        {centre}
-      </span>
+        {/* Border overlay: above the art, to cover its edge fringe */}
+        <span aria-hidden="true" data-testid="card-outline" style={{ position: 'absolute', inset: 0, zIndex: 10, ...cardBorder(outline), borderRadius: 'inherit', pointerEvents: 'none' }} />
 
-      {/* The one thing allowed over the text box, as the physical token is */}
-      {epicActionToken && (
+        <img
+          src={art.src ?? undefined}
+          alt={base.name}
+          onLoad={art.onLoad}
+          onError={art.onError}
+          data-testid="game-card-image"
+          draggable={false}
+          style={art.rotationDeg ? {
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: `${100 * CARD_NATURAL_HEIGHT / CARD_NATURAL_WIDTH}%`,
+            height: `${100 * CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT}%`,
+            objectFit: 'cover',
+            transform: `translate(-50%, -50%) rotate(${art.rotationDeg}deg)`,
+            display: art.loaded ? 'block' : 'none',
+            pointerEvents: 'none',
+          } : {
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: art.loaded ? 'block' : 'none',
+            pointerEvents: 'none',
+          }}
+        />
+
+        {/* No art: the card's own text, in the places the card prints it */}
+        {art.failed && (
+          <>
+            <span style={{ position: 'absolute', top: '5%', left: '8%', right: '8%', zIndex: 2, textAlign: 'center', fontSize: `clamp(1rem, ${u(7)}, 1.8rem)`, fontWeight: 300, letterSpacing: '0.05em' }}>{base.name}</span>
+            {base.epicAction && (
+              <span style={{ position: 'absolute', top: '66%', left: '8%', right: '8%', height: '24%', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontStyle: 'italic', fontWeight: 300, lineHeight: 1.4, fontSize: `clamp(0.6rem, ${u(4)}, 1.1rem)` }}>{base.epicAction}</span>
+            )}
+            <span style={{ position: 'absolute', bottom: '3%', left: '8%', right: '8%', zIndex: 2, textAlign: 'center', fontSize: `clamp(0.7rem, ${u(2.5)}, 1.2rem)`, fontWeight: 300, color: 'var(--color-text-muted)' }}>{base.subtitle}</span>
+          </>
+        )}
+
+        {/* Shading behind the number, fading out by the text box */}
+        {!art.failed && (
+          <span data-testid="card-shading" aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: `${2 * READOUT_MIDDLE - EPIC_TEXT_TOP}%`, bottom: `${100 - EPIC_TEXT_TOP}%`, zIndex: 1, pointerEvents: 'none', background: 'radial-gradient(ellipse 40% 50% at 50% 50%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 45%, transparent 100%)' }} />
+        )}
+
+        {/* The open art below the top band (HP, name, aspect), standing on the line above the text box */}
         <span
-          data-testid="epic-action-token"
-          style={{ position: 'absolute', left: '6%', right: '6%', bottom: '13%', height: '23%', zIndex: 3, borderRadius: '10px', background: 'rgba(var(--color-epic-rgb), 0.9)', color: '#2a1a00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: `max(12px, ${u(3.6)})`, fontWeight: 700, letterSpacing: '0.1em', pointerEvents: 'none' }}
+          data-testid="game-counter"
+          style={{ position: 'absolute', left: 0, right: 0, top: '17%', bottom: `${100 - READOUT_BOTTOM}%`, zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', textShadow: SHADOW }}
         >
-          EPIC ACTION USED
+          {centre}
         </span>
-      )}
 
-      {dragAmount && <FloatingAmount amount={dragAmount} />}
-    </button>
+        {dragAmount && <FloatingAmount amount={dragAmount} />}
+      </button>
+      <CardOverlays base={base} epicUsed={epicUsed} force={force} unit={unit} />
+    </div>
   )
+}
+
+// --- the tokens over the text box ---
+
+// The only things allowed over the text box, as the physical tokens are, so an opponent reads them
+// across the table: translucent, bordered and glowing, a watermark behind white text. Alone, one spans
+// the text box; together, the epic action takes the left half and the Force the right.
+const OVERLAY_TOP = 68
+const OVERLAY_HEIGHT = 22
+const OVERLAY_SIDE = 8
+const OVERLAY_GAP = 2
+
+const OVERLAY_FILL = 0.85
+const WATERMARK_OPACITY = 0.3
+
+const OVERLAY_LOOK = {
+  epic: { fill: `rgba(var(--color-epic-rgb), ${OVERLAY_FILL})`, edge: 'var(--color-epic)', glow: 'rgba(var(--color-epic-rgb), 0.55)', mark: ICON_URL, text: 'Epic Action Used' },
+  force: { fill: `rgba(29,78,216,${OVERLAY_FILL})`, edge: 'rgba(147,197,253,0.8)', glow: 'rgba(29,78,216,0.6)', mark: FORCE_TOKEN_URL, text: 'The Force is With You' },
+} as const
+
+interface CardOverlaysProps {
+  base: Base
+  // The epic action takes no taps: one falls through to the card, and undo in the log takes it back.
+  epicUsed?: boolean
+  // Tapping the Force uses it, as its button does.
+  force?: { onClear: () => void }
+  unit: string
+}
+
+function CardOverlays({ base, epicUsed, force, unit }: CardOverlaysProps) {
+  const half = !!epicUsed && !!force
+  const middle = 50 - OVERLAY_GAP / 2
+  return (
+    <>
+      {epicUsed && (
+        <CardOverlay kind="epic" left={OVERLAY_SIDE} right={half ? 100 - middle : OVERLAY_SIDE} small={half} unit={unit} />
+      )}
+      {force && (
+        <CardOverlay
+          kind="force"
+          left={half ? 100 - middle : OVERLAY_SIDE}
+          right={OVERLAY_SIDE}
+          small={half}
+          unit={unit}
+          label={`${base.name}: the Force is with you, tap to clear`}
+          onClick={force.onClear}
+        />
+      )}
+    </>
+  )
+}
+
+interface CardOverlayProps {
+  kind: keyof typeof OVERLAY_LOOK
+  left: number
+  right: number
+  small: boolean
+  unit: string
+  label?: string
+  onClick?: () => void
+}
+
+function CardOverlay({ kind, left, right, small, unit, label, onClick }: CardOverlayProps) {
+  const u = (n: number) => scaled(unit, n)
+  const look = OVERLAY_LOOK[kind]
+  const style: React.CSSProperties = {
+    position: 'absolute',
+    top: `${OVERLAY_TOP}%`,
+    height: `${OVERLAY_HEIGHT}%`,
+    left: `${left}%`,
+    right: `${right}%`,
+    zIndex: 11,
+    boxSizing: 'border-box',
+    margin: 0,
+    padding: 0,
+    borderRadius: '8px',
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: look.edge,
+    background: look.fill,
+    boxShadow: `0 0 18px ${look.glow}, 0 4px 14px rgba(0,0,0,0.6)`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    fontFamily: 'inherit',
+    color: '#ffffff',
+    cursor: onClick ? 'pointer' : 'default',
+    pointerEvents: onClick ? 'auto' : 'none',
+    WebkitTapHighlightColor: 'transparent',
+  }
+  const content = (
+    <>
+      <img data-testid="overlay-watermark" src={look.mark} alt="" style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '80%', height: '80%', objectFit: 'contain', opacity: WATERMARK_OPACITY, pointerEvents: 'none' }} />
+      <span style={{ position: 'relative', textAlign: 'center', fontSize: small ? `max(10px, ${u(3.4)})` : `max(12px, ${u(5)})`, fontWeight: 300, letterSpacing: '0.08em', lineHeight: 1.2, textShadow: '0 1px 8px rgba(0,0,0,0.8), 0 0 16px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>{look.text}</span>
+    </>
+  )
+  const testId = kind === 'epic' ? 'epic-action-token' : 'force-token'
+  return onClick
+    ? <button type="button" data-testid={testId} aria-label={label} onClick={onClick} style={style}>{content}</button>
+    : <span data-testid={testId} style={style}>{content}</span>
 }
 
 // --- the running amount of a drag ---

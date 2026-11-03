@@ -14,11 +14,10 @@ import SwuGameScreenView from './swuGameScreenView'
 import type { SwuGameViewProps } from './swuGameScreenView'
 import SwuGame2pView from './swuGame2pView'
 import type { SwuSide } from './swuGame2pView'
-import { hasEpicAction } from './swuGameStyles'
+import { baseControls } from './swuGameStyles'
 import type { LastGame } from './swuGamePieces'
 import { LandscapeScreen } from './layout/fixedOrientation'
 import { onGameStart, onGameEnd, onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
-import type { ForceTokenDisplay } from '../hooks/useUserSettings'
 import type { PlayMode } from '../utils/playMode'
 import type { Format } from '../utils/formatFilter'
 
@@ -49,17 +48,6 @@ interface Props {
 
 const RESULT_WORD: Record<MatchResult, string> = { won: 'won', lost: 'lost', drawn: 'drawn' }
 
-// Which of the Force and the epic action a base shows.
-function baseControls(base: Base, forceTokenDisplay: ForceTokenDisplay) {
-  const isMysticMonastery = base.set === 'LOF' && base.number === '022'
-  const isForceBase = /the force is with you/i.test(base.epicAction)
-  const forceShown = forceTokenDisplay !== 'always-off'
-  return {
-    showForce: forceShown && !isMysticMonastery && (forceTokenDisplay === 'always-on' || isForceBase),
-    showMysticMonastery: forceShown && isMysticMonastery,
-    showEpicAction: hasEpicAction(base),
-  }
-}
 
 function SwuGameScreen({ base, theirBase, playMode = 'casual', format, isInTournament = false, onBack, onHelp, onSettings, onMatchComplete, changeBaseOptions, onChangeBase }: Props) {
   const { forceTokenDisplay, useHyperspace, enableInitiativeBar, enableDamageButtons, bo1TimerMinutes, bo3TimerMinutes, setBo1TimerMinutes, setBo3TimerMinutes } = useUserSettings()

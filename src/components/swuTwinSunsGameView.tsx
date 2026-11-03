@@ -7,8 +7,8 @@ import { useCardDrag } from '../hooks/useDragScrubber'
 import GameLogOverlay from './gameLogOverlay'
 import { Button, Sheet } from './shared/controls'
 import { BackIcon, DotsIcon, FlagIcon, LogIcon, PlanIcon } from './icons'
-import { BaseCard, MarkIcon } from './swuGamePieces'
-import { CARD_ASPECT_RATIO, hasEpicAction, scaled } from './swuGameStyles'
+import { BaseCard, ForceIcon, MarkIcon } from './swuGamePieces'
+import { CARD_ASPECT_RATIO, baseControls, scaled } from './swuGameStyles'
 import { lastPhase } from '../utils/twinSuns'
 import type { Counter, Placing, TwinSunsState } from '../utils/twinSuns'
 
@@ -37,7 +37,10 @@ interface Props {
   onTap: (i: number) => void
   onIncrement: (i: number, n: number) => void
   onDecrement: (i: number, n: number) => void
-  onEpic: (i: number, used: boolean) => void
+  onEpic: (i: number) => void
+  // The Force on a base: gained or used, and Mystic Monastery's action.
+  onForce: (i: number, active: boolean) => void
+  onMonastery: (i: number) => void
   onPick: (c: Counter) => void
   onCancelPick: () => void
   onRound: () => void
@@ -130,6 +133,29 @@ const token = (colour: string): React.CSSProperties => ({
   boxShadow: '0 2px 6px rgba(0,0,0,0.6)',
 })
 
+// The epic action and Force buttons on the card, in the text box's bottom corners: epic right, Force left.
+const FORCE_EDGE = '#93c5fd'
+const roundButton = (side: 'left' | 'right', edge: string, fill: string, glow: string, disabled = false): React.CSSProperties => ({
+  ...TAP,
+  position: 'absolute',
+  [side]: '5%',
+  bottom: '6%',
+  zIndex: 5,
+  width: `min(${u(27)}, 84px)`,
+  height: `min(${u(27)}, 84px)`,
+  border: `2px solid ${edge}`,
+  borderRadius: '50%',
+  background: fill,
+  color: edge,
+  boxShadow: disabled ? 'none' : `0 0 12px ${glow}`,
+  opacity: disabled ? 0.5 : 1,
+  cursor: disabled ? 'default' : 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 0,
+})
+
 const cover: React.CSSProperties = {
   position: 'absolute',
   inset: 0,
@@ -151,16 +177,18 @@ interface CellProps {
   onTap: (i: number) => void
   onIncrement: (i: number, n: number) => void
   onDecrement: (i: number, n: number) => void
-  onEpic: (i: number, used: boolean) => void
+  onEpic: (i: number) => void
+  onForce: (i: number, active: boolean) => void
+  onMonastery: (i: number) => void
   onPick: (c: Counter) => void
   // The log, over your cell, facing you.
   log?: ReactNode
   style?: React.CSSProperties
 }
 
-function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDecrement, onEpic, onPick, log, style }: CellProps) {
+function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDecrement, onEpic, onForce, onMonastery, onPick, log, style }: CellProps) {
   const { base, seat } = player
-  const { useHyperspace } = useUserSettings()
+  const { useHyperspace, forceTokenDisplay } = useUserSettings()
   const art = useBaseArt(base, useHyperspace)
   const top = seat.startsWith('Top')
   const yours = index === 0
@@ -187,8 +215,16 @@ function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDe
     return picking === 'initiative' ? `${base.name}: takes the initiative` : `${base.name}: claimed ${COUNTER_NAME[picking as Counter]}`
   })()
 
-  const showEpic = hasEpicAction(base) && !out && !state.finished
+  const controls = baseControls(base, forceTokenDisplay)
+  const showEpic = controls.showEpicAction && !out && !state.finished
   const used = state.epicUsed[index]
+  const showForce = (controls.showForce || controls.showMysticMonastery) && !out && !state.finished
+  const forceActive = state.force[index]
+  const mysticUses = state.mysticUses[index]
+  const noUsesLeft = controls.showMysticMonastery && mysticUses <= 0
+  const forceLabel = !controls.showMysticMonastery ? `${base.name}: gain the Force`
+    : noUsesLeft ? `${base.name}: no Force uses left`
+    : `${base.name}: gain the Force, ${mysticUses} ${mysticUses === 1 ? 'use' : 'uses'} left`
 
   return (
     <section
@@ -213,7 +249,8 @@ function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDe
           face={{ count: damage, gameStarted: true, isCasual: true, matchResult: null, lastGame: null, playerScore: 0, opponentScore: 0, owner: yours ? 'your base' : undefined }}
           label={label}
           disabled={out || state.finished}
-          epicActionToken={false}
+          epicUsed={showEpic && used}
+          force={showForce && forceActive ? { onClear: () => onForce(index, false) } : undefined}
           dragAmount={drag.amount}
           drag={drag}
           width="100%"
@@ -236,26 +273,31 @@ function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDe
           <span aria-hidden="true" style={{ position: 'absolute', right: '3%', top: '21%', zIndex: 5, fontSize: `max(10px, ${u(5.3)})`, letterSpacing: '0.16em', fontWeight: 700, color: 'var(--color-accent)', textShadow: '0 1px 4px #000' }}>YOU</span>
         )}
 
-        {showEpic && (used ? (
-          <button
-            type="button"
-            aria-label={`${base.name}: epic action used, tap to undo`}
-            onClick={() => onEpic(index, false)}
-            style={{ ...TAP, position: 'absolute', left: '3%', right: '3%', bottom: '2%', height: '36%', zIndex: 5, border: '2px solid var(--color-epic)', borderRadius: '6px', background: 'rgba(var(--color-epic-rgb), 0.55)', boxShadow: '0 0 18px rgba(var(--color-epic-rgb), 0.55), 0 4px 14px rgba(0,0,0,0.6)', color: '#1a1500', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: u(4), fontSize: `max(12px, ${u(7)})`, fontWeight: 700, letterSpacing: '0.08em', padding: 0 }}
-          >
-            <MarkIcon size={u(11)} />
-            <span>EPIC ACTION USED</span>
-          </button>
-        ) : (
+        {showEpic && !used && (
           <button
             type="button"
             aria-label={`${base.name}: epic action, tap when used`}
-            onClick={() => onEpic(index, true)}
-            style={{ ...TAP, position: 'absolute', right: '5%', bottom: '6%', zIndex: 5, width: `min(${u(21)}, 64px)`, height: `min(${u(21)}, 64px)`, border: '2px solid var(--color-epic)', borderRadius: '50%', background: '#2b2610', color: 'var(--color-epic)', boxShadow: '0 0 12px rgba(var(--color-epic-rgb), 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+            onClick={() => onEpic(index)}
+            style={roundButton('right', 'var(--color-epic)', '#2b2610', 'rgba(var(--color-epic-rgb), 0.5)')}
           >
             <MarkIcon size="52%" />
           </button>
-        ))}
+        )}
+
+        {showForce && !forceActive && (
+          <button
+            type="button"
+            aria-label={forceLabel}
+            disabled={noUsesLeft}
+            onClick={() => (controls.showMysticMonastery ? onMonastery(index) : onForce(index, true))}
+            style={roundButton('left', FORCE_EDGE, '#0d1733', 'rgba(29,78,216,0.5)', noUsesLeft)}
+          >
+            <ForceIcon faint={noUsesLeft} size="52%" />
+            {controls.showMysticMonastery && (
+              <span style={{ position: 'absolute', bottom: '-4%', right: '-4%', minWidth: u(8), padding: `0 ${u(1)}`, borderRadius: '999px', background: FORCE_EDGE, color: '#0d1733', fontSize: `max(10px, ${u(5)})`, fontWeight: 700, lineHeight: 1.4 }}>{mysticUses}</span>
+            )}
+          </button>
+        )}
 
         {state.healed === index && (
           <div style={{ position: 'absolute', left: '50%', top: u(4), zIndex: 5, transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: '12px', background: '#0f2a18', border: '1px solid var(--color-success)', color: '#86efac', fontSize: `max(13px, ${u(7)})`, fontWeight: 600, whiteSpace: 'nowrap' }}>
@@ -284,7 +326,7 @@ function Cell({ index, player, state, placing, picking, onTap, onIncrement, onDe
 
 function SwuTwinSunsGameView(props: Props) {
   const {
-    players, state, placings, picking, confirmEnd, onTap, onIncrement, onDecrement, onEpic, onPick, onCancelPick,
+    players, state, placings, picking, confirmEnd, onTap, onIncrement, onDecrement, onEpic, onForce, onMonastery, onPick, onCancelPick,
     onRound, onOpenEnd, onKeepPlaying, onFinish, onNoOne, onUndoDamage, onRematch, onNewSetup, onBack, onHelp, onSettings,
     logEntries, onUndo, showLog, onLogToggle,
   } = props
@@ -484,6 +526,8 @@ function SwuTwinSunsGameView(props: Props) {
         onIncrement={onIncrement}
         onDecrement={onDecrement}
         onEpic={onEpic}
+        onForce={onForce}
+        onMonastery={onMonastery}
         onPick={onPick}
         log={i === 0 && showLog ? <GameLogOverlay entries={logEntries} onUndo={onUndo} position={{ inset: '8px' }} /> : undefined}
         style={style}

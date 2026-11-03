@@ -163,7 +163,8 @@ function Half({ side, owner, round, playing, centreProps, onStartGame, showDamag
           face={result ? { ...centreProps, gameStarted: true, count: result.damage, owner: whose } : { ...centreProps, count, owner: whose }}
           label={result ? `${base.name}, ${whose}` : undefined}
           disabled={result !== null || centreProps.matchResult !== null}
-          epicActionToken={side.showEpicAction && side.epicActionUsed}
+          epicUsed={side.showEpicAction && side.epicActionUsed}
+          force={(side.showForce || side.showMysticMonastery) && side.forceActive ? { onClear: side.onForceToggle } : undefined}
           dragAmount={dragAmount}
           drag={cardDrag}
           width={CARD_WIDTH}

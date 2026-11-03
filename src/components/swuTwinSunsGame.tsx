@@ -8,10 +8,12 @@ import { LandscapeScreen } from './layout/fixedOrientation'
 import SwuTwinSunsGameView from './swuTwinSunsGameView'
 import type { Seat, TwinSunsPlayer } from './swuTwinSunsGameView'
 import {
-  addDamage, claim, finish, nextRound, placings, removeDamage, resolveDestroyed, setEpicUsed, startState, yourResult,
+  addDamage, claim, finish, gainForceByMonastery, nextRound, placings, removeDamage, resolveDestroyed, setEpicUsed, setForce, startState, yourResult,
 } from '../utils/twinSuns'
 import type { Counter, TwinSunsState } from '../utils/twinSuns'
-import { onDamageDealt, onDamageHealed, onEpicActionUsed, onGameEnd, onGameStart, onRoundIncremented, onUndoUsed } from '../services/analytics'
+import {
+  onDamageDealt, onDamageHealed, onEpicActionUsed, onForceGained, onForceUsed, onGameEnd, onGameStart, onRoundIncremented, onUndoUsed,
+} from '../services/analytics'
 
 interface Props {
   // Your base, top left.
@@ -111,9 +113,24 @@ function SwuTwinSunsGame({ base, seats, onBack, onHelp, onSettings }: Props) {
     onIncrement(i, 1)
   }
 
-  const onEpic = (i: number, used: boolean) => {
-    apply(setEpicUsed(state, i, used), 'epic', `${name(i)}: epic action ${used ? 'used' : 'taken back'}`, 'var(--color-epic)')
-    if (used) void onEpicActionUsed(keyOf(i), players[i].base.set)
+  const onEpic = (i: number) => {
+    apply(setEpicUsed(state, i, true), 'epic', `${name(i)}: epic action used`, 'var(--color-epic)')
+    void onEpicActionUsed(keyOf(i), players[i].base.set)
+  }
+
+  const onForce = (i: number, active: boolean) => {
+    if (active) {
+      apply(setForce(state, i, true), 'force-gain', `${name(i)}: Force gained`, 'var(--color-force)')
+      void onForceGained(keyOf(i), players[i].base.set)
+    } else {
+      apply(setForce(state, i, false), 'force-use', `${name(i)}: Force used`, '#93c5fd')
+      void onForceUsed(keyOf(i), players[i].base.set)
+    }
+  }
+
+  const onMonastery = (i: number) => {
+    apply(gainForceByMonastery(state, i), 'monastery', `${name(i)}: Force gained (Monastery)`, 'var(--color-force)')
+    void onForceGained(keyOf(i), players[i].base.set)
   }
 
   const onRound = () => {
@@ -163,6 +180,8 @@ function SwuTwinSunsGame({ base, seats, onBack, onHelp, onSettings }: Props) {
         onIncrement={onIncrement}
         onDecrement={onDecrement}
         onEpic={onEpic}
+        onForce={onForce}
+        onMonastery={onMonastery}
         onPick={c => { setPicked(c); setConfirmEnd(false) }}
         onCancelPick={() => setPicked(null)}
         onRound={onRound}

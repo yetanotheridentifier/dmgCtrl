@@ -130,7 +130,8 @@ function SwuGameScreenView(props: SwuGameViewProps) {
       art={art}
       face={{ count, gameStarted, isCasual, matchResult, lastGame, playerScore, opponentScore }}
       disabled={matchOver}
-      epicActionToken={showEpicAction && epicActionUsed}
+      epicUsed={showEpicAction && epicActionUsed}
+      force={(showForce || showMysticMonastery) && forceActive ? { onClear: onForceToggle } : undefined}
       dragAmount={dragAmount}
       drag={cardDrag}
       width={`min(calc((100cqh - var(--edge-top) - var(--edge-bottom)) * ${CARD_ASPECT_RATIO}), calc(100cqw - var(--edge-left) - var(--edge-right) - ${2 * MARGIN_MIN}px))`}
