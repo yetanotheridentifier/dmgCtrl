@@ -192,7 +192,7 @@ public/
 
 scripts/
   inspect-base-data.mjs           Replicates the useBases merging logic; writes docs/base-data-snapshot.json and docs/base-data-summary.json for offline data inspection
-  qa-helpers.mjs                  Shared browser setup and SWU setup steps for the three Playwright scripts below (launch, open /swu, choose a base in the base sheet, go to game, wait for images)
+  qa-helpers.mjs                  Shared browser setup and SWU setup steps for the three Playwright scripts below (`dmgCtrlUrl` refuses any address but a local server, `dev.dmgctrl.app` and `dmgctrl.app`; launch with Chromium sandboxed, open /swu, choose a base in the base sheet, go to game, wait for images)
   validate-bases.mjs              Playwright script: opens a Chromium window and takes every base in the card data through the base sheet to the game screen for semi-automated visual QA (see below)
   validate-errors.mjs             Playwright script: opens a Chromium window and steps through all five error/info message states on SWU setup for semi-automated visual QA (see below)
   measure-performance.mjs         Playwright script: measures setup ready time, LCP, preview image time, and game image time across three resolution tiers (low/normal/hi res) per iteration; reports min/median/max (see project-overview.md)

@@ -25,26 +25,44 @@ export const SEL = {
   gameBack:   '[aria-label="Back"]',
 }
 
+// Playwright's Chromium trails the browser's security fixes, so it opens dmgCtrl and nothing
+// else: a local server (this machine, or one on the local network), dev or prod.
+const LOCAL_HOSTS = ['127.0.0.1', 'localhost']
+const DMGCTRL_HOSTS = ['dev.dmgctrl.app', 'dmgctrl.app']
+const PRIVATE_IPV4 = /^(10\.\d+|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d+\.\d+$/
+const isLocal = url => {
+  const { hostname } = new URL(url)
+  return LOCAL_HOSTS.includes(hostname) || PRIVATE_IPV4.test(hostname)
+}
+
+export function dmgCtrlUrl(url) {
+  const { hostname, username } = new URL(url)
+  if (!(isLocal(url) || DMGCTRL_HOSTS.includes(hostname)) || username) {
+    throw new Error(`${url}: Playwright only tests dmgCtrl (a local server, ${DMGCTRL_HOSTS.join(', ')})`)
+  }
+  return url.endsWith('/') ? url : `${url}/`
+}
+
 export function parseArgs(argv = process.argv.slice(2)) {
   const positional = argv.filter(a => !a.startsWith('--'))
   const flags = argv.filter(a => a.startsWith('--'))
-  const url = positional[0] ?? DEFAULT_URL
   return {
-    url: url.endsWith('/') ? url : `${url}/`,
+    url: dmgCtrlUrl(positional[0] ?? DEFAULT_URL),
     positional: positional.slice(1),
     flags,
     headless: flags.includes('--headless'),
   }
 }
 
-// An iPhone 15 Pro in landscape. HTTPS certificate errors are ignored so the
-// scripts work with the mkcert-backed dev:https server without importing the
-// mkcert CA into Chromium's own certificate store.
+// An iPhone 15 Pro in landscape, with Chromium in its sandbox (Playwright turns it off unless
+// asked). On a local server HTTPS certificate errors are ignored, so the scripts work with the
+// mkcert-backed dev:https server without importing the mkcert CA into Chromium's own store.
 export async function launch({ url, headless, devtools = false }) {
-  const browser = await chromium.launch({ headless, devtools: devtools && !headless })
+  dmgCtrlUrl(url)
+  const browser = await chromium.launch({ headless, chromiumSandbox: true, devtools: devtools && !headless })
   const context = await browser.newContext({
     ...devices['iPhone 15 Pro landscape'],
-    ignoreHTTPSErrors: url.startsWith('https://'),
+    ignoreHTTPSErrors: url.startsWith('https://') && isLocal(url),
   })
   // From the second launch the install banner covers the foot of setup: as if
   // Not now had been tapped (useInstallPrompt.ts).
