@@ -45,9 +45,11 @@ function BaseCell({ b, label, labelColor, ariaLabel, border, onClick }: {
   // art is the one the other modes show: hyperspace when that setting is on, falling back on failure.
   const { useHyperspace } = useUserSettings()
   const art = useBaseArt(b, useHyperspace)
+  // Pinned to the frame's edges, as ImagePreview does: a percentage height in flow, against a height the
+  // frame's aspect ratio gives it, sat the art low in the frame on iOS.
   const fitted: React.CSSProperties = art.rotationDeg
     ? rotatedArt(art.rotationDeg, 'contain')
-    : { display: 'block', width: '100%', height: '100%', objectFit: 'contain' }
+    : { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }
   return (
     <button
       type="button"

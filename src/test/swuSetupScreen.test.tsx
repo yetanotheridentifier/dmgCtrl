@@ -1064,6 +1064,10 @@ describe('SwuSetupScreen: Twin Suns', () => {
       expect(tile.style.background).not.toMatch(/url\(/)
       const card = tile.querySelector('img[data-card]') as HTMLImageElement
       expect(card).toHaveStyle({ objectFit: 'contain' })
+      // Pinned to the frame's edges, as in 1 and 2 players: an image sized by a percentage of the
+      // frame's height, a height its aspect ratio gives it, sat low in the frame on the phone.
+      expect(card.style).toMatchObject({ position: 'absolute', width: '100%', height: '100%' })
+      expect(card.style.getPropertyValue('inset')).toMatch(/^0(px)?$/)
       const parts = [...tile.children]
       expect(parts.indexOf(within(tile).getByText(name.startsWith('Your') ? 'Your base' : 'Opponent'))).toBeLessThan(parts.findIndex(p => p.contains(card)))
       expect(parts.findIndex(p => p.contains(card))).toBeLessThan(parts.findIndex(p => p.contains(within(tile).getByText(b.name))))

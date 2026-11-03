@@ -41,6 +41,8 @@ export interface SwuGameViewProps {
   onMysticAction: () => void
   showInitiative: boolean
   initiative: Initiative
+  // Taken this round: only its holder's control still takes it.
+  initiativeTaken: boolean
   onInitiativeOpponent: () => void
   onInitiativePlayer: () => void
   logEntries: HistoryEntry<unknown>[]
@@ -94,7 +96,7 @@ function SwuGameScreenView(props: SwuGameViewProps) {
     base, onBack, onHelp, onSettings, art, count, round, onIncrement, onDecrement, onStartGame, onRoundIncrement,
     showDamageButtons, showEpicAction, epicActionUsed, onEpicActionMark,
     showForce, showMysticMonastery, forceActive, mysticUsesRemaining, onForceToggle, onMysticAction,
-    showInitiative, initiative, onInitiativeOpponent, onInitiativePlayer,
+    showInitiative, initiative, initiativeTaken, onInitiativeOpponent, onInitiativePlayer,
     logEntries, onUndo, showLog, onLogToggle,
     playMode, playerScore, opponentScore, matchResult, lastGame,
     timerRemaining, timerMinutes, onTimerMinutesChange, timerExpired,
@@ -157,10 +159,12 @@ function SwuGameScreenView(props: SwuGameViewProps) {
 
   const initiativeSide = (side: 'opponent' | 'player') => {
     const held = initiative === side
+    const refused = initiativeTaken && !held
     return (
       <button
         type="button"
         role="radio"
+        disabled={refused}
         aria-checked={held}
         aria-label={side === 'opponent' ? (held ? 'Opponent has initiative' : 'Opponent takes initiative') : (held ? 'You have initiative' : 'You take initiative')}
         onClick={side === 'opponent' ? onInitiativeOpponent : onInitiativePlayer}
@@ -176,6 +180,7 @@ function SwuGameScreenView(props: SwuGameViewProps) {
           cursor: 'pointer',
           WebkitTapHighlightColor: 'transparent',
           ...initiativeLook(held),
+          ...(refused ? DISABLED_BTN : {}),
         }}
       >
         {side === 'opponent' ? 'OPP' : 'YOU'}

@@ -9,7 +9,7 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import { useMatch } from '../hooks/useMatch'
 import type { MatchResult } from '../hooks/useMatch'
 import { useTimer } from '../hooks/useTimer'
-import { useInitiative } from '../hooks/useInitiative'
+import type { Initiative } from '../hooks/useInitiative'
 import SwuGameScreenView from './swuGameScreenView'
 import type { SwuGameViewProps } from './swuGameScreenView'
 import SwuGame2pView from './swuGame2pView'
@@ -21,12 +21,22 @@ import { onGameStart, onGameEnd, onDamageDealt, onDamageHealed, onRoundIncrement
 import type { PlayMode } from '../utils/playMode'
 import type { Format } from '../utils/formatFilter'
 
+// Who has the initiative, and whether it has been taken this round: once it has (its holder taking it
+// again counts), the other side cannot take it until Round. Who has it before the game starts only
+// says who starts with it.
+interface InitiativeState {
+  holder: Initiative
+  taken: boolean
+}
+const NO_INITIATIVE: InitiativeState = { holder: null, taken: false }
+
 interface SwuGameSnapshot {
   gameState: GameState
   // Two players: their base's state. The round lives in yours.
   theirGameState: GameState
   matchState: { playerScore: number; opponentScore: number; matchDrawn: boolean; matchClosedByTimer: boolean }
   lastGame: LastGame | null
+  initiative: InitiativeState
 }
 
 interface Props {
@@ -68,7 +78,7 @@ function SwuGameScreen({ base, theirBase, playMode = 'casual', format, isInTourn
   const setTimerMinutes = playMode === 'bo3' ? setBo3TimerMinutes : setBo1TimerMinutes
   const timer = useTimer(timerMinutes * 60)
 
-  const initiative = useInitiative()
+  const [initiative, setInitiative] = useState<InitiativeState>(NO_INITIATIVE)
   const [showLog, setShowLog] = useState(false)
   const [endGameOpen, setEndGameOpen] = useState(false)
   const [endGameChoice, setEndGameChoice] = useState<MatchResult | null>(null)
@@ -106,6 +116,7 @@ function SwuGameScreen({ base, theirBase, playMode = 'casual', format, isInTourn
       matchClosedByTimer: false,
     },
     lastGame,
+    initiative,
   })
 
   const baseKey = `${base.set}-${base.number}`
@@ -182,8 +193,22 @@ function SwuGameScreen({ base, theirBase, playMode = 'casual', format, isInTourn
   const you = sideOf(base, game, art, 'Your base')
   const them = sideOf(theirs, theirGame, theirArt, 'Their base')
 
+  // Before the game, choosing who starts with it; during one, once a round, and a log entry.
+  const takeInitiative = (side: 'player' | 'opponent') => {
+    if (!gameStarted) {
+      setInitiative({ holder: side, taken: false })
+      return
+    }
+    if (initiative.taken) return
+    const who = twoPlayers ? (side === 'player' ? 'your base' : 'their base') : (side === 'player' ? 'you' : 'opponent')
+    log.add({ type: 'initiative', message: `Initiative: ${who}`, color: 'var(--color-accent)', snapshot: makeSnapshot() })
+    setInitiative({ holder: side, taken: true })
+  }
+  const freeInitiative = () => setInitiative(i => ({ ...i, taken: false }))
+
   const handleRoundIncrement = () => {
     const snap = makeSnapshot()
+    freeInitiative()
     game.incrementRound()
     log.add({ type: 'round', message: `Round ${snap.gameState.round + 1}`, color: '#ffffff', snapshot: snap })
     void onRoundIncremented(baseKey, baseSet, snap.gameState.round + 1)
@@ -215,6 +240,7 @@ function SwuGameScreen({ base, theirBase, playMode = 'casual', format, isInTourn
     const ended: LastGame = { result, round: game.round, damage: game.count, ...(twoPlayers ? { theirDamage: theirGame.count } : {}) }
     game.reset()
     theirGame.reset()
+    freeInitiative()
 
     log.add({
       type: 'game-result',
@@ -239,7 +265,7 @@ function SwuGameScreen({ base, theirBase, playMode = 'casual', format, isInTourn
   const handleRematch = () => {
     setLastGame(null)
     setGameOverOpen(false)
-    initiative.reset()
+    setInitiative(NO_INITIATIVE)
   }
 
   const handleUndo = () => {
@@ -250,6 +276,7 @@ function SwuGameScreen({ base, theirBase, playMode = 'casual', format, isInTourn
       theirGame.restoreState(theirGameState)
       match.restoreState(matchState)
       setLastGame(entry.snapshot.lastGame)
+      setInitiative(entry.snapshot.initiative)
       // Only the first game's start owns the match timer.
       if (gameState.round === 0 && matchState.playerScore + matchState.opponentScore === 0) timer.reset()
       void onUndoUsed(baseKey, baseSet, entry.type)
@@ -283,9 +310,10 @@ function SwuGameScreen({ base, theirBase, playMode = 'casual', format, isInTourn
     onRoundIncrement: handleRoundIncrement,
     showDamageButtons: enableDamageButtons,
     showInitiative: enableInitiativeBar,
-    initiative: initiative.initiative,
-    onInitiativeOpponent: initiative.setOpponent,
-    onInitiativePlayer: initiative.setPlayer,
+    initiative: initiative.holder,
+    initiativeTaken: initiative.taken,
+    onInitiativeOpponent: () => takeInitiative('opponent'),
+    onInitiativePlayer: () => takeInitiative('player'),
     logEntries: log.entries,
     onUndo: handleUndo,
     showLog,

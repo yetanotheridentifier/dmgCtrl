@@ -97,7 +97,7 @@ From the top:
 - **Back** returns to setup (or to the tournament). In casual play the damage resets
 - The **epic action** button, on a base with an epic action: greyed until the game starts, then gold. Tap it once you've used the epic action: it greys out with **USED**, and a gold **Epic Action Used** overlay, with the dmgCtrl mark behind it, covers the card's text box so your opponent can see it. The overlay takes no taps (a tap on it is a tap on the card); undo in the log takes the epic action back
 - The **Force** button, on a base that creates the Force (see below)
-- The **initiative bar**: **OPP** at the top, **YOU** at the bottom. Tap the side that has the initiative; it fills in. Initiative doesn't reset between rounds
+- The **initiative bar**: **OPP** at the top, **YOU** at the bottom. Tap the side that has the initiative; it fills in. Before the game starts, tap either side freely to say who starts with it. Once the game is under way, taking it is once per round: when a side takes it (the holder tapping its own side again counts), the other side is greyed out until **Round**. Taking it is a log entry, so Undo takes it back. Initiative doesn't reset between rounds: if no one takes it, it stays with its holder
 
 ### Right margin
 
@@ -147,7 +147,7 @@ With both the epic action used and the Force, the two overlays share the text bo
 
 With **2 players** chosen in setup, one phone lies flat on the table between you. The screen is portrait and split in two: the bottom half is yours, the top half is theirs, turned round to face them. It stays that way whichever way the phone thinks it is turned, since a phone lying flat flips unreliably.
 
-Each half has its player's base as the damage control, exactly as in 1 player: tap for 1, drag up (from that player's side) to add several, drag down to remove. Each half counts its own damage, and both can be touched at once. At each player's edge sit their **epic action** or **Force** button and **Initiative**: tap **Take initiative** on your half to take it from the other player. With **Damage −/+ buttons** on, each half has its own − and +.
+Each half has its player's base as the damage control, exactly as in 1 player: tap for 1, drag up (from that player's side) to add several, drag down to remove. Each half counts its own damage, and both can be touched at once. At each player's edge sit their **epic action** or **Force** button and **Initiative**: tap **Take initiative** on your half to take it from the other player. As in 1 player, it is once per round once the game is under way: when one half takes it (the holder tapping it again counts), the other half's button is greyed out until **Round**. With **Damage −/+ buttons** on, each half has its own − and +.
 
 The strip across the middle holds **Back**, **Log**, **Round**, **End game** and **More**, and in a best of 1 or 3 the timer with the games score. Before the game both cards say **Start**: tap either to begin. Round and End game wait for the game to start. The middle strip's text faces the bottom player.
 
@@ -164,7 +164,9 @@ The screen opens asking **Who has the initiative?**: the bases light up, and tap
 The three counters and **Round** sit together in the middle of the bar, with **Back**, **Log** and **More** at its top and **End game** at its foot (with 3 players, beside the single base instead). Each question the game asks (who claimed a counter, who destroyed a base, End game's confirmation, the result) shows in the bar's middle, with its answers. The counters are always shown in Twin Suns, whatever the Initiative setting (that setting applies to 1 and 2 players):
 
 - **Plan** and **Blast**: tap one, then the base of the player who claimed it (the bases light up; **Cancel** backs out). Its token sits on that base and the button shows as taken until **Round**, which returns both and moves the round on. **Blast** also deals 1 damage to every other base still in the game.
-- **Initiative**: tap **Initiative** in the bar, or the token on the base that holds it, then the base that takes it. It stays there across rounds.
+- **Initiative**: tap **Initiative** in the bar, or the token on the base that holds it, then the base that takes it. It stays there across rounds. Choosing who has it when the game opens does not count, but after that taking it is once per round: once someone takes it (the holder taking it again counts), the button shows as taken and the token can't be tapped until **Round**.
+
+Each player takes one counter a round: while a counter is being claimed, a base that has already taken one this round doesn't light up and can't be chosen. Holding the initiative from an earlier round doesn't count. **Round** appears only once Plan and Blast are claimed and the initiative has been taken this round.
 
 **A base destroyed:** a base reaching 0 shows **Destroyed** over its card, and the bar asks who destroyed it. Tap that player's base to heal it 5 ("+5 healed"), or **No one** to skip the heal. **Undo the damage** takes back the last hit instead. A destroyed base is out: its card stays covered and takes no input. The bar then shows **Last phase**, and **Finish game** replaces Round; the counters still work until then.
 

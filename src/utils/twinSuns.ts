@@ -1,7 +1,7 @@
 import type { MatchResult } from '../hooks/useMatch'
 
 // A Twin Suns game for 3 or 4 players on one device. Players are numbered as they sit: 0 is you
-// (top left), then the opponents in seat order. Every function returns a new state and leaves the
+// (bottom right), then the opponents in seat order. Every function returns a new state and leaves the
 // one it was given alone, so a snapshot of it is the undo.
 
 export type Counter = 'initiative' | 'plan' | 'blast'
@@ -17,6 +17,9 @@ export interface TwinSunsState {
   initiative: number | null
   plan: number | null
   blast: number | null
+  // Taking the initiative is once per round: once someone has (its holder included), no one else can
+  // until Round. Choosing who has it at the start is not taking it.
+  initiativeTaken: boolean
   // Destroyed: out of the game, and taking no input.
   out: boolean[]
   // Destroyed bases still waiting to be told who destroyed them, first in line first.
@@ -40,6 +43,7 @@ export function startState(players: number): TwinSunsState {
     initiative: null,
     plan: null,
     blast: null,
+    initiativeTaken: false,
     out: Array(players).fill(false),
     pending: [],
     healed: null,
@@ -84,15 +88,31 @@ export function gainForceByMonastery(s: TwinSunsState, i: number): TwinSunsState
   return { ...setForce(s, i, true), mysticUses: set(s.mysticUses, i, s.mysticUses[i] - 1) }
 }
 
+// A player takes at most one counter a round: Plan, Blast, or the initiative (holding it from before
+// is not taking it this round).
+export function tookCounter(s: TwinSunsState, i: number): boolean {
+  return s.plan === i || s.blast === i || (s.initiativeTaken && s.initiative === i)
+}
+
 // Blast also deals its damage to every other base at once.
 export function claim(s: TwinSunsState, hp: number[], counter: Counter, i: number): TwinSunsState {
+  if (tookCounter(s, i)) return s
+  if (counter === 'initiative') {
+    if (s.initiativeTaken) return s
+    return { ...s, initiative: i, initiativeTaken: s.initiative !== null, healed: null }
+  }
   const claimed = { ...s, [counter]: i, healed: null }
   if (counter !== 'blast') return claimed
   return damageMany(claimed, hp, s.damage.map((_, j) => (j === i ? 0 : BLAST_DAMAGE)))
 }
 
+// A round ends only once Plan and Blast are claimed and the initiative taken.
+export function roundCanEnd(s: TwinSunsState): boolean {
+  return s.plan !== null && s.blast !== null && s.initiativeTaken
+}
+
 export function nextRound(s: TwinSunsState): TwinSunsState {
-  return { ...s, round: s.round + 1, plan: null, blast: null, healed: null }
+  return { ...s, round: s.round + 1, plan: null, blast: null, initiativeTaken: false, healed: null }
 }
 
 // The first base waiting is settled: the player who destroyed it heals, or no one does.

@@ -85,6 +85,19 @@ const press = (name: string | RegExp) => fireEvent.click(within(bar()).getByRole
 const claimPlan = /^Plan: tap/
 const claimBlast = /^Blast: tap/
 const claimInitiative = /^Claim initiative/
+// The round ends only once Plan and Blast are claimed and the initiative taken: then Round shows. A
+// player takes one counter a round, so each goes to a different base (seats in 4 players and in 3).
+const claimPlanAndBlast = (plan: Seat = 'Bottom left', blast: Seat = 'Top left') => {
+  press(claimPlan)
+  hit(cell(plan))
+  press(claimBlast)
+  hit(cell(blast))
+}
+const takeAll = (initiative: Seat = 'Bottom right', plan: Seat = 'Bottom left', blast: Seat = 'Top left') => {
+  press(claimInitiative)
+  hit(cell(initiative))
+  claimPlanAndBlast(plan, blast)
+}
 // 3 players: Back, Log, More and End game beside the single base.
 const sideName = 'Game controls, facing you'
 const side = () => screen.getByRole('navigation', { name: sideName })
@@ -125,6 +138,7 @@ describe('SwuTwinSunsGame: layout', () => {
     for (const name of ['Back to setup', 'Log', 'More', 'End game']) {
       expect(within(bar()).getByRole('button', { name })).toBeInTheDocument()
     }
+    takeAll()
     expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
   })
 
@@ -167,14 +181,19 @@ describe('SwuTwinSunsGame: layout', () => {
 
   it('3 players: the counters and Round, used each round, are in the bar; Back, Log, More and End game beside the single base', () => {
     renderGame([tomb, null, thermal])
-    for (const name of [claimInitiative, claimPlan, claimBlast, /^Round 1/]) {
-      expect(within(bar()).getByRole('button', { name })).toBeInTheDocument()
-      expect(within(side()).queryByRole('button', { name })).not.toBeInTheDocument()
+    const inBar = (names: (string | RegExp)[]) => {
+      for (const name of names) {
+        expect(within(bar()).getByRole('button', { name })).toBeInTheDocument()
+        expect(within(side()).queryByRole('button', { name })).not.toBeInTheDocument()
+      }
     }
+    inBar([claimInitiative, claimPlan, claimBlast])
     for (const name of ['Back to setup', 'Log', 'More', 'End game']) {
       expect(within(side()).getByRole('button', { name })).toBeInTheDocument()
       expect(within(bar()).queryByRole('button', { name })).not.toBeInTheDocument()
     }
+    takeAll()
+    inBar([/^Round 1/])
   })
 
   it.each([['a phone', 844, 390], ['a tablet', 1024, 768]])('4 players on %s: Back, Log and More at the top, the counters and Round together in the middle, End game at the foot', (_, width, height) => {
@@ -186,9 +205,11 @@ describe('SwuTwinSunsGame: layout', () => {
       // Equal space either side of the middle group.
       expect(parts[at - 1].style.flex).not.toBe('')
       expect(parts[at - 1].style.flex).toBe(parts[at + 1].style.flex)
-      for (const name of [claimInitiative, claimPlan, claimBlast, /^Round 1/]) expect(within(middle).getByRole('button', { name })).toBeInTheDocument()
+      for (const name of [claimInitiative, claimPlan, claimBlast]) expect(within(middle).getByRole('button', { name })).toBeInTheDocument()
       for (const name of ['Back to setup', 'Log', 'More']) expect(within(parts[0]).getByRole('button', { name })).toBeInTheDocument()
       expect(parts[parts.length - 1]).toBe(within(bar()).getByRole('button', { name: 'End game' }))
+      takeAll()
+      expect(within(middle).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
       expect(at).toBeGreaterThan(0)
       expect(at).toBeLessThan(parts.length - 1)
     })
@@ -239,8 +260,13 @@ describe('SwuTwinSunsGame: layout', () => {
     })) as unknown as typeof window.matchMedia
     try { run() } finally { window.matchMedia = original }
   }
-  const barSquares = (size: string) => ['Back to setup', 'Log', 'More', 'End game', claimInitiative, claimPlan, claimBlast, /^Round 1/]
-    .every(name => within(bar()).getByRole('button', { name }).style.width === size)
+  // Round shows once every counter is taken, so it is measured after the rest.
+  const barSquares = (size: string) => {
+    const rest = ['Back to setup', 'Log', 'More', 'End game', claimInitiative, claimPlan, claimBlast]
+      .every(name => within(bar()).getByRole('button', { name }).style.width === size)
+    takeAll()
+    return rest && within(bar()).getByRole('button', { name: /^Round 1/ }).style.width === size
+  }
 
   it.each([[1024, 768], [768, 1024]])('on a tablet (%ix%i) every bar control is a 94px square', (width, height) => {
     withViewport(width, height, () => {
@@ -290,7 +316,7 @@ describe('SwuTwinSunsGame: 3 players, the table’s controls in the bar and the 
     expect(buttonsIn(bar())).toEqual(['Cancel'])
     expect(buttonsIn(side())).toEqual(ADMIN)
     press('Cancel')
-    expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
+    expect(within(bar()).getByRole('button', { name: claimPlan })).toBeInTheDocument()
   })
 
   it('End game, from beside the single base: the question and its answers in the bar', () => {
@@ -345,8 +371,10 @@ describe('SwuTwinSunsGame: 3 players, the table’s controls in the bar and the 
     window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia
     try {
       renderGame([tomb, null, thermal])
-      for (const name of [claimInitiative, claimPlan, claimBlast, /^Round 1/]) expect(within(bar()).getByRole('button', { name }).style.width).toBe('94px')
+      for (const name of [claimInitiative, claimPlan, claimBlast]) expect(within(bar()).getByRole('button', { name }).style.width).toBe('94px')
       for (const name of [...ADMIN, 'End game']) expect(within(side()).getByRole('button', { name }).style.width).toBe('94px')
+      takeAll()
+      expect(within(bar()).getByRole('button', { name: /^Round 1/ }).style.width).toBe('94px')
     } finally { window.matchMedia = original }
   })
 })
@@ -377,7 +405,7 @@ describe('SwuTwinSunsGame: deciding the initiative', () => {
     renderGame(FOUR, jediTemple, 'Top left')
     expect(within(cell('Top left')).getByRole('button', { name: 'Initiative, Thermal Oscillator: tap to move it' })).toBeInTheDocument()
     expect(damageIn(cell('Top left'))).toHaveTextContent('0')
-    expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
+    expect(within(bar()).getByRole('button', { name: claimPlan })).toBeInTheDocument()
     expect(mockOnGameStart).toHaveBeenCalledTimes(1)
   })
 
@@ -508,32 +536,169 @@ describe('SwuTwinSunsGame: counters', () => {
 
   it('Round returns Plan and Blast and moves the round on', () => {
     renderGame()
+    press(claimInitiative)
+    hit(cell('Bottom right'))
     press(claimPlan)
     hit(cell('Bottom left'))
     press(claimBlast)
     hit(cell('Top right'))
     press(/^Round 1: tap for round 2/)
-    expect(within(bar()).getByRole('button', { name: /^Round 2/ })).toBeInTheDocument()
     expect(within(bar()).getByRole('button', { name: claimPlan })).toBeEnabled()
     expect(within(bar()).getByRole('button', { name: claimBlast })).toBeEnabled()
     expect(screen.queryByRole('img', { name: /^Plan,/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('img', { name: /^Blast,/ })).not.toBeInTheDocument()
+    takeAll()
+    expect(within(bar()).getByRole('button', { name: /^Round 2/ })).toBeInTheDocument()
   })
 
   it('initiative stays on its holder across rounds, and moves from the bar or from the token', () => {
     renderGame()
-    press(claimInitiative)
-    hit(cell('Top left'))
+    takeAll('Top left', 'Bottom left', 'Bottom right')
     press(/^Round 1/)
+    // Its holder takes it again to keep it.
+    takeAll('Top left', 'Bottom left', 'Bottom right')
     press(/^Round 2/)
     const token = within(cell('Top left')).getByRole('button', { name: 'Initiative, Thermal Oscillator: tap to move it' })
     fireEvent.click(token)
     hit(cell('Bottom right'))
-    expect(within(cell('Bottom right')).getByRole('button', { name: 'Initiative, Jedi Temple: tap to move it' })).toBeInTheDocument()
+    // Taken this round, so its token no longer moves it.
+    expect(within(cell('Bottom right')).getByRole('img', { name: 'Initiative, Jedi Temple' })).toBeInTheDocument()
     expect(within(cell('Top left')).queryByRole('button', { name: /^Initiative/ })).not.toBeInTheDocument()
+    expect(within(cell('Top left')).queryByRole('img', { name: /^Initiative/ })).not.toBeInTheDocument()
+    claimPlanAndBlast()
+    press(/^Round 3/)
     press(claimInitiative)
     hit(cell('Bottom left'))
-    expect(within(cell('Bottom left')).getByRole('button', { name: /^Initiative, Tomb of Eilram/ })).toBeInTheDocument()
+    expect(within(cell('Bottom left')).getByRole('img', { name: 'Initiative, Tomb of Eilram' })).toBeInTheDocument()
+  })
+})
+
+describe('SwuTwinSunsGame: the initiative, once per round', () => {
+  const taken = () => within(bar()).getByRole('button', { name: 'Initiative is taken this round' })
+  const tokenOn = (seat: Seat) => within(cell(seat)).getByRole('img', { name: /^Initiative,/ })
+
+  it('the opening choice does not take it: it can be taken in round 1', () => {
+    renderGame()
+    expect(within(bar()).getByRole('button', { name: claimInitiative })).toBeEnabled()
+    expect(within(cell('Bottom right')).getByRole('button', { name: /^Initiative, Jedi Temple: tap to move it/ })).toBeEnabled()
+  })
+
+  it('once taken in a round, the counter is disabled like a claimed one and the token cannot move it, until Round', () => {
+    renderGame()
+    press(claimInitiative)
+    hit(cell('Top left'))
+    expect(taken()).toBeDisabled()
+    press(claimPlan)
+    hit(cell('Bottom left'))
+    const plan = within(bar()).getByRole('button', { name: 'Plan is claimed this round' })
+    for (const prop of ['background', 'color', 'border'] as const) expect(taken().style[prop]).toBe(plan.style[prop])
+    // The token keeps its look on the holder's base, but no longer starts a move.
+    expect(within(cell('Top left')).queryByRole('button', { name: /^Initiative/ })).not.toBeInTheDocument()
+    expect(tokenOn('Top left')).toBeInTheDocument()
+    press(claimBlast)
+    hit(cell('Top right'))
+    press(/^Round 1/)
+    expect(within(bar()).getByRole('button', { name: claimInitiative })).toBeEnabled()
+    expect(within(cell('Top left')).getByRole('button', { name: /^Initiative, Thermal Oscillator: tap to move it/ })).toBeInTheDocument()
+  })
+
+  it('the holder taking it again keeps it and blocks everyone else this round', () => {
+    renderGame()
+    press(claimInitiative)
+    hit(cell('Bottom right'))
+    expect(tokenOn('Bottom right')).toHaveAccessibleName(/^Initiative, Jedi Temple/)
+    expect(taken()).toBeDisabled()
+  })
+
+  it('undo takes back a taking of the initiative, and its once-per-round mark', () => {
+    renderGame()
+    press(claimInitiative)
+    hit(cell('Top left'))
+    openLog()
+    undo()
+    expect(within(cell('Bottom right')).getByRole('button', { name: /^Initiative, Jedi Temple: tap to move it/ })).toBeInTheDocument()
+    expect(within(bar()).getByRole('button', { name: claimInitiative })).toBeEnabled()
+  })
+})
+
+describe('SwuTwinSunsGame: one counter a player each round', () => {
+  const BLAST_COLOUR = 'rgb(239, 83, 80)'
+
+  it('a base that has taken a counter this round cannot be chosen for another: no colour, no tap', () => {
+    renderGame()
+    press(claimPlan)
+    hit(cell('Bottom left'))
+    press(claimBlast)
+    expect(cardIn(cell('Bottom left'))).toBeDisabled()
+    expect(outlineIn(cell('Bottom left'))).toBe('var(--color-accent)')
+    for (const seat of ['Top left', 'Top right', 'Bottom right'] as const) expect(outlineIn(cell(seat))).toBe(BLAST_COLOUR)
+    hit(cell('Bottom left'))
+    expect(screen.queryByRole('img', { name: /^Blast,/ })).not.toBeInTheDocument()
+    hit(cell('Top right'))
+    expect(within(cell('Top right')).getByRole('img', { name: 'Blast, Colossus' })).toBeInTheDocument()
+  })
+
+  it('the base holding the initiative from before can take a counter; once it takes the initiative again, no other', () => {
+    renderGame()
+    press(claimPlan)
+    expect(cardIn(cell('Bottom right'))).toBeEnabled()
+    press('Cancel')
+    press(claimInitiative)
+    hit(cell('Bottom right'))
+    press(claimPlan)
+    expect(cardIn(cell('Bottom right'))).toBeDisabled()
+  })
+
+  it('a new round frees every base to take one again', () => {
+    renderGame()
+    takeAll()
+    press(/^Round 1/)
+    press(claimPlan)
+    for (const seat of ['Top left', 'Top right', 'Bottom left', 'Bottom right'] as const) expect(cardIn(cell(seat))).toBeEnabled()
+  })
+})
+
+describe('SwuTwinSunsGame: Round waits for every counter', () => {
+  const round = () => within(bar()).queryByRole('button', { name: /^Round \d/ })
+
+  it('Round is hidden, not disabled, until Plan and Blast are claimed and the initiative taken, in any order', () => {
+    renderGame()
+    expect(round()).not.toBeInTheDocument()
+    press(claimBlast)
+    hit(cell('Top left'))
+    expect(round()).not.toBeInTheDocument()
+    press(claimInitiative)
+    hit(cell('Bottom left'))
+    expect(round()).not.toBeInTheDocument()
+    press(claimPlan)
+    hit(cell('Top right'))
+    expect(round()).toBeEnabled()
+  })
+
+  it('3 players: the same', () => {
+    renderGame([tomb, null, thermal])
+    claimPlanAndBlast()
+    expect(round()).not.toBeInTheDocument()
+    press(claimInitiative)
+    hit(cell('Bottom right'))
+    expect(round()).toBeEnabled()
+  })
+
+  it('a new round hides it again until every counter is taken', () => {
+    renderGame()
+    takeAll()
+    press(/^Round 1/)
+    expect(round()).not.toBeInTheDocument()
+    takeAll()
+    expect(within(bar()).getByRole('button', { name: /^Round 2/ })).toBeInTheDocument()
+  })
+
+  it('undoing a counter hides it again', () => {
+    renderGame()
+    takeAll()
+    openLog()
+    undo()
+    expect(round()).not.toBeInTheDocument()
   })
 })
 
@@ -668,7 +833,7 @@ describe('SwuTwinSunsGame: a base destroyed', () => {
     press('Undo the damage')
     expect(damageIn(cell('Bottom left'))).toHaveTextContent('2')
     expect(within(cell('Bottom left')).queryByRole('img', { name: /is destroyed/ })).not.toBeInTheDocument()
-    expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
+    expect(within(bar()).getByRole('button', { name: claimPlan })).toBeInTheDocument()
   })
 
   it('that player is out: the card stays covered and takes no input', () => {
@@ -727,7 +892,7 @@ describe('SwuTwinSunsGame: game over', () => {
     renderGame()
     press('End game')
     press('Keep playing')
-    expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
+    expect(within(bar()).getByRole('button', { name: claimPlan })).toBeInTheDocument()
   })
 
   it('Rematch keeps the bases and seats, resets the damage and asks who has the initiative', () => {
@@ -741,7 +906,7 @@ describe('SwuTwinSunsGame: game over', () => {
     expect(within(bar()).getByText('Who has the initiative?')).toBeInTheDocument()
     expect(mockOnGameStart).toHaveBeenCalledTimes(1)
     hit(cell('Top right'))
-    expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
+    expect(within(bar()).getByRole('button', { name: claimPlan })).toBeInTheDocument()
     expect(mockOnGameStart).toHaveBeenCalledTimes(2)
   })
 
