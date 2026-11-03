@@ -42,7 +42,7 @@ function SwuTwinSunsGame({ base, seats, onBack, onHelp, onSettings }: Props) {
   useWakeLock(true)
 
   const players: TwinSunsPlayer[] = [
-    { base, seat: 'Top left' },
+    { base, seat: 'Bottom right' },
     ...TWIN_SUNS_SEATS.flatMap((where, i) => (seats[i] ? [{ base: seats[i] as Base, seat: seatName(where) }] : [])),
   ]
   const hp = players.map(p => p.base.hp)

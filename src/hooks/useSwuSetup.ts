@@ -29,9 +29,11 @@ export const SWU_MODES: { value: SwuMode; label: string }[] = [
   { value: 'twin-suns', label: 'Twin Suns' },
 ]
 
-// Twin Suns seats: the cells of the 2x2 grid after yours (top left), in reading order. A base keeps
-// its seat once placed, so the grid is where each opponent sits.
-export const TWIN_SUNS_SEATS = ['top right', 'bottom left', 'bottom right'] as const
+// Twin Suns seats: the cells of the 2x2 grid other than yours (bottom right, where you hold the phone),
+// beside you, across from you, then diagonally opposite. Seats are kept by this index, so the order
+// is part of what a stored setup means. A base keeps its seat once placed, so the grid is where each
+// opponent sits.
+export const TWIN_SUNS_SEATS = ['bottom left', 'top right', 'top left'] as const
 // Your base and at least two opponents'.
 export const TWIN_SUNS_MIN_OPPONENTS = 2
 const NO_SEATS: (string | null)[] = TWIN_SUNS_SEATS.map(() => null)

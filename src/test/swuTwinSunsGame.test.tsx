@@ -65,7 +65,7 @@ const FOUR: Seats = [tomb, colossus, thermal]
 type Seat = 'Top left' | 'Top right' | 'Bottom left' | 'Bottom right'
 
 // The game starts once someone has the initiative: by default you take it, null leaves the question open.
-function renderGame(seats: Seats = FOUR, base: Base = jediTemple, initiative: Seat | null = 'Top left') {
+function renderGame(seats: Seats = FOUR, base: Base = jediTemple, initiative: Seat | null = 'Bottom right') {
   const onBack = vi.fn()
   const onHelp = vi.fn()
   render(<SwuTwinSunsGame base={base} seats={seats} onBack={onBack} onHelp={onHelp} onSettings={vi.fn()} />)
@@ -89,7 +89,7 @@ const claimInitiative = /^Claim initiative/
 const sideName = 'Game controls, facing you'
 const side = () => screen.getByRole('navigation', { name: sideName })
 const tapSide = (name: string | RegExp) => fireEvent.click(within(side()).getByRole('button', { name }))
-// The single base stays centred, the controls set over the row's left end out of its flow.
+// The single base stays centred, the controls set over the row's right end out of its flow.
 const centred = (row: HTMLElement) => row.style.justifyContent === 'center' && side().style.position === 'absolute'
 const openLog = () => press('Log')
 const undo = () => fireEvent.click(screen.getByTestId('log-undo-btn'))
@@ -104,12 +104,14 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('SwuTwinSunsGame: layout', () => {
-  it('each base sits in its setup cell, the top row turned to face the far side', () => {
+  // You hold the phone at its bottom edge: your base, bottom right, faces you, and the top row is
+  // turned to face the far side.
+  it('each base sits in its setup cell, yours bottom right, the top row turned to face the far side', () => {
     renderGame()
-    expect(within(cell('Top left')).getByRole('button', { name: /^Jedi Temple, your base/ })).toBeInTheDocument()
-    expect(within(cell('Top right')).getByRole('button', { name: /^Tomb of Eilram/ })).toBeInTheDocument()
-    expect(within(cell('Bottom left')).getByRole('button', { name: /^Colossus/ })).toBeInTheDocument()
-    expect(within(cell('Bottom right')).getByRole('button', { name: /^Thermal Oscillator/ })).toBeInTheDocument()
+    expect(within(cell('Bottom right')).getByRole('button', { name: /^Jedi Temple, your base/ })).toBeInTheDocument()
+    expect(within(cell('Bottom left')).getByRole('button', { name: /^Tomb of Eilram/ })).toBeInTheDocument()
+    expect(within(cell('Top right')).getByRole('button', { name: /^Colossus/ })).toBeInTheDocument()
+    expect(within(cell('Top left')).getByRole('button', { name: /^Thermal Oscillator/ })).toBeInTheDocument()
     expect(cell('Top left')).toHaveStyle({ transform: 'rotate(180deg)' })
     expect(cell('Top right')).toHaveStyle({ transform: 'rotate(180deg)' })
     expect(cell('Bottom left')).not.toHaveStyle({ transform: 'rotate(180deg)' })
@@ -119,47 +121,48 @@ describe('SwuTwinSunsGame: layout', () => {
   it('4 players: the bar runs between the side-by-side bases, facing you', () => {
     renderGame()
     expect(screen.getByTestId('twin-suns').getAttribute('data-players')).toBe('4')
-    expect(bar()).toHaveStyle({ transform: 'rotate(180deg)' })
+    expect(bar().style.transform).not.toMatch(/rotate/)
     for (const name of ['Back to setup', 'Log', 'More', 'End game']) {
       expect(within(bar()).getByRole('button', { name })).toBeInTheDocument()
     }
     expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
   })
 
-  it('3 players: the bar sits between the two bases on one side; the single base is centred on the other, the controls at its left', () => {
+  it('3 players: the bar sits between the two bases on one side; the single base is centred on the other, the controls at its right', () => {
     renderGame([tomb, null, thermal])
-    expect(screen.queryByRole('region', { name: 'Bottom left' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Top right' })).not.toBeInTheDocument()
     const top = screen.getByTestId('twin-suns-row-top')
     const bottom = screen.getByTestId('twin-suns-row-bottom')
-    expect(within(top).getByRole('navigation', { name: 'Game, facing you' })).toBeInTheDocument()
-    expect(within(top).queryByRole('navigation', { name: sideName })).not.toBeInTheDocument()
-    expect(within(bottom).getByRole('region', { name: 'Bottom right' })).toBeInTheDocument()
-    expect(centred(bottom)).toBe(true)
-    // The left end of the screen, your seat's end, turned to face you like the bar.
-    expect(bottom.firstElementChild).toBe(side())
-    expect(side()).toHaveStyle({ transform: 'rotate(180deg)' })
+    expect(within(bottom).getByRole('navigation', { name: 'Game, facing you' })).toBeInTheDocument()
+    expect(within(bottom).queryByRole('navigation', { name: sideName })).not.toBeInTheDocument()
+    expect(within(top).getByRole('region', { name: 'Top left' })).toBeInTheDocument()
+    expect(centred(top)).toBe(true)
+    // The right end of the screen, your seat's end, facing you like the bar.
+    expect(top.firstElementChild).toBe(side())
+    expect(side().style.transform).not.toMatch(/rotate/)
   })
 
-  it('3 players: the controls are a base cell’s size, their column the width of the base above them', () => {
+  it('3 players: the controls are a base cell’s size, their column the width of the base below them', () => {
     renderGame([tomb, null, thermal])
     // In line with the pair's cells: the same share of the row, and the same card width within it.
-    const pairCell = cell('Top left')
+    const pairCell = cell('Bottom right')
     const controlsStyle = side().style
     expect(controlsStyle.position).toBe('absolute')
-    expect(controlsStyle.left).toBe('0px')
+    expect(controlsStyle.right).toBe('0px')
+    expect(controlsStyle.left).toBe('')
     const bare = (s: string) => s.replace(/\s/g, '')
-    expect(bare(cell('Bottom right').style.flex)).toContain(bare(controlsStyle.width))
+    expect(bare(cell('Top left').style.flex)).toContain(bare(controlsStyle.width))
     expect(controlsStyle.containerType).toBe('size')
     const sizedCard = cardIn(pairCell).parentElement!.parentElement as HTMLElement
     expect((side().firstElementChild as HTMLElement).style.width).toBe(sizedCard.style.width)
   })
 
-  it('3 players with the top right seat empty: the bar sits between the two bottom bases, the controls beside yours', () => {
+  it('3 players with the bottom left seat empty: the bar sits between the two top bases, the controls beside yours', () => {
     renderGame([null, colossus, thermal])
-    const top = screen.getByTestId('twin-suns-row-top')
-    expect(within(screen.getByTestId('twin-suns-row-bottom')).getByRole('navigation', { name: 'Game, facing you' })).toBeInTheDocument()
-    expect(centred(top)).toBe(true)
-    expect(top.firstElementChild).toBe(side())
+    const bottom = screen.getByTestId('twin-suns-row-bottom')
+    expect(within(screen.getByTestId('twin-suns-row-top')).getByRole('navigation', { name: 'Game, facing you' })).toBeInTheDocument()
+    expect(centred(bottom)).toBe(true)
+    expect(bottom.firstElementChild).toBe(side())
   })
 
   it('3 players: the counters and Round, used each round, are in the bar; Back, Log, More and End game beside the single base', () => {
@@ -193,7 +196,7 @@ describe('SwuTwinSunsGame: layout', () => {
 
   it('4 players in the last phase: the note and Finish game in the middle group, in Round\'s place', () => {
     renderGame([outpost, colossus, thermal])
-    hit(cell('Top right'), 3)
+    hit(cell('Bottom left'), 3)
     press('No one')
     const middle = within(bar()).getByRole('group', { name: 'This round' })
     expect(within(middle).getByRole('button', { name: /^Finish game/ })).toBeInTheDocument()
@@ -298,9 +301,25 @@ describe('SwuTwinSunsGame: 3 players, the table’s controls in the bar and the 
     expect(buttonsIn(side())).toEqual(ADMIN)
   })
 
+  // The bar is half the screen's height, so a state's answers sit side by side: they share its width
+  // rather than each taking all of it and running off the side.
+  it.each([
+    ['End game', () => tapSide('End game'), ['Keep playing', 'End game now']],
+    ['a base destroyed', () => hit(cell('Bottom left'), 3), ['No one', 'Undo the damage']],
+  ] as const)('%s: the answers share the bar’s width side by side', (_, open, names) => {
+    renderGame([outpost, null, thermal])
+    open()
+    const row = within(bar()).getByRole('button', { name: names[0] }).parentElement as HTMLElement
+    expect(within(row).getAllByRole('button').map(b => b.textContent)).toEqual(names)
+    // One equal column each, which may be narrower than its words: no answer widens the row.
+    expect(row.style.display).toBe('grid')
+    expect(row.style.gridAutoFlow).toBe('column')
+    expect(row.style.gridAutoColumns).toBe('minmax(0, 1fr)')
+  })
+
   it('a base destroyed, the last phase and the result', () => {
     renderGame([outpost, null, thermal])
-    hit(cell('Top right'), 3)
+    hit(cell('Bottom left'), 3)
     expect(within(bar()).getByText('Fragile Outpost is destroyed')).toBeInTheDocument()
     expect(buttonsIn(bar())).toEqual(['No one', 'Undo the damage'])
     press('No one')
@@ -340,13 +359,13 @@ describe('SwuTwinSunsGame: deciding the initiative', () => {
     for (const name of [/^Round/, 'End game', claimInitiative, claimPlan, claimBlast, 'Cancel']) {
       expect(within(bar()).queryByRole('button', { name })).not.toBeInTheDocument()
     }
-    expect(within(cell('Bottom right')).getByRole('button', { name: 'Thermal Oscillator: takes the initiative' })).toBeInTheDocument()
+    expect(within(cell('Top left')).getByRole('button', { name: 'Thermal Oscillator: takes the initiative' })).toBeInTheDocument()
     expect(mockOnGameStart).not.toHaveBeenCalled()
   })
 
   it('a base you can choose keeps its single border, with no ring drawn outside it', () => {
     renderGame(FOUR, jediTemple, null)
-    for (const seat of ['Top left', 'Top right', 'Bottom left', 'Bottom right'] as const) {
+    for (const seat of ['Bottom right', 'Bottom left', 'Top right', 'Top left'] as const) {
       for (let el = cardIn(cell(seat)).parentElement; el && el !== cell(seat); el = el.parentElement) {
         expect(el.style.boxShadow).toBe('')
       }
@@ -355,20 +374,20 @@ describe('SwuTwinSunsGame: deciding the initiative', () => {
   })
 
   it('tapping a base gives it the initiative, takes no damage and starts the game', () => {
-    renderGame(FOUR, jediTemple, 'Bottom right')
-    expect(within(cell('Bottom right')).getByRole('button', { name: 'Initiative, Thermal Oscillator: tap to move it' })).toBeInTheDocument()
-    expect(damageIn(cell('Bottom right'))).toHaveTextContent('0')
+    renderGame(FOUR, jediTemple, 'Top left')
+    expect(within(cell('Top left')).getByRole('button', { name: 'Initiative, Thermal Oscillator: tap to move it' })).toBeInTheDocument()
+    expect(damageIn(cell('Top left'))).toHaveTextContent('0')
     expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
     expect(mockOnGameStart).toHaveBeenCalledTimes(1)
   })
 
   it('undoing the choice asks again, and choosing again does not start a second game', () => {
-    renderGame(FOUR, jediTemple, 'Bottom right')
+    renderGame(FOUR, jediTemple, 'Top left')
     openLog()
     undo()
     expect(within(bar()).getByText('Who has the initiative?')).toBeInTheDocument()
-    hit(cell('Top right'))
-    expect(within(cell('Top right')).getByRole('button', { name: /^Initiative, Tomb of Eilram/ })).toBeInTheDocument()
+    hit(cell('Bottom left'))
+    expect(within(cell('Bottom left')).getByRole('button', { name: /^Initiative, Tomb of Eilram/ })).toBeInTheDocument()
     expect(mockOnGameStart).toHaveBeenCalledTimes(1)
   })
 
@@ -390,10 +409,10 @@ describe('SwuTwinSunsGame: deciding the initiative', () => {
 describe('SwuTwinSunsGame: damage', () => {
   it('the game starts at round 1: tapping a card adds 1 damage to that base alone', () => {
     renderGame()
-    hit(cell('Bottom right'), 2)
-    expect(damageIn(cell('Bottom right'))).toHaveTextContent('2')
-    expect(within(cell('Bottom right')).getByText('25 HP left')).toBeInTheDocument()
-    expect(damageIn(cell('Top left'))).toHaveTextContent('0')
+    hit(cell('Top left'), 2)
+    expect(damageIn(cell('Top left'))).toHaveTextContent('2')
+    expect(within(cell('Top left')).getByText('25 HP left')).toBeInTheDocument()
+    expect(damageIn(cell('Bottom right'))).toHaveTextContent('0')
     expect(mockOnGameStart).toHaveBeenCalledTimes(1)
   })
 
@@ -426,10 +445,10 @@ describe('SwuTwinSunsGame: damage', () => {
 
   it('Undo in the log takes damage back', () => {
     renderGame()
-    hit(cell('Top right'))
+    hit(cell('Bottom left'))
     openLog()
     undo()
-    expect(damageIn(cell('Top right'))).toHaveTextContent('0')
+    expect(damageIn(cell('Bottom left'))).toHaveTextContent('0')
   })
 })
 
@@ -446,19 +465,19 @@ describe('SwuTwinSunsGame: counters', () => {
     renderGame()
     press(claimPlan)
     expect(within(bar()).getByText('Tap the base of the player who claimed Plan')).toBeInTheDocument()
-    hit(cell('Top right'))
-    expect(within(cell('Top right')).getByRole('img', { name: 'Plan, Tomb of Eilram' })).toBeInTheDocument()
+    hit(cell('Bottom left'))
+    expect(within(cell('Bottom left')).getByRole('img', { name: 'Plan, Tomb of Eilram' })).toBeInTheDocument()
     expect(within(bar()).getByRole('button', { name: 'Plan is claimed this round' })).toBeDisabled()
     // Choosing the base took no damage.
-    expect(damageIn(cell('Top right'))).toHaveTextContent('0')
+    expect(damageIn(cell('Bottom left'))).toHaveTextContent('0')
   })
 
   it('while choosing who claimed Plan, each base’s border takes the Plan colour, and goes back after', () => {
     renderGame()
     press(claimPlan)
-    expect(outlineIn(cell('Top right'))).toBe('rgb(91, 140, 255)')
-    hit(cell('Top right'))
-    expect(outlineIn(cell('Top right'))).toBe('var(--color-accent)')
+    expect(outlineIn(cell('Bottom left'))).toBe('rgb(91, 140, 255)')
+    hit(cell('Bottom left'))
+    expect(outlineIn(cell('Bottom left'))).toBe('var(--color-accent)')
   })
 
   it('Cancel leaves the counter unclaimed', () => {
@@ -466,33 +485,33 @@ describe('SwuTwinSunsGame: counters', () => {
     press(claimPlan)
     press('Cancel')
     expect(within(bar()).getByRole('button', { name: claimPlan })).toBeEnabled()
-    hit(cell('Top right'))
-    expect(damageIn(cell('Top right'))).toHaveTextContent('1')
+    hit(cell('Bottom left'))
+    expect(damageIn(cell('Bottom left'))).toHaveTextContent('1')
   })
 
   it('Blast deals 1 damage to every other base at once, and undo takes it all back', () => {
     renderGame()
     press(claimBlast)
-    hit(cell('Bottom left'))
-    expect(within(cell('Bottom left')).getByRole('img', { name: 'Blast, Colossus' })).toBeInTheDocument()
-    expect(damageIn(cell('Bottom left'))).toHaveTextContent('0')
-    expect(damageIn(cell('Top left'))).toHaveTextContent('1')
-    expect(damageIn(cell('Top right'))).toHaveTextContent('1')
+    hit(cell('Top right'))
+    expect(within(cell('Top right')).getByRole('img', { name: 'Blast, Colossus' })).toBeInTheDocument()
+    expect(damageIn(cell('Top right'))).toHaveTextContent('0')
     expect(damageIn(cell('Bottom right'))).toHaveTextContent('1')
+    expect(damageIn(cell('Bottom left'))).toHaveTextContent('1')
+    expect(damageIn(cell('Top left'))).toHaveTextContent('1')
     expect(within(bar()).getByRole('button', { name: 'Blast is claimed this round' })).toBeDisabled()
     openLog()
     undo()
-    expect(damageIn(cell('Top left'))).toHaveTextContent('0')
     expect(damageIn(cell('Bottom right'))).toHaveTextContent('0')
+    expect(damageIn(cell('Top left'))).toHaveTextContent('0')
     expect(within(bar()).getByRole('button', { name: claimBlast })).toBeEnabled()
   })
 
   it('Round returns Plan and Blast and moves the round on', () => {
     renderGame()
     press(claimPlan)
-    hit(cell('Top right'))
-    press(claimBlast)
     hit(cell('Bottom left'))
+    press(claimBlast)
+    hit(cell('Top right'))
     press(/^Round 1: tap for round 2/)
     expect(within(bar()).getByRole('button', { name: /^Round 2/ })).toBeInTheDocument()
     expect(within(bar()).getByRole('button', { name: claimPlan })).toBeEnabled()
@@ -504,43 +523,43 @@ describe('SwuTwinSunsGame: counters', () => {
   it('initiative stays on its holder across rounds, and moves from the bar or from the token', () => {
     renderGame()
     press(claimInitiative)
-    hit(cell('Bottom right'))
+    hit(cell('Top left'))
     press(/^Round 1/)
     press(/^Round 2/)
-    const token = within(cell('Bottom right')).getByRole('button', { name: 'Initiative, Thermal Oscillator: tap to move it' })
+    const token = within(cell('Top left')).getByRole('button', { name: 'Initiative, Thermal Oscillator: tap to move it' })
     fireEvent.click(token)
-    hit(cell('Top left'))
-    expect(within(cell('Top left')).getByRole('button', { name: 'Initiative, Jedi Temple: tap to move it' })).toBeInTheDocument()
-    expect(within(cell('Bottom right')).queryByRole('button', { name: /^Initiative/ })).not.toBeInTheDocument()
+    hit(cell('Bottom right'))
+    expect(within(cell('Bottom right')).getByRole('button', { name: 'Initiative, Jedi Temple: tap to move it' })).toBeInTheDocument()
+    expect(within(cell('Top left')).queryByRole('button', { name: /^Initiative/ })).not.toBeInTheDocument()
     press(claimInitiative)
-    hit(cell('Top right'))
-    expect(within(cell('Top right')).getByRole('button', { name: /^Initiative, Tomb of Eilram/ })).toBeInTheDocument()
+    hit(cell('Bottom left'))
+    expect(within(cell('Bottom left')).getByRole('button', { name: /^Initiative, Tomb of Eilram/ })).toBeInTheDocument()
   })
 })
 
 describe('SwuTwinSunsGame: epic action', () => {
   it('the round button on the text box marks it used: the overlay covers the text box and takes no taps', () => {
     renderGame()
-    fireEvent.click(within(cell('Top left')).getByRole('button', { name: 'Jedi Temple: epic action, tap when used' }))
-    const overlay = within(cell('Top left')).getByTestId('epic-action-token')
+    fireEvent.click(within(cell('Bottom right')).getByRole('button', { name: 'Jedi Temple: epic action, tap when used' }))
+    const overlay = within(cell('Bottom right')).getByTestId('epic-action-token')
     expect(overlay).toHaveTextContent('Epic Action Used')
     expect(overlay.tagName).not.toBe('BUTTON')
     expect(overlay.style.pointerEvents).toBe('none')
     expect(within(overlay).getByTestId('overlay-watermark')).toHaveAttribute('src', expect.stringContaining('dmgctrl-icon'))
-    expect(within(cell('Top left')).queryByRole('button', { name: /epic action/ })).not.toBeInTheDocument()
+    expect(within(cell('Bottom right')).queryByRole('button', { name: /epic action/ })).not.toBeInTheDocument()
   })
 
   it('undo in the log takes it back', () => {
     renderGame()
-    fireEvent.click(within(cell('Top left')).getByRole('button', { name: 'Jedi Temple: epic action, tap when used' }))
+    fireEvent.click(within(cell('Bottom right')).getByRole('button', { name: 'Jedi Temple: epic action, tap when used' }))
     openLog()
     undo()
-    expect(within(cell('Top left')).queryByTestId('epic-action-token')).not.toBeInTheDocument()
-    expect(within(cell('Top left')).getByRole('button', { name: 'Jedi Temple: epic action, tap when used' })).toBeInTheDocument()
+    expect(within(cell('Bottom right')).queryByTestId('epic-action-token')).not.toBeInTheDocument()
+    expect(within(cell('Bottom right')).getByRole('button', { name: 'Jedi Temple: epic action, tap when used' })).toBeInTheDocument()
   })
   it('a base with no epic action has no button', () => {
     renderGame()
-    expect(within(cell('Top right')).queryByRole('button', { name: /epic action/ })).not.toBeInTheDocument()
+    expect(within(cell('Bottom left')).queryByRole('button', { name: /epic action/ })).not.toBeInTheDocument()
   })
 })
 
@@ -550,28 +569,28 @@ describe('SwuTwinSunsGame: the Force', () => {
 
   it('a Force base has a Force button on its card; tapping it puts the Force overlay on the text box', () => {
     renderGame([lothal, colossus, thermal])
-    fireEvent.click(within(cell('Top right')).getByRole('button', { name: 'Lothal Airfield: gain the Force' }))
-    expect(forceIn(cell('Top right'))).toHaveTextContent('The Force is With You')
+    fireEvent.click(within(cell('Bottom left')).getByRole('button', { name: 'Lothal Airfield: gain the Force' }))
+    expect(forceIn(cell('Bottom left'))).toHaveTextContent('The Force is With You')
     expect(mockOnForceGained).toHaveBeenCalledWith('LOF-026', 'LOF')
-    expect(forceIn(cell('Top left'))).not.toBeInTheDocument()
+    expect(forceIn(cell('Bottom right'))).not.toBeInTheDocument()
   })
 
   it('tapping the overlay uses the Force, and the button comes back', () => {
     renderGame([lothal, colossus, thermal])
-    fireEvent.click(gainIn(cell('Top right')))
-    fireEvent.click(within(cell('Top right')).getByRole('button', { name: 'Lothal Airfield: the Force is with you, tap to clear' }))
-    expect(forceIn(cell('Top right'))).not.toBeInTheDocument()
+    fireEvent.click(gainIn(cell('Bottom left')))
+    fireEvent.click(within(cell('Bottom left')).getByRole('button', { name: 'Lothal Airfield: the Force is with you, tap to clear' }))
+    expect(forceIn(cell('Bottom left'))).not.toBeInTheDocument()
     expect(mockOnForceUsed).toHaveBeenCalledWith('LOF-026', 'LOF')
-    expect(gainIn(cell('Top right'))).toBeInTheDocument()
+    expect(gainIn(cell('Bottom left'))).toBeInTheDocument()
   })
 
   it('undo in the log takes back the Force gained', () => {
     renderGame([lothal, colossus, thermal])
-    fireEvent.click(gainIn(cell('Top right')))
+    fireEvent.click(gainIn(cell('Bottom left')))
     openLog()
     expect(screen.getByText('Lothal Airfield: Force gained', { selector: 'span' })).toBeInTheDocument()
     undo()
-    expect(forceIn(cell('Top right'))).not.toBeInTheDocument()
+    expect(forceIn(cell('Bottom left'))).not.toBeInTheDocument()
   })
 
   it('follows the Force tokens setting: LOF bases only, Always, Off', () => {
@@ -589,7 +608,7 @@ describe('SwuTwinSunsGame: the Force', () => {
 
   it('Mystic Monastery counts its uses down, and has none left after three', () => {
     renderGame([monastery, colossus, thermal])
-    const top = cell('Top right')
+    const top = cell('Bottom left')
     expect(gainIn(top)).toHaveAccessibleName('Mystic Monastery: gain the Force, 3 uses left')
     for (let i = 0; i < 3; i++) {
       fireEvent.click(gainIn(top))
@@ -601,7 +620,7 @@ describe('SwuTwinSunsGame: the Force', () => {
   it('with the epic action used too, the two share the text box', () => {
     mockUserSettings.forceTokenDisplay = 'always-on'
     renderGame()
-    const you = cell('Top left')
+    const you = cell('Bottom right')
     fireEvent.click(within(you).getByRole('button', { name: 'Jedi Temple: epic action, tap when used' }))
     fireEvent.click(gainIn(you))
     const epic = within(you).getByTestId('epic-action-token')
@@ -611,52 +630,52 @@ describe('SwuTwinSunsGame: the Force', () => {
 })
 
 describe('SwuTwinSunsGame: a base destroyed', () => {
-  // Fragile Outpost top right, 3 HP.
+  // Fragile Outpost bottom left, 3 HP.
   const destroyOutpost = () => {
     renderGame([outpost, colossus, thermal])
-    hit(cell('Bottom left'), 7)
-    hit(cell('Top right'), 3)
+    hit(cell('Top right'), 7)
+    hit(cell('Bottom left'), 3)
   }
 
   it('shows Destroyed over its card and asks who destroyed it', () => {
     destroyOutpost()
-    expect(within(cell('Top right')).getByRole('img', { name: 'Fragile Outpost is destroyed' })).toBeInTheDocument()
+    expect(within(cell('Bottom left')).getByRole('img', { name: 'Fragile Outpost is destroyed' })).toBeInTheDocument()
     expect(within(bar()).getByText('Fragile Outpost is destroyed')).toBeInTheDocument()
     expect(within(bar()).getByText('Tap the base of the player who destroyed it. That base heals 5.')).toBeInTheDocument()
   })
 
   it('while choosing who destroyed it, the bases that can heal have a green border', () => {
     destroyOutpost()
-    expect(outlineIn(cell('Bottom left'))).toBe('var(--color-success)')
+    expect(outlineIn(cell('Top right'))).toBe('var(--color-success)')
   })
 
   it('tapping the base that destroyed it heals that base 5', () => {
     destroyOutpost()
-    hit(cell('Bottom left'))
-    expect(damageIn(cell('Bottom left'))).toHaveTextContent('2')
-    expect(within(cell('Bottom left')).getByText('+5 healed')).toBeInTheDocument()
+    hit(cell('Top right'))
+    expect(damageIn(cell('Top right'))).toHaveTextContent('2')
+    expect(within(cell('Top right')).getByText('+5 healed')).toBeInTheDocument()
   })
 
   it('No one skips the heal', () => {
     destroyOutpost()
     press('No one')
-    expect(damageIn(cell('Bottom left'))).toHaveTextContent('7')
+    expect(damageIn(cell('Top right'))).toHaveTextContent('7')
     expect(within(bar()).getByText(/LAST PHASE/)).toBeInTheDocument()
   })
 
   it('Undo the damage takes back the last hit and closes it', () => {
     destroyOutpost()
     press('Undo the damage')
-    expect(damageIn(cell('Top right'))).toHaveTextContent('2')
-    expect(within(cell('Top right')).queryByRole('img', { name: /is destroyed/ })).not.toBeInTheDocument()
+    expect(damageIn(cell('Bottom left'))).toHaveTextContent('2')
+    expect(within(cell('Bottom left')).queryByRole('img', { name: /is destroyed/ })).not.toBeInTheDocument()
     expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
   })
 
   it('that player is out: the card stays covered and takes no input', () => {
     destroyOutpost()
     press('No one')
-    expect(cardIn(cell('Top right'))).toBeDisabled()
-    expect(within(cell('Top right')).getByRole('img', { name: 'Fragile Outpost is destroyed' })).toBeInTheDocument()
+    expect(cardIn(cell('Bottom left'))).toBeDisabled()
+    expect(within(cell('Bottom left')).getByRole('img', { name: 'Fragile Outpost is destroyed' })).toBeInTheDocument()
   })
 
   it('then the bar shows Last phase, Finish game replaces Round, and the counters still work', () => {
@@ -665,8 +684,8 @@ describe('SwuTwinSunsGame: a base destroyed', () => {
     expect(within(bar()).queryByRole('button', { name: /^Round/ })).not.toBeInTheDocument()
     expect(within(bar()).getByRole('button', { name: 'Finish game: end of this phase' })).toBeInTheDocument()
     press(claimPlan)
-    hit(cell('Bottom right'))
-    expect(within(cell('Bottom right')).getByRole('img', { name: 'Plan, Thermal Oscillator' })).toBeInTheDocument()
+    hit(cell('Top left'))
+    expect(within(cell('Top left')).getByRole('img', { name: 'Plan, Thermal Oscillator' })).toBeInTheDocument()
   })
 })
 
@@ -675,16 +694,16 @@ describe('SwuTwinSunsGame: game over', () => {
 
   it('Finish game places each base over its card; a destroyed base keeps its cover', () => {
     renderGame([outpost, colossus, thermal])
-    hit(cell('Top left'), 14) // Jedi Temple 14 left
-    hit(cell('Bottom left'), 16) // Colossus 19 left
-    hit(cell('Bottom right'), 21) // Thermal 6 left
-    hit(cell('Top right'), 3)
+    hit(cell('Bottom right'), 14) // Jedi Temple 14 left
+    hit(cell('Top right'), 16) // Colossus 19 left
+    hit(cell('Top left'), 21) // Thermal 6 left
+    hit(cell('Bottom left'), 3)
     press('No one')
     finishGame()
-    expect(within(cell('Bottom left')).getByRole('img', { name: '1st · Won, 19 HP left' })).toBeInTheDocument()
-    expect(within(cell('Top left')).getByRole('img', { name: '2nd, 14 HP left' })).toBeInTheDocument()
-    expect(within(cell('Bottom right')).getByRole('img', { name: '3rd, 6 HP left' })).toBeInTheDocument()
-    expect(within(cell('Top right')).getByRole('img', { name: 'Fragile Outpost is destroyed' })).toBeInTheDocument()
+    expect(within(cell('Top right')).getByRole('img', { name: '1st · Won, 19 HP left' })).toBeInTheDocument()
+    expect(within(cell('Bottom right')).getByRole('img', { name: '2nd, 14 HP left' })).toBeInTheDocument()
+    expect(within(cell('Top left')).getByRole('img', { name: '3rd, 6 HP left' })).toBeInTheDocument()
+    expect(within(cell('Bottom left')).getByRole('img', { name: 'Fragile Outpost is destroyed' })).toBeInTheDocument()
     const over = screen.getByRole('navigation', { name: 'Game over, facing you' })
     expect(within(over).getByText(/Jedi Temple \(you\)/)).toBeInTheDocument()
     expect(within(over).getByRole('button', { name: 'Rematch' })).toBeInTheDocument()
@@ -693,12 +712,12 @@ describe('SwuTwinSunsGame: game over', () => {
 
   it('a tie for most HP is a draw between those players, recorded from your side', () => {
     renderGame([tomb, colossus, thermal], make('035', 'Twin Base', 25))
-    hit(cell('Bottom left'), 20)
-    hit(cell('Bottom right'), 20)
+    hit(cell('Top right'), 20)
+    hit(cell('Top left'), 20)
     press('End game')
     press('End game now')
-    expect(within(cell('Top left')).getByRole('img', { name: '1st · Draw, 25 HP left' })).toBeInTheDocument()
-    expect(within(cell('Top right')).getByRole('img', { name: '1st · Draw, 25 HP left' })).toBeInTheDocument()
+    expect(within(cell('Bottom right')).getByRole('img', { name: '1st · Draw, 25 HP left' })).toBeInTheDocument()
+    expect(within(cell('Bottom left')).getByRole('img', { name: '1st · Draw, 25 HP left' })).toBeInTheDocument()
     openLog()
     expect(screen.getByText('Game drawn')).toBeInTheDocument()
     expect(mockOnGameEnd).toHaveBeenCalledTimes(1)
@@ -713,15 +732,15 @@ describe('SwuTwinSunsGame: game over', () => {
 
   it('Rematch keeps the bases and seats, resets the damage and asks who has the initiative', () => {
     renderGame()
-    hit(cell('Top right'), 4)
+    hit(cell('Bottom left'), 4)
     press('End game')
     press('End game now')
     press('Rematch')
-    expect(damageIn(cell('Top right'))).toHaveTextContent('0')
-    expect(within(cell('Top right')).getByRole('button', { name: /^Tomb of Eilram/ })).toBeEnabled()
+    expect(damageIn(cell('Bottom left'))).toHaveTextContent('0')
+    expect(within(cell('Bottom left')).getByRole('button', { name: /^Tomb of Eilram/ })).toBeEnabled()
     expect(within(bar()).getByText('Who has the initiative?')).toBeInTheDocument()
     expect(mockOnGameStart).toHaveBeenCalledTimes(1)
-    hit(cell('Bottom left'))
+    hit(cell('Top right'))
     expect(within(bar()).getByRole('button', { name: /^Round 1/ })).toBeInTheDocument()
     expect(mockOnGameStart).toHaveBeenCalledTimes(2)
   })

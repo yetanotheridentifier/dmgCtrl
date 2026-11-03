@@ -1039,14 +1039,15 @@ describe('SwuSetupScreen: Twin Suns', () => {
     expect(screen.queryByTestId('base-card')).not.toBeInTheDocument()
   })
 
-  it('the grid has your base top left and Add base in the other three cells', () => {
+  // The grid is the table seen from where you hold the phone, read in order: top row, then bottom.
+  it('the grid has your base bottom right and Add base in the other three cells', () => {
     keepTwinSuns(jediTemple)
     renderSetup()
     expect(within(grid()).getAllByRole('button', { name: /^(Your base|Add base)/ }).map(b => b.getAttribute('aria-label'))).toEqual([
-      'Your base: Jedi Temple',
+      'Add base, top left',
       'Add base, top right',
       'Add base, bottom left',
-      'Add base, bottom right',
+      'Your base: Jedi Temple',
     ])
     expect(within(grid()).getByText('Jedi Temple')).toBeInTheDocument()
     expect(within(grid()).getByText('LOF · 28 HP')).toBeInTheDocument()
@@ -1058,7 +1059,7 @@ describe('SwuSetupScreen: Twin Suns', () => {
   it('each base shows its whole card fitted between its label and its name, not cropped behind them', () => {
     keepTwinSuns(jediTemple, [catacombs, null, null])
     renderSetup()
-    for (const [name, b] of [['Your base: Jedi Temple', jediTemple], ['Opponent, top right: Catacombs of Cadera', catacombs]] as const) {
+    for (const [name, b] of [['Your base: Jedi Temple', jediTemple], ['Opponent, bottom left: Catacombs of Cadera', catacombs]] as const) {
       const tile = seatButton(name)
       expect(tile.style.background).not.toMatch(/url\(/)
       const card = tile.querySelector('img[data-card]') as HTMLImageElement
@@ -1074,7 +1075,7 @@ describe('SwuSetupScreen: Twin Suns', () => {
   it('shows the hyperspace art when that setting is on, and the standard art where a base has none', () => {
     keepTwinSuns(jediTemple, [catacombs, null, null])
     renderSetup()
-    expect(cardIn('Opponent, top right: Catacombs of Cadera').src).toBe(catacombs.hyperspaceArtHiRes)
+    expect(cardIn('Opponent, bottom left: Catacombs of Cadera').src).toBe(catacombs.hyperspaceArtHiRes)
     expect(cardIn('Your base: Jedi Temple').src).toBe(jediTemple.frontArt)
   })
 
@@ -1082,14 +1083,14 @@ describe('SwuSetupScreen: Twin Suns', () => {
     mockUserSettings.useHyperspace = false
     keepTwinSuns(jediTemple, [catacombs, null, null])
     renderSetup()
-    expect(cardIn('Opponent, top right: Catacombs of Cadera').src).toBe(catacombs.frontArt)
+    expect(cardIn('Opponent, bottom left: Catacombs of Cadera').src).toBe(catacombs.frontArt)
   })
 
   it('falls back to the standard art when the hyperspace image fails', () => {
     keepTwinSuns(jediTemple, [catacombs, null, null])
     renderSetup()
-    fireEvent.error(cardIn('Opponent, top right: Catacombs of Cadera'))
-    expect(cardIn('Opponent, top right: Catacombs of Cadera').src).toBe(catacombs.frontArt)
+    fireEvent.error(cardIn('Opponent, bottom left: Catacombs of Cadera'))
+    expect(cardIn('Opponent, bottom left: Catacombs of Cadera').src).toBe(catacombs.frontArt)
   })
 
   // Security Complex's hi-res hyperspace image is stored on its side: turned upright, still the whole card.
@@ -1104,14 +1105,14 @@ describe('SwuSetupScreen: Twin Suns', () => {
     expect(card.src).toBe(securityComplex.hyperspaceArtHiRes)
     expect(card.style.transform).toMatch(/rotate\(90deg\)/)
     expect(card).toHaveStyle({ objectFit: 'contain' })
-    expect(cardIn('Opponent, top right: Catacombs of Cadera').style.transform).not.toMatch(/rotate/)
+    expect(cardIn('Opponent, bottom left: Catacombs of Cadera').style.transform).not.toMatch(/rotate/)
   })
 
   // One frame for a base wherever setup draws it: Twin Suns' cards look like 1 and 2 players'.
   it('each card has the same frame as in 1 and 2 players: a 2px accent border and its glow', () => {
     keepTwinSuns(jediTemple, [catacombs, null, null])
     renderSetup()
-    for (const name of ['Your base: Jedi Temple', 'Opponent, top right: Catacombs of Cadera']) {
+    for (const name of ['Your base: Jedi Temple', 'Opponent, bottom left: Catacombs of Cadera']) {
       const tile = seatButton(name)
       const frame = within(tile).getByTestId('card-frame')
       expect(frame).toContainElement(tile.querySelector('img[data-card]') as HTMLElement)
@@ -1125,7 +1126,7 @@ describe('SwuSetupScreen: Twin Suns', () => {
       makeMatchMediaMock(portrait)
       keepTwinSuns(jediTemple, [catacombs, null, null])
       const { unmount } = renderSetup()
-      for (const [name, b] of [['Your base: Jedi Temple', jediTemple], ['Opponent, top right: Catacombs of Cadera', catacombs]] as const) {
+      for (const [name, b] of [['Your base: Jedi Temple', jediTemple], ['Opponent, bottom left: Catacombs of Cadera', catacombs]] as const) {
         const tile = seatButton(name)
         expectOneLine(within(tile).getByText(b.name), within(tile).getByText(baseMetaText(b)))
       }
@@ -1180,7 +1181,7 @@ describe('SwuSetupScreen: Twin Suns', () => {
     expect(screen.getByText('4 players. Tap a base to change or remove it; it keeps its place.')).toBeInTheDocument()
   })
 
-  it('without your base, the top left cell asks for it and Go to game waits', () => {
+  it('without your base, the bottom right cell asks for it and Go to game waits', () => {
     keepTwinSuns(null, [catacombs, echo, coaxium])
     renderSetup()
     expect(seatButton('Choose your base')).toBeInTheDocument()
@@ -1192,40 +1193,40 @@ describe('SwuSetupScreen: Twin Suns', () => {
     const user = userEvent.setup()
     keepTwinSuns(jediTemple)
     renderSetup()
-    await user.click(seatButton('Add base, bottom left'))
+    await user.click(seatButton('Add base, top right'))
     expect(within(opponentSheet()).queryByRole('button', { name: 'Remove base' })).not.toBeInTheDocument()
     await user.type(within(opponentSheet()).getByRole('searchbox'), 'cadera')
     await user.click(tile('Catacombs of Cadera', opponentSheet()))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(seatButton('Opponent, bottom left: Catacombs of Cadera')).toBeInTheDocument()
-    expect(seatButton('Add base, top right')).toBeInTheDocument()
-    expect(seatButton('Add base, bottom right')).toBeInTheDocument()
+    expect(seatButton('Opponent, top right: Catacombs of Cadera')).toBeInTheDocument()
+    expect(seatButton('Add base, bottom left')).toBeInTheDocument()
+    expect(seatButton('Add base, top left')).toBeInTheDocument()
   })
 
   it('tapping an opponent opens the sheet with its base marked; a new base keeps the cell', async () => {
     const user = userEvent.setup()
     keepTwinSuns(jediTemple, [catacombs, echo, null])
     renderSetup()
-    await user.click(seatButton('Opponent, top right: Catacombs of Cadera'))
+    await user.click(seatButton('Opponent, bottom left: Catacombs of Cadera'))
     await user.type(within(opponentSheet()).getByRole('searchbox'), 'cadera')
     expect(tile('Catacombs of Cadera', opponentSheet())).toHaveAttribute('aria-pressed', 'true')
     await user.clear(within(opponentSheet()).getByRole('searchbox'))
     await user.type(within(opponentSheet()).getByRole('searchbox'), 'coaxium')
     await user.click(tile('Coaxium Mine', opponentSheet()))
-    expect(seatButton('Opponent, top right: Coaxium Mine')).toBeInTheDocument()
-    expect(seatButton('Opponent, bottom left: Echo Caverns')).toBeInTheDocument()
+    expect(seatButton('Opponent, bottom left: Coaxium Mine')).toBeInTheDocument()
+    expect(seatButton('Opponent, top right: Echo Caverns')).toBeInTheDocument()
   })
 
   it('Remove base returns that cell to Add base and moves nothing else', async () => {
     const user = userEvent.setup()
     keepTwinSuns(jediTemple, [catacombs, echo, coaxium])
     renderSetup()
-    await user.click(seatButton('Opponent, top right: Catacombs of Cadera'))
+    await user.click(seatButton('Opponent, bottom left: Catacombs of Cadera'))
     await user.click(within(opponentSheet()).getByRole('button', { name: 'Remove base' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(seatButton('Add base, top right')).toBeInTheDocument()
-    expect(seatButton('Opponent, bottom left: Echo Caverns')).toBeInTheDocument()
-    expect(seatButton('Opponent, bottom right: Coaxium Mine')).toBeInTheDocument()
+    expect(seatButton('Add base, bottom left')).toBeInTheDocument()
+    expect(seatButton('Opponent, top right: Echo Caverns')).toBeInTheDocument()
+    expect(seatButton('Opponent, top left: Coaxium Mine')).toBeInTheDocument()
   })
 
   it('tapping your base opens your own base sheet', async () => {
@@ -1256,7 +1257,7 @@ describe('SwuSetupScreen: Twin Suns', () => {
       otherRecentBaseKeys: [key(echo), key(coaxium)],
     })
     renderSetup()
-    await user.click(seatButton('Add base, top right'))
+    await user.click(seatButton('Add base, bottom left'))
     const used = within(opponentSheet()).getByRole('group', { name: 'Used for other players before' })
     expect(within(used).getAllByRole('button').map(b => b.textContent)).toEqual([
       expect.stringMatching(/^Echo Caverns/),
@@ -1283,13 +1284,13 @@ describe('SwuSetupScreen: Twin Suns', () => {
     const user = userEvent.setup()
     keepTwinSuns(jediTemple)
     const first = renderSetup()
-    await user.click(seatButton('Add base, bottom right'))
+    await user.click(seatButton('Add base, top left'))
     await user.type(within(opponentSheet()).getByRole('searchbox'), 'echo')
     await user.click(tile('Echo Caverns', opponentSheet()))
     first.unmount()
     renderSetup()
-    expect(seatButton('Opponent, bottom right: Echo Caverns')).toBeInTheDocument()
-    expect(seatButton('Add base, top right')).toBeInTheDocument()
+    expect(seatButton('Opponent, top left: Echo Caverns')).toBeInTheDocument()
+    expect(seatButton('Add base, bottom left')).toBeInTheDocument()
   })
 
   it('in portrait shows the grid, Mode, Match, the hint and the primary', () => {

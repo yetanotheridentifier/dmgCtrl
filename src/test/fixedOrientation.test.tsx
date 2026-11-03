@@ -17,6 +17,24 @@ function mockScreenAngle(angle: number) {
     removeEventListener: (_: string, l: Listener) => { listeners.splice(listeners.indexOf(l), 1) },
   }
   Object.defineProperty(window.screen, 'orientation', { value: orientation, configurable: true })
+  return {
+    turnTo: (a: number) => {
+      orientation.angle = a
+      act(() => { listeners.forEach(l => l()) })
+    },
+  }
+}
+
+// The phone turning: its viewport and the angle it reports change together.
+function mockPhone(portrait: boolean, angle: number) {
+  const viewport = mockViewport(portrait)
+  const screenAngle = mockScreenAngle(angle)
+  return {
+    turnTo: (toPortrait: boolean, a: number) => {
+      screenAngle.turnTo(a)
+      viewport.turnTo(toPortrait)
+    },
+  }
 }
 
 // A viewport that can turn: a change fires the query's listeners, as a phone turning does.
@@ -80,11 +98,59 @@ describe('LandscapeScreen', () => {
     expect(edges()).toEqual(['var(--screen-edge-left)', 'var(--screen-edge-top)', 'var(--screen-edge-right)', 'var(--screen-edge-bottom)'])
   })
 
-  it('turns back upright when the phone turns to landscape', () => {
+  it('turns upright when the phone turns a quarter to read it', () => {
+    const phone = mockPhone(true, 0)
+    render(<LandscapeScreen><span>game</span></LandscapeScreen>)
+    expect(frame().style.transform).toMatch(/rotate/)
+    phone.turnTo(false, 90)
+    expect(frame().style.transform).not.toMatch(/rotate/)
+  })
+
+  // No orientation lock reaches a web app on iOS, so the screen fixes itself to the phone: where it sits
+  // when it opens, it stays, and when the phone reports the other landscape the frame turns back.
+  it('opened in landscape, stays where it is on the phone when the phone flips to the other landscape', () => {
+    const phone = mockPhone(false, 90)
+    render(<LandscapeScreen><span>game</span></LandscapeScreen>)
+    expect(frame().style.transform).not.toMatch(/rotate/)
+    phone.turnTo(false, 270)
+    expect(frame().style.transform).toMatch(/rotate\(180deg\)/)
+    expect(frame()).toHaveStyle({ width: '100vw', height: '100vh' })
+    expect(edges()).toEqual(['var(--screen-edge-bottom)', 'var(--screen-edge-left)', 'var(--screen-edge-top)', 'var(--screen-edge-right)'])
+    phone.turnTo(false, 90)
+    expect(frame().style.transform).not.toMatch(/rotate/)
+  })
+
+  it('opened in the other landscape, keeps that one', () => {
+    const phone = mockPhone(false, 270)
+    render(<LandscapeScreen><span>game</span></LandscapeScreen>)
+    expect(frame().style.transform).not.toMatch(/rotate/)
+    phone.turnTo(false, 90)
+    expect(frame().style.transform).toMatch(/rotate\(180deg\)/)
+  })
+
+  it('opened in landscape and turned to portrait, stays where it is on the phone', () => {
+    const phone = mockPhone(false, 270)
+    render(<LandscapeScreen><span>game</span></LandscapeScreen>)
+    phone.turnTo(true, 0)
+    expect(frame().style.transform).toMatch(/rotate\(-90deg\)/)
+    expect(frame()).toHaveStyle({ width: '100vh', height: '100vw' })
+    phone.turnTo(true, 180)
+    expect(frame().style.transform).toMatch(/rotate\(90deg\)/)
+  })
+
+  it('opened in portrait and turned to the landscape it does not read in, stays where it is on the phone', () => {
+    const phone = mockPhone(true, 0)
+    render(<LandscapeScreen><span>game</span></LandscapeScreen>)
+    phone.turnTo(false, 270)
+    expect(frame().style.transform).toMatch(/rotate\(180deg\)/)
+  })
+
+  // A desktop window reports no turn as it changes shape: it is upright whenever it is landscape.
+  it('in a window that turns landscape without the angle changing, is upright', () => {
     const viewport = mockViewport(true)
     mockScreenAngle(0)
     render(<LandscapeScreen><span>game</span></LandscapeScreen>)
-    expect(frame().style.transform).toMatch(/rotate/)
+    expect(frame().style.transform).toMatch(/rotate\(90deg\)/)
     viewport.turnTo(false)
     expect(frame().style.transform).not.toMatch(/rotate/)
   })
