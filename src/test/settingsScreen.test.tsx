@@ -70,6 +70,23 @@ describe('SettingsScreen: page', () => {
     expect(section('X-Wing')).toBeInTheDocument()
   })
 
+  it.each<[React.ComponentProps<typeof SettingsScreen>['game'], string[]]>([
+    [undefined, ['General', 'Star Wars: Unlimited', 'X-Wing']],
+    ['swu', ['General', 'Star Wars: Unlimited']],
+    ['xwing', ['General', 'X-Wing']],
+  ])('opened for %s, shows %j', (game, groups) => {
+    mockOrientation.isPortrait = true
+    show({ game })
+    expect(screen.getAllByRole('region').map(r => r.getAttribute('aria-label'))).toEqual(groups)
+  })
+
+  it.each([['swu', 'Star Wars: Unlimited'], ['xwing', 'X-Wing']] as const)(
+    'opened for %s in landscape, General is on the left and the game on the right', (game, name) => {
+      show({ game })
+      expect(within(screen.getByTestId('settings-left')).getAllByRole('region').map(r => r.getAttribute('aria-label'))).toEqual(['General'])
+      expect(within(screen.getByTestId('settings-right')).getAllByRole('region').map(r => r.getAttribute('aria-label'))).toEqual([name])
+    })
+
   it('Back calls onBack', async () => {
     const onBack = vi.fn()
     show({ onBack })

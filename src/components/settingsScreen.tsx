@@ -2,14 +2,16 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import AppScreenLayout from './layout/appScreenLayout'
 import SettingsScreenView from './settingsScreenView'
 import { onSettingChanged } from '../services/analytics'
-import { readLastGame } from '../utils/appStart'
+import { readLastGame, type Game } from '../utils/appStart'
 
 interface Props {
+  // The game Settings was opened from: its settings show beside General. Every game's without one.
+  game?: Game
   onBack: () => void
   onManageXwingLists?: () => void
 }
 
-function SettingsScreen({ onBack, onManageXwingLists }: Props) {
+function SettingsScreen({ game, onBack, onManageXwingLists }: Props) {
   const settings = useUserSettings()
 
   // Every choice is reported by its stored key; the Melee player ID is personal, so it is not.
@@ -21,6 +23,7 @@ function SettingsScreen({ onBack, onManageXwingLists }: Props) {
   return (
     <AppScreenLayout>
       <SettingsScreenView
+        game={game}
         startScreen={settings.startScreen}
         onStartScreenChange={reported('startScreen', settings.setStartScreen)}
         lastGame={readLastGame()}

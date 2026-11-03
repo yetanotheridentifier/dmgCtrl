@@ -22,7 +22,15 @@ const OPENS_AT: Record<HelpSource,{ html: string; section: string }> = {
   gameSelect: { html: appHelpHtml, section: 'Starting the app' },
 }
 
-const stripTags = (html: string) => html.replace(/<[^>]+>/g, '').trim()
+// The depth of the fade at an edge of the help content that cuts through a section.
+const FADE = '40px'
+
+const fadeMask = (top: boolean, bottom: boolean) => {
+  const image = `linear-gradient(to bottom, ${top ? `transparent, black ${FADE}` : 'black'}, ${bottom ? `black calc(100% - ${FADE}), transparent` : 'black'})`
+  return { maskImage: image, WebkitMaskImage: image }
+}
+
+const stripTags =(html: string) => html.replace(/<[^>]+>/g, '').trim()
 
 // The page title is the markdown's h1; the sections are what follows each h2.
 function parsePage(html: string) {
@@ -53,6 +61,21 @@ function HelpScreen({ onBack, source = 'setup' }: Props) {
   // A section's scroll position: the first section's is 0, so each heading lands below the padding.
   const offsetOf = (i: number) => (sectionRefs.current[i]?.offsetTop ?? 0) - (sectionRefs.current[0]?.offsetTop ?? 0)
 
+  // An edge of the view that cuts through a section fades the content out there, so the section
+  // reads as running on past it; an edge at a section's top or bottom, or in a gap, stays crisp.
+  const [fade, setFade] = useState({ top: false, bottom: false })
+  const cutsASection = (y: number) => sections.some((_, i) => {
+    const top = offsetOf(i)
+    return top + 1 < y && y < top + (sectionRefs.current[i]?.offsetHeight ?? 0) - 1
+  })
+  const updateFade = () => {
+    const content = contentRef.current
+    if (!content) return
+    const top = cutsASection(content.scrollTop)
+    const bottom = cutsASection(content.scrollTop + content.clientHeight)
+    if (top !== fade.top || bottom !== fade.bottom) setFade({ top, bottom })
+  }
+
   const scrollTo = (i: number) => {
     askedFor.current = i
     setCurrent(i)
@@ -63,9 +86,14 @@ function HelpScreen({ onBack, source = 'setup' }: Props) {
     if (contentRef.current) contentRef.current.scrollTop = offsetOf(opensAt)
   }, [opensAt])
 
+  // Turning the phone changes the view's height, so the edges are measured again.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(updateFade, [isPortrait])
+
   const onScroll = () => {
     const content = contentRef.current
     if (!content) return
+    updateFade()
     const top = content.scrollTop + 8
     const passed = sections.filter((_, i) => offsetOf(i) <= top).length - 1
     const atEnd = content.scrollTop + content.clientHeight >= content.scrollHeight - 2
@@ -84,17 +112,17 @@ function HelpScreen({ onBack, source = 'setup' }: Props) {
         </div>
 
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: isPortrait ? 'column' : 'row', gap: isPortrait ? '12px' : '16px' }}>
+          {/* Portrait has two rows of links across the top, so every one is in reach without
+              scrolling sideways. */}
           <nav
             aria-label="Sections"
             style={{
-              display: 'flex',
-              flexDirection: isPortrait ? 'row' : 'column',
               gap: '6px',
               flexShrink: 0,
-              width: isPortrait ? undefined : '180px',
-              overflowX: isPortrait ? 'auto' : undefined,
-              overflowY: isPortrait ? undefined : 'auto',
               whiteSpace: 'nowrap',
+              ...(isPortrait
+                ? { display: 'grid', gridTemplateColumns: `repeat(${Math.ceil(sections.length / 2)}, minmax(0, 1fr))` }
+                : { display: 'flex', flexDirection: 'column', width: '180px', overflowY: 'auto' }),
             }}
           >
             {sections.map((s, i) => (
@@ -105,6 +133,7 @@ function HelpScreen({ onBack, source = 'setup' }: Props) {
           <div
             ref={contentRef}
             data-testid="help-content"
+            data-fade={[fade.top && 'top', fade.bottom && 'bottom'].filter(Boolean).join(' ')}
             className="help-content"
             onScroll={onScroll}
             style={{
@@ -112,17 +141,18 @@ function HelpScreen({ onBack, source = 'setup' }: Props) {
               minHeight: 0,
               position: 'relative',
               overflowY: 'auto',
-              background: 'var(--color-sheet)',
-              borderRadius: '16px',
-              padding: '14px 18px',
-              boxSizing: 'border-box',
               fontSize: '15px',
+              ...((fade.top || fade.bottom) && fadeMask(fade.top, fade.bottom)),
             }}
           >
+            {/* Each section is a block of its own on the surface fill, as the section links are, so
+                the link marked current matches a block on the page. */}
             {sections.map((s, i) => (
               <section
                 key={s.title}
+                aria-label={s.title}
                 ref={el => { sectionRefs.current[i] = el }}
+                style={{ background: 'var(--color-surface)', borderRadius: '16px', padding: '14px 18px' }}
                 dangerouslySetInnerHTML={{ __html: s.html }}
               />
             ))}
