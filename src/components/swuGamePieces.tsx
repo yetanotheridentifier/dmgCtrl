@@ -8,7 +8,7 @@ import { baseKey } from '../hooks/useSwuSetup'
 import SwuBaseSheet from './swuBaseSheet'
 import TimerDisplay from './shared/timerDisplay'
 import { Button, SegmentedControl, Sheet, Stepper } from './shared/controls'
-import { CARD_ASPECT_RATIO, CARD_NATURAL_HEIGHT, CARD_NATURAL_WIDTH, DISABLED_BTN, EPIC_TEXT_TOP, READOUT_BOTTOM, READOUT_MIDDLE, RESULT_WORD, aboveFinger, cardBorder, cardGlow, marginButton, mutedText, scaled } from './swuGameStyles'
+import { CARD_ASPECT_RATIO, DISABLED_BTN, EPIC_TEXT_TOP, READOUT_BOTTOM, READOUT_MIDDLE, RESULT_WORD, aboveFinger, cardBorder, cardGlow, marginButton, mutedText, rotatedArt, scaled } from './swuGameStyles'
 
 // The pieces the one-player and two-player SWU game screens share: the base card as the damage
 // control, the epic action and Force buttons, and the sheets. Both screens change together here.
@@ -151,13 +151,7 @@ export function BaseCard({ base, art, face, label: labelOverride, disabled, epic
           data-testid="game-card-image"
           draggable={false}
           style={art.rotationDeg ? {
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            width: `${100 * CARD_NATURAL_HEIGHT / CARD_NATURAL_WIDTH}%`,
-            height: `${100 * CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT}%`,
-            objectFit: 'cover',
-            transform: `translate(-50%, -50%) rotate(${art.rotationDeg}deg)`,
+            ...rotatedArt(art.rotationDeg, 'cover'),
             display: art.loaded ? 'block' : 'none',
             pointerEvents: 'none',
           } : {

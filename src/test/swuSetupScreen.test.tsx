@@ -984,6 +984,21 @@ describe('SwuSetupScreen: their base', () => {
     }
   })
 
+  // A frame that took its space's shape cropped the art: 2 players in portrait drew a near-square frame
+  // (186x181 on an iPhone 15 Pro) and showed 74% of the card's width.
+  it('in 1 and 2 players, portrait and landscape, the art\'s frame keeps the card\'s shape, so the art is never cropped', () => {
+    for (const [portrait, twoPlayers] of [[true, true], [false, true], [true, false], [false, false]]) {
+      makeMatchMediaMock(portrait)
+      if (twoPlayers) keep2p(jediTemple, { theirBaseKey: key(catacombs) })
+      else keep(jediTemple)
+      const { unmount } = renderSetup()
+      const frame = within(baseCard()).getByAltText('Jedi Temple').parentElement as HTMLElement
+      expect(frame.style.aspectRatio, `portrait ${portrait}, 2 players ${twoPlayers}`).toBe('1560 / 1120')
+      expect(frame.style.flex, `portrait ${portrait}, 2 players ${twoPlayers}`).toBe('')
+      unmount()
+    }
+  })
+
   it('in landscape, and with 1 player, the art stays above the name', () => {
     keep2p(jediTemple, { theirBaseKey: key(catacombs) })
     const { unmount } = renderSetup()
@@ -1047,12 +1062,49 @@ describe('SwuSetupScreen: Twin Suns', () => {
       const tile = seatButton(name)
       expect(tile.style.background).not.toMatch(/url\(/)
       const card = tile.querySelector('img[data-card]') as HTMLImageElement
-      expect(card.src).toBe(b.frontArt)
       expect(card).toHaveStyle({ objectFit: 'contain' })
       const parts = [...tile.children]
       expect(parts.indexOf(within(tile).getByText(name.startsWith('Your') ? 'Your base' : 'Opponent'))).toBeLessThan(parts.findIndex(p => p.contains(card)))
       expect(parts.findIndex(p => p.contains(card))).toBeLessThan(parts.findIndex(p => p.contains(within(tile).getByText(b.name))))
     }
+  })
+
+  const cardIn = (name: string) => seatButton(name).querySelector('img[data-card]') as HTMLImageElement
+
+  it('shows the hyperspace art when that setting is on, and the standard art where a base has none', () => {
+    keepTwinSuns(jediTemple, [catacombs, null, null])
+    renderSetup()
+    expect(cardIn('Opponent, top right: Catacombs of Cadera').src).toBe(catacombs.hyperspaceArtHiRes)
+    expect(cardIn('Your base: Jedi Temple').src).toBe(jediTemple.frontArt)
+  })
+
+  it('shows the standard art when hyperspace is off', () => {
+    mockUserSettings.useHyperspace = false
+    keepTwinSuns(jediTemple, [catacombs, null, null])
+    renderSetup()
+    expect(cardIn('Opponent, top right: Catacombs of Cadera').src).toBe(catacombs.frontArt)
+  })
+
+  it('falls back to the standard art when the hyperspace image fails', () => {
+    keepTwinSuns(jediTemple, [catacombs, null, null])
+    renderSetup()
+    fireEvent.error(cardIn('Opponent, top right: Catacombs of Cadera'))
+    expect(cardIn('Opponent, top right: Catacombs of Cadera').src).toBe(catacombs.frontArt)
+  })
+
+  // Security Complex's hi-res hyperspace image is stored on its side: turned upright, still the whole card.
+  it('turns a hyperspace image stored on its side upright, still fitted whole', () => {
+    const securityComplex = makeBase('SOR', '019', 'Security Complex', ['Vigilance'], 25, {
+      hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/285.png',
+    })
+    vi.mocked(useBases).mockReturnValue({ bases: [...mockBases, securityComplex], loading: false, error: null, retry: vi.fn() })
+    keepTwinSuns(securityComplex, [catacombs, null, null])
+    renderSetup()
+    const card = cardIn('Your base: Security Complex')
+    expect(card.src).toBe(securityComplex.hyperspaceArtHiRes)
+    expect(card.style.transform).toMatch(/rotate\(90deg\)/)
+    expect(card).toHaveStyle({ objectFit: 'contain' })
+    expect(cardIn('Opponent, top right: Catacombs of Cadera').style.transform).not.toMatch(/rotate/)
   })
 
   // One frame for a base wherever setup draws it: Twin Suns' cards look like 1 and 2 players'.

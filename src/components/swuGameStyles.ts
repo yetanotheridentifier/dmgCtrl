@@ -14,6 +14,19 @@ export const CARD_ASPECT_RATIO = CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT
 export const cardBorder = (colour = 'var(--color-accent)'): React.CSSProperties => ({ borderWidth: '2px', borderStyle: 'solid', borderColor: colour })
 export const cardGlow = (colour = 'var(--color-accent)') => `0 0 20px color-mix(in srgb, ${colour} 30%, transparent)`
 
+// A card image stored on its side, turned upright in a card-shaped box. Its layout box is the box's
+// height wide and the box's width tall (each percentage taken against the other side, which the card's
+// shape relates), centred, then turned to fill it.
+export const rotatedArt = (deg: number, fit: 'cover' | 'contain'): React.CSSProperties => ({
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  width: `${100 * CARD_NATURAL_HEIGHT / CARD_NATURAL_WIDTH}%`,
+  height: `${100 * CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT}%`,
+  objectFit: fit,
+  transform: `translate(-50%, -50%) rotate(${deg}deg)`,
+})
+
 // Where a base prints its text box (the epic action), in percent of the card's height: its top border
 // measures 62.6% to 62.8% on the printed art. The readout on the open art (Start, the damage and HP left)
 // stands on a line just above it and grows upward, in the same place on every base, so it never covers

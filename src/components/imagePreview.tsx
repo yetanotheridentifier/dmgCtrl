@@ -1,6 +1,6 @@
 import { useRef, useLayoutEffect } from 'react'
 import { Base } from '../hooks/useBases'
-import { CARD_NATURAL_HEIGHT as CARD_H, CARD_NATURAL_WIDTH as CARD_W, cardBorder, cardGlow } from './swuGameStyles'
+import { CARD_NATURAL_HEIGHT as CARD_H, CARD_NATURAL_WIDTH as CARD_W, cardBorder, cardGlow, rotatedArt } from './swuGameStyles'
 
 interface ImagePreviewProps {
   overlay?: React.ReactNode
@@ -29,18 +29,8 @@ const wrapperStyleWidth: React.CSSProperties = {
   boxShadow: cardGlow(),
 }
 
-// In fill='height' mode the outer container owns height/aspectRatio/marginLeft so that both
-// the image wrapper and any message below it share the same computed width automatically.
-const wrapperStyleHeightInner: React.CSSProperties = {
-  flex: '1 1 0',
-  minHeight: 0,
-  boxSizing: 'border-box',
-  position: 'relative',
-  overflow: 'hidden',
-  borderRadius: '12px',
-  ...cardBorder(),
-  boxShadow: cardGlow(),
-}
+// The message under the art, a fixed height so a frame sized from its space can leave room for it.
+const MESSAGE_HEIGHT = 24
 
 const imgStyleNormal: React.CSSProperties = {
   position: 'absolute',
@@ -50,19 +40,6 @@ const imgStyleNormal: React.CSSProperties = {
   objectFit: 'cover',
 }
 
-// A portrait image (CARD_H × CARD_W) rotated 90° must fill a landscape box (CARD_W × CARD_H).
-// We size the layout box as (CARD_H/CARD_W × 100%) wide and (CARD_W/CARD_H × 100%) tall
-// — those are container-height-relative and container-width-relative percentages —
-// then center and rotate so the visual result is (100% × 100%) landscape fill.
-const imgStyleRotated: React.CSSProperties = {
-  position: 'absolute',
-  top: '50%',
-  left: '50%',
-  width: `${100 * CARD_H / CARD_W}%`,
-  height: `${100 * CARD_W / CARD_H}%`,
-  objectFit: 'cover',
-  transform: 'translate(-50%, -50%) rotate(90deg)',
-}
 
 const messageStyle: React.CSSProperties = {
   color: 'var(--color-text-muted)',
@@ -123,10 +100,8 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
       ? 'Hyperspace variant not found'
       : null)
 
-  const baseWrapperStyle = fill === 'height' ? wrapperStyleHeightInner : wrapperStyleWidth
-
   const imageWrapperStyle: React.CSSProperties = {
-    ...baseWrapperStyle,
+    ...wrapperStyleWidth,
     ...(imageLoaded ? {} : { opacity: 0, boxShadow: 'none', borderStyle: 'none' }),
     ...(message ? {
       borderBottomLeftRadius: 0,
@@ -134,8 +109,11 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
     } : {}),
   }
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', ...(fill === 'height' ? { height: '100%', maxWidth: '100%', aspectRatio: `${CARD_W} / ${CARD_H}`, marginLeft: 'auto', ...(centred ? { marginRight: 'auto' } : {}) } : {}) }}>
+  // The frame is always the card's shape, its width set and its height following. fill='height' sizes
+  // that width from the space it has: as tall as fits under the message, no wider than the space. A
+  // frame that took the space's shape instead cropped the art.
+  const column = (
+    <div style={{ display: 'flex', flexDirection: 'column', ...(fill === 'height' ? { width: `min(100cqw, (100cqh - ${message ? MESSAGE_HEIGHT : 0}px) * ${CARD_W / CARD_H})` } : {}) }}>
       <div style={imageWrapperStyle}>
         <img
           ref={imgRef}
@@ -143,7 +121,7 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
           alt={base.name}
           onLoad={onLoad}
           onError={onError}
-          style={rotationDeg ? imgStyleRotated : imgStyleNormal}
+          style={rotationDeg ? rotatedArt(rotationDeg, 'cover') : imgStyleNormal}
         />
         {overlay}
       </div>
@@ -153,12 +131,24 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
           borderRight: '2px solid var(--color-accent)',
           borderBottom: '2px solid var(--color-accent)',
           borderRadius: '0 0 12px 12px',
-          padding: '0.5vh 1.5vw 0.6vh',
+          boxSizing: 'border-box',
+          height: `${MESSAGE_HEIGHT}px`,
+          padding: '0 1.5vw',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           boxShadow: '0 4px 12px rgba(var(--color-accent-rgb), 0.2)',
         }}>
-          <p style={messageStyle}>{message}</p>
+          <p style={{ ...messageStyle, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{message}</p>
         </div>
       )}
+    </div>
+  )
+
+  if (fill === 'width') return column
+  return (
+    <div style={{ width: '100%', height: '100%', containerType: 'size', display: 'flex', alignItems: 'center', justifyContent: centred ? 'center' : 'flex-end' }}>
+      {column}
     </div>
   )
 }
