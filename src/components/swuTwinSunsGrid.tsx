@@ -2,7 +2,9 @@ import type { Base } from '../hooks/useBases'
 import { TWIN_SUNS_SEATS } from '../hooks/useSwuSetup'
 import { aspectIconSrc, baseAspect, baseMeta } from '../utils/baseAspect'
 import { PlusIcon, StarIcon } from './icons'
-import { CARD_ASPECT_RATIO, cardBorder, cardGlow } from './swuGameStyles'
+import { useBaseArt } from '../hooks/useBaseArt'
+import { useUserSettings } from '../hooks/useUserSettings'
+import { CARD_ASPECT_RATIO, cardBorder, cardGlow, rotatedArt } from './swuGameStyles'
 import { baseMetaStyle, baseNameStyle } from '../styles/sectionLabel'
 
 interface Props {
@@ -38,8 +40,13 @@ function BaseCell({ b, label, labelColor, ariaLabel, border, onClick }: {
 }) {
   const aspect = baseAspect(b)
   // The whole card, fitted between the label and the name (cropped to the cell, its own title bar and
-  // rules text would show behind them), in a frame of its own shape as large as that space allows.
-  const art = b.frontArtLowRes ?? b.frontArt
+  // rules text would show behind them), in a frame of its own shape as large as that space allows. The
+  // art is the one the other modes show: hyperspace when that setting is on, falling back on failure.
+  const { useHyperspace } = useUserSettings()
+  const art = useBaseArt(b, useHyperspace)
+  const fitted: React.CSSProperties = art.rotationDeg
+    ? rotatedArt(art.rotationDeg, 'contain')
+    : { display: 'block', width: '100%', height: '100%', objectFit: 'contain' }
   return (
     <button
       type="button"
@@ -49,12 +56,12 @@ function BaseCell({ b, label, labelColor, ariaLabel, border, onClick }: {
     >
       <span style={{ ...labelStyle(labelColor), lineHeight: '20px' }}>{label}</span>
       <span style={{ flex: 1, minHeight: 0, containerType: 'size', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {art && (
+        {art.src && (
           <span
             data-testid="card-frame"
-            style={{ display: 'block', width: `min(100cqw, 100cqh * ${CARD_ASPECT_RATIO})`, aspectRatio: `${CARD_ASPECT_RATIO}`, boxSizing: 'border-box', overflow: 'hidden', borderRadius: '8px', ...cardBorder(), boxShadow: cardGlow() }}
+            style={{ position: 'relative', display: 'block', width: `min(100cqw, 100cqh * ${CARD_ASPECT_RATIO})`, aspectRatio: `${CARD_ASPECT_RATIO}`, boxSizing: 'border-box', overflow: 'hidden', borderRadius: '8px', ...cardBorder(), boxShadow: cardGlow() }}
           >
-            <img data-card src={art} alt="" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'contain' }} />
+            <img data-card src={art.src} alt="" onLoad={art.onLoad} onError={art.onError} style={fitted} />
           </span>
         )}
       </span>
