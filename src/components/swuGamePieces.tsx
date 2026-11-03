@@ -8,7 +8,7 @@ import { baseKey } from '../hooks/useSwuSetup'
 import SwuBaseSheet from './swuBaseSheet'
 import TimerDisplay from './shared/timerDisplay'
 import { Button, SegmentedControl, Sheet, Stepper } from './shared/controls'
-import { CARD_ASPECT_RATIO, CARD_NATURAL_HEIGHT, CARD_NATURAL_WIDTH, DISABLED_BTN, EPIC_TEXT_TOP, READOUT_BOTTOM, READOUT_MIDDLE, RESULT_WORD, aboveFinger, marginButton, mutedText, scaled } from './swuGameStyles'
+import { CARD_ASPECT_RATIO, CARD_NATURAL_HEIGHT, CARD_NATURAL_WIDTH, DISABLED_BTN, EPIC_TEXT_TOP, READOUT_BOTTOM, READOUT_MIDDLE, RESULT_WORD, aboveFinger, cardBorder, cardGlow, marginButton, mutedText, scaled } from './swuGameStyles'
 
 // The pieces the one-player and two-player SWU game screens share: the base card as the damage
 // control, the epic action and Force buttons, and the sheets. Both screens change together here.
@@ -132,12 +132,12 @@ export function BaseCard({ base, art, face, label: labelOverride, disabled, epic
         userSelect: 'none',
         WebkitUserSelect: 'none',
         WebkitTapHighlightColor: 'transparent',
-        boxShadow: `0 0 20px color-mix(in srgb, ${outline} 30%, transparent)`,
+        boxShadow: cardGlow(outline),
         opacity: dimmed ? 0.55 : 1,
       }}
     >
       {/* Border overlay: above the art, to cover its edge fringe */}
-      <span aria-hidden="true" data-testid="card-outline" style={{ position: 'absolute', inset: 0, zIndex: 10, borderWidth: '2px', borderStyle: 'solid', borderColor: outline, borderRadius: 'inherit', pointerEvents: 'none' }} />
+      <span aria-hidden="true" data-testid="card-outline" style={{ position: 'absolute', inset: 0, zIndex: 10, ...cardBorder(outline), borderRadius: 'inherit', pointerEvents: 'none' }} />
 
       <img
         src={art.src ?? undefined}

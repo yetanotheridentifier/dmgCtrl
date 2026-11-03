@@ -2,6 +2,8 @@ import type { Base } from '../hooks/useBases'
 import { TWIN_SUNS_SEATS } from '../hooks/useSwuSetup'
 import { aspectIconSrc, baseAspect, baseMeta } from '../utils/baseAspect'
 import { PlusIcon, StarIcon } from './icons'
+import { CARD_ASPECT_RATIO, cardBorder, cardGlow } from './swuGameStyles'
+import { baseMetaStyle, baseNameStyle } from '../styles/sectionLabel'
 
 interface Props {
   base: Base | null
@@ -26,18 +28,17 @@ const cellStyle: React.CSSProperties = {
 
 const labelStyle = (color: string): React.CSSProperties => ({ fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', color })
 
-function BaseCell({ b, label, labelColor, ariaLabel, border, compact, onClick }: {
+function BaseCell({ b, label, labelColor, ariaLabel, border, onClick }: {
   b: Base
   label: string
   labelColor: string
   ariaLabel: string
   border: string
-  compact: boolean
   onClick: () => void
 }) {
   const aspect = baseAspect(b)
-  // The whole card, fitted between the label and the name: cropped to the cell, its own title bar and
-  // rules text would show behind them.
+  // The whole card, fitted between the label and the name (cropped to the cell, its own title bar and
+  // rules text would show behind them), in a frame of its own shape as large as that space allows.
   const art = b.frontArtLowRes ?? b.frontArt
   return (
     <button
@@ -47,15 +48,21 @@ function BaseCell({ b, label, labelColor, ariaLabel, border, compact, onClick }:
       style={{ ...cellStyle, width: '100%', height: '100%', border, background: 'var(--color-surface)', color: 'var(--color-text-primary)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}
     >
       <span style={{ ...labelStyle(labelColor), lineHeight: '20px' }}>{label}</span>
-      <span style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        {art && <img data-card src={art} alt="" style={{ width: '100%', height: '100%', minHeight: 0, objectFit: 'contain' }} />}
+      <span style={{ flex: 1, minHeight: 0, containerType: 'size', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {art && (
+          <span
+            data-testid="card-frame"
+            style={{ display: 'block', width: `min(100cqw, 100cqh * ${CARD_ASPECT_RATIO})`, aspectRatio: `${CARD_ASPECT_RATIO}`, boxSizing: 'border-box', overflow: 'hidden', borderRadius: '8px', ...cardBorder(), boxShadow: cardGlow() }}
+          >
+            <img data-card src={art} alt="" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'contain' }} />
+          </span>
+        )}
       </span>
       <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
         {aspect && <img src={aspectIconSrc(aspect)} alt="" style={{ width: '24px', height: '24px', flexShrink: 0 }} />}
         <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-          {/* Two lines at most: a portrait cell is too narrow for most names on one. */}
-          <span style={{ fontSize: compact ? '16px' : '17px', lineHeight: 1.2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{b.name}</span>
-          <span style={{ fontSize: '12px', color: 'var(--color-text-body)' }}>{baseMeta(b)}</span>
+          <span style={baseNameStyle}>{b.name}</span>
+          <span style={baseMetaStyle}>{baseMeta(b)}</span>
         </span>
       </span>
     </button>
@@ -82,7 +89,7 @@ export default function SwuTwinSunsGrid({ base, isFavourite, onFavouriteToggle, 
   const yours = base ? (
     // The star sits over the cell, beside its button rather than inside it: a button can't hold another.
     <div style={{ position: 'relative', minHeight: 0, minWidth: 0 }}>
-      <BaseCell b={base} label="Your base" labelColor="var(--color-accent)" ariaLabel={`Your base: ${base.name}`} border="2px solid var(--color-accent)" compact={compact} onClick={onOpenYours} />
+      <BaseCell b={base} label="Your base" labelColor="var(--color-accent)" ariaLabel={`Your base: ${base.name}`} border="2px solid var(--color-accent)" onClick={onOpenYours} />
       <button
         type="button"
         aria-label="Favourite"
@@ -101,7 +108,7 @@ export default function SwuTwinSunsGrid({ base, isFavourite, onFavouriteToggle, 
       {TWIN_SUNS_SEATS.map((where, i) => {
         const b = seats[i] ?? null
         return b
-          ? <BaseCell key={where} b={b} label="Opponent" labelColor="var(--color-text-muted)" ariaLabel={`Opponent, ${where}: ${b.name}`} border="none" compact={compact} onClick={() => onOpenSeat(i)} />
+          ? <BaseCell key={where} b={b} label="Opponent" labelColor="var(--color-text-muted)" ariaLabel={`Opponent, ${where}: ${b.name}`} border="none" onClick={() => onOpenSeat(i)} />
           : <AddCell key={where} ariaLabel={`Add base, ${where}`} text="Add base" compact={compact} onClick={() => onOpenSeat(i)} />
       })}
     </div>

@@ -8,7 +8,7 @@ import AppScreenLayout from './layout/appScreenLayout'
 import ImagePreview from './imagePreview'
 import SwuBaseSheet from './swuBaseSheet'
 import { aspectIconSrc, baseAspect, baseMeta } from '../utils/baseAspect'
-import { sectionLabelStyle, mutedStyle } from '../styles/sectionLabel'
+import { baseMetaStyle, baseNameStyle, sectionLabelStyle, mutedStyle } from '../styles/sectionLabel'
 import type { SwudbImportControls } from './swuBaseSheet'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon, DotsIcon, PlusIcon, StarIcon } from './icons'
@@ -214,15 +214,14 @@ export default function SwuSetupScreenView({
   )
 
   // Under the art rather than over it: the art is the whole card, with its own text.
-  // Beside the art the column is narrow, so the name may take two lines rather than one.
-  const baseInfo = (b: Base, narrow: boolean) => {
+  const baseInfo = (b: Base) => {
     const aspect = baseAspect(b)
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
         {aspect && <img src={aspectIconSrc(aspect)} alt="" style={{ width: '28px', height: '28px', flexShrink: 0 }} />}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-          <span style={{ fontSize: '1.1rem', overflow: 'hidden', ...(narrow ? { lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } : { textOverflow: 'ellipsis', whiteSpace: 'nowrap' }) }}>{b.name}</span>
-          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-body)' }}>{baseMeta(b)}</span>
+          <span style={baseNameStyle}>{b.name}</span>
+          <span style={baseMetaStyle}>{baseMeta(b)}</span>
         </div>
       </div>
     )
@@ -291,7 +290,7 @@ export default function SwuSetupScreenView({
             />
           </div>
           <div style={{ display: 'flex', flexDirection: twoPlayers ? 'column' : 'row', alignItems: twoPlayers ? 'stretch' : 'center', gap: twoPlayers ? '8px' : '12px', ...(shareHeight ? { width: '40%', flexShrink: 0 } : {}) }}>
-            {baseInfo(b, shareHeight)}
+            {baseInfo(b)}
             <Button onClick={onOpen} style={{ flexShrink: 0 }}>Change base</Button>
           </div>
         </div>

@@ -7,6 +7,12 @@ export const CARD_NATURAL_WIDTH = 1560
 export const CARD_NATURAL_HEIGHT = 1120
 export const CARD_ASPECT_RATIO = CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT
 
+// The frame round a base card wherever it is drawn (setup, in every mode, and the game screens): a 2px
+// border and a 20px glow, in the accent unless a screen marks the card out. Longhands, so a colour
+// from a custom property survives where the border shorthand would not parse it.
+export const cardBorder = (colour = 'var(--color-accent)'): React.CSSProperties => ({ borderWidth: '2px', borderStyle: 'solid', borderColor: colour })
+export const cardGlow = (colour = 'var(--color-accent)') => `0 0 20px color-mix(in srgb, ${colour} 30%, transparent)`
+
 // Where a base prints its text box (the epic action), in percent of the card's height: its top border
 // measures 62.6% to 62.8% on the printed art. The readout on the open art (Start, the damage and HP left)
 // stands on a line just above it and grows upward, in the same place on every base, so it never covers
