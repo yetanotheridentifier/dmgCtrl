@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  addDamage, claim, finish, lastPhase, nextRound, placings, removeDamage, resolveDestroyed, setEpicUsed, startState, yourResult,
+  MYSTIC_USES, addDamage, claim, finish, gainForceByMonastery, lastPhase, nextRound, placings, removeDamage, resolveDestroyed, setEpicUsed, setForce,
+  startState, yourResult,
 } from '../utils/twinSuns'
 
 // Four players: you (0) and three opponents, every base 30 HP unless a test says otherwise.
@@ -139,6 +140,32 @@ describe('twinSuns: epic action', () => {
     expect(s.epicUsed).toEqual([false, true, false])
     s = setEpicUsed(s, 1, false)
     expect(s.epicUsed).toEqual([false, false, false])
+  })
+})
+
+describe('twinSuns: the Force', () => {
+  it('no one has the Force at the start, and Mystic Monastery has 3 uses', () => {
+    const s = startState(3)
+    expect(s.force).toEqual([false, false, false])
+    expect(s.mysticUses).toEqual([MYSTIC_USES, MYSTIC_USES, MYSTIC_USES])
+    expect(MYSTIC_USES).toBe(3)
+  })
+
+  it('gains and clears the Force on one base', () => {
+    let s = setForce(startState(3), 2, true)
+    expect(s.force).toEqual([false, false, true])
+    s = setForce(s, 2, false)
+    expect(s.force).toEqual([false, false, false])
+  })
+
+  it('Mystic Monastery gains the Force and spends a use', () => {
+    const s = gainForceByMonastery(startState(3), 1)
+    expect(s.force).toEqual([false, true, false])
+    expect(s.mysticUses).toEqual([3, 2, 3])
+  })
+
+  it('the Force stays across Round', () => {
+    expect(nextRound(setForce(startState(3), 0, true)).force).toEqual([true, false, false])
   })
 })
 

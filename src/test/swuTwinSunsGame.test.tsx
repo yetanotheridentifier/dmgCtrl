@@ -9,6 +9,8 @@ vi.mock('../hooks/useWakeLock', () => ({ useWakeLock: vi.fn() }))
 
 const mockOnGameStart = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnGameEnd = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnForceGained = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnForceUsed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 vi.mock('../services/analytics', () => ({
   onGameStart: mockOnGameStart,
   onGameEnd: mockOnGameEnd,
@@ -17,10 +19,16 @@ vi.mock('../services/analytics', () => ({
   onRoundIncremented: vi.fn().mockResolvedValue(undefined),
   onUndoUsed: vi.fn().mockResolvedValue(undefined),
   onEpicActionUsed: vi.fn().mockResolvedValue(undefined),
+  onForceGained: mockOnForceGained,
+  onForceUsed: mockOnForceUsed,
   onImageLoadFailed: vi.fn().mockResolvedValue(undefined),
 }))
 
-const mockUserSettings = vi.hoisted(() => ({ useHyperspace: false, enableInitiativeBar: true }))
+const mockUserSettings = vi.hoisted(() => ({
+  useHyperspace: false,
+  enableInitiativeBar: true,
+  forceTokenDisplay: 'lof-only' as 'always-on' | 'lof-only' | 'always-off',
+}))
 vi.mock('../hooks/useUserSettings', () => ({ useUserSettings: () => mockUserSettings }))
 
 // ---------------------------------------------------------------------------
@@ -48,6 +56,8 @@ const colossus = make('032', 'Colossus', 35)
 const thermal = make('033', 'Thermal Oscillator', 27)
 // Three HP: three taps destroy it.
 const outpost = make('034', 'Fragile Outpost', 3)
+const lothal: Base = { ...make('026', 'Lothal Airfield', 25, 'When a friendly Force unit attacks: The Force is with you (create your Force token).'), set: 'LOF' }
+const monastery: Base = { ...make('022', 'Mystic Monastery', 25, 'Action: The Force is with you (create your Force token). Use this ability no more than 3 times each game.'), set: 'LOF' }
 
 type Seats = (Base | null)[]
 const FOUR: Seats = [tomb, colossus, thermal]
@@ -82,6 +92,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
   mockUserSettings.enableInitiativeBar = true
+  mockUserSettings.forceTokenDisplay = 'lof-only'
 })
 
 // ---------------------------------------------------------------------------
@@ -378,18 +389,94 @@ describe('SwuTwinSunsGame: counters', () => {
 })
 
 describe('SwuTwinSunsGame: epic action', () => {
-  it('the round button on the text box marks it used; tapping the used plate undoes it', () => {
+  it('the round button on the text box marks it used: the overlay covers the text box and takes no taps', () => {
     renderGame()
     fireEvent.click(within(cell('Top left')).getByRole('button', { name: 'Jedi Temple: epic action, tap when used' }))
-    const plate = within(cell('Top left')).getByRole('button', { name: 'Jedi Temple: epic action used, tap to undo' })
-    expect(plate).toHaveTextContent('EPIC ACTION USED')
-    fireEvent.click(plate)
-    expect(within(cell('Top left')).getByRole('button', { name: 'Jedi Temple: epic action, tap when used' })).toBeInTheDocument()
+    const overlay = within(cell('Top left')).getByTestId('epic-action-token')
+    expect(overlay).toHaveTextContent('Epic Action Used')
+    expect(overlay.tagName).not.toBe('BUTTON')
+    expect(overlay.style.pointerEvents).toBe('none')
+    expect(within(overlay).getByTestId('overlay-watermark')).toHaveAttribute('src', expect.stringContaining('dmgctrl-icon'))
+    expect(within(cell('Top left')).queryByRole('button', { name: /epic action/ })).not.toBeInTheDocument()
   })
 
+  it('undo in the log takes it back', () => {
+    renderGame()
+    fireEvent.click(within(cell('Top left')).getByRole('button', { name: 'Jedi Temple: epic action, tap when used' }))
+    openLog()
+    undo()
+    expect(within(cell('Top left')).queryByTestId('epic-action-token')).not.toBeInTheDocument()
+    expect(within(cell('Top left')).getByRole('button', { name: 'Jedi Temple: epic action, tap when used' })).toBeInTheDocument()
+  })
   it('a base with no epic action has no button', () => {
     renderGame()
     expect(within(cell('Top right')).queryByRole('button', { name: /epic action/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('SwuTwinSunsGame: the Force', () => {
+  const gainIn = (c: Cell) => within(c).getByRole('button', { name: /: gain the Force/ })
+  const forceIn = (c: Cell) => within(c).queryByTestId('force-token')
+
+  it('a Force base has a Force button on its card; tapping it puts the Force overlay on the text box', () => {
+    renderGame([lothal, colossus, thermal])
+    fireEvent.click(within(cell('Top right')).getByRole('button', { name: 'Lothal Airfield: gain the Force' }))
+    expect(forceIn(cell('Top right'))).toHaveTextContent('The Force is With You')
+    expect(mockOnForceGained).toHaveBeenCalledWith('LOF-026', 'LOF')
+    expect(forceIn(cell('Top left'))).not.toBeInTheDocument()
+  })
+
+  it('tapping the overlay uses the Force, and the button comes back', () => {
+    renderGame([lothal, colossus, thermal])
+    fireEvent.click(gainIn(cell('Top right')))
+    fireEvent.click(within(cell('Top right')).getByRole('button', { name: 'Lothal Airfield: the Force is with you, tap to clear' }))
+    expect(forceIn(cell('Top right'))).not.toBeInTheDocument()
+    expect(mockOnForceUsed).toHaveBeenCalledWith('LOF-026', 'LOF')
+    expect(gainIn(cell('Top right'))).toBeInTheDocument()
+  })
+
+  it('undo in the log takes back the Force gained', () => {
+    renderGame([lothal, colossus, thermal])
+    fireEvent.click(gainIn(cell('Top right')))
+    openLog()
+    expect(screen.getByText('Lothal Airfield: Force gained', { selector: 'span' })).toBeInTheDocument()
+    undo()
+    expect(forceIn(cell('Top right'))).not.toBeInTheDocument()
+  })
+
+  it('follows the Force tokens setting: LOF bases only, Always, Off', () => {
+    const { unmount } = render(<SwuTwinSunsGame base={jediTemple} seats={[lothal, colossus, thermal]} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getAllByRole('button', { name: /: gain the Force/ })).toHaveLength(1)
+    unmount()
+    mockUserSettings.forceTokenDisplay = 'always-on'
+    const always = render(<SwuTwinSunsGame base={jediTemple} seats={[lothal, colossus, thermal]} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getAllByRole('button', { name: /: gain the Force/ })).toHaveLength(4)
+    always.unmount()
+    mockUserSettings.forceTokenDisplay = 'always-off'
+    render(<SwuTwinSunsGame base={jediTemple} seats={[lothal, colossus, thermal]} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /Force/ })).not.toBeInTheDocument()
+  })
+
+  it('Mystic Monastery counts its uses down, and has none left after three', () => {
+    renderGame([monastery, colossus, thermal])
+    const top = cell('Top right')
+    expect(gainIn(top)).toHaveAccessibleName('Mystic Monastery: gain the Force, 3 uses left')
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(gainIn(top))
+      fireEvent.click(within(top).getByRole('button', { name: /the Force is with you, tap to clear/ }))
+    }
+    expect(within(top).getByRole('button', { name: 'Mystic Monastery: no Force uses left' })).toBeDisabled()
+  })
+
+  it('with the epic action used too, the two share the text box', () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
+    renderGame()
+    const you = cell('Top left')
+    fireEvent.click(within(you).getByRole('button', { name: 'Jedi Temple: epic action, tap when used' }))
+    fireEvent.click(gainIn(you))
+    const epic = within(you).getByTestId('epic-action-token')
+    const force = within(you).getByTestId('force-token')
+    expect(100 - parseFloat(epic.style.right)).toBeLessThan(parseFloat(force.style.left))
   })
 })
 

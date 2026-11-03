@@ -157,6 +157,7 @@ function renderGame(props: Props = {}) {
   return { onBack, onHelp }
 }
 
+const pct = (v: string) => Number(/^(-?[\d.]+)%$/.exec(v)?.[1] ?? NaN)
 const card = () => screen.getByTestId('game-card')
 const counter = () => screen.getByTestId('game-counter')
 const tapCard = () => fireEvent.click(card())
@@ -213,7 +214,6 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('SwuGameScreen: the card’s readout keeps clear of the epic action text', () => {
-  const pct = (v: string) => Number(/^(-?[\d.]+)%$/.exec(v)?.[1] ?? NaN)
   const readoutBox = () => {
     const s = counter().style
     return { top: pct(s.top), bottom: 100 - pct(s.bottom), align: s.justifyContent }
@@ -535,14 +535,26 @@ describe('SwuGameScreen: epic action', () => {
     expect(epicReady()).toBeEnabled()
   })
 
-  it('tapping it marks it used: the button greys and the token covers the text box', () => {
+  it('tapping it marks it used: the button greys and the overlay covers the text box', () => {
     renderGame({ base: mockBaseWithEpicAction })
     startGame()
     expect(screen.queryByTestId('epic-action-token')).not.toBeInTheDocument()
     fireEvent.click(epicReady())
     expect(screen.getByRole('button', { name: 'Epic action used' })).toBeDisabled()
-    expect(screen.getByTestId('epic-action-token')).toHaveTextContent('EPIC ACTION USED')
+    expect(screen.getByTestId('epic-action-token')).toHaveTextContent('Epic Action Used')
     expect(mockOnEpicActionUsed).toHaveBeenCalledWith('SOR-022', 'SOR')
+  })
+
+  it('the overlay is translucent epic gold with the dmgCtrl mark behind its text, and takes no taps', () => {
+    renderGame({ base: mockBaseWithEpicAction })
+    startGame()
+    fireEvent.click(epicReady())
+    const overlay = screen.getByTestId('epic-action-token')
+    expect(overlay.tagName).not.toBe('BUTTON')
+    expect(overlay.style.pointerEvents).toBe('none')
+    expect(overlay.style.borderColor).toBe('var(--color-epic)')
+    expect(overlay.style.background).toContain('var(--color-epic-rgb)')
+    expect(within(overlay).getByTestId('overlay-watermark')).toHaveAttribute('src', expect.stringContaining('dmgctrl-icon'))
   })
 
   it('undo in the log takes it back', () => {
@@ -585,12 +597,59 @@ describe('SwuGameScreen: the Force', () => {
     expect(gain()).toBeEnabled()
   })
 
-  it('nothing covers the card when the Force is gained', () => {
+  it('the Force overlay covers the text box while you have the Force, with the Force token behind its text', () => {
+    renderGame({ base: mockBaseForce })
+    startGame()
+    expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
+    fireEvent.click(gain())
+    const overlay = screen.getByTestId('force-token')
+    expect(overlay).toHaveTextContent('The Force is With You')
+    expect(within(overlay).getByTestId('overlay-watermark')).toHaveAttribute('src', expect.stringContaining('dmgCtrl-force-token'))
+  })
+
+  it('tapping the Force overlay uses the Force, as the button does', () => {
     renderGame({ base: mockBaseForce })
     startGame()
     fireEvent.click(gain())
-    expect(within(card()).queryByText(/Force/i)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Lothal Airfield: the Force is with you, tap to clear' }))
+    expect(mockOnForceUsed).toHaveBeenCalledWith('LOF-026', 'LOF')
+    expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
+    expect(gain()).toBeEnabled()
   })
+
+  it('the epic action and the Force share the text box, half each; alone, each spans it', () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
+    renderGame({ base: mockBaseWithEpicAction })
+    startGame()
+    fireEvent.click(screen.getByRole('button', { name: 'Epic action: tap when used' }))
+    const epic = () => screen.getByTestId('epic-action-token')
+    const force = () => screen.getByTestId('force-token')
+    const span = (el: HTMLElement) => [100 - pct(el.style.right), pct(el.style.left)]
+    const full = span(epic())
+    fireEvent.click(gain())
+    const [epicRight, epicLeft] = span(epic())
+    const [forceRight, forceLeft] = span(force())
+    expect(epicLeft).toBe(full[1])
+    expect(forceRight).toBe(full[0])
+    expect(epicRight).toBeLessThan(forceLeft)
+    expect(epicRight - epicLeft).toBeCloseTo(forceRight - forceLeft)
+    openLog()
+    undo()
+    expect(span(epic())).toEqual(full)
+  })
+
+  it('the overlays sit on the text box: below the epic text line, so clear of the readout and the top band', () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
+    renderGame({ base: mockBaseWithEpicAction })
+    startGame()
+    fireEvent.click(screen.getByRole('button', { name: 'Epic action: tap when used' }))
+    fireEvent.click(gain())
+    for (const el of [screen.getByTestId('epic-action-token'), screen.getByTestId('force-token')]) {
+      expect(pct(el.style.top)).toBeGreaterThanOrEqual(EPIC_TEXT_TOP)
+      expect(pct(el.style.top) + pct(el.style.height)).toBeLessThanOrEqual(100)
+    }
+  })
+
 
   it('is hidden for a non-Force base with LOF bases only, and shown with Always', () => {
     renderGame()
@@ -632,8 +691,10 @@ describe('SwuGameScreen: Mystic Monastery', () => {
     startGame()
     fireEvent.click(gain())
     expect(active()).toHaveTextContent('2 LEFT')
+    expect(screen.getByTestId('force-token')).toBeInTheDocument()
     fireEvent.click(active())
     expect(gain()).toHaveAccessibleName('Gain the Force: 2 uses left')
+    expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
   })
 
   it('after three uses the button is disabled', () => {
@@ -1234,6 +1295,18 @@ describe('SwuGameScreen: two players, damage', () => {
     fireEvent.click(within(theirHalf()).getByRole('button', { name: 'Epic action: tap when used' }))
     expect(within(theirHalf()).getByRole('button', { name: 'Epic action used' })).toBeInTheDocument()
     expect(within(yourHalf()).getByRole('button', { name: 'Epic action: tap when used' })).toBeInTheDocument()
+    expect(within(theirHalf()).getByTestId('epic-action-token')).toHaveTextContent('Epic Action Used')
+    expect(within(yourHalf()).queryByTestId('epic-action-token')).not.toBeInTheDocument()
+  })
+
+  it('each half shows its own Force overlay, and tapping it uses that half’s Force', () => {
+    render2p({ base: mockBaseForce, theirBase: { ...mockBaseForce, number: '027', name: 'Fortress Vader' } })
+    hit(yourHalf())
+    fireEvent.click(within(theirHalf()).getByRole('button', { name: /^Gain the Force/ }))
+    expect(within(theirHalf()).getByTestId('force-token')).toHaveTextContent('The Force is With You')
+    expect(within(yourHalf()).queryByTestId('force-token')).not.toBeInTheDocument()
+    fireEvent.click(within(theirHalf()).getByRole('button', { name: 'Fortress Vader: the Force is with you, tap to clear' }))
+    expect(within(theirHalf()).queryByTestId('force-token')).not.toBeInTheDocument()
   })
 })
 

@@ -282,7 +282,7 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 | Epic action button tapped | `onEpicActionUsed(baseKey, baseSet)` |
 | Force button tapped (Force or non-Force base) | `onForceGained(baseKey, baseSet)` |
 | Mystic Monastery action button tapped | `onForceGained(baseKey, baseSet)` |
-| Force token or greyed Force button dismissed | `onForceUsed(baseKey, baseSet)` |
+| Force overlay or active Force button tapped (every SWU mode, Twin Suns included) | `onForceUsed(baseKey, baseSet)` |
 
 **useBaseArt (useBaseArt.ts)**
 

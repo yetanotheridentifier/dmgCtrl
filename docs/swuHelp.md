@@ -75,7 +75,7 @@ Tap ⋯ at the top right for **Help** and **Settings**. Tap <svg width="0.8em" h
 
 ## Game
 
-Your phone stands in for your base. The card fills the screen from top to bottom, and the controls sit in the narrow margins either side of it. Nothing covers the card's top band (HP, name, aspect) or its text box; the damage goes in the open art between them. The 1-player screen is landscape only: held in portrait it stays landscape on the phone, turned on its side, so turn the phone to read it.
+Your phone stands in for your base. The card fills the screen from top to bottom, and the controls sit in the narrow margins either side of it. Nothing covers the card's top band (HP, name, aspect); the damage goes in the open art below it, above the text box. Only the epic action and Force overlays cover the text box, as the physical tokens do. The 1-player screen is landscape only: held in portrait it stays landscape on the phone, turned on its side, so turn the phone to read it.
 
 **Starting a game:** the card shows **Start**. Tap the card to begin round 1. Between games of a best of 3 it shows the last result and **Start game N**.
 
@@ -95,7 +95,7 @@ With **Damage −/+ buttons** on, **−** sits at the foot of the left margin an
 From the top:
 
 - **Back** returns to setup (or to the tournament). In casual play the damage resets
-- The **epic action** button, on a base with an epic action: greyed until the game starts, then gold. Tap it once you've used the epic action: it greys out with **USED**, and an **EPIC ACTION USED** token covers the card's text box, as the physical token does
+- The **epic action** button, on a base with an epic action: greyed until the game starts, then gold. Tap it once you've used the epic action: it greys out with **USED**, and a gold **Epic Action Used** overlay, with the dmgCtrl mark behind it, covers the card's text box so your opponent can see it. The overlay takes no taps (a tap on it is a tap on the card); undo in the log takes the epic action back
 - The **Force** button, on a base that creates the Force (see below)
 - The **initiative bar**: **OPP** at the top, **YOU** at the bottom. Tap the side that has the initiative; it fills in. Initiative doesn't reset between rounds
 
@@ -134,8 +134,10 @@ When time is called and you record a win or a loss, the match ends there.
 The Force button appears according to the **Force tokens** setting (LOF bases at first): on Legends of the Force bases whose ability creates the Force, on every base with **Always**, and never with **Off**.
 
 - It is greyed until the game starts
-- Tap it to gain the Force: the button fills blue
-- Tap it again when you use the Force
+- Tap it to gain the Force: the button fills blue, and a blue **The Force is With You** overlay, with the Force token behind it, covers the card's text box so your opponent can see it
+- Tap the button or the overlay when you use the Force
+
+With both the epic action used and the Force, the two overlays share the text box, half each.
 
 #### Mystic Monastery
 
@@ -157,7 +159,7 @@ Log entries name the base ("Their base: 3 damage"), and the log opens over your 
 
 With **Twin Suns** chosen in setup, one phone or tablet lies flat in landscape with two players along each long side. Each base sits in its setup cell; the top row is turned round to face the players across, and so is the bar, which faces you (top left). With 4 players the bar runs between the side-by-side bases; with 3 it sits between the two bases on one side and the single base is centred on the other. The screen is landscape only: held in portrait it stays landscape on the device, turned on its side, so turn the device to read it.
 
-The screen opens asking **Who has the initiative?**: the bases light up, and tapping the base of the player who takes it starts the game at round 1. Undo takes the choice back and asks again. Each card is its player's damage control: tap for 1, drag up (from that player's side) to add several, drag down to remove. A base with an epic action has a round yellow button on its text box: tap it when used, and the **Epic action used** plate covers the text box. Tap the plate to take it back.
+The screen opens asking **Who has the initiative?**: the bases light up, and tapping the base of the player who takes it starts the game at round 1. Undo takes the choice back and asks again. Each card is its player's damage control: tap for 1, drag up (from that player's side) to add several, drag down to remove. A base with an epic action has a round yellow button at the right of its text box: tap it when used, and the **Epic Action Used** overlay covers the text box, as in 1 and 2 players (undo in the log takes it back). A base with the Force (by the same **Force tokens** setting) has a round blue button at the left: tap it to gain the Force and show the Force overlay, and tap the overlay when the Force is used. On **Mystic Monastery** the button shows the uses left and is disabled after the third.
 
 The bar holds **Back**, **Log** and **More**, the three counters, **Round** and **End game**. The counters are always shown in Twin Suns, whatever the Initiative setting (that setting applies to 1 and 2 players):
 

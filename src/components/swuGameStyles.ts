@@ -1,5 +1,6 @@
 import type { Base } from '../hooks/useBases'
 import type { MatchResult } from '../hooks/useMatch'
+import type { ForceTokenDisplay } from '../hooks/useUserSettings'
 
 // Styles and words the one-player and two-player SWU game screens share (components: swuGamePieces.tsx).
 
@@ -42,6 +43,18 @@ export const RESULT_WORD: Record<MatchResult, string> = { won: 'won', lost: 'los
 
 // Whether a base has an epic action to mark: its text can be a passive ability instead.
 export const hasEpicAction = (base: Base) => /epic action/i.test(base.epicAction)
+
+// Which of the Force and the epic action a base shows, on every SWU game screen.
+export function baseControls(base: Base, forceTokenDisplay: ForceTokenDisplay) {
+  const isMysticMonastery = base.set === 'LOF' && base.number === '022'
+  const isForceBase = /the force is with you/i.test(base.epicAction)
+  const forceShown = forceTokenDisplay !== 'always-off'
+  return {
+    showForce: forceShown && !isMysticMonastery && (forceTokenDisplay === 'always-on' || isForceBase),
+    showMysticMonastery: forceShown && isMysticMonastery,
+    showEpicAction: hasEpicAction(base),
+  }
+}
 
 // A size on the card: n hundredths of its height, given one hundredth as `unit`.
 export const scaled = (unit: string, n: number) => `calc(${n} * ${unit})`
