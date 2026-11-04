@@ -1,0 +1,55 @@
+# Version updates for the three npm packages and for the actions the workflows use.
+#
+# The cooldown matches `min-release-age=7` in the local npm config: a release is only proposed once
+# it has been public for a week, which is when a compromised one has usually been caught and pulled.
+# Security updates are not held back by it.
+#
+# Minor and patch updates come as one pull request per package, so a week's routine updates are one
+# review; a major arrives on its own, as it is the one that can break something.
+#
+# Dependabot's pull requests are let through close-outside-prs.yml, and get no preview: they get no
+# repository secrets, and the preview deploy needs the Cloudflare token.
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      pwa-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /sealed
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      sealed-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /proxy
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      proxy-minor-and-patch:
+        update-types: [minor, patch]
+
+  # Every action is pinned to a commit SHA, with its release in a comment; Dependabot moves both.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]

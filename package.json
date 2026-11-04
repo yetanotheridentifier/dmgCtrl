@@ -18,12 +18,12 @@
     "deploy:proxy": "npm --prefix proxy run deploy"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^6.0.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.43.0",
+    "@vitejs/plugin-react": "^6.0.2",
     "@eslint/js": "^10.0.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",

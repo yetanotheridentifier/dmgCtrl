@@ -11,8 +11,9 @@ name: Close outside pull requests
 # CONTRIBUTOR (someone with a previously merged commit) is closed too, deliberately: a trusted
 # contributor is made a collaborator, which lets them through with no change here.
 #
-# Dependabot is not configured (there is no .github/dependabot.yml). If it is ever turned on, its
-# pull requests would be closed by this and it would need an exemption here.
+# Dependabot's pull requests pass too (`.github/dependabot.yml`). Its author association is NONE,
+# so it is let through by login: a `[bot]` login is reserved for GitHub Apps and cannot be taken by
+# a person.
 #
 # Why `pull_request_target` is safe here: it runs this file from the default branch with a
 # write-capable token, even for pull requests from forks. That is only safe because this workflow
@@ -32,7 +33,7 @@ permissions:
 
 jobs:
   close:
-    if: ${{ !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) }}
+    if: ${{ !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) && github.event.pull_request.user.login != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Comment and close

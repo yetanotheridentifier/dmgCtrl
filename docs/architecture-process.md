@@ -73,7 +73,7 @@ When the pull request is merged or closed, `.github/workflows/preview-teardown.y
 - **One address per preview.** `wrangler.jsonc` turns `workers_dev` on (the `pr-<number>` address) and `preview_urls` off, so a preview has no version-numbered addresses besides it.
 - **Real HTTPS**, so the PWA installs and runs its service worker as it does in production. Each preview is its own origin, so it does not share storage or the service worker with `dmgctrl.app`.
 - **Analytics and game records are refused.** `worker.dmgctrl.app` only accepts them from `https://dmgctrl.app` and `https://dev.dmgctrl.app`, which keeps preview traffic out of production data. Card data and art load from any origin.
-- **Pull requests from forks get no preview**, as they get no secrets.
+- **Pull requests from forks and from Dependabot get no preview**, as they get no repository secrets.
 - **The Cloudflare files stay off GitHub Pages.** The Cloudflare Vite plugin writes `dist/wrangler.json` and `dist/.assetsignore`, which the preview needs. `build` hands the preview the build with them, then removes them before packaging the build for Pages.
 
 Both workflows need the `CLOUDFLARE_API_TOKEN` repository secret (a custom token with only Account → Workers Scripts → Edit). Nothing is deployed to Cloudflare from the repo root by hand; there is no `npm run deploy` script.
@@ -83,6 +83,13 @@ Both workflows need the `CLOUDFLARE_API_TOKEN` repository secret (a custom token
 - Push to `main`: `lint`, `test`, `build`, then `deploy` on success
 - PRs targeting `main`: `lint`, `test`, `build`, then `preview`; `deploy` is skipped
 - PR merged or closed: `preview-teardown.yml` deletes the preview
+
+### Supply chain
+
+- **No install scripts in CI.** Every `npm install` in the workflows passes `--ignore-scripts`, so no dependency's install script runs on a runner that holds a deploy secret. Nothing the build needs depends on one: esbuild, sharp and workerd, the only packages with install scripts, all work without them.
+- **Actions are pinned to commit SHAs**, with the release in a comment (`actions/checkout@<sha> # v5.1.0`), so a tag moved upstream cannot change what runs.
+- **Dependabot** (`.github/dependabot.yml`) proposes updates weekly for the three npm packages and for the actions, each only once it has been public for 7 days. Minor and patch updates come as one pull request per package; a major comes on its own. Security updates are raised as soon as an advisory is published. Dependabot's pull requests are exempt from `close-outside-prs.yml` and get no preview.
+- **Branch protection on `main` applies to admins.** `test` and `build` must pass, and the branch must be up to date with `main`, for every merge, the owner's included.
 
 ### Pipeline: `.github/workflows/populate-base-aspects.yml`
 

@@ -173,7 +173,9 @@ same rule, which is to match the common case in that suite and make the exceptio
 ## Build identity: two identifiers, two audiences
 
 `src/buildIdentity.ts` is **generated and gitignored**, written by `scripts/buildIdentity.mjs` before
-every dev server, build, test, bench and tune run (npm `pre` hooks), and on `npm install`.
+every dev server, build, test, simulation test, bench and tune run. Each of those scripts runs it
+first itself rather than through an npm `pre` hook, because installs run with `ignore-scripts`
+(locally and in CI), which also skips `pre` and `post` hooks.
 
 | | Local | CI | Audience |
 | --- | --- | --- | --- |
