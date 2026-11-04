@@ -12,9 +12,10 @@ import type { GameState, PendingChoice, PlayerId } from '../engine/types'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { nextSeed } from '../engine/rng'
-import { opponentAi, OPPONENT_AI } from '../config'
+import { OPPONENT_AI } from '../config'
 import { COMMIT_ID, RELEASE } from '../buildIdentity'
-import { driverAction } from '../ai/concession'
+import { opponentChooser } from './opponentChooser'
+import type { OpponentChooser } from './opponentChooser'
 import type { DescribePart } from '../utils/describeAction'
 import { logEntries } from '../utils/boardDiff'
 import { saveGameRecord } from '../data/gameRecords'
@@ -85,7 +86,10 @@ export interface UseGameOptions {
   rng?: () => number
   firstPlayer?: PlayerId
   rngSeed?: number
-  /** Swap the opponent (tests inject a passive one; a smarter rung slots in here later). */
+  /**
+   * Swap the opponent (tests inject a passive one). One handed in chooses on the main thread, before
+   * the step that asked returns; the shipped opponent chooses in a Web Worker (`opponentChooser.ts`).
+   */
   ai?: (state: GameState) => Action | null
   /**
    * The least time, in milliseconds, between one opponent action being shown and the next. Absent or
@@ -100,11 +104,13 @@ const AI: PlayerId = 'opponent'
 /** Hard stop for the AI drive loop — engine bugs must not hang the UI. */
 const MAX_AI_STEPS = 500
 /**
- * How long a paced opponent waits after a state is shown before choosing its next action. Choosing
- * blocks the main thread, sometimes for seconds, so it must not start until the browser has painted
- * the state the player is meant to be looking at.
+ * How long a paced opponent waits after a state is shown before choosing its next action. The shipped
+ * opponent chooses in a worker, but one handed in chooses on the main thread, where it would block the
+ * paint of the state the player is meant to be looking at.
  */
 const PAINT_GAP_MS = 50
+/** `pendingStepRef` while the opponent's next action is being chosen, so nothing else is offered meanwhile. */
+const THINKING = 'thinking'
 
 interface MoveRecord {
   by: PlayerId
@@ -188,7 +194,8 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
 
   const rng = options.rng ?? Math.random
   const shuffle = options.shuffle ?? fisherYates
-  const ai = options.ai ?? opponentAi
+  // Where the opponent's moves come from, one per game: made when the game loads, closed with it.
+  const chooserRef = useRef<OpponentChooser | null>(null)
 
   const initialStateRef = useRef<GameState | null>(null)
   const movesRef = useRef<MoveRecord[]>([])
@@ -214,14 +221,17 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
   useEffect(() => {
     delayRef.current = options.opponentDelayMs ?? 0
   })
-  // The timer for the paced opponent's next step. Non-null for as long as the opponent has actions
-  // still to show, which is what refuses an undo in the middle of them.
-  const pendingStepRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The timer for the paced opponent's next step, or THINKING while its next action is being chosen.
+  // Non-null for as long as the opponent has actions still to show, which is what refuses an undo in
+  // the middle of them.
+  const pendingStepRef = useRef<ReturnType<typeof setTimeout> | typeof THINKING | null>(null)
 
-  /** Stop a paced opponent where it stands: nothing it had not yet shown is ever applied. */
+  /** Stop the opponent where it stands: nothing it had not yet shown is ever applied. */
   const cancelOpponent = useCallback(() => {
-    if (pendingStepRef.current !== null) clearTimeout(pendingStepRef.current)
+    if (pendingStepRef.current !== null && pendingStepRef.current !== THINKING) clearTimeout(pendingStepRef.current)
     pendingStepRef.current = null
+    // A choice still being made is dropped with it: its reply, when it comes, is discarded.
+    chooserRef.current?.cancel()
   }, [])
 
   /**
@@ -254,25 +264,43 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
    * at a time, each applied by the same `apply` and shown no sooner than the delay after the state
    * before it. The delay is a floor on that gap, not a wait added to it: the time the AI spends
    * choosing counts towards it, so a choice slower than the delay is shown the moment it is made.
+   *
+   * Each choice is asked of the game's chooser and continues when it answers: later, from the worker,
+   * or at once, for an AI handed in, which keeps that reply as synchronous as it always was.
    */
   const driveAi = useCallback(() => {
     let steps = 0
     let shownAt = 0
     // The step the bench takes too: offer to concede a certain loss, else the setup heuristic, else
     // the AI. An offer hands the turn to the player, which is what ends the reply to ask them.
-    function choose(): Action | null {
+    function choose(then: (action: Action | null) => void) {
       const state = gameStateRef.current
-      if (!state || state.winner !== null || state.activePlayer !== AI || steps >= MAX_AI_STEPS) return null
-      return driverAction(state, ai)
+      const chooser = chooserRef.current
+      if (!chooser || !state || state.winner !== null || state.activePlayer !== AI || steps >= MAX_AI_STEPS) return then(null)
+      pendingStepRef.current = THINKING
+      chooser.choose(state, action => {
+        pendingStepRef.current = null
+        then(action)
+      })
     }
     function step(action: Action) {
       apply(AI, action)
       steps++
     }
+    // No delay: apply every action as it is chosen, and show only once the reply is over.
+    function instant() {
+      choose(action => {
+        if (!action) {
+          shownAt = Date.now()
+          return publish()
+        }
+        step(action)
+        instant()
+      })
+    }
     function show() {
-      if (delayRef.current <= 0) {
-        for (let action = choose(); action; action = choose()) step(action)
-      } else if (gameStateRef.current?.winner === null && gameStateRef.current.activePlayer === AI) {
+      if (delayRef.current <= 0) return instant()
+      if (gameStateRef.current?.winner === null && gameStateRef.current.activePlayer === AI) {
         pendingStepRef.current = setTimeout(think, Math.min(delayRef.current, PAINT_GAP_MS))
       }
       shownAt = Date.now()
@@ -280,24 +308,28 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
     }
     function think() {
       pendingStepRef.current = null
-      const action = choose()
-      // Nothing to play: publish anyway, since the reply being over is what allows an undo again.
-      if (!action) return publish()
-      const reveal = () => {
-        pendingStepRef.current = null
-        step(action)
-        show()
-      }
-      // Never longer than the delay itself, whatever the clock has done since.
-      const remaining = Math.min(delayRef.current, delayRef.current - (Date.now() - shownAt))
-      if (remaining > 0) pendingStepRef.current = setTimeout(reveal, remaining)
-      else reveal()
+      choose(action => {
+        // Nothing to play: publish anyway, since the reply being over is what allows an undo again.
+        if (!action) return publish()
+        const reveal = () => {
+          pendingStepRef.current = null
+          step(action)
+          show()
+        }
+        // Never longer than the delay itself, whatever the clock has done since.
+        const remaining = Math.min(delayRef.current, delayRef.current - (Date.now() - shownAt))
+        if (remaining > 0) pendingStepRef.current = setTimeout(reveal, remaining)
+        else reveal()
+      })
     }
     show()
-  }, [ai, apply, publish])
+  }, [apply, publish])
 
   useEffect(() => {
     let cancelled = false
+    // Made before the cards load, so a worker is starting while they do.
+    const chooser = opponentChooser(options.ai)
+    chooserRef.current = chooser
 
     async function load() {
       cancelOpponent()
@@ -375,8 +407,11 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
     void load()
     return () => {
       cancelled = true
-      // A rematch, a change of deck or leaving the game: the opponent's pending actions go with it.
+      // A rematch, a change of deck or leaving the game: the opponent's pending actions go with it,
+      // and so does its worker.
       cancelOpponent()
+      chooser.close()
+      if (chooserRef.current === chooser) chooserRef.current = null
     }
     // Re-run on rematch (generation) or deck change; options are init-only.
     // eslint-disable-next-line react-hooks/exhaustive-deps

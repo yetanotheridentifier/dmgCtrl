@@ -44,6 +44,8 @@ src/
   hooks/
     useDecks.ts      Deck import/list/remove
     useGame.ts       Hydrate cards → init → act(); drives the AI turn loop; saves records
+    opponentChooser.ts  Where the AI's moves come from: its worker, or the main thread
+    opponentWorker.ts   The AI's Web Worker: state in, action out
   components/        Art-dominant card UI: deck selection, battlefield, hand, action menu, log
     cardFace.tsx     Card = its art; textual fallback; per-type portrait/landscape orientation
     cardSizing.ts    Card size constants (square slot; zoom-override hook, #321)
@@ -51,8 +53,8 @@ src/
   utils/             ProtectThePod parser, action describer
 ```
 
-The AI runs synchronously on the main thread in `useGame`; it is moving to a Web Worker so a
-search cannot freeze a phone's UI (see `docs/architecture.md`).
+The shipped AI chooses in a Web Worker (`hooks/opponentWorker.ts`), so a search cannot freeze a
+phone's UI; the bench and the tests call it directly (see `docs/architecture.md`).
 
 ## Decisions & assumptions to revisit
 

@@ -129,6 +129,9 @@ export default defineConfig({
     // PWA's node_modules: a second React, and the first hook call fails. One copy, this package's.
     dedupe: ['react', 'react-dom'],
   },
+  // The opponent's worker (hooks/opponentWorker.ts) is a module worker, so it is bundled as one. Its
+  // chunk is a .js file under assets/, which SEALED_PWA_WORKBOX precaches with the rest.
+  worker: { format: 'es' },
   plugins: [
     // Same pattern as the main app: .md files import as rendered HTML strings.
     {

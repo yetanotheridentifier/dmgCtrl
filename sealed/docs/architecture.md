@@ -33,10 +33,11 @@ redesign rather than a set of breakpoints, and is in progress (see [planned-work
   directly (`var(--color-text-primary)`, `var(--color-damage)`). Only the colours Sealed alone uses
   (the cunning yellow, the `--color-token-*` pills) are declared as variables here. A test holds
   every `var()` in Sealed to a shared token or one of those.
-- **The AI is kept off the main thread's assumptions.** Its search costs about 85 ms a decision on a
-  desktop and perhaps 2 to 4x that on a mid-range phone, enough to freeze a phone's UI, so it is
-  moving to a Web Worker. Nothing in `src/ai` or `src/engine` may depend on the DOM, React or
-  main-thread state, and `GameState` stays plain structured-clonable data.
+- **The AI runs off the main thread.** Its search costs about 85 ms a decision on a desktop and
+  perhaps 2 to 4x that on a mid-range phone, enough to freeze a phone's UI, so the shipped opponent
+  chooses in a Web Worker (see [Game flow at runtime](#game-flow-at-runtime)). Nothing in `src/ai`
+  or `src/engine` may depend on the DOM, React or main-thread state, and `GameState` stays plain
+  structured-clonable data, which a test holds over every coverage deck.
 
 ## Components &amp; integration
 
@@ -360,7 +361,29 @@ step is timed from when the state before it was published; the AI chooses its ac
 moment later (`PAINT_GAP_MS`, so the browser has painted that state before a slow choice
 blocks the main thread), and the action is then held only for what is left of the delay. A
 choice that took longer than the delay is shown the moment it is made. The AI's own thinking
-is neither slowed nor moved: it is the same synchronous call either way.
+is neither slowed nor moved: it is the same call either way.
+
+**The shipped opponent chooses in a Web Worker.** Each game gets an `OpponentChooser`
+(`hooks/opponentChooser.ts`), made when the game loads and closed with it. `driveAi` asks it for
+each action and carries on when it answers, so the pacing above is the same whichever answers:
+
+- **The worker** (`hooks/opponentWorker.ts`, a module worker) is used for the shipped opponent.
+  The page posts `{ id, state }` and the worker replies `{ id, action }` with `driverAction`, the
+  step the bench takes. The state crosses by structured clone and carries its own card database
+  (`state.cards`), so nothing is fetched or built in the worker; the ability registry is module
+  state, so the worker fills its own by importing `cardDefinitions`. A search that throws replies
+  with the error's message, which is logged, and the opponent stops as it would on the main thread.
+- **The main thread** is used for an AI handed in through `UseGameOptions.ai` (the tests), and
+  wherever `Worker` does not exist. That chooser answers before `choose` returns, so an instant
+  reply is still applied in one synchronous pass. A worker whose script fails to load hands its
+  request, and every one after it, to the main thread.
+
+One request is out at a time, and `pendingStepRef` holds `THINKING` while it is, which refuses an
+undo exactly as a pending timer does. A reply is matched to its request by id: `cancelOpponent`
+(any rewind, a rematch, a change of deck, an unmount) drops the request in flight, and a reply
+that arrives after that is discarded. The worker is terminated when its game's effect is cleaned
+up. With no delay the player's action and the whole reply are published together once the worker
+has answered the last of it, as on the main thread.
 
 While paced actions are pending:
 
@@ -369,7 +392,8 @@ While paced actions are pending:
   until the last action is shown, since a rewind takes the whole reply; `cancelChoice` is
   offered only on the player's own turn.
 - **Nothing pending outlives its game.** A rematch, a change of deck, an unmount and any rewind
-  cancel the timer, and an action is only ever chosen from and applied to the live state.
+  cancel the timer and any choice the worker is still making, and an action is only ever chosen
+  from and applied to the live state.
 - **The delay is read at every step**, so changing the setting applies to the turn in
   progress: switched to instant, the rest of the reply arrives with the step already waited on.
 
