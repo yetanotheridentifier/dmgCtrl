@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import DeckSelectScreen from './components/deckSelectScreen'
+import SetupScreen from './components/setupScreen'
 import GameScreen from './components/gameScreen'
 import { HelpOverlay } from './components/helpOverlay'
 import { SettingsOverlay } from './components/settingsOverlay'
 import { ShareGamesNotice, ShareGamesPill } from './components/shareGamesNotice'
-import { GearIcon, HelpIcon } from './components/icons'
 import { SettingsProvider, useSettings } from './hooks/useSettings'
 import { useUpdateOnDeckScreen } from './hooks/useUpdateOnDeckScreen'
 import type { SavedDeck } from './data/deckStore'
@@ -64,56 +63,26 @@ function AppShell() {
           onHelp={openHelp}
         />
       ) : (
-        <>
-          <header className="flex items-center justify-between px-6 py-3">
-            <div className="flex items-center gap-3">
-              <img
-                src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
-                alt="dmgCtrl"
-                className="w-9 h-9"
-              />
-              <h1 className="text-2xl font-extralight tracking-[0.15em] text-ink">dmgCtrl</h1>
-            </div>
-            <div className="flex items-center gap-2">
-              {/* Deck screen only, since the game screen has its own header. Quieter than the two
-                  buttons it sits beside, and absent until the notice in the page is answered. */}
-              <ShareGamesPill onOpenSettings={() => setSettingsOpen(true)} />
-              <button
-                data-testid="settings-btn"
-                onClick={() => setSettingsOpen(true)}
-                aria-label="Settings"
-                className="w-9 h-9 flex items-center justify-center border-2 border-line rounded-lg text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
-              >
-                <GearIcon />
-              </button>
-              <button
-                onClick={() => openHelp()}
-                aria-label="Help"
-                className="w-9 h-9 flex items-center justify-center border-2 border-line rounded-lg text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
-              >
-                <HelpIcon />
-              </button>
-            </div>
-          </header>
-          <main className="px-6 pt-2 pb-4">
-            {screen === 'decks' && (
-              <DeckSelectScreen
-                // Part of the page, at the head of the catalogue column: it covers nothing, and
-                // every control works whether or not it has been answered. Passed in so the deck
-                // screen itself needs no settings.
-                catalogueNotice={<ShareGamesNotice />}
-                onPlay={(deck, opponent) => {
-                  // The notice is put once. A player who starts a game without answering it has
-                  // not agreed, so that is recorded as a no and the header pill replaces it.
-                  if (settings.shareGames === 'unasked') update({ shareGames: 'no' })
-                  setSelectedDeck(deck)
-                  setOpponentDeck(opponent)
-                  setScreen('game')
-                }}
-              />
-            )}
-          </main>
-        </>
+        <SetupScreen
+          onHelp={() => openHelp()}
+          onSettings={() => setSettingsOpen(true)}
+          // Game select is the dmgCtrl app at the site root, a separate app from this one.
+          onBack={() => window.location.assign('/')}
+          // Setup only, since the game screen has its own header. Absent until the notice in the
+          // page is answered.
+          headerExtra={<ShareGamesPill onOpenSettings={() => setSettingsOpen(true)} />}
+          // Part of the page, under the two cards: it covers nothing, and every control works
+          // whether or not it has been answered. Passed in so the setup screen needs no settings.
+          notice={<ShareGamesNotice />}
+          onPlay={(deck, opponent) => {
+            // The notice is put once. A player who starts a game without answering it has not
+            // agreed, so that is recorded as a no and the header pill replaces it.
+            if (settings.shareGames === 'unasked') update({ shareGames: 'no' })
+            setSelectedDeck(deck)
+            setOpponentDeck(opponent)
+            setScreen('game')
+          }}
+        />
       )}
 
       {/* The game screen opens settings from its own header, so this covers the other screens. */}

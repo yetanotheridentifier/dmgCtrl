@@ -20,7 +20,7 @@
   <text class="title" x="34" y="40" fill="#2e7d32">UI · React (src/components, App.tsx)</text>
   <g>
     <rect class="box" x="34" y="52" width="120" height="30" fill="#e8f5e9" stroke="#66bb6a"/><text class="lbl" x="94" y="71">App (screens)</text>
-    <rect class="box" x="166" y="52" width="150" height="30" fill="#e8f5e9" stroke="#66bb6a"/><text class="lbl" x="241" y="71">DeckSelectScreen</text>
+    <rect class="box" x="166" y="52" width="150" height="30" fill="#e8f5e9" stroke="#66bb6a"/><text class="lbl" x="241" y="71">SetupScreen</text>
     <rect class="box" x="328" y="52" width="300" height="52" fill="#e8f5e9" stroke="#66bb6a"/>
     <text class="lbl" x="478" y="70" font-weight="600">GameScreen</text>
     <text class="sub" x="478" y="88">OpponentBar · Board · PlayerBar · UnitLine · CardFace · zoom</text>

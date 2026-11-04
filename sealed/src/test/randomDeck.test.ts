@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import ashSet from './fixtures/ashSet.json'
 import type { SwuCard } from '../data/cards'
 import type { SavedDeck } from '../data/deckStore'
-import { generateRandomDeck, generationOptions } from '../deckgen/randomDeck'
+import jtlSet from './fixtures/jtlSet.json'
+import { generateRandomDeck, generationOptions, NO_ASPECT } from '../deckgen/randomDeck'
 import { DECK_SIZE } from '../deckgen/rules'
 
 /**
@@ -14,6 +15,7 @@ import { DECK_SIZE } from '../deckgen/rules'
  * and the overlap buys nothing. Choosing both deliberately is the one way to get that pairing.
  */
 const POOL = ashSet as unknown as SwuCard[]
+const JTL = jtlSet as unknown as SwuCard[]
 const byId = new Map(POOL.map(c => [`${c.Set}_${c.Number}`, c]))
 const idOf = (c: SwuCard) => `${c.Set}_${c.Number}`
 const CAD_BANE = POOL.find(c => c.Type === 'Leader' && c.Name === 'Cad Bane')!
@@ -81,5 +83,21 @@ describe('generationOptions', () => {
     expect(leaders[0].name).toBe('The Armorer')
     expect(leaders.find(l => l.id === idOf(CAD_BANE))?.aspects).toEqual(CAD_BANE.Aspects)
     expect(aspects).toEqual(['Aggression', 'Command', 'Cunning', 'Vigilance'])
+  })
+
+  it('offers No aspect only for a set printing a base without one', () => {
+    expect(generationOptions(JTL).aspects).toEqual(['Aggression', 'Command', 'Cunning', 'Vigilance', NO_ASPECT])
+    expect(generationOptions(POOL).aspects).not.toContain(NO_ASPECT)
+  })
+})
+
+/** JTL prints Lake Country, a base with no aspect: a generated deck can be built on it by asking. */
+describe('a base with no aspect', () => {
+  it('builds on Lake Country when No aspect is chosen', () => {
+    for (const seed of SEEDS.slice(0, 4)) {
+      const generated = generateRandomDeck(JTL, seed, { baseAspect: NO_ASPECT })
+      expect(generated, `seed ${seed}`).not.toBeNull()
+      expect(JTL.find(c => idOf(c) === generated!.deck.base)?.Name, `seed ${seed}`).toBe('Lake Country')
+    }
   })
 })

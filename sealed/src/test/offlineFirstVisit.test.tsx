@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, renderHook, screen, waitFor } from '@testing-library/react'
+import { render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import DeckSelectScreen from '../components/deckSelectScreen'
+import SetupScreen from '../components/setupScreen'
 import { useGame } from '../hooks/useGame'
 import { db } from '../data/db'
 import { legalMoves } from '../engine/legalMoves'
 import type { SavedDeck } from '../data/deckStore'
 import type { GameState } from '../engine/types'
-import hmwSet from './fixtures/hmwSet.json'
 import sorSet from './fixtures/sorSet.json'
 import type { SwuCard } from '../data/cards'
 
@@ -44,12 +43,15 @@ describe('a first visit with the card API unreachable', () => {
   it('builds a generated deck and a generated opponent, and starts the game', async () => {
     const user = userEvent.setup()
     const onPlay = vi.fn()
-    render(<DeckSelectScreen onPlay={onPlay} />)
+    render(<SetupScreen onPlay={onPlay} onHelp={vi.fn()} onSettings={vi.fn()} onBack={vi.fn()} />)
 
     // The set both generators start on is here without an import, so there is no failed fetch to report.
-    await waitFor(() => expect(screen.getByTestId('generated-deck-subtitle')).toHaveTextContent(`Built from HMW (${hmwSet.length} cards cached)`))
-    await user.click(screen.getByTestId('generate-deck-button'))
-    await user.click(screen.getByTestId('play-generated-button'))
+    await user.click(screen.getByRole('button', { name: 'Generate a deck' }))
+    const view = screen.getByRole('dialog', { name: 'Generated deck' })
+    await waitFor(() => expect(within(view).getAllByTestId('deck-row').length).toBeGreaterThan(0))
+    expect(within(view).getByRole('button', { name: 'Set: HMW' })).toBeInTheDocument()
+    await user.click(within(view).getByRole('button', { name: 'Use this deck' }))
+    await user.click(screen.getByRole('button', { name: 'Go to game' }))
 
     await waitFor(() => expect(onPlay).toHaveBeenCalled())
     const [deck, opponent] = onPlay.mock.calls[0] as [SavedDeck, SavedDeck]

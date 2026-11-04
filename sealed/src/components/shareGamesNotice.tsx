@@ -4,10 +4,9 @@ import { useSettings } from '../hooks/useSettings'
 const ANSWER_CLASS = 'px-4 py-1.5 text-sm border-2 border-line text-ink rounded-xl hover:bg-white/10'
 
 /**
- * The pill in both states. The opted-in one adds the fainter colours. It sits in the app header's
- * button row, which must stay on one line: the label never wraps, and below the `sm` width, where
- * it no longer fits beside the title and the two buttons, it is not shown. The cog next to it
- * opens the same Settings.
+ * The pill in both states. The opted-in one adds the fainter colours. It sits in the setup header's
+ * row, which must stay on one line: the label never wraps, and below the `sm` width, where it no
+ * longer fits beside the title and the buttons, it is not shown. More beside it opens the same Settings.
  */
 const PILL_CLASS = 'hidden sm:inline-block whitespace-nowrap rounded-full border px-3 py-1 text-xs hover:text-ink'
 
@@ -17,8 +16,8 @@ const PILL_CLASS = 'hidden sm:inline-block whitespace-nowrap rounded-full border
  *
  * After an answer, or once a first game has started (which `App` records as a no), the pill is all
  * there is: a small button that opens Settings, and the question is never put again. `App` puts it
- * in its header, to the left of the settings and help buttons. It is the button alone, with no
- * wrapper, so the row it joins lays it out.
+ * in the setup header, just before More. It is the button alone, with no wrapper, so the row it
+ * joins lays it out.
  */
 export function ShareGamesPill({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { settings } = useSettings()
@@ -41,9 +40,8 @@ export function ShareGamesPill({ onOpenSettings }: { onOpenSettings: () => void 
  * Until the player answers, a card in the page: not a dialog, covering nothing, with a game
  * startable beside it. The two answers are styled alike and neither is chosen for the player.
  *
- * `App` hands it to the deck screen, which puts it at the head of the card catalogue column. The
- * section after it brings the gap between them, so the card has no margin of its own, and once
- * answered it renders nothing, so the column starts at its first heading.
+ * `App` hands it to the setup screen, which puts it under the two cards. The screen spaces it, so the
+ * card has no margin of its own, and once answered it renders nothing.
  *
  * The card's wording is the Help section's ("Improving the bot" in `docs/userGuide.md`), and a test
  * holds the two together.

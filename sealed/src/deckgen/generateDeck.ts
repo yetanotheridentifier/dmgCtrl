@@ -218,6 +218,12 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
 }
 
 /**
+ * The base aspect that names a base printing none (JTL's Lake Country). No card carries it, so it is
+ * never in a leader's aspects and never pays for a card: a deck on such a base is paid by its leader alone.
+ */
+export const NO_ASPECT = 'None'
+
+/**
  * Build a deck for a leader, choosing its base. Deterministic. This is the entry point a single-deck
  * consumer uses. `baseAspect` restricts it to that aspect, including one the leader already carries.
  *
@@ -236,7 +242,9 @@ export function buildDeckForLeader(leader: SwuCard, pool: SwuCard[], seed: numbe
    */
   const leaderAspects = new Set(leader.Aspects ?? [])
   const usable = all.filter(b => !(b.Aspects ?? []).some(a => leaderAspects.has(a)))
-  const named = baseAspect === undefined ? [] : all.filter(b => (b.Aspects ?? []).includes(baseAspect))
+  const named = baseAspect === undefined ? []
+    : baseAspect === NO_ASPECT ? all.filter(b => (b.Aspects ?? []).length === 0)
+      : all.filter(b => (b.Aspects ?? []).includes(baseAspect))
   const allowed = named.length > 0 ? named : usable.length > 0 ? usable : all
 
   const candidates = colourBases(allowed, seed)

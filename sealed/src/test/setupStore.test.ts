@@ -21,6 +21,11 @@ describe('setupStore', () => {
     it('plays a random generated opponent built around a random leader and base aspect', () => {
       expect(defaultSetup()).toMatchObject({ opponentChoice: 'generated', opponentLeader: '', opponentAspect: '' })
     })
+
+    /** A first visit has no deck chosen, so Go to game waits for one. */
+    it('has no deck chosen', () => {
+      expect(defaultSetup().playerDeck).toBe('')
+    })
   })
 
   describe('loadSetup', () => {
@@ -41,6 +46,7 @@ describe('setupStore', () => {
         opponentChoice: 'some-deck-id',
         opponentLeader: 'HMW_002',
         opponentAspect: 'Command',
+        playerDeck: 'my-deck-id',
       }
       saveSetup(setup)
       expect(loadSetup()).toEqual(setup)

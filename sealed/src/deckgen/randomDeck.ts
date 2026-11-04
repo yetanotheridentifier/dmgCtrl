@@ -1,7 +1,7 @@
 import type { SwuCard } from '../data/cards'
 import type { SavedDeck } from '../data/deckStore'
 import { seededUnit } from '../engine/rng'
-import { buildDeckForLeader } from './generateDeck'
+import { buildDeckForLeader, NO_ASPECT } from './generateDeck'
 import { deckReport } from './rules'
 import { minimumDeckSize } from '../utils/parseProtectThePod'
 import type { DeckReport } from './rules'
@@ -44,6 +44,8 @@ export interface GeneratedDeck {
 
 export const GENERATED_DECK_ID = 'generated'
 
+export { NO_ASPECT }
+
 /** What a generated deck is built around. Either one left out is picked at random. */
 export interface GenerationChoice {
   leaderId?: string
@@ -63,7 +65,10 @@ export function generationOptions(pool: SwuCard[]): GenerationOptions {
   const leaders = leadersIn(pool)
     .sort((a, b) => a.Set.localeCompare(b.Set) || Number(a.Number) - Number(b.Number))
     .map(l => ({ id: cardId(l), name: l.Name, aspects: l.Aspects ?? [] }))
-  const aspects = [...new Set(pool.filter(c => c.Type === 'Base').flatMap(b => b.Aspects ?? []))].sort()
+  const bases = pool.filter(c => c.Type === 'Base')
+  const aspects = [...new Set(bases.flatMap(b => b.Aspects ?? []))].sort()
+  // Last, after the aspects proper, and only for a set that prints such a base.
+  if (bases.some(b => (b.Aspects ?? []).length === 0)) aspects.push(NO_ASPECT)
   return { leaders, aspects }
 }
 
