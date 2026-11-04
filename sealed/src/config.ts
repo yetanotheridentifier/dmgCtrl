@@ -15,8 +15,8 @@ import { resolveAi } from './ai/registry'
  * level. It beats plain `beam` **67.4%** over three seeds and 2580 games, and `beam` in turn beat
  * one-ply `greedy` 60.0%.
  *
- * It costs ~143 ms a decision against greedy's ~2 ms, which is affordable because Sealed is a desktop
- * browser app (see architecture.md). No Web Worker is needed at that budget.
+ * It costs ~143 ms a decision against greedy's ~2 ms. In the app it chooses in a Web Worker
+ * (`hooks/opponentWorker.ts`), so that cost never blocks the page (see architecture.md).
  */
 export const OPPONENT_AI = 'beam-reply'
 

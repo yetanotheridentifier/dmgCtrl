@@ -91,6 +91,32 @@ opponent to cooperate.
 shard below 50%, so the gains run +10.2, +2.7, then negative. Width is flat over the same range.
 Minimising our own score leads maximising theirs by about a point, not separably at this width.
 
+### In a worker the search blocks the page for under a frame
+
+Measured in desktop Chromium (headless, Playwright) against the dev server, so unminified code,
+over 44 action-phase positions from six ASH coverage-deck games played by greedy. "Longest block" is
+the widest gap in a `setTimeout(0)` heartbeat while the decision is under way, which is the longest
+the page could not answer a click or paint; its floor is the timer's own ~4 ms clamp. Times in ms.
+
+| | median | p90 | max |
+| --- | --- | --- | --- |
+| main thread: the decision | 19.3 | 787.4 | 4136.0 |
+| main thread: longest block | 21.2 | 789.5 | 4137.3 |
+| worker: the `postMessage` call (cloning the state) | 0.4 | 0.4 | 0.6 |
+| worker: longest block | 4.6 | 4.7 | 4.8 |
+| worker: time to the move | 21.5 | 815.8 | 4662.0 |
+
+With the page's CPU throttled 4x as a **proxy** for a phone, the main-thread decision measured median
+90.3, p90 3386.2 and max 18497.9; through the worker the `postMessage` call measured max 2.3 and the
+longest block median 5.1, p90 5.5 and max 35.6, one position over a 16.7 ms frame. Chrome's CPU
+throttling applies to the page's thread and not to its workers, so the throttled worker's time to the
+move (median 23.3) is not a phone figure. **No real phone has been measured.**
+
+The spread is the finding beside the worker: the median decision is well under the bench's
+~143 ms mean, and the slowest one in ten costs most of a second on a desktop (on these positions,
+which greedy played, not the shipped bot). On the main thread
+those froze the page for their whole length; in the worker they delay only the opponent's move.
+
 ### Re-weighting is exhausted, at one ply and under search
 
 A 146-cell interaction grid plus 8400-game validation, roughly 400,000 games, put the weight set at a
