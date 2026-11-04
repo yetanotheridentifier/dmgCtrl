@@ -36,6 +36,16 @@ describe('useDecks', () => {
     expect(result.current.decks[0].name).toBe('Vader Aggro')
   })
 
+  /** The saved deck, id and all, so the screen can choose the deck it has just imported. */
+  it('importDeck returns the deck as saved', () => {
+    const { result } = renderHook(() => useDecks())
+    let outcome: ReturnType<typeof result.current.importDeck> | undefined
+    act(() => {
+      outcome = result.current.importDeck(validDeckJson())
+    })
+    expect(outcome!.ok && outcome!.deck.id).toBe(result.current.decks[0].id)
+  })
+
   it('importDeck rejects invalid JSON without adding a deck', () => {
     const { result } = renderHook(() => useDecks())
     let outcome: ReturnType<typeof result.current.importDeck> | undefined

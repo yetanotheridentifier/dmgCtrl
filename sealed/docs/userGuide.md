@@ -2,39 +2,48 @@
 
 dmgCtrl Sealed lets you play Star Wars: Unlimited **Sealed** games against an AI opponent, using a deck built from your own sealed pool.
 
-The **?** in the header opens this help, showing the part that covers the screen you're on: choosing and importing decks on the deck screen, playing the game once you're in one. It opens over what you were doing rather than replacing it, so opening it mid-game costs you nothing. Click anywhere outside it, or press **Escape**, to go back.
+Help opens over what you were doing rather than replacing it, showing the part that covers the screen you're on: choosing decks on the setup screen, where it is under **More** (**⋯**) in the header, and playing the game once you're in one, where it is the **?** in the game's header. Opening it mid-game costs you nothing. Click anywhere outside it, or press **Escape**, to go back.
 
-## Importing a deck
+## Choosing your deck
+
+The setup screen has two cards, **Your deck** and **Opponent**, and **Go to game**, which starts the game once you have chosen a deck. **Back** (the arrow at the top left) returns to dmgCtrl's game select. **More** (**⋯**) at the top right holds **Help**, **Card support** and **Settings**.
+
+On a first visit, with no saved decks, the **Your deck** card offers **Generate a deck** and **Import deck JSON**. Once you have saved decks, **Change deck** opens the deck sheet: each of your saved decks, with its leader's and base's aspect icons, its leader, base and set. Tap a deck to choose it, which closes the sheet; **View** beside it opens the deck first. The sheet also has **Generate a deck** and **Import deck JSON**.
+
+The chosen deck is summed up on its card: its name, its aspects, its leader and base, how many cards it holds, its set, how many units, upgrades and events, and a **cost curve** (how many cards at each cost, the first bar counting cost 1 or less and the last 7 or more). **View** opens it. A deck on a base with no aspect (JTL's **Lake Country**) shows its leader's aspects alone.
+
+**Viewing a deck** shows its leader and base, then its cards: units, then upgrades, then events, each by cost, with no heading for a type the deck has none of. Tap any card, the leader and base included, to see it full size, and tap again to put it away. **Use this deck** chooses it, and **Delete** removes it from this device.
+
+**Generate a deck** builds a deck for you from one set and shows it the same way. Choose the set at the top (it starts on the newest), **Generate again** for another, and **Use this deck** to play it. A generated deck is never kept: it lasts until you choose another deck or close the app.
+
+**Import deck JSON**:
 
 1. Build your sealed deck in **ProtectThePod** and copy its JSON export to the clipboard.
-2. On the deck selection screen, paste the JSON into the **Import deck** box and press **Import**.
-3. A legal Sealed deck needs exactly 1 leader, exactly 1 base, and at least 30 other cards, unless the base itself says otherwise (Data Vault asks for 10 more, Thermal Oscillator for 5 fewer). The importer will tell you if something is missing.
+2. Press **Paste** (or paste into the box yourself) and press **Import**.
+3. A legal Sealed deck needs exactly 1 leader, exactly 1 base, and at least 30 other cards, unless the base itself says otherwise (Data Vault asks for 10 more, Thermal Oscillator for 5 fewer). The importer tells you if something is missing, and keeps what you pasted so you can fix it.
 
-Your decks are saved on this device and appear in the deck list. Every card a deck in that list names is fetched and cached locally as soon as it is there, leader and base first, so a deck you import now, or one saved from an earlier visit, can be viewed and played without you fetching anything yourself.
+An imported deck is saved on this device and chosen. Every card a saved deck names is fetched and cached locally as soon as it is there, leader and base first, so a deck you import now, or one saved from an earlier visit, can be viewed and played without you fetching anything yourself.
 
-At the top of the right-hand column, above the card catalogue note, an **Implemented cards** panel shows how many card abilities are currently built into the engine. It starts **collapsed**: the heading, the count across every set (tokens included) and a **progress bar**. Click the **Implemented cards** heading to open the breakdown, and again to close it; it is closed again the next time you open the app. The breakdown lists each set, newest first, under its legality (current sets, then **Rotated out**, then **Other sets**), and each set is one line with its count and percentage. Every set starts closed; click a set's line to open its row per card type: leaders, bases, units, upgrades, events and tokens. A token counts for every set that prints it once the engine creates it, so Shield and Experience count in each set of the cycle. Cards not yet implemented still play: they just use their printed stats and keywords (and make fine resources) rather than their special ability text.
+On a phone held sideways the two cards sit side by side; held upright they stack, with the leader and base on your deck's card. On a wide screen the chosen deck's cards are listed beside them.
 
 ## Caching a full set
 
 There is nothing to fetch by hand, and for the sets in the **Set** pickers there is nothing to fetch at all: their cards come with the app. A generator can build from any of them on your first visit, and a generated deck plays, even on a day the card service cannot be reached. Card art is the exception: it is still downloaded as cards are shown, and a card whose art cannot be loaded shows a text summary instead. The app itself still needs a connection to open.
 
-Each generator panel names its set on its summary line with the number of cards behind it, after a moment of **Caching HMW…** while the set is read. If a set's cards cannot be read from the app, the panel downloads the set instead and reports that there: a running count, the number of cards once it lands, and the reason if it fails.
+While a set is read, **Generate a deck** says **Caching HMW…** in place of a deck, and the opponent sheet says the same under its choices. If a set's cards cannot be read from the app, it is downloaded instead and reported there: a running count, the number of cards once it lands, and the reason if it fails.
 
-A deck you import names the exact printings you own. The standard printing of a card in one of those sets needs no download either; a Hyperspace, foil, prestige or showcase printing, or a card from a set the pickers do not list, is downloaded once and kept on this device. Only the cards your own decks name are fetched, and nothing already here is fetched again. The **Card catalogue** column is a reference: it shows how much of each set the engine implements.
+A deck you import names the exact printings you own. The standard printing of a card in one of those sets needs no download either; a Hyperspace, foil, prestige or showcase printing, or a card from a set the pickers do not list, is downloaded once and kept on this device. Only the cards your own decks name are fetched, and nothing already here is fetched again.
 
 ## Choosing an opponent
 
-The deck screen has three columns: **your deck** on the left, **the opponent** in the middle, and the **card catalogue** on the right.
+The **Opponent** card says what the AI plays, and **Change opponent** opens the opponent sheet, which chooses between two kinds of deck:
 
-The **Opponent** selector controls which deck the AI plays:
+- **Generated** (the default): a fresh deck built for every game, so playing twice is two different decks. Until its set holds enough cards to fill a whole deck, one of your saved decks is used instead.
+- **One of my decks**: **Any of my decks** picks one of your saved decks at random each game (it can be the deck you play), or tap a deck to play against that one. Each has **View**.
 
-- **Random generated deck** (the default): a fresh deck built for every game, from the set of the deck you play unless you choose another (see below). Until that set holds enough cards to fill a whole deck, a random built deck is used instead, and **Generate** says the set cannot fill a deck.
-- **Random built deck**: one of your imported decks at random (it may pick the same deck you're playing).
-- **A specific deck**: choose any imported deck by name.
+**Same set as my deck** (on by default) builds the generated opponent from the set of the deck you play: a generated deck's set, or for an imported deck the set of its leader (a deck mixing sets is matched to its leader's set only). An imported deck's set is read first if it hasn't been yet, so the game can take a moment to start. Turn it off to choose the opponent's **Set** yourself and play a deck from one set against an opponent from another; it starts on the set it was building from. A deck is built from a single set, so the two pools are never mixed.
 
-Each generator has its own **Set** picker: one in the **Random generated deck** panel for the deck you play, one in the **Generated opponent** panel for the deck the AI plays. Both start on the newest set. **Same set as my deck** (on by default) builds the generated opponent from the set of whichever deck you play: your generated deck's set, or for an imported deck the set of its leader (a deck mixing sets is matched to its leader's set only). An imported deck's set is read first if it hasn't been yet, so the game can take a moment to start. Untick it to choose the opponent's set yourself and play a deck from one set against an opponent from another. Each panel names the set it builds from and how many of its cards are here (see **Caching a full set** above). A deck is built from a single set, so the two pools are never mixed.
-
-Below the opponent's set, **Generated opponent** chooses the **leader** and **base aspect** the generated deck is built around, and either can stay **random**. Both come from the opponent's chosen set, so switching sets drops a leader that the new set doesn't print (switch back and it returns). A random pick never pairs a leader with a base of an aspect the leader already has, since one colour rarely fills a deck; choose both yourself to get that pairing anyway, which is what makes cards with a doubled aspect (two Aggression icons, say) playable. It only applies while the opponent is a random generated deck, and it's the way to watch how the AI plays a particular leader.
+**Leader** and **Base aspect** choose what the generated deck is built around, each opening a sheet of the choices, and either can stay **Random**. Both come from the opponent's set, so switching sets drops a leader that the new set doesn't print (switch back and it returns). **No aspect** is offered only for a set with a base that has none (JTL's Lake Country), and builds on that base. A random pick never pairs a leader with a base of an aspect the leader already has, since one colour rarely fills a deck; choose both yourself to get that pairing anyway, which is what makes cards with a doubled aspect (two Aggression icons, say) playable. It's the way to watch how the AI plays a particular leader.
 
 How a generated deck is built, for yours and the opponent's alike:
 
@@ -43,9 +52,13 @@ How a generated deck is built, for yours and the opponent's alike:
 - **Deck size follows the base.** A Thermal Oscillator deck has 25 cards and a Data Vault deck 40; the curve, card-type and rarity limits scale with it.
 - **Homeworlds worlds.** Where a colour has several world bases (Tatooine, Naboo, Endor, Kashyyyk), the deck takes the world its cards name most, and any of them where none does.
 
-The screen remembers your choices on this device: both sets, **Same set as my deck**, the opponent, and the generated opponent's leader and base aspect come back as you left them, after a game or a reload. A remembered deck you have since removed falls back to **Random generated deck**. Generated decks themselves are never kept.
+The screen remembers your choices on this device: your chosen saved deck, the set you generate from, **Same set as my deck**, the opponent's set, the opponent, and the generated opponent's leader and base aspect come back as you left them, after a game or a reload. A remembered deck you have since deleted is no longer chosen, and as the opponent falls back to **Generated**. Generated decks themselves are never kept.
 
 The current AI opponent plays **random legal moves**. It exists to exercise the full rules engine; smarter opponents are on the roadmap.
+
+## Card support
+
+**More › Card support** shows how much of each set's card abilities the game plays. The sets are listed newest first under their legality (**In rotation**, then **Rotated out**, then **Other sets**), each with how many of its cards are built: **All 275 cards**, or **266 of 267 cards** where some are still to come. Tap a set to see its count per card type (leaders, bases, units, upgrades, events and tokens), and again to close it. A token counts for every set that prints it once the engine creates it, so Shield and Experience count in each set of the cycle. Cards not yet built still play: they use their printed stats and keywords (and make fine resources) rather than their ability text.
 
 ## Improving the bot
 
@@ -61,7 +74,7 @@ Turning it off stops future games being sent and does not recall games already s
 
 ## Playing a game
 
-Press **Play** next to your deck. Cards hydrate, both players draw 6, and the board appears in the **setup step**: choose **Keep hand** or **Mulligan** (shuffle your hand back and draw a fresh 6, once only; whoever holds the initiative decides first). Then **resource 2 cards, one pick at a time**: **click a hand card to resource it**, and you can also just avoid resourcing your early plays. Aim to keep a curve: something to play on turn 1 (cost ≤ 2), turn 2 (≤ 3), turn 3 (≤ 4). Once both players have resourced 2, round 1 begins. Resourcing is private: the log shows only that your opponent resourced, never which card.
+Choose your deck and press **Go to game**. Cards hydrate, both players draw 6, and the board appears in the **setup step**: choose **Keep hand** or **Mulligan** (shuffle your hand back and draw a fresh 6, once only; whoever holds the initiative decides first). Then **resource 2 cards, one pick at a time**: **click a hand card to resource it**, and you can also just avoid resourcing your early plays. Aim to keep a curve: something to play on turn 1 (cost ≤ 2), turn 2 (≤ 3), turn 3 (≤ 4). Once both players have resourced 2, round 1 begins. Resourcing is private: the log shows only that your opponent resourced, never which card.
 
 The AI opponent mulligans any hand without a turn-1 play and resources the pair of cards that best preserves its early curve.
 
@@ -86,7 +99,7 @@ The AI opponent mulligans any hand without a turn-1 play and resources the pair 
 
 ### Settings
 
-The **cog** in the header opens **Settings**, from the deck screen and from inside a game alike. It opens **over** whatever you're doing, so changing something mid-game costs you nothing: your game is exactly where you left it when you close it, and a change takes effect straight away rather than at the next game. Settings are remembered on **this device, in this browser**, so they don't follow you to another machine.
+**Settings** opens from **More** on the setup screen and from the **cog** in the game's header alike. It opens **over** whatever you're doing, so changing something mid-game costs you nothing: your game is exactly where you left it when you close it, and a change takes effect straight away rather than at the next game. Settings are remembered on **this device, in this browser**, so they don't follow you to another machine.
 
 - **Allow undo**: shows the **Undo** button. Off by default. See **Undo** above for what it does and why it's a practice tool.
 - **Show the bug report button**: shows the **bug button** in the game header. Off by default.

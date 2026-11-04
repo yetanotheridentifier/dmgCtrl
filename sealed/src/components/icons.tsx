@@ -58,3 +58,26 @@ export function HelpIcon() {
     </svg>
   )
 }
+
+/*
+ * The setup header's icons, for the shared `IconButton`. Copies of the PWA's `BackIcon` and `DotsIcon`
+ * (src/components/icons.tsx), kept to its shapes and sizes so the two apps' setup headers match: they
+ * size off the button (a percentage, or 1em of its 22px), not off the 16px spec above.
+ */
+export function BackIcon() {
+  return (
+    <svg width="70%" height="70%" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M15.5 5L7 12L15.5 19Z" />
+    </svg>
+  )
+}
+
+export function DotsIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="5" cy="12" r="1.8" />
+      <circle cx="12" cy="12" r="1.8" />
+      <circle cx="19" cy="12" r="1.8" />
+    </svg>
+  )
+}

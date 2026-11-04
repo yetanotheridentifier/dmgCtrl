@@ -19,7 +19,7 @@ export const SHARING_HELP_SECTION = 'Improving the bot'
  * or newly added heading fails the suite rather than quietly disappearing from the help.
  */
 export const HELP_SECTIONS: Record<HelpContext, string[]> = {
-  decks: ['Importing a deck', 'Caching a full set', 'Choosing an opponent', SHARING_HELP_SECTION],
+  decks: ['Choosing your deck', 'Caching a full set', 'Choosing an opponent', 'Card support', SHARING_HELP_SECTION],
   game: ['Playing a game', 'After the game'],
 }
 

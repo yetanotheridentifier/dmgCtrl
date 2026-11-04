@@ -13,7 +13,7 @@ describe('HelpOverlay', () => {
   it('shows the deck screen’s help, not how to play', () => {
     render(<HelpOverlay context="decks" onClose={vi.fn()} />)
     const content = screen.getByTestId('help-content')
-    expect(content.innerHTML).toContain('Importing a deck')
+    expect(content.innerHTML).toContain('Choosing your deck')
     expect(content.innerHTML).not.toContain('Turn structure')
   })
 
@@ -21,7 +21,7 @@ describe('HelpOverlay', () => {
     render(<HelpOverlay context="game" onClose={vi.fn()} />)
     const content = screen.getByTestId('help-content')
     expect(content.innerHTML).toContain('Turn structure')
-    expect(content.innerHTML).not.toContain('Importing a deck')
+    expect(content.innerHTML).not.toContain('Choosing your deck')
   })
 
   it('shows the fan-content disclaimer whichever screen it was opened from', () => {
@@ -38,7 +38,7 @@ describe('HelpOverlay', () => {
     const content = screen.getByTestId('help-content')
 
     expect(within(content).getByRole('heading', { name: 'Improving the bot' })).toBeInTheDocument()
-    expect(content.innerHTML).not.toContain('Importing a deck')
+    expect(content.innerHTML).not.toContain('Choosing your deck')
     expect(content.innerHTML).not.toContain('Turn structure')
     expect(content).toHaveTextContent(/unofficial fan site/i)
   })

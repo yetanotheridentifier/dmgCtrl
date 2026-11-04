@@ -11,9 +11,10 @@ describe('help sections', () => {
 
     it('finds the guide’s top-level sections, in order', () => {
       expect(sections.map(s => s.title)).toEqual([
-        'Importing a deck',
+        'Choosing your deck',
         'Caching a full set',
         'Choosing an opponent',
+        'Card support',
         'Improving the bot',
         'Playing a game',
         'After the game',
@@ -65,7 +66,7 @@ describe('help sections', () => {
   describe('helpContentFor', () => {
     it('gives the deck screen importing and opponent choice, not how to play', () => {
       const html = helpContentFor('decks')
-      expect(html).toContain('Importing a deck')
+      expect(html).toContain('Choosing your deck')
       expect(html).toContain('Choosing an opponent')
       expect(html).not.toContain('Turn structure')
       expect(html).not.toContain('After the game')
@@ -76,7 +77,7 @@ describe('help sections', () => {
       expect(html).toContain('Playing a game')
       expect(html).toContain('Turn structure')
       expect(html).toContain('After the game')
-      expect(html).not.toContain('Importing a deck')
+      expect(html).not.toContain('Choosing your deck')
     })
 
     /** Both are legal notices or orientation: they belong wherever help is opened. */
@@ -113,7 +114,7 @@ describe('help sections', () => {
       expect(html).toContain('What is sent')
       expect(html).toContain('does not recall games already sent')
       expect(html).toContain('unofficial fan site')
-      expect(html).not.toContain('Importing a deck')
+      expect(html).not.toContain('Choosing your deck')
       expect(html).not.toContain('Turn structure')
       expect(html).not.toContain('<h1')
     })

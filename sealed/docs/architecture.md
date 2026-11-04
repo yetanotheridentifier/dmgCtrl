@@ -494,29 +494,22 @@ surfaces write it, and one module reads it to act on it (`data/collection.ts`, s
 record holds" above):
 
 - **The notice** (`components/shareGamesNotice.tsx`), shown while the answer is `unasked`. `App`
-  passes it to `DeckSelectScreen` as `catalogueNotice`, a slot the screen renders at the head of
-  its card catalogue column. That column stacks three sections (the notice, the Implemented cards
-  panel, then the Card catalogue heading and its note) on the rhythm of the other two columns,
-  from the same two constants in `deckSelectScreen.tsx`: `BLOCK_GAP` under a heading and between
-  panels, `SECTION_GAP` above a section that follows another, which gives way on a column's first
-  child. Each is a top margin on the block it pushes down, so the notice carries none and leaves
-  no gap behind once it renders nothing. So the notice reads the
-  settings and the deck screen does not, and the deck and opponent columns start at the top of
-  the page. It is a card in the page, never a dialog: it covers nothing and the deck screen works
-  untouched. Its two buttons share one class, so neither answer is the highlighted one, and
-  nothing is chosen in advance.
+  passes it to `SetupScreen` as `notice`, a slot the screen renders under its two cards, above Go
+  to game; with it showing, the page scrolls rather than squeezing the cards. So the notice reads
+  the settings and the setup screen does not. It is a card in the page, never a dialog: it covers
+  nothing and the setup screen works untouched. Its two buttons share one class, so neither answer
+  is the highlighted one, and nothing is chosen in advance.
 - **Starting a game.** `App` turns `unasked` into `no` as the first game starts, so ignoring the
   notice is a refusal and the question is put once.
 - **The settings form**, where a checkbox maps on to `yes` and off to `no`.
 
-Once the answer is not `unasked`, the notice renders nothing, so the catalogue column starts at its
-first heading (Implemented cards), level with the other two. In its place `ShareGamesPill` (same file) shows in the app
-header, immediately left of the cog and help buttons, and opens the settings form: "Improve the
-bot" after a no, and a fainter "Your games are improving the bot" after a yes. It carries no badge,
-count or animation in either state, and is smaller and lighter than the two icon buttons. The app
-header belongs to the deck screen (the game screen is full-bleed with its own), so the pill is not
-shown during a game. The header row never wraps for it: the label stays on one line, and below
-Tailwind's `sm` width (640px) the pill is hidden, leaving the cog as the route to the setting.
+Once the answer is not `unasked`, the notice renders nothing. In its place `ShareGamesPill` (same
+file) shows in the setup header, passed as `headerExtra` and rendered immediately before More, and
+opens the settings form: "Improve the bot" after a no, and a fainter "Your games are improving the
+bot" after a yes. It carries no badge, count or animation in either state, and is smaller and
+lighter than the icon buttons. The game screen has its own header, so the pill is not shown during
+a game. The header row never wraps for it: the label stays on one line, and below Tailwind's `sm`
+width (640px) the pill is hidden, leaving More › Settings as the route to the setting.
 
 The surface is an **overlay** (`SettingsOverlay`), opened from the cog in the app header and
 from the cog in the game header. Not a screen: routing away unmounts `GameScreen` and the game
@@ -533,7 +526,8 @@ and question mark are copies of the PWA's paths.
 ## Help
 
 `HelpOverlay` shows `userGuide.md`, and shows only the part belonging to the screen it was
-opened from: importing and opponent choice on the deck screen, playing and the board in a game.
+opened from: choosing decks, the opponent and card support on the setup screen, playing and the
+board in a game.
 
 It is an overlay for the same reason settings is, and it is the reason that reason is known:
 help used to be a screen, so opening it mid-game unmounted `GameScreen` and the game with it,
@@ -565,6 +559,46 @@ fraction of the viewport with the content scrolling inside it depends on a flex 
 to a definite height, and that did not hold here: the game's help ran off the screen unreachably
 while the deck screen's shorter help fitted and looked correct. `min-h-full` with `items-center`
 centres a short panel and lets a tall one grow downward, so the top stays reachable.
+
+## UI (SetupScreen)
+
+`components/setupScreen.tsx` is built from the PWA's shared controls (`@pwa-shared/controls`:
+`Button`, `IconButton`, `SegmentedControl`, `SelectButton`, `OptionRow`, `Switch`, `Sheet`,
+`SetupHeaderMark`) in the shape of its X-Wing setup screen: a header (Back, the dmgCtrl mark,
+"Sealed", More), a **Your deck** card and an **Opponent** card, and one primary **Go to game**,
+disabled until a deck is chosen. It has no native select, checkbox or text box of its own: every
+choice opens a `Sheet`, and the only text box is the import sheet's.
+
+- **State is a hook.** `hooks/useSealedSetup.ts` holds what the screen does apart from how it
+  looks: the chosen deck (a saved deck's id in `setupStore`, or a generated deck held in memory
+  and never stored), the opponent choice, the sets each generator builds from, the caching that
+  makes them buildable (`ensureSet`, one fetch per set however many ask) and resolving the opponent
+  at Go to game. Linked, the opponent's set is the chosen deck's (its leader's set), so the pool the
+  sheet offers leaders from is the one the game builds from.
+- **Sheets stack.** The screen keeps a stack of open sheets and shows the top one; a sheet opened
+  from another (the opponent's set, leader and base aspect; import from the deck sheet) returns to
+  it on close, which is the design's Back. A deck view (`setup/deckView.tsx`) covers the screen at
+  z-index 20, under the sheets' 30, so the set sheet opened from the Generate view shows over it.
+- **Cards are looked up once.** `hooks/useCardLookup.ts` resolves the cards a deck names through
+  `getCard` (cache, bundled set, network) into a session map, and a generator's pool is added whole
+  as it loads, so a generated deck shows without a lookup. A card not found shows its id.
+- **What a deck says** is `setup/deckSummary.ts`: the list ordered units, upgrades, events by cost
+  then name, a type with no cards having no group; the type counts; the cost curve (1 or less, each
+  cost to 6, 7 or more); the set from the leader; the aspects, leader's then base's, so a base with
+  none (Lake Country) adds nothing. `setup/deckParts.tsx` draws them: the aspect icons (copies of
+  the PWA's PNGs in `public/`), the leader and base through `CardFace` at their own landscape shape,
+  and the list in CSS columns with each type heading kept with its first card. A tap on any card
+  shows it full size in an `OverlayShell`.
+- **Three layouts**, by media query (`hooks/useMediaQuery.ts`): landscape (the two cards side by
+  side, filling a phone's 844x390 without scrolling), portrait (stacked, the leader and base on the
+  deck card) and desktop (at least 1024x600: the cards in a column with the chosen deck's list
+  beside them). The portrait query is the one the shared `Sheet` reads, so a sheet and its screen
+  agree on the orientation.
+- **Back** goes to the site root, which is the dmgCtrl PWA's game select: a different app, so an
+  installed Sealed may open it outside its own window.
+- **No aspect** is the generator's `NO_ASPECT` base aspect: `generationOptions` lists it last, and
+  only for a pool printing a base without an aspect, and `buildDeckForLeader` builds on such a base
+  when it is named.
 
 ## UI (GameScreen)
 
@@ -742,7 +776,7 @@ The board is drawn with art-dominant cards, not text rows:
 |---|---|---|
 | localStorage `sealed_decks` | Imported decks | Tiny, synchronous |
 | localStorage `sealed_settings` | User settings | Tiny, synchronous; per device and browser |
-| localStorage `sealed_setup` ← `setupStore.ts` | The deck screen's last choices: sets, the set link, the opponent and its leader and base aspect | Validated per field on load, written only on a change; a deck or leader that no longer exists is resolved by the screen |
+| localStorage `sealed_setup` ← `setupStore.ts` | The setup screen's last choices: the chosen saved deck, sets, the set link, the opponent and its leader and base aspect | Validated per field on load, written only on a change; a deck or leader that no longer exists is resolved by the screen |
 | localStorage `sealed_collection_pending` ← `collectionSend.ts` | The ids of finished games still owed an attempt at collection, oldest first, at most 50 | Lets an undelivered game be offered again on the next start without reading every saved record |
 | Bundled sets ← `bundledSets.ts` | Every set the setup panel lists, as shipped with the app: Normal printings, one row per card, no tokens. The files are the bench fixtures (`src/test/fixtures/<set>Set.json`), each loaded with `import()` so it is a file of its own, fetched when its set is first asked for | A first visit plays with the card API unreachable; the game plays the card data the bench and tests run against |
 | IndexedDB `cards` ← `setImport.ts` | Whole sets via one SWUDB search call (`?q=set:XXX`), each row passed through `fromSearchRow` first because the search wraps aspects and traits as `{ S: value }` | A set with no bundled snapshot; includes bases the detail endpoint 502s on |

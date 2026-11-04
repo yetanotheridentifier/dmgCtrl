@@ -23,6 +23,11 @@ export interface Setup {
   opponentLeader: string
   /** A generated opponent's base aspect, or the empty string for random. */
   opponentAspect: string
+  /**
+   * The saved deck the player chose, or the empty string for none. A generated deck is never kept, so
+   * it is never remembered either; a deck deleted since is resolved by the screen.
+   */
+  playerDeck: string
 }
 
 const SET_CODES = SET_PROGRESS.map(s => s.code)
@@ -39,6 +44,7 @@ export function defaultSetup(): Setup {
     opponentChoice: GENERATED_DECK_ID,
     opponentLeader: '',
     opponentAspect: '',
+    playerDeck: '',
   }
 }
 
@@ -65,6 +71,7 @@ export function loadSetup(): Setup {
       opponentChoice: str(stored.opponentChoice, defaults.opponentChoice),
       opponentLeader: str(stored.opponentLeader, defaults.opponentLeader),
       opponentAspect: str(stored.opponentAspect, defaults.opponentAspect),
+      playerDeck: str(stored.playerDeck, defaults.playerDeck),
     }
   } catch {
     return defaults
