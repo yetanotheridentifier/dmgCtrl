@@ -80,6 +80,13 @@ export interface GameValue {
    * not happening) is otherwise indistinguishable from a broken implementation.
    */
   unresolvedPrintings: Unresolved[]
+  /**
+   * The paced opponent's next action, chosen and waiting out the delay before it is applied: what the
+   * board shows the opponent doing. Null with no delay, and whenever nothing is waiting.
+   */
+  opponentAction: Action | null
+  /** How many cards the player drew at the latest regroup: the last that many in hand are new. */
+  regroupDrawn: number
 }
 
 export interface UseGameOptions {
@@ -211,6 +218,11 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
   const historyRef = useRef<Snapshot[]>([])
   const logRef = useRef<LogEntry[]>([])
   const [canUndo, setCanUndo] = useState(false)
+  // The paced opponent's chosen action while it waits to be shown, and the cards the player drew at
+  // the latest regroup (see `GameValue`).
+  const [opponentAction, setOpponentAction] = useState<Action | null>(null)
+  const regroupDrawnRef = useRef(0)
+  const [regroupDrawn, setRegroupDrawn] = useState(0)
   // Rewinds actually performed, for the saved record's provenance. A ref, not state: it is
   // read once at save time and must not re-render the board on every undo.
   const undoCountRef = useRef(0)
@@ -232,6 +244,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
   const cancelOpponent = useCallback(() => {
     if (pendingStepRef.current !== null && pendingStepRef.current !== THINKING) clearTimeout(pendingStepRef.current)
     pendingStepRef.current = null
+    setOpponentAction(null)
     // A choice still being made is dropped with it: its reply, when it comes, is discarded.
     chooserRef.current?.cancel()
   }, [])
@@ -248,12 +261,16 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
     const next = resolve(prev, action)
     logRef.current = [...logRef.current, ...logEntries(prev, next, by, action)]
     gameStateRef.current = next
+    // The regroup draw happened in this step: what left the deck is on the end of the hand.
+    const drewNow = (s: GameState) => s.phase === 'regroup' && !s.pendingRegroupDraw
+    if (drewNow(next) && !drewNow(prev)) regroupDrawnRef.current = Math.max(0, prev.players[HUMAN].deck.length - next.players[HUMAN].deck.length)
   }, [])
 
   /** Render what the refs hold. */
   const publish = useCallback(() => {
     setGameState(gameStateRef.current)
     setLog(logRef.current)
+    setRegroupDrawn(regroupDrawnRef.current)
     setCanUndo(pendingStepRef.current === null && historyRef.current.some(s => s.by === HUMAN))
   }, [])
 
@@ -315,13 +332,17 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
         if (!action) return publish()
         const reveal = () => {
           pendingStepRef.current = null
+          setOpponentAction(null)
           step(action)
           show()
         }
-        // Never longer than the delay itself, whatever the clock has done since.
+        // Never longer than the delay itself, whatever the clock has done since. The wait shows the
+        // action that is coming, so the board can say what the opponent is doing before it is done.
         const remaining = Math.min(delayRef.current, delayRef.current - (Date.now() - shownAt))
-        if (remaining > 0) pendingStepRef.current = setTimeout(reveal, remaining)
-        else reveal()
+        if (remaining > 0) {
+          setOpponentAction(action)
+          pendingStepRef.current = setTimeout(reveal, remaining)
+        } else reveal()
       })
     }
     show()
@@ -504,5 +525,5 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
 
   // Once the game is over the record has been written — rewinding past that would leave a saved
   // game disagreeing with what is on screen.
-  return { status, errorDetail, gameState, legal, log, act, undo, canUndo: canUndo && gameState?.winner === null, cancelChoice, rematch, replayData, unresolvedPrintings }
+  return { status, errorDetail, gameState, legal, log, act, undo, canUndo: canUndo && gameState?.winner === null, cancelChoice, rematch, replayData, unresolvedPrintings, opponentAction, regroupDrawn }
 }

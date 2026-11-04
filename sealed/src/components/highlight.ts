@@ -1,7 +1,7 @@
 import type { TargetIntent } from '../engine/types'
 
 /** The edge highlights a card can carry (`data-highlight`), face up or face down. */
-export type Highlight = 'accent' | 'accent-dim' | 'green' | 'red' | 'yellow' | 'white'
+export type Highlight = 'accent' | 'accent-dim' | 'green' | 'red' | 'yellow' | 'white' | 'amber'
 
 const OUTLINE: Record<Highlight, string> = {
   accent: '2px solid var(--color-accent)',
@@ -9,6 +9,8 @@ const OUTLINE: Record<Highlight, string> = {
   red: '2px solid var(--color-damage)',
   yellow: '2px solid var(--color-yellow)',
   white: '2px solid var(--color-text-primary)',
+  /** The opponent's unit acting, while its action is on show. */
+  amber: '2px solid var(--color-warning)',
   'accent-dim': '2px solid rgba(79, 195, 247, 0.55)',
 }
 

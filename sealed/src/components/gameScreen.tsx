@@ -6,7 +6,7 @@ import type { SavedDeck } from '../data/deckStore'
 import type { CapturedCard, EngineCard, GameState, PendingChoice, PendingTrigger, PlayerId, TargetIntent, UnitState, UpgradeAttachment } from '../engine/types'
 import { leaderActions, mayLookAtDeckTop, triggerAbility } from '../engine/abilities'
 import type { Action } from '../engine/actions'
-import { describeAction, handCardRef } from '../utils/describeAction'
+import { describeAction, describeActionParts, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
 import { describeChoiceParts, answeredWithButtons, BOARD_TARGET_KINDS, allocation, isRepeatable } from '../utils/describeChoice'
 import { upgradeHostIds, upgradeHostName } from '../utils/upgradeHosts'
@@ -17,7 +17,7 @@ import { BugIcon, GearIcon, HelpIcon } from './icons'
 import { useSettings } from '../hooks/useSettings'
 import { RELEASE, COMMIT_ID } from '../buildIdentity'
 import { isDev } from '../env'
-import { orderUnits, phoneHandOverlap, PHONE_HAND_CARD_PX } from './boardLayout'
+import { actionFocus, deployBlocker, orderUnits, phoneHandOverlap, PHONE_HAND_CARD_PX } from './boardLayout'
 import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
 import { intentHighlight } from './highlight'
@@ -31,13 +31,15 @@ import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE, TOKEN_WEAKNESS } from 
 import { unitHasKeyword } from '../engine/keywords'
 import { baseHostId, baseHostOwner } from '../engine/types'
 import { offCardStatDelta } from '../engine/stats'
-import { useCardZoom } from './useCardZoom'
+import { useCardZoom, CardInspect } from './useCardZoom'
+import type { InspectTarget } from './useCardZoom'
 import { CardRef, DescribedParts } from './cardRef'
 import { CardZoomPopover } from './cardZoom'
 import { DeckPile, ResourceStack, DiscardPile, OpponentHand, EmptySlot } from './mat'
 import { friendlyCreditTokens, hasForceToken } from '../engine/effects'
 import { useMediaQuery, PHONE_LANDSCAPE_QUERY, PHONE_PORTRAIT_QUERY } from '../hooks/useMediaQuery'
-import { GameLogDrawer, MoreSheet, PhoneGameLayout, PileSheet, TurnSideways } from './game/phoneLayout'
+import { CardDetail, GameLogDrawer, LeaderMenu, MoreSheet, PhoneGameLayout, PhoneGameOver, PileSheet, TurnSideways } from './game/phoneLayout'
+import type { LeaderMenuItem } from './game/phoneLayout'
 
 interface Props {
   deck: SavedDeck
@@ -63,6 +65,8 @@ export interface UnitInteraction {
   intent?: TargetIntent
   /** Valid target for the upgrade currently being placed from hand. */
   isUpgradeTarget?: boolean
+  /** The opponent's action on show names this unit: the one acting (amber) or its target (red). */
+  acting?: 'actor' | 'target'
   onClick?: () => void
 }
 
@@ -871,16 +875,18 @@ interface BaseTarget {
 }
 
 /** A base card in the central strip, with an HP overlay; clickable when a target. */
-function BaseCard({ state, side, target, widthPx }: {
+function BaseCard({ state, side, target, widthPx, attacked = false }: {
   state: GameState
   side: PlayerId
   target?: BaseTarget
+  /** The opponent's action on show is aimed at this base: ringed red. */
+  attacked?: boolean
   /** The card's short edge, framed tight to the card; the board's default square slot when absent. */
   widthPx?: number
 }) {
   const p = state.players[side]
   const baseCard = state.cards[p.base.cardId]
-  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom({ cardId: p.base.cardId })
   const { settings } = useSettings()
   // Base HP comes from the card metadata (bases vary; never assume 30).
   const baseHp = baseCard?.hp ?? 0
@@ -893,7 +899,7 @@ function BaseCard({ state, side, target, widthPx }: {
   const label = countDown ? 'health remaining' : 'damage'
   const inner = (
     <div className="relative">
-      <CardFace card={baseCard} fallbackName={p.base.cardId} highlight={target ? intentHighlight(target.intent) : undefined} widthPx={widthPx} tight={widthPx !== undefined} />
+      <CardFace card={baseCard} fallbackName={p.base.cardId} highlight={target ? intentHighlight(target.intent) : attacked ? 'red' : undefined} widthPx={widthPx} tight={widthPx !== undefined} />
       {/* Damage overlaid on the card, PWA game-screen style: light weight,
           accent glow + dark outline, ~50% of the card's height. Nudged up a
           little since the base art sits low, so the number reads centred on it. */}
@@ -957,7 +963,7 @@ export function LeaderCard({ state, side, widthPx, interact, labelDeployed = fal
 }) {
   const p = state.players[side]
   const leaderCard = state.cards[p.leader.cardId]
-  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom({ cardId: p.leader.cardId })
   // Deployed → the leader is on the battlefield as a unit; the slot is an empty
   // outline (whether it's deployed is self-evident). Keep it for alignment.
   if (p.leader.deployed) {
@@ -971,7 +977,7 @@ export function LeaderCard({ state, side, widthPx, interact, labelDeployed = fal
   // Deployed once and defeated (its epic action is spent) — it can't redeploy.
   const defeated = p.leader.epicActionUsed
   // An undeployed leader with an available activated ability is clickable.
-  const clickable = Boolean(interact?.actionable && interact.onClick)
+  const clickable = Boolean(interact?.onClick)
   const highlight = interact?.selected ? 'accent' : interact?.actionable ? 'accent-dim' : undefined
   return (
     <div
@@ -1004,7 +1010,7 @@ export function LeaderCard({ state, side, widthPx, interact, labelDeployed = fal
  * A card in your hand. Clickable to play (blue) or resource (green); hover /
  * focus / long-press zooms it. Its own component so it can use the zoom hook.
  */
-function HandCard({ card, cardId, index, action, onAct, onSelect, selected, discarding, widthPx }: {
+function HandCard({ card, cardId, index, action, onAct, onSelect, selected, discarding, widthPx, isNew = false }: {
   card: EngineCard | undefined
   /** The card's short edge; the board's default when absent. */
   widthPx?: number
@@ -1017,11 +1023,18 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected, disc
   selected?: boolean
   /** A pending "discard a card" choice: clicking discards this card — highlight it red. */
   discarding?: boolean
+  /** Just drawn at the regroup: tagged NEW. */
+  isNew?: boolean
 }) {
-  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom({ cardId })
   const isResource = action?.type === 'resourceCard' || action?.type === 'setupResource'
   const playHighlight = discarding ? 'red' : isResource ? 'green' : 'accent'
-  const popover = zoomed && <CardZoomPopover card={card} fallbackName={cardId} anchorRef={anchorRef} />
+  const popover = (
+    <>
+      {isNew && <span data-testid="hand-card-new" className="pointer-events-none absolute left-1/2 top-0.5 z-10 -translate-x-1/2 rounded-md bg-accent px-1 text-[8px] font-bold leading-3 text-black">NEW</span>}
+      {zoomed && <CardZoomPopover card={card} fallbackName={cardId} anchorRef={anchorRef} />}
+    </>
+  )
   if (action) {
     // Clickable shortcut for the matching action-menu button:
     // "Play …" (action phase) or "Resource …" (setup/regroup).
@@ -1259,7 +1272,7 @@ function PlayerBar({ state, hand, action }: { state: GameState; hand: ReactNode;
 export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOptions }: Props) {
   const { settings } = useSettings()
   // The opponent's pace is the player's setting; `gameOptions` (tests) may pin one of its own.
-  const { status, errorDetail, gameState, legal, log, act, undo, canUndo, cancelChoice, rematch, replayData, unresolvedPrintings } = useGame(deck, opponentDeck, { opponentDelayMs: settings.opponentDelayMs, ...gameOptions })
+  const { status, errorDetail, gameState, legal, log, act, undo, canUndo, cancelChoice, rematch, replayData, unresolvedPrintings, opponentAction, regroupDrawn } = useGame(deck, opponentDeck, { opponentDelayMs: settings.opponentDelayMs, ...gameOptions })
   // Board affordance: click an actionable friendly unit to select it,
   // then click a highlighted target to attack. Any action clears the selection.
   const [selectedAttacker, setSelectedAttacker] = useState<string | null>(null)
@@ -1292,6 +1305,10 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   const [logOpen, setLogOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [pile, setPile] = useState<{ title: string; cards: string[] } | null>(null)
+  // A phone has no hover: a held card, or a name touched in the log, opens full size until closed.
+  const [inspecting, setInspecting] = useState<InspectTarget | null>(null)
+  // A phone opens your leader's actions as a menu from the leader.
+  const [leaderMenuOpen, setLeaderMenuOpen] = useState(false)
 
   async function submitReport(title: string, description: string) {
     const { initialState, moves } = replayData()
@@ -1407,7 +1424,36 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     const leaderTargetlessMove = leaderAbilityMoves.find(a => a.targetInstanceId === undefined)
     const leaderTargetIds = new Map<string, Action>()
     if (leaderSelected) for (const a of leaderAbilityMoves) if (a.targetInstanceId) leaderTargetIds.set(a.targetInstanceId, a)
-    const leaderInteract: UnitInteraction | undefined = leaderAbilityMoves.length > 0
+    // On a phone the leader opens its menu instead: each action, deploying, and the card.
+    const deployMoves = legal.filter((a): a is Extract<Action, { type: 'deployLeader' }> => a.type === 'deployLeader')
+    const takeLeaderAbility = (index: number) => {
+      const moves = leaderAbilityMoves.filter(a => a.index === index)
+      const targetless = moves.find(a => a.targetInstanceId === undefined)
+      if (targetless) { actAndClear(targetless); return }
+      setSelectedAttacker(null)
+      setSelectedUpgrade(null)
+      setLeaderSelected(true)
+    }
+    const playerLeader = gameState.players.player.leader
+    const leaderMenuItems: LeaderMenuItem[] = [
+      ...leaderActions(playerLeader.cardId).map((def, index) => ({
+        label: 'Use action',
+        detail: leaderAbilityMoves.some(a => a.index === index) ? def.description : playerLeader.exhausted ? 'Your leader is exhausted' : def.description,
+        onSelect: leaderAbilityMoves.some(a => a.index === index) ? () => takeLeaderAbility(index) : undefined,
+      })),
+      ...(deployMoves.length > 0
+        ? deployMoves.map(a => ({ label: describeAction(gameState, 'player', a), onSelect: () => actAndClear(a) }))
+        : [{ label: 'Deploy', detail: deployBlocker(gameState) }]),
+    ]
+    const phoneLeaderInteract: UnitInteraction = {
+      actionable: leaderAbilityMoves.length > 0 || deployMoves.length > 0,
+      selected: leaderSelected || leaderMenuOpen,
+      isTarget: false,
+      onClick: () => (leaderSelected ? setLeaderSelected(false) : setLeaderMenuOpen(true)),
+    }
+    const leaderInteract: UnitInteraction | undefined = phone
+      ? phoneLeaderInteract
+      : leaderAbilityMoves.length > 0
       ? {
           actionable: true,
           selected: leaderSelected,
@@ -1488,7 +1534,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         ? { actionable: false, selected: false, isTarget: true, onClick: () => setUpgradeHost(instanceId) }
         : null
 
-    const playerInteraction = (unit: { instanceId: string }): UnitInteraction =>
+    const playerInteractionBase = (unit: { instanceId: string }): UnitInteraction =>
       upgradeInteraction(unit.instanceId) ?? asUpgradeHost(unit.instanceId) ?? asBoardTarget(unit.instanceId) ?? {
         actionable: attackerIds.has(unit.instanceId),
         selected: selectedAttacker === unit.instanceId,
@@ -1498,7 +1544,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           : undefined,
       }
 
-    const opponentInteraction = (unit: { instanceId: string }): UnitInteraction =>
+    const opponentInteractionBase = (unit: { instanceId: string }): UnitInteraction =>
       upgradeInteraction(unit.instanceId) ?? asUpgradeHost(unit.instanceId) ?? asBoardTarget(unit.instanceId) ?? {
         actionable: false,
         selected: false,
@@ -1507,6 +1553,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           ? () => actAndClear({ type: 'attack', attackerId: selectedAttacker!, target: { kind: 'unit', instanceId: unit.instanceId } })
           : undefined,
       }
+
+    // On a phone the opponent's action, while it is on show, rings the unit acting and its target.
+    const focus: ReturnType<typeof actionFocus> = phone && opponentAction ? actionFocus(opponentAction) : {}
+    const withActing = (interact: UnitInteraction, instanceId: string): UnitInteraction =>
+      instanceId === focus.actorId ? { ...interact, acting: 'actor' } : instanceId === focus.targetId ? { ...interact, acting: 'target' } : interact
+    const playerInteraction = (unit: { instanceId: string }) => withActing(playerInteractionBase(unit), unit.instanceId)
+    const opponentInteraction = (unit: { instanceId: string }) => withActing(opponentInteractionBase(unit), unit.instanceId)
+
+    // Regroup on a phone: the cards just drawn, on the end of the hand, are tagged NEW until you resource.
+    const newFrom = phone && gameState.phase === 'regroup' && !gameState.regroupResourced.player ? hand.length - regroupDrawn : hand.length
 
     // On a phone the hand is one row under the board, fanned (overlapping) once it is too long for it.
     const fan = phone ? phoneHandOverlap(hand.length) : 0
@@ -1532,6 +1588,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
               }
               selected={selectedUpgrade === i}
               discarding={discardChoice !== undefined}
+              isNew={i >= newFrom}
             />
           </li>
         ))}
@@ -1715,7 +1772,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       : undefined
     const buttonChoiceActions = buttonChoice ? unclaimed.filter(answers(buttonChoice.id)) : []
     const buttonChoiceHidden = buttonChoice !== undefined && hiddenChoice === buttonChoice.id
-    const menuActions = unclaimed.filter(a => !buttonChoiceActions.includes(a))
+    // A phone deploys from the leader's menu, so deploying is not a button there.
+    const menuActions = unclaimed.filter(a => !buttonChoiceActions.includes(a) && !(phone && a.type === 'deployLeader'))
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for a repeatable pick (`isRepeatable`), else "Decline".
     // An optional "defeat an upgrade" choice (Clan Vizsla Soldier, Vane's On Attack, #416): the
@@ -1775,7 +1833,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             onClick={() => actAndClear(action)}
             className={`rounded-xl border-2 border-accent ${btn} text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10`}
           >
-            {describeAction(gameState, 'player', action)}
+            {phone && action.type === 'skipResource' ? "Don't resource" : describeAction(gameState, 'player', action)}
           </button>
         ))}
         {declineChoice === undefined && menuActions.length === 0 && legal.length === 0 && gameState.winner === null && (
@@ -2086,17 +2144,31 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     if (phone) {
       const state = gameState
       const attacker = selectedAttacker ? state.players.player.units.find(u => u.instanceId === selectedAttacker) : undefined
+      // The opponent's chosen action, said while it waits to be shown, redacted as the log is.
+      const opponentPrompt: DescribePart[] | undefined = opponentAction && state.activePlayer === 'opponent'
+        ? ['Opponent: ', ...describeActionParts(state, 'opponent', opponentAction, { redact: true })]
+        : undefined
+      const leaderName = state.cards[state.players.player.leader.cardId]?.name ?? state.players.player.leader.cardId
       playContent = (
+        <>
+        {leaderMenuOpen && !state.players.player.leader.deployed && (
+          <LeaderMenu
+            name={leaderName}
+            items={leaderMenuItems}
+            onSee={() => setInspecting({ cardId: state.players.player.leader.cardId })}
+            onClose={() => setLeaderMenuOpen(false)}
+          />
+        )}
         <PhoneGameLayout
           state={state}
-          prompt={boardPrompt}
+          prompt={opponentPrompt ?? boardPrompt}
           attacker={attacker ? state.cards[attacker.cardId]?.name ?? attacker.cardId : undefined}
           actions={actionColumn}
           hand={playerHand}
           centre={{
             opponentLeader: <LeaderCard state={state} side="opponent" widthPx={PHONE_LEADER_PX} labelDeployed />,
             opponentBase: <BaseCard state={state} side="opponent" target={baseTarget('opponent')} widthPx={PHONE_BASE_PX} />,
-            playerBase: <BaseCard state={state} side="player" target={baseTarget('player')} widthPx={PHONE_BASE_PX} />,
+            playerBase: <BaseCard state={state} side="player" target={baseTarget('player')} attacked={focus.targetBase} widthPx={PHONE_BASE_PX} />,
             playerLeader: <LeaderCard state={state} side="player" widthPx={PHONE_LEADER_PX} interact={leaderInteract} labelDeployed />,
           }}
           playerInteraction={playerInteraction}
@@ -2107,6 +2179,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           onDiscard={side => setPile({ title: side === 'player' ? 'Your discard' : "Opponent's discard", cards: state.players[side].discard })}
           onDeck={mayLookAtDeckTop(state, 'player') ? () => setPile({ title: 'Top of your deck', cards: state.players.player.deck.slice(0, 1) }) : undefined}
         />
+        </>
       )
     }
   }
@@ -2115,7 +2188,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   if (upright && gameState) return <TurnSideways />
 
   if (phone && gameState) {
+    const inspectedUnit = inspecting?.instanceId
+      ? [...gameState.players.player.units, ...gameState.players.opponent.units].find(u => u.instanceId === inspecting.instanceId)
+      : undefined
     return (
+      <CardInspect.Provider value={setInspecting}>
       <div data-testid="game-screen" className="h-screen w-full">
         {playContent}
         {choiceOverlay}
@@ -2135,10 +2212,10 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         />
         <PileSheet state={gameState} title={pile?.title ?? ''} cards={pile?.cards ?? null} onClose={() => setPile(null)} />
         {settingsOpen && <SettingsOverlay onClose={() => setSettingsOpen(false)} onHelp={onHelp} />}
-        {gameState.winner !== null && (
-          <GameOverOverlay winner={gameState.winner} concededBy={gameState.concededBy} onRematch={rematch} onExit={onExit} />
-        )}
+        {!logOpen && <PhoneGameOver state={gameState} deckName={deck.name} onRematch={rematch} onExit={onExit} />}
+        {inspecting && <CardDetail state={gameState} cardId={inspecting.cardId} unit={inspectedUnit} onClose={() => setInspecting(null)} />}
       </div>
+      </CardInspect.Provider>
     )
   }
 

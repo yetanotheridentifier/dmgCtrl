@@ -1,5 +1,25 @@
 import type { GameState, UnitState } from '../engine/types'
+import type { Action } from '../engine/actions'
 import { hasKeyword } from '../engine/keywords'
+
+/** Why your leader can't deploy, when deploying is not among your legal moves: the leader menu's reason. */
+export function deployBlocker(state: GameState): string {
+  const p = state.players.player
+  if (p.leader.epicActionUsed) return 'Already deployed this game'
+  if (state.winner !== null || state.activePlayer !== 'player' || state.phase !== 'action') return 'Only on your action'
+  const cost = state.cards[p.leader.cardId]?.cost ?? 0
+  if (p.resources.length < cost) return `Needs ${cost} resources; you have ${p.resources.length}`
+  return 'Not available now'
+}
+
+/** The unit an action is taken with and what it is aimed at, for ringing them on the board. */
+export function actionFocus(action: Action): { actorId?: string; targetId?: string; targetBase?: boolean } {
+  if (action.type === 'attack') {
+    return action.target.kind === 'base' ? { actorId: action.attackerId, targetBase: true } : { actorId: action.attackerId, targetId: action.target.instanceId }
+  }
+  if ('targetInstanceId' in action && typeof action.targetInstanceId === 'string') return { targetId: action.targetInstanceId }
+  return {}
+}
 
 /**
  * Order units so Sentinels sit closest to the battlefront. Units grow *back*
