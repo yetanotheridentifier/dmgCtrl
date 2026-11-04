@@ -1,6 +1,8 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Button, IconButton, Sheet } from '@pwa-shared/controls'
 import type { GameState, PlayerId, UnitState } from '../../engine/types'
+import { useCardZoom } from '../useCardZoom'
+import { outcomeBanner } from '../outcome'
 import type { LogEntry } from '../../hooks/useGame'
 import type { DescribePart } from '../../utils/describeAction'
 import type { UnitInteraction } from '../gameScreen'
@@ -63,8 +65,13 @@ export function PhoneUnit({ state, unit, interact, size = 'normal' }: {
   size?: keyof typeof SLOT
 }) {
   const { slot, card } = SLOT[size]
+  const { bind } = useCardZoom({ cardId: unit.cardId, instanceId: unit.instanceId })
   const clickable = (interact.actionable || interact.isTarget || interact.isUpgradeTarget) && interact.onClick
-  const highlight: Highlight | undefined = interact.selected
+  const highlight: Highlight | undefined = interact.acting === 'actor'
+    ? 'amber'
+    : interact.acting === 'target'
+      ? 'red'
+      : interact.selected
     ? 'white'
     : interact.isTarget
       ? intentHighlight(interact.intent)
@@ -95,6 +102,7 @@ export function PhoneUnit({ state, unit, interact, size = 'normal' }: {
       data-upgrade-target={Boolean(interact.isUpgradeTarget)}
       role={clickable ? 'button' : undefined}
       aria-label={name}
+      {...bind}
       onClick={clickable ? interact.onClick : undefined}
       className={`relative flex shrink-0 items-center justify-center ${clickable ? 'cursor-pointer' : ''}`}
       style={{ width: slot, height: slot }}
@@ -233,7 +241,7 @@ function roundTitle(round: number): string {
 /**
  * The log, sliding in from the left over the controls and leaving the board in view: newest first,
  * under the round each action was taken in, each action in one row with what it changed beneath it.
- * Card names are coloured by their owner and open the card. Undo sits at its foot when it is on.
+ * Card names are coloured by their owner and a tap opens the card. Undo sits at its foot when it is on.
  */
 export function GameLogDrawer({ open, state, log, onClose, onUndo }: {
   open: boolean
@@ -242,12 +250,7 @@ export function GameLogDrawer({ open, state, log, onClose, onUndo }: {
   onClose: () => void
   onUndo?: () => void
 }) {
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  useEscape(open, onClose)
   if (!open) return null
   const rounds: { round: number; rows: { action: LogEntry; outcomes: LogEntry[] }[] }[] = []
   for (const entry of log) {
@@ -331,6 +334,152 @@ export function PileSheet({ state, title, cards, onClose }: { state: GameState; 
         {(cards ?? []).map((id, i) => <CardFace key={`${id}-${i}`} card={state.cards[id]} fallbackName={id} tight widthPx={80} />)}
       </div>
     </Sheet>
+  )
+}
+
+/** Close on Escape while open. */
+function useEscape(open: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+}
+
+const TOKEN_NAMES: Record<string, string> = { [TOKEN_SHIELD]: 'Shield', [TOKEN_EXPERIENCE]: 'Experience' }
+
+/** What is on a unit, one line per kind: its upgrades by name and its tokens, with a count past one. */
+function upgradeLines(state: GameState, unit: UnitState): string[] {
+  const counts = new Map<string, number>()
+  for (const u of unit.upgrades) {
+    const name = TOKEN_NAMES[u.cardId] ?? state.cards[u.cardId]?.name ?? u.cardId
+    counts.set(name, (counts.get(name) ?? 0) + 1)
+  }
+  return [...counts].map(([name, n]) => (n > 1 ? `${name} ×${n}` : name))
+}
+
+/**
+ * A card held (or its name touched in the log) on a phone, full size over a dimmed board, and beside it what is
+ * on it when it is a unit in play: its damage and the HP it has left, whether it is ready and where,
+ * and its upgrades and tokens. A tap anywhere closes it.
+ */
+export function CardDetail({ state, cardId, unit, onClose }: {
+  state: GameState
+  cardId: string
+  /** The unit it is in play as, when it is one. */
+  unit?: UnitState
+  onClose: () => void
+}) {
+  useEscape(true, onClose)
+  const card = state.cards[cardId]
+  const name = card?.name ?? cardId
+  const owner: PlayerId | undefined = unit && (state.players.player.units.some(u => u.instanceId === unit.instanceId) ? 'player' : 'opponent')
+  const lines = unit ? upgradeLines(state, unit) : []
+  return (
+    <div className="fixed inset-0 z-50">
+      <button type="button" aria-label="Close the card" onClick={onClose} className="absolute inset-0 cursor-default border-none bg-[rgba(0,5,16,0.72)] p-0" />
+      <div role="dialog" aria-label={`${name}, full size`} className="pointer-events-none relative flex h-full items-center justify-center gap-5">
+        <CardFace card={card} fallbackName={cardId} deployed={unit?.isLeader} tight widthPx={card?.type === 'leader' || card?.type === 'base' ? 230 : 250} />
+        {unit && (
+          <div className="flex w-[220px] flex-col gap-2 text-ink">
+            <div className="text-xs tracking-[0.14em] text-accent">ON THE BOARD</div>
+            <div className="flex flex-col gap-1.5 text-sm leading-[19px]">
+              <span data-testid="detail-damage" className="flex items-center gap-2">
+                {unit.damage > 0
+                  ? <><span className="min-w-5 rounded-[3px] bg-red text-center text-xs font-bold leading-5 text-white">{unit.damage}</span>{' '}damage, {effectiveHp(state, unit) - unit.damage} HP left</>
+                  : `Undamaged, ${effectiveHp(state, unit)} HP`}
+              </span>
+              <span>{unit.exhausted ? 'Exhausted' : 'Ready'}, in {owner === 'player' ? 'your' : "the opponent's"} {unit.arena} arena</span>
+              {lines.length === 0
+                ? <span className="text-ink-faint">No upgrades or tokens</span>
+                : lines.map(line => <span key={line}>{line}</span>)}
+            </div>
+            <div className="mt-2.5 text-xs leading-[17px] text-ink-faint">Tap anywhere to close.</div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** One of the leader's actions in its menu: unavailable, with the reason, when it has no `onSelect`. */
+export interface LeaderMenuItem {
+  label: string
+  detail?: string
+  onSelect?: () => void
+}
+
+/**
+ * Your leader's actions, opened by tapping it: each action ability, deploying (with why not, when it
+ * can't be), and seeing the card. Picking one closes the menu.
+ */
+export function LeaderMenu({ name, items, onSee, onClose }: {
+  name: string
+  items: LeaderMenuItem[]
+  onSee: () => void
+  onClose: () => void
+}) {
+  useEscape(true, onClose)
+  const item = 'flex flex-col gap-0.5 rounded-xl border-none px-3 py-2 text-left'
+  return (
+    <>
+      <button type="button" aria-label="Close the menu" onClick={onClose} className="fixed inset-0 z-40 cursor-default border-none bg-transparent p-0" />
+      <div role="menu" aria-label={name} className="fixed bottom-14 right-4 z-50 flex w-[252px] flex-col gap-1.5 rounded-[14px] bg-[var(--color-sheet)] p-2.5 shadow-[0_8px_28px_rgba(0,0,0,0.6)]">
+        <span className="px-1 pb-1 pt-0.5 text-xs tracking-[0.14em] text-accent">{name.toUpperCase()} · LEADER</span>
+        {items.map(it => (
+          <button
+            key={it.label}
+            type="button"
+            role="menuitem"
+            aria-disabled={!it.onSelect}
+            onClick={it.onSelect ? () => { onClose(); it.onSelect!() } : undefined}
+            className={`${item} ${it.onSelect ? 'bg-[var(--color-tonal)] text-ink' : 'cursor-default bg-surface text-ink-faint'}`}
+          >
+            <span className="text-[15px] font-medium">{it.label}</span>
+            {it.detail && <span className={`text-xs leading-4 ${it.onSelect ? 'text-accent' : ''}`}>{it.detail}</span>}
+          </button>
+        ))}
+        <button type="button" role="menuitem" onClick={() => { onClose(); onSee() }} className="h-10 rounded-xl border-none bg-transparent px-3 text-left text-sm text-ink-dim">
+          See the card
+        </button>
+      </div>
+    </>
+  )
+}
+
+/**
+ * The game over, on a phone: a card over the board saying who won and how, which decks played, and
+ * Rematch or a new setup. The controls column stays uncovered, so the log is still under Log.
+ */
+export function PhoneGameOver({ state, deckName, onRematch, onExit }: {
+  state: GameState
+  deckName: string
+  onRematch: () => void
+  onExit: () => void
+}) {
+  if (state.winner === null) return null
+  const outcome = outcomeBanner(state.winner, state.concededBy)
+  const baseName = (side: PlayerId) => state.cards[state.players[side].base.cardId]?.name ?? 'The base'
+  const how = outcome.detail ?? (state.winner === 'draw'
+    ? `Both bases destroyed in round ${state.round}`
+    : `${baseName(state.winner === 'player' ? 'opponent' : 'player')} destroyed in round ${state.round}`)
+  const opp = state.players.opponent
+  const against = `${deckName} against ${state.cards[opp.leader.cardId]?.name ?? opp.leader.cardId} · ${baseName('opponent')}`
+  return (
+    <div data-testid="game-over" className="fixed inset-y-0 right-0 z-30 flex items-center justify-center bg-[rgba(0,5,16,0.62)]" style={{ left: 214 }}>
+      <div role="dialog" aria-label={`Game over: ${outcome.title.toLowerCase()}`} data-testid="game-over-banner" className="flex w-[380px] flex-col items-center gap-1.5 rounded-2xl bg-[var(--color-sheet)] p-5 text-center shadow-[0_8px_32px_rgba(0,0,0,0.6)]">
+        <div className="text-xs tracking-[0.14em] text-accent">GAME OVER</div>
+        <div className={`text-[30px] font-light tracking-[0.06em] ${outcome.tone}`}>{outcome.title}</div>
+        <div data-testid="outcome-detail" className="text-sm text-ink-dim">{how}</div>
+        <div className="text-xs text-ink-faint">{against}</div>
+        <div className="mt-3 flex w-full gap-2 *:flex-1">
+          <Button onClick={onExit}>New setup</Button>
+          <Button variant="primary" testId="rematch-btn" onClick={onRematch}>Rematch</Button>
+        </div>
+        <div className="mt-1 text-xs text-ink-faint">Rematch shuffles the same decks. The log is still under Log.</div>
+      </div>
+    </div>
   )
 }
 

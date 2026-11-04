@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useContext, useRef, useState } from 'react'
 import type { GameState, PlayerId, EngineCard } from '../engine/types'
 import type { DescribePart } from '../utils/describeAction'
 import { CardZoomPopover } from './cardZoom'
+import { CardInspect } from './useCardZoom'
 
 /**
  * A card named in the log or in an action prompt, shown as a link-styled reference: bold and
@@ -12,8 +13,8 @@ import { CardZoomPopover } from './cardZoom'
  * mid-play, which does not apply to a line of text in the log.
  *
  * It is styled like a link but is deliberately a `<span>`, not an `<a>`: there is nowhere to
- * navigate, and clicking does nothing. An anchor would have screen readers announce a link
- * that goes nowhere.
+ * navigate. On the desktop clicking does nothing; on a phone (under a `CardInspect`) a tap opens
+ * the card full size, and the span says it is a button.
  *
  * `pointer-events-auto` keeps a reference hoverable inside the action prompt, which is itself
  * click-through so it never intercepts the board it is describing.
@@ -30,12 +31,17 @@ export function CardRef({ state, cardId, controller, text }: {
   // Stable callback ref: an unstable one is detached and re-attached around the popover's
   // layout effect, which leaves the zoom permanently invisible (see #367 and useCardZoom).
   const setAnchor = useCallback((el: HTMLElement | null) => { anchorRef.current = el }, [])
+  // On a phone there is no hover: a tap on the name opens the card full size.
+  const inspect = useContext(CardInspect)
+  const open = inspect ? () => inspect({ cardId }) : undefined
 
   return (
     <span
       ref={setAnchor}
       data-testid="card-ref"
       data-card-id={cardId}
+      role={open ? 'button' : undefined}
+      onClick={open}
       onPointerEnter={e => { if (e.pointerType === 'mouse') setHovering(true) }}
       onPointerLeave={() => setHovering(false)}
       onPointerCancel={() => setHovering(false)}

@@ -785,6 +785,16 @@ The board is drawn with art-dominant cards, not text rows:
   panel grouping `LogEntry`s by their `round` (0 is setup) with outcomes folded into their
   action's row; More (`MoreSheet`) and the piles (`PileSheet`) are the PWA's shared `Sheet`.
   Conceding lives in More on a phone, not the action column, and the bug report is not offered.
+  The phone screen provides `CardInspect` (`useCardZoom.ts`): under it a long press on a card that
+  hands `useCardZoom` its target, and a tap on a `CardRef` name, opens `CardDetail` (the card full
+  size and, for a unit in play, what is on it) until closed, instead of the hold-only popover.
+  The leader opens `LeaderMenu` (each `leaderActions` ability, the `deployLeader` moves or
+  `boardLayout.deployBlocker`'s reason, and the card), so deploying leaves the action column there.
+  `useGame` publishes `opponentAction`, the paced opponent's chosen action while it waits out the
+  delay, which the phone writes in the prompt (redacted as the log is) and rings with
+  `boardLayout.actionFocus`; and `regroupDrawn`, the deck's shrink at the regroup draw, which tags
+  the end of the hand NEW until the player resources. Game over is `PhoneGameOver`, a dialog over
+  the board that leaves the controls column uncovered.
 
 ## Storage tiers
 

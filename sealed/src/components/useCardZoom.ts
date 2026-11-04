@@ -1,6 +1,18 @@
-import { useCallback, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, MouseEvent as ReactMouseEvent } from 'react'
 import { useModifierKeys } from './modifierKeys'
+
+/** A card to see full size: a card by id, and the unit it is in play as, when it is one. */
+export interface InspectTarget {
+  cardId: string
+  instanceId?: string
+}
+
+/**
+ * Where a held card goes on a phone: the game screen's full-size view of it (`CardDetail`), which
+ * stays open until closed. Absent on the desktop, where a long press shows the popover while held.
+ */
+export const CardInspect = createContext<((target: InspectTarget) => void) | null>(null)
 
 /** How long a touch/pen press must be held before it zooms rather than taps. */
 const LONG_PRESS_MS = 350
@@ -10,7 +22,9 @@ const LONG_PRESS_MS = 350
  * - **mouse** zooms only while **Shift** is held and the pointer is over the card
  *   (so plain hovering doesn't obscure the board mid-play);
  * - **touch/pen** long-press zooms and, on release, suppresses the click so a
- *   long-press doesn't also play/attack the card. A quick tap is unaffected.
+ *   long-press doesn't also play/attack the card. A quick tap is unaffected. Under a
+ *   `CardInspect` (a phone), a long press on a card given its `target` opens the
+ *   full-size view instead, which stays open once the finger lifts.
  *
  * No keyboard/focus zoom: focus persists on a card until a blur, which left the
  * zoom stuck on for long-lived cards (leaders/bases) — see the removed focusZoom.
@@ -18,8 +32,9 @@ const LONG_PRESS_MS = 350
  * `anchorRef` is attached to the card's wrapper and handed to `CardZoomPopover`, which
  * centres the (portalled) zoom over it and clamps it to the viewport.
  */
-export function useCardZoom() {
+export function useCardZoom(target?: InspectTarget) {
   const { shift } = useModifierKeys()
+  const inspect = useContext(CardInspect)
   const [hovering, setHovering] = useState(false)
   const [pressZoom, setPressZoom] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -47,7 +62,8 @@ export function useCardZoom() {
         longPressed.current = false
         timer.current = setTimeout(() => {
           longPressed.current = true
-          setPressZoom(true)
+          if (inspect && target) inspect(target)
+          else setPressZoom(true)
         }, LONG_PRESS_MS)
       }
     },

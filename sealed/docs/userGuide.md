@@ -105,9 +105,14 @@ Play with the phone **on its side**: held upright, the game asks you to **turn y
 - **The board** fills the rest: **Space** on the left and **Ground** on the right, each in two panels, the opponent's above and yours below, with both bases and leaders in the strip between them. Each unit sits in a square slot, four to a row (five once a side holds more than eight), turned sideways when exhausted, with its power and health in its bottom corners and a badge for what is on it: damage in the middle, **Shd** and **Exp** for Shield and Experience tokens, **+n** for upgrade cards, **Sentinel**, **Hidden**, and **LEADER** on a deployed leader, whose slot in the strip says **Deployed**.
 - **Your hand** runs under the board: playable cards are ringed blue (green to resource), the rest dimmed, and a long hand fans so it all fits.
 - **Attacking**: tap a ringed unit, which is then ringed **white**, then a red target. **Cancel attack** puts the unit down again.
+- **Seeing a card**: **tap and hold** any card (in your hand, on the board, a leader or a base) to see it full size. A unit in play shows what is on it beside the card: its damage and the HP it has left, whether it is ready and in which arena, and its upgrades and tokens. Tap anywhere to close it. Holding a card never plays it.
+- **Your leader**: tap it to open its menu: **Use action** for each of its action abilities (with what it does), **Deploy** (greyed out with the reason when you can't, such as how many resources it needs), and **See the card**.
+- **The opponent's turn**: while the opponent acts, the action buttons give way to **Opponent…**, and the prompt says what it is doing before it is done, with the unit acting ringed **amber** and its target **red**. With the opponent's pace at its fastest there is nothing to show: its reply lands at once.
+- **Regroup**: the two cards you have just drawn are tagged **NEW** while you choose one to resource, and **Don't resource** keeps them all.
 - **Piles**: tap a **DISC** count to see that discard pile. When a card lets you look at the top of your deck, tap your **DECK** count.
-- **The log** slides in from the left over the controls, leaving the board in view: newest first, under the round each action was taken in, each action in one row with what it changed beneath it. **Undo** sits at its foot when it's on.
+- **The log** slides in from the left over the controls, leaving the board in view: newest first, under the round each action was taken in, each action in one row with what it changed beneath it. Tap a card's name to see the card. **Undo** sits at its foot when it's on.
 - **More** holds **Help**, **Settings** and **Concede**, which asks you to confirm. The bug report is not offered on a phone.
+- **Game over** shows over the board: who won and how (the base destroyed, and in which round, or who conceded), your deck and the one it played against, and **Rematch** or **New setup**. The controls column stays uncovered, so the log is still under **Log**.
 
 ### Settings
 
