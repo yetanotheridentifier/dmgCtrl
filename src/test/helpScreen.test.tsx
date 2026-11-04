@@ -84,7 +84,7 @@ describe('HelpScreen', () => {
     const blocks = within(content).getAllByRole('region')
     expect(blocks.map(b => b.getAttribute('aria-label'))).toEqual(['Setup', 'Game', 'Tournament', 'Rules'])
     for (const block of blocks) {
-      expect(block).toHaveStyle({ background: 'var(--color-surface)' })
+      expect(block.style).toMatchObject({ background: 'var(--color-surface)' })
       expect(within(block).getAllByRole('heading', { level: 2 })).toHaveLength(1)
     }
   })
