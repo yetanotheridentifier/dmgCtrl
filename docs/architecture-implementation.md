@@ -187,12 +187,14 @@ public/
 
 .github/
   dependabot.yml                  Weekly version updates for the three npm packages and the actions, 7-day cooldown (see architecture-process.md)
+  upstream-watch.json             The upstream releases blocked tickets wait on, read by upstream-watch.yml
   workflows/
     deploy.yml                    CI/CD pipeline
     simulation-tests.yml          Sealed's simulation tests, on pull requests, pushes to main and nightly
     preview-teardown.yml          Deletes a pull request's preview Worker when it is merged or closed
     close-outside-prs.yml         Closes pull requests from outside the project (Dependabot's pass)
     populate-base-aspects.yml     Daily cron + manual dispatch — refreshes the base_aspects InfluxDB measurement (see architecture-process.md)
+    upstream-watch.yml            Weekly + manual dispatch: raises a ticket when a blocking upstream release lands, and disables itself once none is left (see architecture-process.md)
 
 scripts/
   inspect-base-data.mjs           Replicates the useBases merging logic; writes docs/base-data-snapshot.json and docs/base-data-summary.json for offline data inspection
@@ -202,6 +204,7 @@ scripts/
   measure-performance.mjs         Playwright script: measures setup ready time, LCP, preview image time, and game image time across three resolution tiers (low/normal/hi res) per iteration; reports min/median/max (see project-overview.md)
   populate-base-aspects.mjs       Fetches base card data from swuapi.com and the swu-db proxy (one query per set, skipping sets swu-db cannot serve), merges them into baseKey→aspect pairs, and writes to the base_aspects InfluxDB measurement; exports buildBaseAspects, toLineProtocol, fetchSetCodes and fetchSwuDbBases for unit testing; run by the GitHub Actions daily workflow and on-demand via node scripts/populate-base-aspects.mjs
   generate-xwing-data.mjs         Writes src/data/xwaCards.ts from YASB's card data (raithos/xwing `coffeescripts/content/cards-common.coffee` at the pinned `YASB_COMMIT`): YASB has no data API, so it compiles the CoffeeScript and runs YASB's own `basicCardData`/`setupCommonCardData` in `node:vm` to get the XWS ids YASB exports; exports extractXwingData and renderModule for unit testing. To pick up new XWA points, read the YASB diff, move `YASB_COMMIT` and run node scripts/generate-xwing-data.mjs
+  upstream-watch.mjs              Checks each entry in .github/upstream-watch.json against the package's latest release on npm; raises a ticket once a watched peer range accepts the version a blocked ticket needs, and disables upstream-watch.yml when every watch has cleared; exports accepts, latestPeerRange, ticketTitle, ticketBody and run for unit testing
   check-influxdb-usage.mjs        Queries the dmgctrl InfluxDB bucket row count and prints an estimated storage size against the 5GB free-tier limit; reads credentials from .env.influxdb automatically; run with node scripts/check-influxdb-usage.mjs
 ```
 

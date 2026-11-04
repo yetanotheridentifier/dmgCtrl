@@ -1,0 +1,34 @@
+# Raises a ticket when an upstream release lands that a blocked ticket is waiting on, and turns
+# itself off once nothing is left to watch. The watches are in .github/upstream-watch.json; the
+# logic, and how to add one, is in scripts/upstream-watch.mjs.
+#
+# No secrets: the job's own token raises the ticket (issues) and disables the workflow (actions).
+
+name: Upstream watch
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - run: npm ci --ignore-scripts
+
+      - name: Check the watches
+        run: node scripts/upstream-watch.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
