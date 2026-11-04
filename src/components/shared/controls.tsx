@@ -185,6 +185,48 @@ interface OptionRowProps {
   icon?: ReactNode
 }
 
+interface SwitchProps {
+  label: string
+  note?: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}
+
+// An on/off choice as a row: its label (and an optional note under it) beside the switch. The
+// button is 44px tall so the track is easy to hit.
+export function Switch({ label, note, checked, onChange }: SwitchProps) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minHeight: '44px' }}>
+      <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <span style={{ fontSize: '15px', color: 'var(--color-text-primary)' }}>{label}</span>
+        {note && <span style={{ fontSize: '12px', lineHeight: '16px', color: 'var(--color-text-muted)' }}>{note}</span>}
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        style={{ flexShrink: 0, width: '60px', height: '44px', padding: 0, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
+      >
+        <span style={{
+          width: '52px',
+          height: '32px',
+          boxSizing: 'border-box',
+          padding: '3px',
+          borderRadius: '16px',
+          background: checked ? 'var(--color-accent)' : 'rgba(var(--color-ui-border-muted-rgb), 0.25)',
+          display: 'flex',
+          justifyContent: checked ? 'flex-end' : 'flex-start',
+          transition: 'background 0.15s',
+        }}>
+          <span style={{ width: '26px', height: '26px', borderRadius: '13px', background: checked ? 'var(--color-on-accent)' : 'var(--color-text-muted)' }} />
+        </span>
+      </button>
+    </div>
+  )
+}
+
 // One choice in a Sheet, one or two lines: a list, a scenario, a start screen. `selected` marks the
 // current choice.
 export function OptionRow({ title, detail, selected = false, suggested = false, onClick, testId, icon }: OptionRowProps) {

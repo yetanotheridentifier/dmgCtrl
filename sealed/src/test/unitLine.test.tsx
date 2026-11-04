@@ -33,7 +33,7 @@ describe('UnitLine — on-card damage overlay', () => {
     render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D', { damage: 2 })} interact={noInteract} />)
     const token = screen.getByTestId('board-unit-damage-u1')
     expect(token).toHaveTextContent('2')
-    expect(token.style).toMatchObject({ background: 'var(--color-red)', color: 'var(--color-ink)' })
+    expect(token.style).toMatchObject({ background: 'var(--color-damage)', color: 'var(--color-text-primary)' })
   })
 
   it('shows no damage overlay at 0 damage', () => {
@@ -112,10 +112,10 @@ describe('UnitLine — on-card damage overlay', () => {
 
   it.each([
     // kind, power figure colour, HP figure colour
-    ['mod', 'var(--color-red)', 'var(--color-token-hp)'], // the white buff keeps the physical token's red and blue
-    ['debuff', 'var(--color-ink)', 'var(--color-ink)'],
-    ['experience', 'var(--color-ink)', 'var(--color-ink)'],
-    ['weakness', 'var(--color-ink)', 'var(--color-ink)'],
+    ['mod', 'var(--color-damage)', 'var(--color-token-hp)'], // the white buff keeps the physical token's red and blue
+    ['debuff', 'var(--color-text-primary)', 'var(--color-text-primary)'],
+    ['experience', 'var(--color-text-primary)', 'var(--color-text-primary)'],
+    ['weakness', 'var(--color-text-primary)', 'var(--color-text-primary)'],
   ])('prints the %s pill’s figures in bold, coloured from its spec, with the shared shadow', (kind, power, hp) => {
     const s = addLastingEffect(boardWith('TST_D'), { targetInstanceId: 'u1', power: 2, hp: -1 })
     const u = unit('u1', 'TST_D', { upgrades: [{ cardId: TOKEN_EXPERIENCE, owner: 'player' }, { cardId: TOKEN_WEAKNESS, owner: 'player' }] })

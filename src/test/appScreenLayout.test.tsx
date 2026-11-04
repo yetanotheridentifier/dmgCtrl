@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import AppScreenLayout from '../components/layout/appScreenLayout'
 
 const indexCss = String(Object.values(import.meta.glob('../index.css', { query: '?raw', import: 'default', eager: true }))[0])
+const tokensCss = String(Object.values(import.meta.glob('../styles/tokens.css', { query: '?raw', import: 'default', eager: true }))[0])
 
 describe('AppScreenLayout', () => {
   it('Renders children', () => {
@@ -23,10 +24,10 @@ describe('AppScreenLayout', () => {
 
 describe('the edge tokens', () => {
   // Content keeps clear of the screen's rounded corners: each edge is the safe-area inset or the edge
-  // margin, whichever is larger (never the two added), and the top is the top clearance (index.css)
+  // margin, whichever is larger (never the two added), and the top is the top clearance (styles/tokens.css)
   // or the margin. One place to tune: no component reads an inset itself.
   const sources = import.meta.glob(['../**/*.{ts,tsx}', '!../test/**', '!../**/*.test.*'], { query: '?raw', import: 'default', eager: true })
-  const declared = (name: string) => indexCss.match(new RegExp(`--${name}:\\s*([^;]+);`))?.[1].trim()
+  const declared = (name: string) => tokensCss.match(new RegExp(`--${name}:\\s*([^;]+);`))?.[1].trim()
 
   it('are the larger of the inset and a 16px margin on every edge', () => {
     expect(declared('edge-margin')).toBe('16px')
