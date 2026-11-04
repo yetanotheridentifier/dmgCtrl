@@ -4,6 +4,78 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { marked } from 'marked'
 import { fileURLToPath } from 'node:url'
+import { VitePWA } from 'vite-plugin-pwa'
+import type { Plugin } from 'vite'
+import type { ManifestOptions, VitePWAOptions } from 'vite-plugin-pwa'
+
+/**
+ * Sealed installs as an app of its own, beside dmgCtrl on the same origin: its own id, and a
+ * scope and start page of /sealed/, so the install opens Sealed and its worker stays there.
+ *
+ * A copy of the PWA's pattern (PWA_MANIFEST in the root vite.config.ts), kept in the same shape
+ * so the two can be merged later. Icon paths are relative to the manifest, which is at /sealed/.
+ */
+export const SEALED_PWA_MANIFEST: Partial<ManifestOptions> = {
+  id: '/sealed/',
+  name: 'dmgCtrl Sealed',
+  short_name: 'Sealed',
+  description: 'Star Wars Unlimited sealed play against the AI',
+  theme_color: '#0a0e1a',
+  background_color: '#0a0e1a',
+  display: 'standalone',
+  scope: '/sealed/',
+  start_url: '/sealed/',
+  icons: [
+    {
+      src: 'dmgCtrl-icon-192.png',
+      sizes: '192x192',
+      type: 'image/png'
+    },
+    {
+      src: 'dmgCtrl-icon-512.png',
+      sizes: '512x512',
+      type: 'image/png'
+    }
+  ],
+}
+
+/**
+ * The service worker precaches the app's code and pages and every image it ships in `public/`, so
+ * it opens offline after one visit. Nothing is cached at run time: card data and thumbnails stay
+ * in IndexedDB (Dexie), and full card art is fetched from the network each time.
+ *
+ * Workbox leaves any file over `maximumFileSizeToCacheInBytes` out of the precache with only a
+ * warning, and its 2 MiB default is not far above the main bundle, so the limit is set here and
+ * `precacheFits` fails the build if a precached file outgrows it.
+ *
+ * A copy of the PWA's pattern (PWA_WORKBOX in the root vite.config.ts), kept in the same shape.
+ */
+export const SEALED_PWA_WORKBOX: Partial<VitePWAOptions['workbox']> = {
+  globPatterns: ['**/*.{js,css,html,png,svg}'],
+  maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+}
+
+/** The file types SEALED_PWA_WORKBOX's patterns precache. */
+const PRECACHED = /\.(js|css|html|png|svg)$/
+
+/** Fails the build, naming the file, if any precached file is over the precache's size limit. */
+function precacheFits(): Plugin {
+  const limit = SEALED_PWA_WORKBOX.maximumFileSizeToCacheInBytes ?? 0
+  return {
+    name: 'precache-fits',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      for (const file of Object.values(bundle)) {
+        if (!PRECACHED.test(file.fileName)) continue
+        const content = file.type === 'chunk' ? file.code : file.source
+        const size = typeof content === 'string' ? new TextEncoder().encode(content).length : content.length
+        if (size > limit) {
+          this.error(`${file.fileName} is ${size} bytes, over the precache limit of ${limit}: it would not open offline. Raise maximumFileSizeToCacheInBytes in vite.config.ts.`)
+        }
+      }
+    },
+  }
+}
 
 /**
  * The PWA's shared UI (controls, log drawer, tournament layout), the one part of the PWA that
@@ -69,6 +141,17 @@ export default defineConfig({
     },
     react(),
     tailwindcss(),
+    VitePWA({
+      // Not 'autoUpdate' as the PWA has it: a game lives only in memory, so a new worker waits
+      // and useUpdateOnDeckScreen applies it when no game is open.
+      registerType: 'prompt',
+      devOptions: { enabled: false },
+      workbox: SEALED_PWA_WORKBOX,
+      // The manifest icons are in public/ and already matched by SEALED_PWA_WORKBOX's patterns.
+      includeManifestIcons: false,
+      manifest: SEALED_PWA_MANIFEST,
+    }),
+    precacheFits(),
   ],
   test: {
     globals: true,
