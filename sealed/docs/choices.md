@@ -525,8 +525,14 @@ action looks like a heal that never happened.
   in the panel, a selectable card itself the button (named with its action, "Loth-Wolf: Discard"),
   the rest dimmed, any card opened full size when held, and a lone button beside the cards (Done,
   Cancel) the primary. Naming a card or a Trait lists the first three matches as `OptionRow`s; the
-  one chosen is named by the primary **Name ...** button. The other dedicated overlays (which
-  resolves next) keep their desktop frames on a phone for now.
+  one chosen is named by the primary **Name ...** button. Which resolves next lists one answer per
+  waiting ability, a line each, the first primary.
+- **A distribution on a phone** (damage, tokens, indirect damage, healing) is answered on the board;
+  its question stays in the controls column's prompt and `allocation` is drawn under it as a count,
+  "1 of 2 placed" ("healed" for healing).
+- **Your base's actions on a phone** are not action buttons: tapping the base opens a `LeaderMenu`
+  as a `BASE`, holding **Use Epic Action** (greyed with "Used this game" once spent) and any action an
+  upgrade on the base gives, each answering its `useBaseAbility` move.
 - **The opponent's hand** dims the cards its discard cannot take and offers Done only when the legal
   moves allow declining, both read from the legal moves (a non-unit for Bodhi Rook, an event for Jam
   Communications, nothing to decline for Reveal Intentions).

@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Button, IconButton, Sheet } from '@pwa-shared/controls'
-import type { GameState, PlayerId, UnitState } from '../../engine/types'
+import type { CapturedCard, GameState, PlayerId, UnitState } from '../../engine/types'
 import { CardInspect, useCardZoom } from '../useCardZoom'
 import { outcomeBanner } from '../outcome'
 import type { LogEntry } from '../../hooks/useGame'
@@ -86,6 +86,8 @@ export function PhoneUnit({ state, unit, interact, size = 'normal' }: {
   const upgrades = unit.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token').length
   const sentinel = unitHasKeyword(state, unit, 'Sentinel')
   const name = state.cards[unit.cardId]?.name ?? unit.cardId
+  const captured = unit.captured ?? []
+  const [capturedOpen, setCapturedOpen] = useState(false)
   const tags = [
     unit.isLeader && { kind: 'leader', text: 'LEADER', style: 'bg-amber text-black' },
     sentinel && { kind: 'sentinel', text: 'Sentinel', style: 'bg-black/80 text-ink' },
@@ -94,6 +96,9 @@ export function PhoneUnit({ state, unit, interact, size = 'normal' }: {
     experience > 0 && { kind: 'experience', text: `Exp ${experience}`, style: 'bg-token-experience text-token-ink-dark' },
   ].filter((t): t is { kind: string; text: string; style: string } => Boolean(t))
   return (
+    <>
+    {/* Outside the unit, so a tap in it never reaches the unit's own tap or hold. */}
+    {capturedOpen && <CapturedCards state={state} guard={name} captured={captured} onClose={() => setCapturedOpen(false)} />}
     <div
       data-testid={`board-unit-${unit.instanceId}`}
       data-actionable={interact.actionable}
@@ -113,6 +118,18 @@ export function PhoneUnit({ state, unit, interact, size = 'normal' }: {
           <span key={t.kind} data-testid={`unit-badge-${t.kind}`} className={`${BADGE} ${t.style}`}>{t.text}</span>
         ))}
       </div>
+      {captured.length > 0 && (
+        <button
+          type="button"
+          data-testid="unit-badge-captured"
+          aria-label={`${name}: guarding ${captured.length} captured card${captured.length === 1 ? '' : 's'}`}
+          aria-expanded={capturedOpen}
+          onClick={e => { e.stopPropagation(); setCapturedOpen(true) }}
+          className={`${BADGE} absolute left-1/2 top-[-9px] z-10 -translate-x-1/2 cursor-pointer border-none bg-amber px-1 text-black`}
+        >
+          {captured.length} CAPT
+        </button>
+      )}
       {unit.damage > 0 && (
         <span data-testid="unit-badge-damage" aria-label={`${unit.damage} damage`} className="pointer-events-none absolute left-1/2 top-1/2 min-w-4 -translate-x-1/2 -translate-y-1/2 rounded-[3px] bg-red text-center text-[10px] font-bold leading-4 text-white">
           {unit.damage}
@@ -124,6 +141,46 @@ export function PhoneUnit({ state, unit, interact, size = 'normal' }: {
       <span className="pointer-events-none absolute bottom-0 left-0 h-3.5 w-3.5 rounded-full bg-red text-center text-[9px] font-bold leading-[14px] text-white">{effectivePower(state, unit)}</span>
       <span className="pointer-events-none absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-token-hp text-center text-[9px] font-bold leading-[14px] text-white">{effectiveHp(state, unit)}</span>
     </div>
+    </>
+  )
+}
+
+/**
+ * What a unit is guarding, opened from its CAPT tag: each captured card (tap it to see it full size),
+ * whose it is, and that it comes back into play exhausted for its owner when the guard leaves play.
+ */
+function CapturedCards({ state, guard, captured, onClose }: {
+  state: GameState
+  guard: string
+  captured: CapturedCard[]
+  onClose: () => void
+}) {
+  useEscape(true, onClose)
+  const inspect = useContext(CardInspect)
+  return (
+    <>
+      <button type="button" aria-label="Close the captured cards" onClick={onClose} className="fixed inset-0 z-40 cursor-default border-none bg-transparent p-0" />
+      <div role="dialog" aria-label={`${guard}'s captured card${captured.length === 1 ? '' : 's'}`} className="fixed right-2 top-2 z-50 flex w-[270px] flex-col gap-2 rounded-[14px] bg-[var(--color-sheet)] p-3 shadow-[0_8px_28px_rgba(0,0,0,0.6)]">
+        <div className="flex items-center gap-2">
+          <span className="flex-1 text-xs tracking-[0.14em] text-accent">{guard.toUpperCase()} · GUARDING {captured.length}</span>
+          <IconButton label="Close" onClick={onClose}><CloseIcon /></IconButton>
+        </div>
+        {captured.map((c, i) => {
+          const name = state.cards[c.cardId]?.name ?? c.cardId
+          const yours = c.owner === 'player'
+          return (
+            <div key={`${c.cardId}-${i}`} className="flex items-start gap-2.5">
+              <button type="button" aria-label={`${name}: see the card`} onClick={() => inspect?.({ cardId: c.cardId })} className="flex-none cursor-pointer border-none bg-transparent p-0">
+                <CardFace card={state.cards[c.cardId]} fallbackName={c.cardId} tight widthPx={50} />
+              </button>
+              <div className="text-[13px] leading-[18px] text-ink-dim">
+                {`${name}, ${yours ? 'your' : "the opponent's"} card. It comes back into play for ${yours ? 'you' : 'them'}, exhausted, when ${guard} leaves play.`}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </>
   )
 }
 
@@ -412,10 +469,12 @@ export interface LeaderMenuItem {
 
 /**
  * Your leader's actions, opened by tapping it: each action ability, deploying (with why not, when it
- * can't be), and seeing the card. Picking one closes the menu.
+ * can't be), and seeing the card. Picking one closes the menu. Your base opens the same menu as a
+ * `BASE`: its Epic Action, once a game, and any action an upgrade on it gives.
  */
-export function LeaderMenu({ name, items, onSee, onClose }: {
+export function LeaderMenu({ name, kind = 'LEADER', items, onSee, onClose }: {
   name: string
+  kind?: 'LEADER' | 'BASE'
   items: LeaderMenuItem[]
   onSee: () => void
   onClose: () => void
@@ -426,7 +485,7 @@ export function LeaderMenu({ name, items, onSee, onClose }: {
     <>
       <button type="button" aria-label="Close the menu" onClick={onClose} className="fixed inset-0 z-40 cursor-default border-none bg-transparent p-0" />
       <div role="menu" aria-label={name} className="fixed bottom-14 right-4 z-50 flex w-[252px] flex-col gap-1.5 rounded-[14px] bg-[var(--color-sheet)] p-2.5 shadow-[0_8px_28px_rgba(0,0,0,0.6)]">
-        <span className="px-1 pb-1 pt-0.5 text-xs tracking-[0.14em] text-accent">{name.toUpperCase()} · LEADER</span>
+        <span className="px-1 pb-1 pt-0.5 text-xs tracking-[0.14em] text-accent">{name.toUpperCase()} · {kind}</span>
         {items.map(it => (
           <button
             key={it.label}

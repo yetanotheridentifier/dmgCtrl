@@ -2,8 +2,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import GameScreen, { CardSelectOverlay, NameCardOverlay, OpponentHandOverlay, SearchPlayFreeOverlay, TriggerOrderOverlay } from '../components/gameScreen'
-import { PhonePrompt } from '../components/game/phoneLayout'
+import GameScreen, { CardSelectOverlay, NameCardOverlay, NextTriggerOverlay, OpponentHandOverlay, SearchPlayFreeOverlay, TriggerOrderOverlay } from '../components/gameScreen'
+import { PhonePrompt, PhoneUnit } from '../components/game/phoneLayout'
 import { CardInspect } from '../components/useCardZoom'
 import { PHONE_LANDSCAPE_QUERY } from '../hooks/useMediaQuery'
 import { db } from '../data/db'
@@ -11,7 +11,7 @@ import type { SavedDeck } from '../data/deckStore'
 import type { SwuCard } from '../data/cards'
 import type { UseGameOptions } from '../hooks/useGame'
 import { legalMoves } from '../engine/legalMoves'
-import { registerAbility, unregisterAbility } from '../engine/abilities'
+import { registerAbility, registerCard, unregisterAbility } from '../engine/abilities'
 import { pushChoice } from '../engine/types'
 import type { PendingTrigger, PlayerId } from '../engine/types'
 import { SettingsProvider } from '../hooks/useSettings'
@@ -121,6 +121,64 @@ describe('who resolves first, on a phone', () => {
     expect(theirs.compareDocumentPosition(mine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await userEvent.setup().click(mine)
     expect(onPick).toHaveBeenCalledWith(0)
+  })
+
+  it('asks which of your abilities resolves next, one answer per ability, the first primary', async () => {
+    const onPick = vi.fn()
+    render(
+      <NextTriggerOverlay
+        phone
+        state={board}
+        candidates={[{ triggerId: 't1', cardId: 'ASH_153' }, { triggerId: 't2', cardId: 'ASH_116' }]}
+        onPick={onPick}
+        onDismiss={vi.fn()}
+      />,
+    )
+    const dialog = screen.getByRole('dialog', { name: /which resolves next/i })
+    const answers = within(dialog).getAllByTestId(/^next-trigger-btn-\d$/)
+    expect(answers.map(b => b.textContent)).toEqual(['Green Leader', 'Ant Droid'])
+    expect(answers.filter(isPrimary)).toEqual([answers[0]])
+    expect(dialog).toHaveTextContent(/you can still decline optional effects/i)
+    expect(within(dialog).getByTestId('overlay-dismiss')).toBeInTheDocument()
+    await userEvent.setup().click(answers[1])
+    expect(onPick).toHaveBeenCalledWith(1)
+  })
+})
+
+describe('a captured card, on a phone', () => {
+  const cards = {
+    ...CARDS,
+    TST_G: card({ id: 'TST_G', name: 'Discerning Veteran', type: 'unit', arena: 'ground', power: 3, hp: 4 }),
+    TST_P: card({ id: 'TST_P', name: 'Clone Deserter', type: 'unit', arena: 'ground', power: 1, hp: 2 }),
+  }
+  const guard = unit('g', 'TST_G', { captured: [{ cardId: 'TST_P', owner: 'player' }] })
+  const s = state({ cards, players: { player: player(), opponent: player({ units: [guard] }) } })
+
+  it('tags the guard with what it holds, and the tag opens it without acting on the unit', async () => {
+    const onUnit = vi.fn()
+    const inspect = vi.fn()
+    render(
+      <CardInspect.Provider value={inspect}>
+        <PhoneUnit state={s} unit={guard} interact={{ actionable: true, selected: false, isTarget: false, onClick: onUnit }} />
+      </CardInspect.Provider>,
+    )
+    const user = userEvent.setup()
+    const tag = screen.getByRole('button', { name: /discerning veteran: guarding 1 captured card/i })
+    expect(tag).toHaveTextContent('1 CAPT')
+    await user.click(tag)
+    expect(onUnit).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('dialog', { name: "Discerning Veteran's captured card" })
+    expect(within(dialog).getByText('DISCERNING VETERAN · GUARDING 1')).toBeInTheDocument()
+    expect(dialog).toHaveTextContent('Clone Deserter, your card. It comes back into play for you, exhausted, when Discerning Veteran leaves play.')
+    await user.click(within(dialog).getByRole('button', { name: /clone deserter: see the card/i }))
+    expect(inspect).toHaveBeenCalledWith({ cardId: 'TST_P' })
+    await user.click(within(dialog).getByRole('button', { name: /^close$/i }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('has no tag on a unit guarding nothing', () => {
+    render(<PhoneUnit state={s} unit={unit('h', 'TST_G')} interact={{ actionable: false, selected: false, isTarget: false }} />)
+    expect(screen.queryByText(/CAPT/)).toBeNull()
   })
 })
 
@@ -248,6 +306,8 @@ const other = (p: PlayerId): PlayerId => (p === 'player' ? 'opponent' : 'player'
 const SWU: SwuCard[] = [
   { Set: 'TST', Number: '001', Name: 'Test Leader', Type: 'Leader', Cost: '5', Power: '4', HP: '7' },
   { Set: 'TST', Number: '002', Name: 'Test Base', Type: 'Base', HP: '30' },
+  { Set: 'TST', Number: '003', Name: 'Epic Base', Type: 'Base', HP: '30' },
+  { Set: 'TST', Number: '966', Name: 'Indirect Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '1', HP: '3' },
   { Set: 'TST', Number: '300', Name: 'Filler', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
   { Set: 'TST', Number: '960', Name: 'Choosy Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '1', HP: '1' },
   { Set: 'TST', Number: '961', Name: 'Taxing Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '1', HP: '1' },
@@ -269,8 +329,18 @@ beforeAll(() => {
     description: 'Look at the top card of your deck.',
     effect: (s, ctx) => pushChoice(s, { kind: 'mayPlayTopFree', id: 'look', controller: ctx.owner, unitId: ctx.sourceInstanceId!, cardId: s.players[ctx.owner].deck[0] }),
   })
+  // Indirect damage dealt to yourself on play, so the test is the one placing it.
+  registerAbility('TST_966', {
+    trigger: 'whenPlayed',
+    description: 'Deal 2 indirect damage to yourself.',
+    effect: (s, ctx) => pushChoice(s, {
+      kind: 'distributeIndirectDamage', id: 'ind', controller: ctx.owner, targetPlayer: ctx.owner, remaining: 2, total: 2,
+      unitTargets: s.players[ctx.owner].units.map(u => u.instanceId), source: { cardId: 'TST_966', controller: ctx.owner },
+    }),
+  })
+  registerCard('TST_003', { baseAbilities: { epicAction: { description: 'Draw a card.', effect: s => s } } })
 })
-afterAll(() => { for (const id of ['TST_960', 'TST_961', 'TST_964']) unregisterAbility(id) })
+afterAll(() => { for (const id of ['TST_960', 'TST_961', 'TST_964', 'TST_966', 'TST_003']) unregisterAbility(id) })
 
 const deck = (id: string, first: string, rest = 'TST_300'): SavedDeck => ({
   id, name: id, leader: 'TST_001', base: 'TST_002', cards: [{ id: first, count: 1 }, { id: rest, count: 29 }], importedAt: 1,
@@ -363,5 +433,35 @@ describe('GameScreen prompts on a phone in landscape', () => {
     await user.click(answers[0])
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(unitsOn('player')).toHaveLength(2)
+  })
+
+  it('counts indirect damage placed in the controls column, a point at a time', async () => {
+    const user = await start(deck('p', 'TST_966'), allOf('TST_300'))
+    await user.click(screen.getByTestId('hand-card-0'))
+
+    const controls = screen.getByTestId('phone-controls')
+    expect(within(controls).getByRole('status')).toHaveTextContent(/^0 of 2 placed$/)
+    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/indirect damage/i)
+    await user.click(screen.getByTestId('target-player-base'))
+    expect(within(controls).getByRole('status')).toHaveTextContent(/^1 of 2 placed$/)
+  })
+
+  it("opens your base's Epic Action from a menu on the base, once a game", async () => {
+    const user = await start({ ...deck('p', 'TST_300'), base: 'TST_003' }, allOf('TST_300'))
+    // Not a button in the controls column: it lives on the base.
+    expect(within(screen.getByTestId('phone-actions')).queryByText(/epic base/i)).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /epic base: open its actions/i }))
+    const menu = screen.getByRole('menu', { name: 'Epic Base' })
+    expect(within(menu).getByText('EPIC BASE · BASE')).toBeInTheDocument()
+    const use = within(menu).getByRole('menuitem', { name: /use epic action/i })
+    expect(use).toHaveTextContent('Draw a card. Once a game.')
+    await user.click(use)
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /epic base: open its actions/i }))
+    const spent = within(screen.getByRole('menu', { name: 'Epic Base' })).getByRole('menuitem', { name: /use epic action/i })
+    expect(spent).toHaveAttribute('aria-disabled', 'true')
+    expect(spent).toHaveTextContent('Used this game')
   })
 })

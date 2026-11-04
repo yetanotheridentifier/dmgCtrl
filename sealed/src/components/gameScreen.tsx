@@ -5,7 +5,7 @@ import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
 import type { CapturedCard, EngineCard, GameState, PendingChoice, PendingTrigger, PlayerId, TargetIntent, UnitState, UpgradeAttachment } from '../engine/types'
-import { leaderActions, mayLookAtDeckTop, triggerAbility } from '../engine/abilities'
+import { baseEpicAction, leaderActions, mayLookAtDeckTop, triggerAbility } from '../engine/abilities'
 import type { Action } from '../engine/actions'
 import { describeAction, describeActionParts, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
@@ -595,33 +595,57 @@ export function TriggerOrderOverlay({ state, mine, theirs, onPick, onDismiss, ph
  * Each is named by its own card, which is the whole point of asking, since a unit's own ability and one
  * granted by an upgrade attached to it are otherwise indistinguishable.
  */
-export function NextTriggerOverlay({ state, candidates, onPick, onDismiss }: {
+export function NextTriggerOverlay({ state, candidates, onPick, onDismiss, phone = false }: {
   state: GameState
   candidates: { triggerId: string; cardId: string; sourceInstanceId?: string }[]
   onPick: (optionIndex: number) => void
   /** Cancels the action that raised the triggers; absent, the overlay blocks until answered. */
   onDismiss?: () => void
+  /** Asked in the phone's prompt panel: one answer per ability, a line each, the first primary. */
+  phone?: boolean
 }) {
   const owed = state.pendingTriggers ?? []
   const labels = candidates.map(c => {
     const trigger = owed.find(t => t.id === c.triggerId)
     return trigger ? triggerLabel(state, trigger) : (state.cards[c.cardId]?.name ?? c.cardId)
   })
+  // Two copies of one card each hold their own ability, and the label cannot tell them apart.
+  // Number those so the buttons are at least distinct to click.
+  const label = (i: number) => {
+    const duplicated = labels.filter(l => l === labels[i]).length > 1
+    const seen = labels.slice(0, i + 1).filter(l => l === labels[i]).length
+    return duplicated ? `${labels[i]} (${seen})` : labels[i]
+  }
+  if (phone) {
+    return (
+      <PhonePrompt
+        testId="next-trigger-overlay"
+        state={state}
+        question="Several of your abilities triggered at once. Which resolves next?"
+        note="Each will resolve in turn. You can still decline optional effects when they do."
+        buttons={[]}
+        onCancel={onDismiss}
+        cancelLabel={CANCEL_LABEL}
+      >
+        <div className="flex flex-col gap-2">
+          {candidates.map((c, i) => (
+            <Button key={c.triggerId} testId={`next-trigger-btn-${i}`} variant={i === 0 ? 'primary' : 'secondary'} onClick={() => onPick(i)} style={{ fontSize: '15px' }}>
+              {label(i)}
+            </Button>
+          ))}
+        </div>
+      </PhonePrompt>
+    )
+  }
   return (
     <OverlayShell testId="next-trigger-overlay" size="panel" onDismiss={onDismiss} dismissLabel={CANCEL_LABEL}>
       <OverlayHeader title="Which resolves next?" detail="Several of your abilities triggered at once." />
       <OverlayButtons stacked>
-        {candidates.map((c, i) => {
-          // Two copies of one card each hold their own ability, and the label cannot tell them apart.
-          // Number those so the buttons are at least distinct to click.
-          const duplicated = labels.filter(l => l === labels[i]).length > 1
-          const seen = labels.slice(0, i + 1).filter(l => l === labels[i]).length
-          return (
-            <button key={c.triggerId} data-testid={`next-trigger-btn-${i}`} onClick={() => onPick(i)} className={PANEL_PRIMARY}>
-              {duplicated ? `${labels[i]} (${seen})` : labels[i]}
-            </button>
-          )
-        })}
+        {candidates.map((c, i) => (
+          <button key={c.triggerId} data-testid={`next-trigger-btn-${i}`} onClick={() => onPick(i)} className={PANEL_PRIMARY}>
+            {label(i)}
+          </button>
+        ))}
       </OverlayButtons>
       {/* Picking here is not accepting the ability, and the difference is not obvious: there is no
           decline on this prompt because all of them resolve, and a "may" is turned down on its own
@@ -944,12 +968,14 @@ interface BaseTarget {
 }
 
 /** A base card in the central strip, with an HP overlay; clickable when a target. */
-function BaseCard({ state, side, target, widthPx, attacked = false }: {
+function BaseCard({ state, side, target, widthPx, attacked = false, menu }: {
   state: GameState
   side: PlayerId
   target?: BaseTarget
   /** The opponent's action on show is aimed at this base: ringed red. */
   attacked?: boolean
+  /** A phone opens the base's actions as a menu from the base: ringed blue while one can be taken. */
+  menu?: { open: boolean; actionable: boolean; onOpen: () => void }
   /** The card's short edge, framed tight to the card; the board's default square slot when absent. */
   widthPx?: number
 }) {
@@ -968,7 +994,13 @@ function BaseCard({ state, side, target, widthPx, attacked = false }: {
   const label = countDown ? 'health remaining' : 'damage'
   const inner = (
     <div className="relative">
-      <CardFace card={baseCard} fallbackName={p.base.cardId} highlight={target ? intentHighlight(target.intent) : attacked ? 'red' : undefined} widthPx={widthPx} tight={widthPx !== undefined} />
+      <CardFace
+        card={baseCard}
+        fallbackName={p.base.cardId}
+        highlight={target ? intentHighlight(target.intent) : attacked ? 'red' : menu?.open ? 'white' : menu?.actionable ? 'accent' : undefined}
+        widthPx={widthPx}
+        tight={widthPx !== undefined}
+      />
       {/* Damage overlaid on the card, PWA game-screen style: light weight,
           accent glow + dark outline, ~50% of the card's height. Nudged up a
           little since the base art sits low, so the number reads centred on it. */}
@@ -1009,6 +1041,17 @@ function BaseCard({ state, side, target, widthPx, attacked = false }: {
           data-testid={`target-${side}-base`}
           onClick={target.onClick}
           className="block cursor-pointer"
+        >
+          {inner}
+        </button>
+      ) : menu ? (
+        <button
+          type="button"
+          data-testid={`${side}-base-menu-btn`}
+          aria-label={`${baseCard?.name ?? p.base.cardId}: open its actions`}
+          aria-expanded={menu.open}
+          onClick={menu.onOpen}
+          className="block cursor-pointer border-none bg-transparent p-0"
         >
           {inner}
         </button>
@@ -1378,6 +1421,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   const [inspecting, setInspecting] = useState<InspectTarget | null>(null)
   // A phone opens your leader's actions as a menu from the leader.
   const [leaderMenuOpen, setLeaderMenuOpen] = useState(false)
+  // And your base's: its Epic Action and any action an upgrade on it gives.
+  const [baseMenuOpen, setBaseMenuOpen] = useState(false)
 
   async function submitReport(title: string, description: string) {
     const { initialState, moves } = replayData()
@@ -1513,6 +1558,21 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       ...(deployMoves.length > 0
         ? deployMoves.map(a => ({ label: describeAction(gameState, 'player', a), onSelect: () => actAndClear(a) }))
         : [{ label: 'Deploy', detail: deployBlocker(gameState) }]),
+    ]
+    // On a phone your base's actions are a menu on the base, as the leader's are.
+    const baseMoves = legal.filter((a): a is Extract<Action, { type: 'useBaseAbility' }> => a.type === 'useBaseAbility')
+    const playerBase = gameState.players.player.base
+    const epic = baseEpicAction(playerBase.cardId)
+    const epicMove = baseMoves.find(a => a.cardId === undefined)
+    const baseMenuItems: LeaderMenuItem[] = [
+      ...(epic
+        ? [{
+            label: 'Use Epic Action',
+            detail: playerBase.epicActionUsed ? 'Used this game' : `${epic.description} Once a game.`,
+            onSelect: epicMove ? () => actAndClear(epicMove) : undefined,
+          }]
+        : []),
+      ...baseMoves.filter(a => a.cardId !== undefined).map(a => ({ label: describeAction(gameState, 'player', a), onSelect: () => actAndClear(a) })),
     ]
     const phoneLeaderInteract: UnitInteraction = {
       actionable: leaderAbilityMoves.length > 0 || deployMoves.length > 0,
@@ -1841,8 +1901,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       : undefined
     const buttonChoiceActions = buttonChoice ? unclaimed.filter(answers(buttonChoice.id)) : []
     const buttonChoiceHidden = buttonChoice !== undefined && hiddenChoice === buttonChoice.id
-    // A phone deploys from the leader's menu, so deploying is not a button there.
-    const menuActions = unclaimed.filter(a => !buttonChoiceActions.includes(a) && !(phone && a.type === 'deployLeader'))
+    // A phone deploys from the leader's menu and uses the base's actions from the base's, so neither is
+    // a button there.
+    const menuActions = unclaimed.filter(a => !buttonChoiceActions.includes(a) && !(phone && (a.type === 'deployLeader' || a.type === 'useBaseAbility')))
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for a repeatable pick (`isRepeatable`), else "Decline".
     // An optional "defeat an upgrade" choice (Clan Vizsla Soldier, Vane's On Attack, #416): the
@@ -1872,7 +1933,14 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             Cancel attack
           </button>
         )}
-        {distribute && (
+        {/* A phone says it as a count across the column, the question itself being in the prompt above. */}
+        {distribute && phone && (
+          <div data-testid="distribute-hud" role="status" className="flex h-[52px] basis-full items-center justify-center gap-2 rounded-xl bg-surface text-[15px] text-ink-dim">
+            <b className="text-xl font-semibold text-ink">{distribute.spent}</b>
+            {` of ${distribute.total} ${distribute.label === 'Healing' ? 'healed' : 'placed'}`}
+          </div>
+        )}
+        {distribute && !phone && (
           <div data-testid="distribute-hud" className="rounded-xl border-2 border-accent/60 px-3 py-1.5 text-center text-xs text-ink-dim">
             {distribute.label} allocated <span className="font-semibold text-ink">{distribute.spent} / {distribute.total}</span>
           </div>
@@ -1974,6 +2042,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           candidates={nextTriggerChoice.candidates}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: nextTriggerChoice.id, optionIndex })}
           onDismiss={cancel}
+          phone={phone}
         />
       )
     } else if (phone && (lookChoice || discardTopChoice)) {
@@ -2251,6 +2320,15 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             onClose={() => setLeaderMenuOpen(false)}
           />
         )}
+        {baseMenuOpen && baseMenuItems.length > 0 && (
+          <LeaderMenu
+            name={state.cards[playerBase.cardId]?.name ?? playerBase.cardId}
+            kind="BASE"
+            items={baseMenuItems}
+            onSee={() => setInspecting({ cardId: playerBase.cardId })}
+            onClose={() => setBaseMenuOpen(false)}
+          />
+        )}
         <PhoneGameLayout
           state={state}
           prompt={opponentPrompt ?? boardPrompt}
@@ -2260,7 +2338,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           centre={{
             opponentLeader: <LeaderCard state={state} side="opponent" widthPx={PHONE_LEADER_PX} labelDeployed />,
             opponentBase: <BaseCard state={state} side="opponent" target={baseTarget('opponent')} widthPx={PHONE_BASE_PX} />,
-            playerBase: <BaseCard state={state} side="player" target={baseTarget('player')} attacked={focus.targetBase} widthPx={PHONE_BASE_PX} />,
+            playerBase: (
+              <BaseCard
+                state={state}
+                side="player"
+                target={baseTarget('player')}
+                attacked={focus.targetBase}
+                widthPx={PHONE_BASE_PX}
+                menu={baseMenuItems.length > 0 ? { open: baseMenuOpen, actionable: baseMoves.length > 0, onOpen: () => setBaseMenuOpen(true) } : undefined}
+              />
+            ),
             playerLeader: <LeaderCard state={state} side="player" widthPx={PHONE_LEADER_PX} interact={leaderInteract} labelDeployed />,
           }}
           playerInteraction={playerInteraction}
