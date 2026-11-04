@@ -769,6 +769,22 @@ The board is drawn with art-dominant cards, not text rows:
   damage is clamped to it, so an overkill reads as a full base or as zero remaining, never
   as more damage than the base has HP nor as negative health. The preference is display
   only: the engine counts damage up either way, and the win threshold stays `damage >= hp`.
+- **Phone layout** (`components/game/phoneLayout.tsx`): `GameScreen` picks its layout by media
+  query (`hooks/useMediaQuery.ts`). `PHONE_LANDSCAPE_QUERY` (landscape, at most 500px tall) draws
+  `PhoneGameLayout`: a 196px controls column (leave, log, more; round and phase; each side's
+  `PlayerSummary` with its INITIATIVE, FORCE and CRED pills; the prompt; the action column) beside
+  the board, with the hand under it, all fitting 844×390 without scrolling. `PHONE_PORTRAIT_QUERY`
+  (portrait, at most 500px wide) draws `TurnSideways` instead; the game stays mounted, so turning
+  back resumes it. Anything else is the desktop layout. The layout is presentational: `GameScreen`
+  computes the interactions, the prompt (`boardPrompt`), the base targets and the action column
+  once and hands the same pieces to either layout, so a move is answered the same way on both.
+  The phone draws its own unit tile (`PhoneUnit`: art at a 40px short edge in a 56px square slot,
+  32 in 45 once a half holds more than eight, with power, HP and badges in place of the token
+  pills and upgrade stack) and reuses `HandCard`, `BaseCard` and `LeaderCard` at a phone
+  `widthPx`; the hand's fan is `boardLayout.phoneHandOverlap`. Its log is `GameLogDrawer`, a left
+  panel grouping `LogEntry`s by their `round` (0 is setup) with outcomes folded into their
+  action's row; More (`MoreSheet`) and the piles (`PileSheet`) are the PWA's shared `Sheet`.
+  Conceding lives in More on a phone, not the action column, and the bug report is not offered.
 
 ## Storage tiers
 

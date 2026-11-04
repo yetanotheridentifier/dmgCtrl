@@ -17,7 +17,7 @@ import { BugIcon, GearIcon, HelpIcon } from './icons'
 import { useSettings } from '../hooks/useSettings'
 import { RELEASE, COMMIT_ID } from '../buildIdentity'
 import { isDev } from '../env'
-import { orderUnits } from './boardLayout'
+import { orderUnits, phoneHandOverlap, PHONE_HAND_CARD_PX } from './boardLayout'
 import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
 import { intentHighlight } from './highlight'
@@ -36,6 +36,8 @@ import { CardRef, DescribedParts } from './cardRef'
 import { CardZoomPopover } from './cardZoom'
 import { DeckPile, ResourceStack, DiscardPile, OpponentHand, EmptySlot } from './mat'
 import { friendlyCreditTokens, hasForceToken } from '../engine/effects'
+import { useMediaQuery, PHONE_LANDSCAPE_QUERY, PHONE_PORTRAIT_QUERY } from '../hooks/useMediaQuery'
+import { GameLogDrawer, MoreSheet, PhoneGameLayout, PileSheet, TurnSideways } from './game/phoneLayout'
 
 interface Props {
   deck: SavedDeck
@@ -668,7 +670,7 @@ export function GameOverOverlay({ winner, concededBy, onRematch, onExit }: {
           Rematch
         </button>
         <button onClick={onExit} className={PANEL_SECONDARY}>
-          Back to decks
+          New setup
         </button>
       </OverlayButtons>
     </OverlayShell>
@@ -869,10 +871,12 @@ interface BaseTarget {
 }
 
 /** A base card in the central strip, with an HP overlay; clickable when a target. */
-function BaseCard({ state, side, target }: {
+function BaseCard({ state, side, target, widthPx }: {
   state: GameState
   side: PlayerId
   target?: BaseTarget
+  /** The card's short edge, framed tight to the card; the board's default square slot when absent. */
+  widthPx?: number
 }) {
   const p = state.players[side]
   const baseCard = state.cards[p.base.cardId]
@@ -889,7 +893,7 @@ function BaseCard({ state, side, target }: {
   const label = countDown ? 'health remaining' : 'damage'
   const inner = (
     <div className="relative">
-      <CardFace card={baseCard} fallbackName={p.base.cardId} highlight={target ? intentHighlight(target.intent) : undefined} />
+      <CardFace card={baseCard} fallbackName={p.base.cardId} highlight={target ? intentHighlight(target.intent) : undefined} widthPx={widthPx} tight={widthPx !== undefined} />
       {/* Damage overlaid on the card, PWA game-screen style: light weight,
           accent glow + dark outline, ~50% of the card's height. Nudged up a
           little since the base art sits low, so the number reads centred on it. */}
@@ -898,7 +902,7 @@ function BaseCard({ state, side, target }: {
         aria-label={`${side === 'player' ? 'Your' : 'Opponent'} base ${label}: ${shown} of ${baseHp}`}
         className="pointer-events-none absolute inset-0 flex items-center justify-center tabular-nums select-none"
         style={{
-          fontSize: `${Math.round(CARD_WIDTH_PX * 0.5)}px`,
+          fontSize: `${Math.round((widthPx ?? CARD_WIDTH_PX) * 0.5)}px`,
           fontWeight: 300,
           lineHeight: 1,
           letterSpacing: '0.05em',
@@ -943,7 +947,14 @@ function BaseCard({ state, side, target }: {
 
 /** A leader: its card while undeployed, a marker once deployed. `widthPx` scales
  *  it down for the opponent's mat column; omitted, it renders at full size. */
-export function LeaderCard({ state, side, widthPx, interact }: { state: GameState; side: PlayerId; widthPx?: number; interact?: UnitInteraction }) {
+export function LeaderCard({ state, side, widthPx, interact, labelDeployed = false }: {
+  state: GameState
+  side: PlayerId
+  widthPx?: number
+  interact?: UnitInteraction
+  /** Say Deployed in the empty slot: on a phone the leader's unit is too small to tell at a glance. */
+  labelDeployed?: boolean
+}) {
   const p = state.players[side]
   const leaderCard = state.cards[p.leader.cardId]
   const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
@@ -951,8 +962,9 @@ export function LeaderCard({ state, side, widthPx, interact }: { state: GameStat
   // outline (whether it's deployed is self-evident). Keep it for alignment.
   if (p.leader.deployed) {
     return (
-      <div data-testid={`${side}-leader-card`} className="w-fit">
+      <div data-testid={`${side}-leader-card`} className="relative w-fit">
         <EmptySlot landscape widthPx={widthPx} />
+        {labelDeployed && <span className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-wider text-ink-dim">Deployed</span>}
       </div>
     )
   }
@@ -992,8 +1004,10 @@ export function LeaderCard({ state, side, widthPx, interact }: { state: GameStat
  * A card in your hand. Clickable to play (blue) or resource (green); hover /
  * focus / long-press zooms it. Its own component so it can use the zoom hook.
  */
-function HandCard({ card, cardId, index, action, onAct, onSelect, selected, discarding }: {
+function HandCard({ card, cardId, index, action, onAct, onSelect, selected, discarding, widthPx }: {
   card: EngineCard | undefined
+  /** The card's short edge; the board's default when absent. */
+  widthPx?: number
   cardId: string
   index: number
   action: Action | undefined
@@ -1020,7 +1034,7 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected, disc
         {...bind}
         className="relative block w-fit shrink-0 cursor-pointer"
       >
-        <CardFace card={card} fallbackName={cardId} tight highlight={playHighlight} />
+        <CardFace card={card} fallbackName={cardId} tight highlight={playHighlight} widthPx={widthPx} />
         {popover}
       </button>
     )
@@ -1038,7 +1052,7 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected, disc
         {...bind}
         className="relative block w-fit shrink-0 cursor-pointer"
       >
-        <CardFace card={card} fallbackName={cardId} tight highlight={selected ? 'accent' : 'accent-dim'} />
+        <CardFace card={card} fallbackName={cardId} tight highlight={selected ? 'accent' : 'accent-dim'} widthPx={widthPx} />
         {popover}
       </button>
     )
@@ -1053,7 +1067,7 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected, disc
     >
       {/* Dim the card (unplayable), but not the zoom popover — the opacity must
           stay off the wrapper or it'd dim and trap the popover above. */}
-      <CardFace card={card} fallbackName={cardId} tight className="opacity-60" />
+      <CardFace card={card} fallbackName={cardId} tight className="opacity-60" widthPx={widthPx} />
       {popover}
     </span>
   )
@@ -1065,6 +1079,10 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected, disc
  * base, your base, your leader — so the bases sit closest together and the leaders
  * are outermost. Each grid row is one player, aligning their lanes with their cards.
  */
+/** The centre strip's cards on a phone (short edges): both fit a half of it, leader above base. */
+const PHONE_LEADER_PX = 50
+const PHONE_BASE_PX = 50
+
 /** Cards resourced during setup, before the first round (CR 5.2.1f). */
 const SETUP_RESOURCES = 2
 
@@ -1267,6 +1285,13 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // A button choice put aside to read the board (only where it cannot be cancelled): the id of the
   // choice whose overlay is hidden. Any action clears it, so the next choice always shows.
   const [hiddenChoice, setHiddenChoice] = useState<string | null>(null)
+  // A phone on its side gets the phone layout, with its log, More and piles opened from the controls
+  // column; held upright, it is asked to turn.
+  const phone = useMediaQuery(PHONE_LANDSCAPE_QUERY)
+  const upright = useMediaQuery(PHONE_PORTRAIT_QUERY)
+  const [logOpen, setLogOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [pile, setPile] = useState<{ title: string; cards: string[] } | null>(null)
 
   async function submitReport(title: string, description: string) {
     const { initialState, moves } = replayData()
@@ -1483,11 +1508,18 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           : undefined,
       }
 
+    // On a phone the hand is one row under the board, fanned (overlapping) once it is too long for it.
+    const fan = phone ? phoneHandOverlap(hand.length) : 0
     const playerHand = (
-      <ul data-testid="player-hand" className="flex flex-wrap justify-center gap-1">
+      <ul
+        data-testid="player-hand"
+        data-fanned={fan > 0}
+        className={phone ? 'flex h-[88px] flex-none items-end justify-center gap-1.5' : 'flex flex-wrap justify-center gap-1'}
+      >
         {hand.map((cardId, i) => (
-          <li key={`${cardId}-${i}`}>
+          <li key={`${cardId}-${i}`} style={fan > 0 && i > 0 ? { marginLeft: -fan } : undefined}>
             <HandCard
+              widthPx={phone ? PHONE_HAND_CARD_PX : undefined}
               card={gameState.cards[cardId]}
               cardId={cardId}
               index={i}
@@ -1697,8 +1729,22 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // pool is allocated.
     const distribute = targetChoice ? allocation(targetChoice) : undefined
     const repeatable = targetChoice !== undefined && isRepeatable(targetChoice)
+    // A phone's buttons are thumb-sized; conceding moves to More there, and choosing an attacker
+    // gets its own way back, since tapping the unit again is a small target.
+    const btn = phone ? 'min-h-11 px-3 text-sm' : 'px-3 py-1.5 text-xs'
     const actionColumn = (
-      <div className="flex flex-col items-stretch gap-1.5">
+      // Two to a row on a phone, where the column is short: a pair such as Take initiative and Pass
+      // side by side, and anything left over across the width.
+      <div className={phone ? 'flex flex-wrap gap-1.5 *:mt-0 *:min-w-0 *:flex-1 *:basis-[40%]' : 'flex flex-col items-stretch gap-1.5'}>
+        {phone && selectedAttacker && (
+          <button
+            data-testid="cancel-attack-btn"
+            onClick={() => setSelectedAttacker(null)}
+            className={`rounded-xl border-2 border-line/60 ${btn} text-ink-dim hover:text-ink`}
+          >
+            Cancel attack
+          </button>
+        )}
         {distribute && (
           <div data-testid="distribute-hud" className="rounded-xl border-2 border-accent/60 px-3 py-1.5 text-center text-xs text-ink-dim">
             {distribute.label} allocated <span className="font-semibold text-ink">{distribute.spent} / {distribute.total}</span>
@@ -1708,7 +1754,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           <button
             data-testid="decline-choice-btn"
             onClick={() => actAndClear(declineButton)}
-            className="rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-dim hover:text-ink"
+            className={`rounded-xl border-2 border-line/60 ${btn} text-ink-dim hover:text-ink`}
           >
             {repeatable ? 'Done' : 'Decline'}
           </button>
@@ -1717,7 +1763,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           <button
             data-testid="show-choice-btn"
             onClick={() => setHiddenChoice(null)}
-            className="rounded-xl border-2 border-accent px-3 py-1.5 text-xs text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
+            className={`rounded-xl border-2 border-accent ${btn} text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10`}
           >
             Show choice
           </button>
@@ -1727,7 +1773,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             key={i}
             data-testid={`action-btn-${i}`}
             onClick={() => actAndClear(action)}
-            className="rounded-xl border-2 border-accent px-3 py-1.5 text-xs text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
+            className={`rounded-xl border-2 border-accent ${btn} text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10`}
           >
             {describeAction(gameState, 'player', action)}
           </button>
@@ -1745,14 +1791,14 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           <button
             data-testid="undo-btn"
             onClick={() => { clearSelections(); undo() }}
-            className="mt-1.5 rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-faint hover:text-ink"
+            className={`mt-1.5 rounded-xl border-2 border-line/60 ${btn} text-ink-faint hover:text-ink`}
           >
             Undo
           </button>
         )}
         {/* Conceding, the player's own (#537): not a game action the menu lists, and muted like Undo
             so it never reads as a move. On the player's turn only, and confirmed before it ends the game. */}
-        {gameState.winner === null && gameState.activePlayer === 'player' && (confirmingConcede ? (
+        {!phone && gameState.winner === null && gameState.activePlayer === 'player' && (confirmingConcede ? (
           <div className="mt-1.5 flex flex-col gap-1.5 text-center text-xs text-ink-dim">
             <span>Concede the game?</span>
             <button
@@ -2003,6 +2049,23 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       )
     }
 
+    // What the board's highlights are asking for. Suppressed entirely while the bug form is open: it
+    // is board decoration and must not compete with a modal, whatever the stacking order says.
+    // Step one of the upgrade pick has its own instruction; it is computed after the choice is found,
+    // so it overrides the general prompt here rather than inside it.
+    const boardPrompt = reporting || choiceOverlay
+      ? undefined
+      : upgradePick && pickedHost === null
+        ? [upgradeHosts.some(id => baseHostOwner(id)) ? 'Choose the unit or base to defeat an upgrade from' : 'Choose the unit to defeat an upgrade from']
+        : actionPrompt ?? (anyPlayerChoice ? describeChoiceParts(gameState, anyPlayerChoice) : undefined)
+    const baseTarget = (side: PlayerId): BaseTarget | undefined => {
+      // Step one of an upgrade pick: a base carrying a candidate (Fortify) is a host like a unit.
+      if (upgradePick && pickedHost === null && upgradeHosts.includes(baseHostId(side))) return { onClick: () => setUpgradeHost(baseHostId(side)) }
+      if (side === 'opponent' && baseAttack) return { onClick: () => actAndClear(baseAttack) }
+      const pick = baseTargetActions.get(side)
+      return pick ? { onClick: () => actAndClear(pick), intent: targetChoice?.intent } : undefined
+    }
+
     // The play area: one continuous background across the opponent bar, the
     // battlefield, and the player bar — joined, edge-to-edge, filling the height.
     playContent = (
@@ -2010,27 +2073,71 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         <OpponentBar state={gameState} />
         <Board
           state={gameState}
-          // Suppressed entirely while the bug form is open: it is board decoration and must not
-          // compete with a modal, whatever the stacking order says.
-          // Step one of the upgrade pick has its own instruction; it is computed after the choice
-          // is found, so it overrides the general prompt here rather than inside it.
-          prompt={reporting || choiceOverlay
-            ? undefined
-            : upgradePick && pickedHost === null
-              ? [upgradeHosts.some(id => baseHostOwner(id)) ? 'Choose the unit or base to defeat an upgrade from' : 'Choose the unit to defeat an upgrade from']
-              : actionPrompt ?? (anyPlayerChoice ? describeChoiceParts(gameState, anyPlayerChoice) : undefined)}
+          prompt={boardPrompt}
           playerInteraction={playerInteraction}
           opponentInteraction={opponentInteraction}
-          baseTarget={side => {
-            // Step one of an upgrade pick: a base carrying a candidate (Fortify) is a host like a unit.
-            if (upgradePick && pickedHost === null && upgradeHosts.includes(baseHostId(side))) return { onClick: () => setUpgradeHost(baseHostId(side)) }
-            if (side === 'opponent' && baseAttack) return { onClick: () => actAndClear(baseAttack) }
-            const pick = baseTargetActions.get(side)
-            return pick ? { onClick: () => actAndClear(pick), intent: targetChoice?.intent } : undefined
-          }}
+          baseTarget={baseTarget}
           leaderInteract={leaderInteract}
         />
         <PlayerBar state={gameState} hand={playerHand} action={actionColumn} />
+      </div>
+    )
+
+    if (phone) {
+      const state = gameState
+      const attacker = selectedAttacker ? state.players.player.units.find(u => u.instanceId === selectedAttacker) : undefined
+      playContent = (
+        <PhoneGameLayout
+          state={state}
+          prompt={boardPrompt}
+          attacker={attacker ? state.cards[attacker.cardId]?.name ?? attacker.cardId : undefined}
+          actions={actionColumn}
+          hand={playerHand}
+          centre={{
+            opponentLeader: <LeaderCard state={state} side="opponent" widthPx={PHONE_LEADER_PX} labelDeployed />,
+            opponentBase: <BaseCard state={state} side="opponent" target={baseTarget('opponent')} widthPx={PHONE_BASE_PX} />,
+            playerBase: <BaseCard state={state} side="player" target={baseTarget('player')} widthPx={PHONE_BASE_PX} />,
+            playerLeader: <LeaderCard state={state} side="player" widthPx={PHONE_LEADER_PX} interact={leaderInteract} labelDeployed />,
+          }}
+          playerInteraction={playerInteraction}
+          opponentInteraction={opponentInteraction}
+          onExit={onExit}
+          onLog={() => setLogOpen(true)}
+          onMore={() => setMoreOpen(true)}
+          onDiscard={side => setPile({ title: side === 'player' ? 'Your discard' : "Opponent's discard", cards: state.players[side].discard })}
+          onDeck={mayLookAtDeckTop(state, 'player') ? () => setPile({ title: 'Top of your deck', cards: state.players.player.deck.slice(0, 1) }) : undefined}
+        />
+      )
+    }
+  }
+
+  // Held upright, a phone is asked to turn; the game carries on underneath and is there when it does.
+  if (upright && gameState) return <TurnSideways />
+
+  if (phone && gameState) {
+    return (
+      <div data-testid="game-screen" className="h-screen w-full">
+        {playContent}
+        {choiceOverlay}
+        <GameLogDrawer
+          open={logOpen}
+          state={gameState}
+          log={log}
+          onClose={() => setLogOpen(false)}
+          onUndo={settings.allowUndo && canUndo ? () => { clearSelections(); undo() } : undefined}
+        />
+        <MoreSheet
+          open={moreOpen}
+          onClose={() => setMoreOpen(false)}
+          onHelp={() => onHelp()}
+          onSettings={() => setSettingsOpen(true)}
+          onConcede={gameState.winner === null && gameState.activePlayer === 'player' ? () => { clearSelections(); act({ type: 'concede' }) } : undefined}
+        />
+        <PileSheet state={gameState} title={pile?.title ?? ''} cards={pile?.cards ?? null} onClose={() => setPile(null)} />
+        {settingsOpen && <SettingsOverlay onClose={() => setSettingsOpen(false)} onHelp={onHelp} />}
+        {gameState.winner !== null && (
+          <GameOverOverlay winner={gameState.winner} concededBy={gameState.concededBy} onRematch={rematch} onExit={onExit} />
+        )}
       </div>
     )
   }

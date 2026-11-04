@@ -156,8 +156,9 @@ function wasDefeated(unit: UnitState, controller: PlayerId, reachedDiscard: (car
  */
 export function logEntries(before: GameState, after: GameState, by: PlayerId, action: Action): LogEntry[] {
   const parts = describeActionParts(before, by, action, { redact: by === 'opponent' })
+  const round = before.phase === 'setup' ? 0 : before.round
   return [
-    { by, text: partsText(parts), parts },
-    ...boardChanges(before, after, parts).map(change => ({ by, text: partsText(change), parts: change, outcome: true as const })),
+    { by, text: partsText(parts), parts, round },
+    ...boardChanges(before, after, parts).map(change => ({ by, text: partsText(change), parts: change, outcome: true as const, round })),
   ]
 }
