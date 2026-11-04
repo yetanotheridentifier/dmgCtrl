@@ -87,7 +87,7 @@ Both workflows need the `CLOUDFLARE_API_TOKEN` repository secret (a custom token
 ### Supply chain
 
 - **No install scripts in CI.** Every `npm install` in the workflows passes `--ignore-scripts`, so no dependency's install script runs on a runner that holds a deploy secret. Nothing the build needs depends on one: esbuild, sharp and workerd, the only packages with install scripts, all work without them.
-- **Actions are pinned to commit SHAs**, with the release in a comment (`actions/checkout@<sha> # v5.1.0`), so a tag moved upstream cannot change what runs.
+- **Actions are pinned to commit SHAs**, with the release in a comment (`actions/checkout@<sha> # v7.0.1`), so a tag moved upstream cannot change what runs.
 - **Dependabot** (`.github/dependabot.yml`) proposes updates weekly for the three npm packages and for the actions, each only once it has been public for 7 days. Minor and patch updates come as one pull request per package; a major comes on its own. Security updates are raised as soon as an advisory is published. Dependabot's pull requests are exempt from `close-outside-prs.yml` and get no preview.
 - **Branch protection on `main` applies to admins.** `test` and `build` must pass, and the branch must be up to date with `main`, for every merge, the owner's included.
 
