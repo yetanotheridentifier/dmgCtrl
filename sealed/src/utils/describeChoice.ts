@@ -183,12 +183,20 @@ function targetNoun(choice: { unitTargets: string[]; baseTargets: PlayerId[] }):
 export function describeChoiceParts(state: GameState, choice: PendingChoice): DescribePart[] {
   const source = sourceRef(state, choice)
   const lead = source.length > 0 ? [...source, ': '] : []
-  const body = choiceBody(state, choice)
   // Capitalise the instruction when it stands alone; after a card name it reads as a clause.
-  if (lead.length === 0 && typeof body[0] === 'string') {
-    return [body[0].charAt(0).toUpperCase() + body[0].slice(1), ...body.slice(1)]
-  }
-  return [...lead, ...body]
+  return lead.length === 0 ? describeChoiceQuestion(state, choice) : [...lead, ...choiceBody(state, choice)]
+}
+
+/** The question alone, capitalised, for a prompt that names the card that asked on its own (the phone's). */
+export function describeChoiceQuestion(state: GameState, choice: PendingChoice): DescribePart[] {
+  const body = choiceBody(state, choice)
+  return typeof body[0] === 'string' ? [body[0].charAt(0).toUpperCase() + body[0].slice(1), ...body.slice(1)] : body
+}
+
+/** The card that raised this choice, for a prompt to show: the id of `choiceSourceRef`'s card. */
+export function choiceSourceCard(state: GameState, choice: PendingChoice): string | undefined {
+  const ref = sourceRef(state, choice).find(p => typeof p !== 'string')
+  return ref && typeof ref !== 'string' ? ref.cardId : undefined
 }
 
 function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
