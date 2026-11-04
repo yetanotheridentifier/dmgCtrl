@@ -3,6 +3,13 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { marked } from 'marked'
+import { fileURLToPath } from 'node:url'
+
+/**
+ * The PWA's shared UI (controls, log drawer, tournament layout), the one part of the PWA that
+ * Sealed's UI may import. The engine, AI and bench may not: eslint.config.js holds that line.
+ */
+const PWA_SHARED = fileURLToPath(new URL('../src/components/shared', import.meta.url))
 
 /**
  * Tests that play real games to get their numbers, rather than asserting against a fixture.
@@ -41,6 +48,14 @@ export default defineConfig({
     // mkcert certificate (see root vite.config.ts and sealed/docs/operations.md).
     port: 5174,
     strictPort: true,
+    // The shared UI lives outside this package, in the PWA's src/.
+    fs: { allow: ['.', '../src'] },
+  },
+  resolve: {
+    alias: { '@pwa-shared': PWA_SHARED },
+    // The shared files sit under the PWA's tree, so a bare `react` from them would resolve to the
+    // PWA's node_modules: a second React, and the first hook call fails. One copy, this package's.
+    dedupe: ['react', 'react-dom'],
   },
   plugins: [
     // Same pattern as the main app: .md files import as rendered HTML strings.

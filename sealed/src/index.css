@@ -1,23 +1,32 @@
+/* The palette, shared with the PWA: the one place its colours are defined. */
+@import "../../src/styles/tokens.css";
 @import "tailwindcss";
 
-/* dmgCtrl app theme — tokens mirror the main app's src/index.css palette. */
+/* Sealed's Tailwind colour names, onto the shared tokens. `reference` writes no variables, so
+   none of these names can override a shared token of the same name (both apps have a
+   `--color-surface`, and they differ); `inline` puts the token itself into each utility. Code
+   outside a class reads the shared tokens directly: `var(--color-text-primary)`, not `--color-ink`. */
+@theme inline reference {
+  --color-bg: var(--color-bg-deep);
+  --color-bg-dark: var(--color-bg-dark);
+  --color-surface: rgba(13, 27, 42, 0.45); /* translucent panel over starfield, Sealed's own */
+  --color-surface-solid: var(--color-bg-mid); /* same panel, opaque, for anything laid over card art */
+  --color-line: var(--color-ui-border);
+  --color-ink: var(--color-text-primary);
+  --color-ink-body: var(--color-text-body);
+  --color-ink-dim: var(--color-text-muted);
+  --color-ink-faint: var(--color-text-disabled);
+  --color-accent: var(--color-accent);
+  --color-amber: var(--color-warning);
+  --color-red: var(--color-damage);
+  --color-green: var(--color-success);
+}
+
+/* Colours only Sealed uses, written as variables for the code that reads them directly. */
 @theme {
-  --color-bg: #0a0e1a;            /* --color-bg-deep    */
-  --color-bg-dark: #000510;       /* --color-bg-dark    */
-  --color-surface: rgba(13, 27, 42, 0.45); /* translucent panel over starfield */
-  --color-surface-solid: #0d1b2a; /* same panel, opaque — for anything laid over card art */
-  --color-line: #6b7280;          /* --color-ui-border  */
-  --color-ink: #ffffff;           /* --color-text-primary */
-  --color-ink-body: #d0d0d8;      /* --color-text-body  */
-  --color-ink-dim: #a8a8b3;       /* --color-text-muted */
-  --color-ink-faint: #6b7280;     /* --color-text-disabled */
-  --color-accent: #4fc3f7;        /* --color-accent     */
-  --color-amber: #f5a623;         /* --color-warning    */
-  --color-red: #d42121;           /* --color-error / damage — deep, not rose */
-  --color-green: #22c55e;         /* --color-success    */
   --color-yellow: #facc15;        /* "cunning" target highlight (exhaust, capture, return, take control) */
 
-  /* On-card token pills (components/tokens.ts TOKEN_SPEC); damage uses --color-red. Declared
+  /* On-card token pills (components/tokens.ts TOKEN_SPEC); damage uses --color-damage. Declared
      here with the rest of the palette, the block whose colours render in every browser tested. */
   --color-token-advantage: #f5c518;  /* Adv. N: gold */
   --color-token-shield: #2563eb;     /* Shd. N: blue */
@@ -28,7 +37,7 @@
   --color-token-credit: #c2410c;     /* Cred. N, in a player's bar: burnt orange */
   --color-token-force: #0f766e;      /* Force, in a player's bar: teal */
   --color-token-ink-dark: #1a1200;   /* text on the light fills */
-  --color-token-hp: #2563eb;         /* HP figure on a stat pill (power uses --color-red) */
+  --color-token-hp: #2563eb;         /* HP figure on a stat pill (power uses --color-damage) */
 
   --font-sans: 'Segoe UI', Helvetica, Arial, sans-serif;
   --font-mono: 'SF Mono', Consolas, Menlo, monospace;
@@ -46,7 +55,7 @@
 /* Dropdown option lists — explicit colours for browsers that ignore color-scheme. */
 select option {
   background-color: #0d1b2a;
-  color: var(--color-ink);
+  color: var(--color-text-primary);
 }
 
 /* Starfield background — same recipe as the main app. */
@@ -73,7 +82,7 @@ html {
 body {
   margin: 0;
   background: transparent;
-  color: var(--color-ink);
+  color: var(--color-text-primary);
 }
 
 /* Rendered-markdown styling for the help screen (content arrives as raw HTML). */
@@ -86,7 +95,7 @@ body {
   margin: 1.5rem 0 0.5rem;
 }
 .help-content h3 {
-  color: var(--color-ink);
+  color: var(--color-text-primary);
   font-weight: 500;
   font-size: 0.95rem;
   margin: 1rem 0 0.25rem;
@@ -112,7 +121,7 @@ body {
   margin: 0.25rem 0;
 }
 .help-content strong {
-  color: var(--color-ink);
+  color: var(--color-text-primary);
   font-weight: 600;
 }
 

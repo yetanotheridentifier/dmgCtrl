@@ -16,11 +16,18 @@ redesign rather than a set of breakpoints, and is in progress (see [planned-work
   worker leaves `/sealed` alone (`navigateFallbackDenylist` in the root `vite.config.ts`). Sealed
   borrows the PWA's dev server and origin; see [operations.md](operations.md) for how the two
   interact. The two may merge later, so where Sealed copies a PWA pattern it keeps the same shape.
-- **Only the UI may share with the PWA.** Sealed's screens may use the PWA's shared controls
-  (`src/components/shared/controls.tsx`), and the palette has one source, the PWA's colour tokens in
-  `src/index.css`. Sealed's Tailwind theme (the `@theme` block in `sealed/src/index.css`) still
-  restates those colours, and is to refer to the tokens instead. The engine, the AI and the bench
-  import nothing from the PWA, so the bench keeps running under Node.
+- **Only the UI may share with the PWA.** Sealed's screens import the PWA's shared UI (the
+  controls in `controls.tsx`, the log drawer, the tournament layout) from `@pwa-shared/…`, an alias
+  for `../src/components/shared` in `vite.config.ts` and `tsconfig.app.json`. Vite dedupes React,
+  so those files run on this package's copy. The engine, the AI and the bench import nothing from
+  the PWA, so the bench keeps running under Node; a lint rule holds the line.
+- **The palette has one source**, `src/styles/tokens.css` in the PWA, which `src/index.css`
+  imports. Sealed's Tailwind colour names (`ink`, `line`, `accent`, `red` and the rest) are mapped
+  onto those tokens in an `@theme inline reference` block, which writes no variables, so no Sealed
+  name can override a shared token of the same name. Code outside a class reads the shared tokens
+  directly (`var(--color-text-primary)`, `var(--color-damage)`). Only the colours Sealed alone uses
+  (the cunning yellow, the `--color-token-*` pills) are declared as variables here. A test holds
+  every `var()` in Sealed to a shared token or one of those.
 - **The AI is kept off the main thread's assumptions.** Its search costs about 85 ms a decision on a
   desktop and perhaps 2 to 4x that on a mid-range phone, enough to freeze a phone's UI, so it is
   moving to a Web Worker. Nothing in `src/ai` or `src/engine` may depend on the DOM, React or

@@ -32,13 +32,13 @@ export type TokenKind = 'damage' | 'mod' | 'debuff' | 'shield' | 'experience' | 
  * and nowhere else.
  */
 export const TOKEN_SPEC: Record<TokenKind, { background: string; ink: string; width: number; figures?: { power: string; hp: string } }> = {
-  damage: { background: 'var(--color-red)', ink: 'var(--color-ink)', width: TOKEN_W },
-  mod: { background: 'var(--color-token-buff)', ink: 'var(--color-token-ink-dark)', width: PILL_W, figures: { power: 'var(--color-red)', hp: 'var(--color-token-hp)' } },
-  debuff: { background: 'var(--color-token-debuff)', ink: 'var(--color-ink)', width: PILL_W, figures: { power: 'var(--color-ink)', hp: 'var(--color-ink)' } },
-  shield: { background: 'var(--color-token-shield)', ink: 'var(--color-ink)', width: PILL_W },
-  experience: { background: 'var(--color-token-experience)', ink: 'var(--color-ink)', width: PILL_W, figures: { power: 'var(--color-ink)', hp: 'var(--color-ink)' } },
+  damage: { background: 'var(--color-damage)', ink: 'var(--color-text-primary)', width: TOKEN_W },
+  mod: { background: 'var(--color-token-buff)', ink: 'var(--color-token-ink-dark)', width: PILL_W, figures: { power: 'var(--color-damage)', hp: 'var(--color-token-hp)' } },
+  debuff: { background: 'var(--color-token-debuff)', ink: 'var(--color-text-primary)', width: PILL_W, figures: { power: 'var(--color-text-primary)', hp: 'var(--color-text-primary)' } },
+  shield: { background: 'var(--color-token-shield)', ink: 'var(--color-text-primary)', width: PILL_W },
+  experience: { background: 'var(--color-token-experience)', ink: 'var(--color-text-primary)', width: PILL_W, figures: { power: 'var(--color-text-primary)', hp: 'var(--color-text-primary)' } },
   advantage: { background: 'var(--color-token-advantage)', ink: 'var(--color-token-ink-dark)', width: PILL_W },
-  weakness: { background: 'var(--color-token-weakness)', ink: 'var(--color-ink)', width: PILL_W, figures: { power: 'var(--color-ink)', hp: 'var(--color-ink)' } },
+  weakness: { background: 'var(--color-token-weakness)', ink: 'var(--color-text-primary)', width: PILL_W, figures: { power: 'var(--color-text-primary)', hp: 'var(--color-text-primary)' } },
 }
 
 /**
@@ -49,8 +49,8 @@ export const TOKEN_SPEC: Record<TokenKind, { background: string; ink: string; wi
 export type PlayerTokenKind = 'credit' | 'force'
 
 export const PLAYER_TOKEN_SPEC: Record<PlayerTokenKind, { background: string; ink: string }> = {
-  credit: { background: 'var(--color-token-credit)', ink: 'var(--color-ink)' },
-  force: { background: 'var(--color-token-force)', ink: 'var(--color-ink)' },
+  credit: { background: 'var(--color-token-credit)', ink: 'var(--color-text-primary)' },
+  force: { background: 'var(--color-token-force)', ink: 'var(--color-text-primary)' },
 }
 
 /** Weight of a stat pill's figures: bold, a step above the labels. */

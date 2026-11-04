@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Button, IconButton, SegmentedControl, SelectButton, Stepper, Sheet } from '../components/shared/controls'
+import { Button, IconButton, SegmentedControl, SelectButton, Stepper, Sheet, Switch } from '../components/shared/controls'
 import { FIELD_STYLE } from '../styles/field'
 
 const mockOrientation = { isPortrait: false, vmin: 390 }
@@ -123,6 +123,31 @@ describe('SelectButton', () => {
     expect(button).toHaveAttribute('aria-haspopup', 'dialog')
     await userEvent.setup().click(button)
     expect(onClick).toHaveBeenCalledOnce()
+  })
+})
+
+describe('Switch', () => {
+  it('is a switch named by its label, showing its state', () => {
+    render(<Switch label="Initiative" checked={false} onChange={vi.fn()} />)
+    expect(screen.getByText('Initiative')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Initiative' })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('reports the flipped value', async () => {
+    const onChange = vi.fn()
+    render(<Switch label="Initiative" checked onChange={onChange} />)
+    await userEvent.setup().click(screen.getByRole('switch'))
+    expect(onChange).toHaveBeenCalledWith(false)
+  })
+
+  it('shows a note under the label', () => {
+    render(<Switch label="Phase tracker" note="Off for a new install" checked={false} onChange={vi.fn()} />)
+    expect(screen.getByText('Off for a new install')).toBeInTheDocument()
+  })
+
+  it('is 44px tall so the track is easy to hit', () => {
+    render(<Switch label="Initiative" checked={false} onChange={vi.fn()} />)
+    expect(screen.getByRole('switch')).toHaveStyle({ height: '44px' })
   })
 })
 

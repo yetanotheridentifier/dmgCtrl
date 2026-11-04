@@ -23,7 +23,10 @@
     "noUncheckedSideEffectImports": true,
     "resolveJsonModule": true,
 
-    "types": ["vitest/globals", "@testing-library/jest-dom", "node"]
+    "types": ["vitest/globals", "@testing-library/jest-dom", "node"],
+
+    /* The PWA's shared UI (vite.config.ts). */
+    "paths": { "@pwa-shared/*": ["../src/components/shared/*"] }
   },
   "include": ["src"]
 }

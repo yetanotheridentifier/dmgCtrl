@@ -1,55 +1,7 @@
-:root {
-  --color-accent: #4fc3f7;
-  --color-accent-rgb: 79, 195, 247;
-  --color-bg-dark: #000510;
-  --color-bg-mid: #0d1b2a;
-  --color-bg-deep: #0a0e1a;
-  --color-text-primary: #ffffff;
-  --color-text-body: #d0d0d8;
-  --color-text-muted: #a8a8b3;
-  --color-text-disabled: #6b7280;
-  --color-ui-border: #6b7280;
-  --color-ui-border-muted: #9ca3af;
-  --color-ui-border-muted-rgb: 156, 163, 175;
-  --color-error: #ff6b6b;
-  --color-error-rgb: 255, 107, 107;
-  --color-warning: #f5a623;
-  --color-warning-rgb: 245, 166, 35;
-  --color-success: #22c55e;
-  --color-success-rgb: 34, 197, 94;
-  --color-force: #3b82f6;
-  --color-epic: #f5c518;
-  --color-epic-rgb: 245, 197, 24;
-  /* Their side in a two-player game, against the accent for yours. */
-  --color-opponent: #ff8a65;
-  /* Filled surfaces for the shared controls (src/components/shared/controls.tsx). */
-  --color-on-accent: #04121c;
-  --color-surface: #141b29;
-  --color-surface-raised: #1b2433;
-  --color-tonal: #17324a;
-  --color-tonal-text: #e6f6fe;
-  --color-sheet: #10172a;
-  --color-backdrop: rgba(0, 5, 16, 0.72);
-  /* The top edge below the status bar. iOS fades the top of the installed app about
-     20pt past the inset in portrait, and no setting turns that off, so content clears it by half
-     the inset again. Scaled off the inset, it is 0 wherever the inset is 0 (landscape, Android,
-     desktop). The starfield on html still runs up through the inset. */
-  --top-clearance: calc(env(safe-area-inset-top, 0px) * 1.5);
-  /* How far content keeps from each screen edge, clear of the rounded corners: the inset or the
-     margin, whichever is larger, so an inset already wider than the margin is not added to. The top
-     is the top clearance or the margin. Layouts pad by the --edge-* tokens; nothing else reads an inset.
-     Each is its own screen edge, except inside a screen turned against the phone
-     (layout/fixedOrientation.tsx), which points each at the screen edge that side lies along. */
-  --edge-margin: 16px;
-  --screen-edge-top: max(var(--top-clearance), var(--edge-margin));
-  --screen-edge-right: max(env(safe-area-inset-right, 0px), var(--edge-margin));
-  --screen-edge-bottom: max(env(safe-area-inset-bottom, 0px), var(--edge-margin));
-  --screen-edge-left: max(env(safe-area-inset-left, 0px), var(--edge-margin));
-  --edge-top: var(--screen-edge-top);
-  --edge-right: var(--screen-edge-right);
-  --edge-bottom: var(--screen-edge-bottom);
-  --edge-left: var(--screen-edge-left);
+/* Colours and edge tokens, shared with Sealed. */
+@import './styles/tokens.css';
 
+:root {
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

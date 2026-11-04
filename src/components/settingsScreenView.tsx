@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon } from './icons'
-import { Button, IconButton, OptionRow, SegmentedControl, SelectButton, Sheet } from './shared/controls'
+import { Button, IconButton, OptionRow, SegmentedControl, SelectButton, Sheet, Switch } from './shared/controls'
 import { sectionLabelStyle } from '../styles/sectionLabel'
 import { FIELD_STYLE } from '../styles/field'
 import type { ForceTokenDisplay, StartScreen } from '../hooks/useUserSettings'
@@ -33,42 +33,6 @@ const FORCE_TOKENS: { value: ForceTokenDisplay; label: string }[] = [
 const CONTROL_WIDTH = '280px'
 
 const labelStyle: React.CSSProperties = { fontSize: '15px', color: 'var(--color-text-primary)' }
-const noteStyle: React.CSSProperties = { fontSize: '12px', lineHeight: '16px', color: 'var(--color-text-muted)' }
-
-// Settings is the only screen with on/off choices, so the switch lives here rather than in the
-// shared controls. The button is 44px tall so the track is easy to hit.
-function SwitchRow({ label, note, checked, onChange }: { label: string; note?: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minHeight: '44px' }}>
-      <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        <span style={labelStyle}>{label}</span>
-        {note && <span style={noteStyle}>{note}</span>}
-      </span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        onClick={() => onChange(!checked)}
-        style={{ flexShrink: 0, width: '60px', height: '44px', padding: 0, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
-      >
-        <span style={{
-          width: '52px',
-          height: '32px',
-          boxSizing: 'border-box',
-          padding: '3px',
-          borderRadius: '16px',
-          background: checked ? 'var(--color-accent)' : 'rgba(var(--color-ui-border-muted-rgb), 0.25)',
-          display: 'flex',
-          justifyContent: checked ? 'flex-end' : 'flex-start',
-          transition: 'background 0.15s',
-        }}>
-          <span style={{ width: '26px', height: '26px', borderRadius: '13px', background: checked ? 'var(--color-on-accent)' : 'var(--color-text-muted)' }} />
-        </span>
-      </button>
-    </div>
-  )
-}
 
 // A labelled control: beside its label in landscape, under it in portrait where the width is short.
 function FieldRow({ label, htmlFor, stacked, children }: { label: string; htmlFor?: string; stacked: boolean; children: ReactNode }) {
@@ -140,7 +104,7 @@ export default function SettingsScreenView(props: Props) {
 
   const swu = (
     <Section label="Star Wars: Unlimited">
-      <SwitchRow label="Hyperspace art" checked={props.useHyperspace} onChange={props.onUseHyperspaceChange} />
+      <Switch label="Hyperspace art" checked={props.useHyperspace} onChange={props.onUseHyperspaceChange} />
       <FieldRow label="Force tokens" stacked={isPortrait}>
         <div style={{ flex: 1 }}>
           <SegmentedControl label="Force tokens" options={FORCE_TOKENS} value={props.forceTokenDisplay} onChange={props.onForceTokenDisplayChange} />
@@ -156,20 +120,20 @@ export default function SettingsScreenView(props: Props) {
           style={{ ...FIELD_STYLE, flex: 1 }}
         />
       </FieldRow>
-      <SwitchRow label="Damage −/+ buttons" checked={props.enableDamageButtons} onChange={props.onEnableDamageButtonsChange} />
-      <SwitchRow label="Initiative" checked={props.enableInitiativeBar} onChange={props.onEnableInitiativeBarChange} />
+      <Switch label="Damage −/+ buttons" checked={props.enableDamageButtons} onChange={props.onEnableDamageButtonsChange} />
+      <Switch label="Initiative" checked={props.enableInitiativeBar} onChange={props.onEnableInitiativeBarChange} />
     </Section>
   )
 
   const xwing = (
     <Section label="X-Wing">
-      <SwitchRow
+      <Switch
         label="Phase tracker"
         note={isPortrait ? 'Step through every phase. Off: the round button scores the round' : undefined}
         checked={props.enableXwingPhases}
         onChange={props.onEnableXwingPhasesChange}
       />
-      <SwitchRow
+      <Switch
         label="Score −/+ buttons"
         note={isPortrait ? 'Change scores by hand on the game screen' : undefined}
         checked={props.enableXwingAlwaysIncDec}

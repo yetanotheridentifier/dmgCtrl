@@ -902,7 +902,7 @@ function BaseCard({ state, side, target }: {
           fontWeight: 300,
           lineHeight: 1,
           letterSpacing: '0.05em',
-          color: 'var(--color-ink)',
+          color: 'var(--color-text-primary)',
           textShadow: '0 0 20px rgba(79, 195, 247, 0.4), 0 0 8px rgba(0, 0, 0, 1)',
           transform: 'translateY(-2%)',
         }}

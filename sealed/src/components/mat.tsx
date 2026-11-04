@@ -24,7 +24,7 @@ function dims(short: number, landscape: boolean) {
 export function CardBack({ widthPx = MAT_CARD_PX, landscape = false, symbol = true, highlight }: { widthPx?: number; landscape?: boolean; symbol?: boolean; highlight?: Highlight }) {
   return (
     <div
-      style={{ ...dims(widthPx, landscape), backgroundColor: 'var(--color-bg)', ...highlightOutline(highlight) }}
+      style={{ ...dims(widthPx, landscape), backgroundColor: 'var(--color-bg-deep)', ...highlightOutline(highlight) }}
       className="flex items-center justify-center rounded-lg border border-line/40"
     >
       {symbol && <img src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`} alt="" className="w-3/5 opacity-90" />}

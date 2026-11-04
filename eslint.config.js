@@ -26,6 +26,10 @@ export default tseslint.config(
         'warn',
         { allowConstantExport: true },
       ],
+      // Sealed may use this app's shared UI; nothing here uses Sealed's code.
+      'no-restricted-imports': ['error', {
+        patterns: [{ group: ['**/sealed/**'], message: 'The PWA imports nothing from Sealed.' }],
+      }],
     },
   },
 )

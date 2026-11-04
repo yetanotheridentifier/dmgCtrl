@@ -5,10 +5,10 @@ export type Highlight = 'accent' | 'accent-dim' | 'green' | 'red' | 'yellow' | '
 
 const OUTLINE: Record<Highlight, string> = {
   accent: '2px solid var(--color-accent)',
-  green: '2px solid var(--color-green)',
-  red: '2px solid var(--color-red)',
+  green: '2px solid var(--color-success)',
+  red: '2px solid var(--color-damage)',
   yellow: '2px solid var(--color-yellow)',
-  white: '2px solid var(--color-ink)',
+  white: '2px solid var(--color-text-primary)',
   'accent-dim': '2px solid rgba(79, 195, 247, 0.55)',
 }
 
