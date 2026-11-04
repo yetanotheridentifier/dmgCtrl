@@ -54,8 +54,8 @@ points too high and the bot paid a real card for a unit it had to defeat immedia
 Two properties worth keeping:
 
 - **It costs about 2.5x wall clock**: 420 games in 74.7s against 29.8s, so a few hundred games a
-  minute either way. A single decision stays far inside interactive latency at this depth, so no Web
-  Worker is needed for it.
+  minute either way. A single decision stays far inside interactive latency on a desktop at this
+  depth; on a phone it does not, which is why the search is moving to a Web Worker.
 - **A node budget bounds the worst case.** `support` fans out across every ready unit and every legal
   target, so the cap is a safety rail against the card pool, not a tuning knob. Exhausting it scores
   the board where it stopped, degrading to the old answer rather than a wrong one.

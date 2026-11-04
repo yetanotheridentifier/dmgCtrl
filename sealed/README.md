@@ -51,8 +51,8 @@ src/
   utils/             ProtectThePod parser, action describer
 ```
 
-The AI runs synchronously in `useGame` for the random rung; the Web Worker
-offload (T5.4) is only needed from MCTS onwards.
+The AI runs synchronously on the main thread in `useGame`; it is moving to a Web Worker so a
+search cannot freeze a phone's UI (see `docs/architecture.md`).
 
 ## Decisions & assumptions to revisit
 

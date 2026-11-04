@@ -31,6 +31,8 @@ Core functionality:
 
 The app is served at the root of `dmgctrl.app` and is designed to be added to an iOS home screen for a native-like experience.
 
+**Sealed** (`sealed/`, served at `dmgctrl.app/sealed`) is a separate app on the same origin, with its own package, build, tests and docs (`sealed/docs/`). This app's service worker leaves `/sealed` alone (`navigateFallbackDenylist` in `PWA_WORKBOX`), so Sealed can have a service worker of its own. The only things Sealed may import from here are the controls in `src/components/shared/` and the colour tokens in `src/index.css`, the single source of the palette for both apps, so a change to either is a change to Sealed too. This app imports nothing from Sealed.
+
 ---
 
 ## 2. Goals and Non-Goals
