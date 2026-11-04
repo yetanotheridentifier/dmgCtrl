@@ -6,7 +6,7 @@
     "deploy": "wrangler deploy --config wrangler.toml"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.6",
+    "@cloudflare/vitest-pool-workers": "^0.23.0",
     "vitest": "^4.1.6"
   }
 }
