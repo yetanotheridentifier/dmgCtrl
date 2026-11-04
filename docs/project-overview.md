@@ -54,7 +54,7 @@ After setup, `npm run dev:https` will print a local network URL (e.g. `https://1
 
 `scripts/validate-bases.mjs` automates the visual QA process for all bases. It opens a visible Chromium window at SWU setup (`/swu`), reads every base from the card data the app has loaded (`swu_bases_cache`), and for each one in set order chooses it in the base sheet (search by name, tap the tile), goes to the game screen and waits for the card image. You watch while it runs; the script handles the navigation and timing.
 
-The three QA scripts share their browser setup and SWU setup steps in `scripts/qa-helpers.mjs`. Each takes the dev server address as its first argument (default `https://127.0.0.1:5173/`) and `--headless` to run without a window.
+The three QA scripts share their browser setup and SWU setup steps in `scripts/qa-helpers.mjs`. Each takes the dev server address as its first argument (default `https://127.0.0.1:5173/`) and `--headless` to run without a window. They open dmgCtrl and nothing else: a server on this machine or the local network, `dev.dmgctrl.app` or `dmgctrl.app`; any other address is refused, because Playwright's Chromium trails the browser's security fixes. Chromium runs in its sandbox, and certificate errors are ignored only on a local server (for the mkcert dev certificate).
 
 **One-time setup** (Playwright + Chromium browser binary):
 ```bash
