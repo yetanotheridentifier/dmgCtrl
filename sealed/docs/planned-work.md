@@ -424,13 +424,10 @@ Sealed is redesigned for a phone as well as a desktop, as a separate PWA under `
 merge with the dmgCtrl PWA later. The UI shares the PWA's controls and colour tokens; the engine and
 AI share nothing.
 
-1. **#1000 Sealed as an installable PWA**: its own manifest and a service worker scoped to
-   `/sealed/`, precaching Sealed's code; card data stays in Dexie. An update must not reload a game in
-   progress.
-2. **#1001 the AI's search in a Web Worker.** Planned whatever a phone measures: ~85 ms a decision on
+1. **#1001 the AI's search in a Web Worker.** Planned whatever a phone measures: ~85 ms a decision on
    a desktop is 200 to 350 ms of frozen UI on a mid-range phone. Wanted before the phone board
    (#883) is played on a phone; record phone timings before and after.
-3. **The redesigned screens**: #882 setup, #883 game board for phone landscape, #884 game prompts,
+2. **The redesigned screens**: #882 setup, #883 game board for phone landscape, #884 game prompts,
    #885 game on desktop, #886 settings, #887 help.
 
 ## Deferred

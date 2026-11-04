@@ -259,10 +259,25 @@ calls to it and to swuapi.com for cards, and, for a player who opted in, posts e
 finished game to it (see "Game collection" below). **The worker is not deployed by
 this workflow**: it goes out by hand with `npm run deploy:proxy`.
 
-**PWA interaction**: the main app's service worker controls the whole origin.
-Its workbox config carries `navigateFallbackDenylist: [/^\/sealed/]` (see root
-`vite.config.ts`) so navigations to `/sealed` are never rewritten to the PWA's
-index.html. Keep that in place if the workbox config is ever reworked.
+**PWA interaction**: two service workers share the origin. The main app's is
+registered at the root and its workbox config carries `navigateFallbackDenylist:
+[/^\/sealed/]` (see root `vite.config.ts`) so navigations to `/sealed` are never
+rewritten to the PWA's index.html. Keep that in place if the workbox config is ever
+reworked. Sealed's is `/sealed/sw.js`, scoped to `/sealed/`, and as the more specific
+scope it controls every Sealed page; it precaches only Sealed's build, which is
+copied into `dist/sealed` after the root's precache list is written, so neither
+worker lists the other's files. The manifest (`id`, `scope` and `start_url` all
+`/sealed/`) makes Sealed a separate install from dmgCtrl.
+
+**Sealed's updates wait for the deck screen.** The worker registers with
+`registerType: 'prompt'`, so a new version waits instead of taking over. The shell
+(`hooks/useUpdateOnDeckScreen.ts`) applies it, which reloads the page, as soon as no
+game is open: at once on the deck screen, or the moment the player leaves a game. A
+game lives only in memory, so a player mid-game keeps the old version until then.
+The browser checks for a new worker when the page loads, so a tab left open picks
+up a release at its next load. **The precache has a 4 MiB per-file limit**
+(`maximumFileSizeToCacheInBytes`): Workbox silently leaves a larger file out, so the
+`precache-fits` build step fails the build instead, naming the file.
 
 To reproduce the prod artifact locally:
 
@@ -683,9 +698,9 @@ is up, and whether the browser is offline.
 **What works with the card API down, and what does not.** With the site itself reachable, a first
 visit builds a generated deck from any set and plays it, and plays a deck list of Normal printings,
 without one card request. Card art still streams from the worker, so with the worker down the
-cards show their text summaries. **The app shell is not available offline**: Sealed registers no
-service worker, and the PWA's worker precaches only the PWA's own files, so opening `/sealed` with
-no connection at all fails before any of this runs.
+cards show their text summaries. **The app shell opens offline after one online visit**: Sealed's
+service worker precaches its code, pages and shipped images, and the card data it has seen is in
+IndexedDB. Full art is never cached, so offline the cards show their thumbnails or text summaries.
 
 **The cache is read before the bundled set**, so a browser that cached a card keeps playing that
 copy after a release ships a newer snapshot. To put a browser back on the shipped data, delete the

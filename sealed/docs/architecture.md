@@ -11,8 +11,13 @@ they render on a phone, but the board needs more screen than a phone has. The ph
 redesign rather than a set of breakpoints, and is in progress (see [planned-work.md](planned-work.md)).
 
 - **Sealed is its own app.** It has its own package, build, tests and docs, and is served under
-  `/sealed`. It is not installable yet; it is to become a PWA of its own, with a manifest and a
-  service worker scoped to `/sealed/`, while its card data stays in IndexedDB. The PWA (X-Wing, SWU tracking) lives at the site root, and its service
+  `/sealed`. It installs as a PWA of its own ("dmgCtrl Sealed"), with a manifest whose `id`,
+  `scope` and `start_url` are `/sealed/` and a service worker scoped to `/sealed/` that precaches
+  its code, pages and shipped images; card data stays in IndexedDB and full art stays network-only
+  (`SEALED_PWA_MANIFEST` and `SEALED_PWA_WORKBOX` in `sealed/vite.config.ts`). **An update never
+  reloads a game**: a new worker waits, and `useUpdateOnDeckScreen` applies it on the deck screen,
+  at once or the moment the player leaves a game, since a game lives only in `useGame`'s memory.
+  The PWA (X-Wing, SWU tracking) lives at the site root, and its service
   worker leaves `/sealed` alone (`navigateFallbackDenylist` in the root `vite.config.ts`). Sealed
   borrows the PWA's dev server and origin; see [operations.md](operations.md) for how the two
   interact. The two may merge later, so where Sealed copies a PWA pattern it keeps the same shape.

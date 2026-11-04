@@ -6,6 +6,7 @@ import { SettingsOverlay } from './components/settingsOverlay'
 import { ShareGamesNotice, ShareGamesPill } from './components/shareGamesNotice'
 import { GearIcon, HelpIcon } from './components/icons'
 import { SettingsProvider, useSettings } from './hooks/useSettings'
+import { useUpdateOnDeckScreen } from './hooks/useUpdateOnDeckScreen'
 import type { SavedDeck } from './data/deckStore'
 import { retryPendingCollection } from './data/collectionSend'
 import { RELEASE } from './buildIdentity'
@@ -49,6 +50,7 @@ function AppShell() {
     setHelpOpen(true)
   }
   const { settings, update } = useSettings()
+  useUpdateOnDeckScreen(screen === 'game')
 
   return (
     <div className="min-h-screen text-ink font-sans">
