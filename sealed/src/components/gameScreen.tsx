@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
-import { Button } from '@pwa-shared/controls'
+import { Button, OptionRow } from '@pwa-shared/controls'
 import { nameableCardNames, nameableTraits, zoneCards } from '../engine/legalMoves'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
@@ -363,20 +363,20 @@ const CANCEL_LABEL = 'Cancel: take back the action that raised this'
  * "Look at" / "reveal" overlay — a single card over a dark backdrop with a prompt and the
  * caller's action buttons. PRIVATE to the acting player. A thin wrapper over `CardGridOverlay`.
  */
-export function CardChoiceOverlay({ card, cardId, prompt, children }: {
-  card: EngineCard | undefined
+export function CardChoiceOverlay({ state, cardId, prompt, buttons }: {
+  state: GameState
   cardId: string
   prompt: string
-  children: ReactNode
+  buttons: PromptButton[]
 }) {
   return (
     <CardGridOverlay
       idPrefix="card-choice"
       prompt={prompt}
-      cardsById={{ [cardId]: card }}
+      state={state}
       items={[{ cardId, key: 0 }]}
       fullWidthCards
-      footer={children}
+      buttons={buttons}
     />
   )
 }
@@ -406,7 +406,7 @@ export function CardSelectOverlay({ state, prompt, items, onPick, onCancel, onDi
       prompt={prompt}
       onDismiss={onDismiss}
       dismissLabel={CANCEL_LABEL}
-      cardsById={state.cards}
+      state={state}
       items={items.map(item => {
         const key = item.key ?? item.optionIndex
         return {
@@ -417,11 +417,7 @@ export function CardSelectOverlay({ state, prompt, items, onPick, onCancel, onDi
           onSelect: () => onPick(item.optionIndex),
         }
       })}
-      footer={onCancel && (
-        <button data-testid="card-select-cancel" onClick={onCancel} className={PANEL_SECONDARY}>
-          Cancel
-        </button>
-      )}
+      buttons={onCancel && [{ label: 'Cancel', testId: 'card-select-cancel', onClick: onCancel }]}
     />
   )
 }
@@ -443,7 +439,7 @@ export function SearchRevealOverlay({ state, choice, onPick, onDone }: {
       prompt={onDone
         ? `Look at the top ${choice.revealed.length}: no ground unit to discard`
         : `Look at the top ${choice.revealed.length}: discard a ground unit`}
-      cardsById={state.cards}
+      state={state}
       items={choice.revealed.map((cardId, i) => {
         const c = state.cards[cardId]
         const ground = c?.type === 'unit' && c.arena === 'ground'
@@ -451,11 +447,7 @@ export function SearchRevealOverlay({ state, choice, onPick, onDone }: {
           ? { cardId, key: i, testId: `search-pick-${i}`, actionLabel: 'Discard', onSelect: () => onPick(i) }
           : { cardId, key: i, dimmed: true }
       })}
-      footer={onDone && (
-        <button data-testid="search-done" onClick={onDone} className={PANEL_SECONDARY}>
-          Done
-        </button>
-      )}
+      buttons={onDone && [{ label: 'Done', testId: 'search-done', onClick: onDone }]}
     />
   )
 }
@@ -479,15 +471,11 @@ export function SearchDrawOverlay({ state, choice, onPick, onDone }: {
       prompt={onDone
         ? `Search the top ${choice.revealed.length}: no match, these go to the bottom`
         : `Search the top ${choice.revealed.length}: draw a match`}
-      cardsById={state.cards}
+      state={state}
       items={choice.revealed.map((cardId, i) => eligible.has(i)
         ? { cardId, key: i, testId: `search-draw-pick-${i}`, actionLabel: 'Draw', onSelect: () => onPick(i) }
         : { cardId, key: i, dimmed: true })}
-      footer={onDone && (
-        <button data-testid="search-draw-done" onClick={onDone} className={PANEL_SECONDARY}>
-          Done
-        </button>
-      )}
+      buttons={onDone && [{ label: 'Done', testId: 'search-draw-done', onClick: onDone }]}
     />
   )
 }
@@ -653,15 +641,58 @@ export function NextTriggerOverlay({ state, candidates, onPick, onDismiss }: {
  * `what` names what is being picked, so "name a Trait" (The First Legion) uses the same overlay: the
  * two choices differ in the list and the heading and in nothing else.
  */
-export function NameCardOverlay({ names, onPick, what = 'card', onDismiss }: {
+/** How many matching names the phone lists: as many as fit beside the keyboard's half of the screen. */
+const PHONE_NAME_MATCHES = 3
+
+export function NameCardOverlay({ names, onPick, what = 'card', onDismiss, phone }: {
   names: string[]
   onPick: (name: string) => void
   what?: string
   /** Cancels the action that asked for the name; absent, the overlay blocks until answered. */
   onDismiss?: () => void
+  /** Asked in the phone's prompt panel, with the card that asked and its question. */
+  phone?: { state: GameState; choice: PendingChoice }
 }) {
   const [query, setQuery] = useState('')
+  const [chosen, setChosen] = useState<string | null>(null)
   const filtered = query.trim() ? names.filter(n => n.toLowerCase().includes(query.trim().toLowerCase())) : names
+  if (phone) {
+    // A name is chosen from the matches first and named by the primary button, so a slip of the
+    // finger in a short list does not answer the card.
+    const asker = choiceSourceCard(phone.state, phone.choice)
+    const shown = filtered.slice(0, PHONE_NAME_MATCHES)
+    return (
+      <PhonePrompt
+        testId="name-card-overlay"
+        state={phone.state}
+        cardId={asker}
+        eyebrow={asker ? phone.state.cards[asker]?.name ?? asker : undefined}
+        question={describeChoiceQuestion(phone.state, phone.choice)}
+        width={440}
+        buttons={chosen && shown.includes(chosen) ? [{ label: `Name ${chosen}`, testId: 'name-card-confirm', onClick: () => onPick(chosen), primary: true }] : []}
+        onCancel={onDismiss}
+        cancelLabel={CANCEL_LABEL}
+      >
+        <label className="flex flex-col gap-1.5 text-xs tracking-[0.14em] text-ink-dim">
+          {`${what.toUpperCase()} NAME`}
+          <input
+            data-testid="name-card-input"
+            autoFocus
+            aria-autocomplete="list"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            className="h-11 rounded-xl border-2 border-line/60 bg-[var(--color-surface)] px-3 text-base tracking-normal text-ink outline-none focus:border-accent"
+          />
+        </label>
+        <div role="group" aria-label="Matching names" className="flex flex-col gap-1">
+          {shown.map((n, i) => (
+            <OptionRow key={n} testId={`name-card-option-${i}`} title={n} selected={n === chosen} onClick={() => setChosen(n)} />
+          ))}
+          {filtered.length === 0 && <div className="py-2 text-sm text-ink-faint">No match</div>}
+        </div>
+      </PhonePrompt>
+    )
+  }
   return (
     <OverlayShell testId="name-card-overlay" size="panel" onDismiss={onDismiss} dismissLabel={CANCEL_LABEL}>
       <OverlayHeader title={`Name a ${what}`} />
@@ -762,6 +793,9 @@ function promptButtons(state: GameState, actions: Action[], onPick: (action: Act
   }))
 }
 
+/** The desktop's look at the top card draws every answer in the accent colour. */
+const allPrimary = (buttons: PromptButton[]): PromptButton[] => buttons.map(b => ({ ...b, primary: true }))
+
 /**
  * "Search & play for free" overlay: reveals the searched cards; eligible ones get a "Play free"
  * button, the rest are dimmed, and Done stops early. A thin wrapper over `CardGridOverlay`.
@@ -784,15 +818,11 @@ export function SearchPlayFreeOverlay({ state, choice, onPick, onDone }: {
     <CardGridOverlay
       idPrefix="search-free"
       prompt={prompt}
-      cardsById={state.cards}
+      state={state}
       items={choice.revealed.map((cardId, i) => eligible.has(i)
         ? { cardId, key: i, testId: `search-free-pick-${i}`, actionLabel: 'Play free', onSelect: () => onPick(i) }
         : { cardId, key: i, dimmed: true })}
-      footer={
-        <button data-testid="search-free-done" onClick={onDone} className={PANEL_SECONDARY}>
-          Done
-        </button>
-      }
+      buttons={[{ label: 'Done', testId: 'search-free-done', onClick: onDone }]}
     />
   )
 }
@@ -817,30 +847,29 @@ export function SearchPlayUpgradeOverlay({ state, choice, playableIndices, onPic
       prompt={playable.size > 0
         ? `Search the top ${choice.revealed.length}: play an upgrade, ${choice.discount} less`
         : `Search the top ${choice.revealed.length}: nothing to attach, these go back`}
-      cardsById={state.cards}
+      state={state}
       items={choice.revealed.map((cardId, i) => playable.has(i)
         ? { cardId, key: i, testId: `search-upgrade-pick-${i}`, actionLabel: 'Play', onSelect: () => onPick(i) }
         : { cardId, key: i, dimmed: true })}
-      footer={
-        <button data-testid="search-upgrade-done" onClick={onDone} className={PANEL_SECONDARY}>
-          Done
-        </button>
-      }
+      buttons={[{ label: 'Done', testId: 'search-upgrade-done', onClick: onDone }]}
     />
   )
 }
 
 /**
  * "Look at an opponent's hand" overlay (Imperial Defector / Remnant Lookouts): reveals the
- * target's hand face-up. View-only unless `mayDiscard`, when each card gets a Discard button. A
- * Done button dismisses it. A thin wrapper over `CardGridOverlay`.
+ * target's hand face-up. View-only unless `mayDiscard`, when each card the legal moves offer
+ * (`discardable`, hand indices) gets a Discard button and the rest are dimmed. Done dismisses it, and
+ * is given only when the legal moves allow declining. A thin wrapper over `CardGridOverlay`.
  */
-export function OpponentHandOverlay({ state, choice, onDiscard, onDone }: {
+export function OpponentHandOverlay({ state, choice, discardable, onDiscard, onDone }: {
   state: GameState
   choice: Extract<PendingChoice, { kind: 'lookAtHand' }>
+  discardable: number[]
   onDiscard: (handIndex: number) => void
-  onDone: () => void
+  onDone?: () => void
 }) {
+  const offered = new Set(discardable)
   const hand = state.players[choice.target].hand
   const prompt = hand.length === 0
     ? "Opponent's hand is empty"
@@ -849,15 +878,13 @@ export function OpponentHandOverlay({ state, choice, onDiscard, onDone }: {
     <CardGridOverlay
       idPrefix="opp-hand"
       prompt={prompt}
-      cardsById={state.cards}
-      items={hand.map((cardId, i) => choice.mayDiscard
-        ? { cardId, key: i, testId: `opp-hand-pick-${i}`, actionLabel: 'Discard', onSelect: () => onDiscard(i) }
-        : { cardId, key: i })}
-      footer={
-        <button data-testid="opp-hand-done" onClick={onDone} className={PANEL_SECONDARY}>
-          Done
-        </button>
-      }
+      state={state}
+      items={hand.map((cardId, i) => !choice.mayDiscard
+        ? { cardId, key: i }
+        : offered.has(i)
+          ? { cardId, key: i, testId: `opp-hand-pick-${i}`, actionLabel: 'Discard', onSelect: () => onDiscard(i) }
+          : { cardId, key: i, dimmed: true })}
+      buttons={onDone && [{ label: 'Done', testId: 'opp-hand-done', onClick: onDone }]}
     />
   )
 }
@@ -877,16 +904,12 @@ export function DeckTopsOverlay({ state, prompt, tops, onDone }: {
     <CardGridOverlay
       idPrefix="deck-tops"
       prompt={prompt}
-      cardsById={state.cards}
+      state={state}
       items={tops.map(({ deck, cardId }) => ({
         cardId, key: deck, caption: deck === 'player' ? 'Your deck' : "Opponent's deck", captionTestId: `deck-tops-caption-${deck}`,
       }))}
       onBackdropClick={onDone}
-      footer={
-        <button data-testid="deck-tops-done" onClick={onDone} className={PANEL_PRIMARY}>
-          Done
-        </button>
-      }
+      buttons={[{ label: 'Done', testId: 'deck-tops-done', onClick: onDone, primary: true }]}
     />
   )
 }
@@ -1974,37 +1997,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       )
     } else if (lookChoice) {
       choiceOverlay = (
-        <CardChoiceOverlay card={gameState.cards[lookChoice.cardId]} cardId={lookChoice.cardId} prompt="Look at the top card of your deck">
-          {lookActions.map((action, i) => (
-            <button
-              key={i}
-              data-testid={`choice-btn-${i}`}
-              onClick={() => actAndClear(action)}
-              className={PANEL_PRIMARY}
-            >
-              {describeAction(gameState, 'player', action)}
-            </button>
-          ))}
-        </CardChoiceOverlay>
+        <CardChoiceOverlay state={gameState} cardId={lookChoice.cardId} prompt="Look at the top card of your deck" buttons={allPrimary(promptButtons(gameState, lookActions, actAndClear, 'choice-btn'))} />
       )
     } else if (discardTopChoice) {
       choiceOverlay = (
         <CardChoiceOverlay
-          card={gameState.cards[discardTopChoice.cardId]}
+          state={gameState}
           cardId={discardTopChoice.cardId}
           prompt={`Look at the top of ${discardTopChoice.deck === 'player' ? 'your' : "opponent's"} deck`}
-        >
-          {discardTopActions.map((action, i) => (
-            <button
-              key={i}
-              data-testid={`choice-btn-${i}`}
-              onClick={() => actAndClear(action)}
-              className={PANEL_PRIMARY}
-            >
-              {describeAction(gameState, 'player', action)}
-            </button>
-          ))}
-        </CardChoiceOverlay>
+          buttons={allPrimary(promptButtons(gameState, discardTopActions, actAndClear, 'choice-btn'))}
+        />
       )
     } else if (searchChoice) {
       choiceOverlay = (
@@ -2024,8 +2026,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         <OpponentHandOverlay
           state={gameState}
           choice={lookHandChoice}
+          discardable={lookHandActions.flatMap(a => (a.type === 'acceptChoice' && a.handIndex !== undefined ? [a.handIndex] : []))}
           onDiscard={handIndex => actAndClear({ type: 'acceptChoice', choiceId: lookHandChoice.id, handIndex })}
-          onDone={() => actAndClear({ type: 'skipTrigger', choiceId: lookHandChoice.id })}
+          onDone={lookHandActions.some(a => a.type === 'skipTrigger')
+            ? () => actAndClear({ type: 'skipTrigger', choiceId: lookHandChoice.id })
+            : undefined}
         />
       )
     } else if (deckTopsChoice && deckTopsActions.length > 0) {
@@ -2073,6 +2078,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           names={nameableCardNames(gameState)}
           onPick={cardName => actAndClear({ type: 'acceptChoice', choiceId: nameCardChoice.id, cardName })}
           onDismiss={cancel}
+          phone={phone ? { state: gameState, choice: nameCardChoice } : undefined}
         />
       )
     } else if (nameTraitChoice) {
@@ -2082,6 +2088,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           names={nameableTraits(gameState)}
           onPick={traitName => actAndClear({ type: 'acceptChoice', choiceId: nameTraitChoice.id, traitName })}
           onDismiss={cancel}
+          phone={phone ? { state: gameState, choice: nameTraitChoice } : undefined}
         />
       )
     } else if (selectUpgradeChoice && pickedHost !== null) {

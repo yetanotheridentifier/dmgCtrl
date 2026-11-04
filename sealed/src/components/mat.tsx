@@ -92,7 +92,7 @@ export function DeckPile({ state, side, canLook = false }: { state: GameState; s
         <CardGridOverlay
           idPrefix="deck-top"
           prompt="The top card of your deck"
-          cardsById={state.cards}
+          state={state}
           cardWidthPx={CARD_WIDTH_PX}
           onBackdropClick={() => setOpen(false)}
           items={[{ cardId: top, key: top }]}
@@ -177,7 +177,7 @@ function DiscardOverlay({ cardIds, state, onClose }: { cardIds: string[]; state:
   return (
     <CardGridOverlay
       idPrefix="discard"
-      cardsById={state.cards}
+      state={state}
       cardWidthPx={CARD_WIDTH_PX}
       onBackdropClick={onClose}
       items={cardIds.map((id, i) => ({ cardId: id, key: `${id}-${i}` }))}
