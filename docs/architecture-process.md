@@ -479,6 +479,14 @@ Sealed defaults the other way round, to `node`, since most of its files are engi
 
 It must not run anywhere else. Vitest resolves this config on startup, so an ungated plugin called that API on every test run too, and CI runners share an IP and therefore share the unauthenticated rate limit: a pipeline run failed with a 403 that had nothing to do with certificates, and the next passed only because the shared quota had moved on.
 
+### The Cloudflare plugin stays out of a test run
+
+`@cloudflare/vite-plugin` builds the Worker that serves the app, so a build (CI's included) and the dev server load it. A test run (`VITEST` set) does not: since its 1.58 the plugin stops Vitest starting at all ("There is already a server associated with the config", workers-sdk #15969), and no test runs the Worker. `viteConfig.test.ts` pins both sides.
+
+### jest-dom matcher types
+
+jest-dom's own type augmentation targets Vitest's old `Assertion<T>`, and Vitest 5's `Assertion<R, T>` no longer merges with it (testing-library/jest-dom #738), so each suite declares the matchers onto Vitest's `Matchers` interface itself, in `src/test/jestDomVitest.d.ts`. Sealed holds an identical copy. Both go once jest-dom ships a fix.
+
 ### Coverage expectations
 
 - All hooks must have unit tests

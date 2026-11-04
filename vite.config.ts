@@ -93,6 +93,12 @@ export default defineConfig(({ command, mode }) => {
   // Reached through globalThis because this config is type-checked without Node types.
   const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
   const localDevServer = command === 'serve' && !env.VITEST && !env.CI
+  /**
+   * The Cloudflare plugin builds the Worker that serves the app. Since its 1.58 it stops Vitest
+   * starting at all ("There is already a server associated with the config", workers-sdk
+   * #15969), and no test runs the Worker, so a test run goes without it.
+   */
+  const testRun = !!env.VITEST
 
   return {
     base,
@@ -123,7 +129,7 @@ export default defineConfig(({ command, mode }) => {
       // The manifest icons are in public/ and already matched by PWA_WORKBOX's patterns.
       includeManifestIcons: false,
       manifest: PWA_MANIFEST,
-    }), gameAddresses(), cloudflare()],
+    }), gameAddresses(), ...(testRun ? [] : [cloudflare()])],
     test: {
       // `npm test` runs three separate Vitest invocations, so each writes its own summary to
       // the CI report. Named, or the run shows three anonymous blocks and you count tests to

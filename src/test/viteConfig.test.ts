@@ -16,6 +16,13 @@ import configFn, { PWA_MANIFEST, PWA_WORKBOX } from '../../vite.config'
 const MKCERT = 'vite:plugin:mkcert'
 
 /**
+ * The Cloudflare plugin builds the Worker that serves the app, and since its 1.58 it stops Vitest
+ * starting at all ("There is already a server associated with the config", workers-sdk #15969).
+ * The tests never run the Worker, so a test run leaves it out; a build, CI's included, keeps it.
+ */
+const CLOUDFLARE = 'vite-plugin-cloudflare'
+
+/**
  * Vite plugins nest arbitrarily (a plugin may be an array of plugins), so this walks rather
  * than flattening: `.flat(Infinity)` over Vite's own union types makes tsc give up with
  * "type instantiation is excessively deep".
@@ -61,6 +68,20 @@ describe('root vite config', () => {
     vi.stubEnv('VITEST', '')
     vi.stubEnv('CI', '')
     expect(pluginNames(serve)).toContain(MKCERT)
+  })
+
+  it('leaves the Cloudflare plugin out of a test run', () => {
+    expect(pluginNames(serve)).not.toContain(CLOUDFLARE)
+    expect(pluginNames(build)).not.toContain(CLOUDFLARE)
+  })
+
+  it('loads the Cloudflare plugin for a build, in CI too, and for a local dev server', () => {
+    vi.stubEnv('VITEST', '')
+    vi.stubEnv('CI', 'true')
+    expect(pluginNames(build)).toContain(CLOUDFLARE)
+    vi.stubEnv('CI', '')
+    expect(pluginNames(build)).toContain(CLOUDFLARE)
+    expect(pluginNames(serve)).toContain(CLOUDFLARE)
   })
 
   /**
