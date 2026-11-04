@@ -1,24 +1,30 @@
 # Sealed: Architecture
 
-Standalone desktop web app for playing SWU Sealed against an AI opponent. Lives at
-`dmgctrl.app/sealed` (Vite `base: '/sealed/'`), deliberately separate from the dmgCtrl PWA.
+Web app for playing SWU Sealed against an AI opponent. Lives at `dmgctrl.app/sealed` (Vite
+`base: '/sealed/'`), a separate app from the dmgCtrl PWA on the same origin.
 Build plan and epic breakdown: `docs/swu-ai-handoff.html` (repo root).
 
-## Desktop browser only
+## Platform, and its place beside the PWA
 
-**Sealed targets a desktop browser and nothing else.** It renders and plays on a phone, but the
-layout needs more screen than a phone has, so the experience is poor. Adapting it is a redesign
-rather than a set of breakpoints, and it is not currently planned.
+**Sealed targets a phone and a desktop browser.** The current screens are laid out for a desktop:
+they render on a phone, but the board needs more screen than a phone has. The phone layout is a
+redesign rather than a set of breakpoints, and is in progress (see [planned-work.md](planned-work.md)).
 
-Two consequences worth knowing before optimising anything:
-
-- **The AI's compute budget is generous.** A desktop CPU absorbs a search that a mid-range phone
-  would not, so per-decision cost is measured against a budget of hundreds of milliseconds rather
-  than tens. A Web Worker, which exists to keep a phone's UI responsive under a blocking search, is
-  therefore not a prerequisite for shipping a deeper model here.
-- **This is not part of the PWA.** The PWA (X-Wing, SWU tracking, Kill Team) is mobile-first and
-  lives at the site root; Sealed only borrows its dev server and origin. See
-  [operations.md](operations.md) for how the two interact.
+- **Sealed is its own app.** It has its own package, build, tests and docs, and is served under
+  `/sealed`. It is not installable yet; it is to become a PWA of its own, with a manifest and a
+  service worker scoped to `/sealed/`, while its card data stays in IndexedDB. The PWA (X-Wing, SWU tracking) lives at the site root, and its service
+  worker leaves `/sealed` alone (`navigateFallbackDenylist` in the root `vite.config.ts`). Sealed
+  borrows the PWA's dev server and origin; see [operations.md](operations.md) for how the two
+  interact. The two may merge later, so where Sealed copies a PWA pattern it keeps the same shape.
+- **Only the UI may share with the PWA.** Sealed's screens may use the PWA's shared controls
+  (`src/components/shared/controls.tsx`), and the palette has one source, the PWA's colour tokens in
+  `src/index.css`. Sealed's Tailwind theme (the `@theme` block in `sealed/src/index.css`) still
+  restates those colours, and is to refer to the tokens instead. The engine, the AI and the bench
+  import nothing from the PWA, so the bench keeps running under Node.
+- **The AI is kept off the main thread's assumptions.** Its search costs about 85 ms a decision on a
+  desktop and perhaps 2 to 4x that on a mid-range phone, enough to freeze a phone's UI, so it is
+  moving to a Web Worker. Nothing in `src/ai` or `src/engine` may depend on the DOM, React or
+  main-thread state, and `GameState` stays plain structured-clonable data.
 
 ## Components &amp; integration
 
@@ -486,8 +492,7 @@ Help on a single section of the guide.
 
 The header chrome icons (bug, cog, question mark) live together in `components/icons.tsx` and
 share one `ICON_PROPS` spec, so a mismatch between neighbours is visible in one file. The cog
-and question mark are the PWA's paths, copied rather than imported: the two apps are separate
-packages and deliberately stay that way.
+and question mark are copies of the PWA's paths.
 
 ## Help
 

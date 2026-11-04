@@ -418,13 +418,32 @@ rule read off the payload rather than a table of the kinds that exist on the day
   split to aim for is by how a choice is answered: click-a-unit stays on the board, pick-a-button moves
   to an overlay. The action column keeps what the player initiates.
 
+### Phone and the PWA
+
+Sealed is redesigned for a phone as well as a desktop, as a separate PWA under `/sealed` that may
+merge with the dmgCtrl PWA later. The UI shares the PWA's controls and colour tokens; the engine and
+AI share nothing.
+
+1. **#877 shared controls and tokens.** Sealed imports the PWA's shared controls, and its Tailwind
+   theme refers to the PWA's tokens rather than restating them. First, because every redesigned
+   screen is built from them.
+2. **#1000 Sealed as an installable PWA**: its own manifest and a service worker scoped to
+   `/sealed/`, precaching Sealed's code; card data stays in Dexie. An update must not reload a game in
+   progress.
+3. **#1001 the AI's search in a Web Worker.** Planned whatever a phone measures: ~85 ms a decision on
+   a desktop is 200 to 350 ms of frozen UI on a mid-range phone. Wanted before the phone board
+   (#883) is played on a phone; record phone timings before and after.
+4. **The redesigned screens**: #882 setup, #883 game board for phone landscape, #884 game prompts,
+   #885 game on desktop, #886 settings, #887 help.
+
 ## Deferred
 
-- **Web Worker** for the AI. **Downgraded, probably unnecessary.** It existed to stop a blocking search
-  freezing a phone's UI, and Sealed is desktop only, where ~85 ms a decision reads as instant. Revisit
-  only if a winning configuration lands in the hundreds of milliseconds, or if mobile happens.
-- **Mobile and PWA adaptation** (#482). A redesign rather than breakpoints, and it would reinstate the
-  Web Worker question.
+- **npm workspaces for the PWA, Sealed and the proxy.** The three already pin the same vite, vitest,
+  TypeScript, React and eslint, but each has its own lockfile, so every upgrade is done three times.
+  Workspaces give one install and one lockfile while each package keeps its own config and scripts,
+  and they do not stand in the way of merging the two PWAs later.
+- **Merging Sealed into the dmgCtrl PWA**, its docs included. Sealed is a separate PWA for now; the
+  option is kept open by copying PWA patterns in the same shape.
 - **#579 an engine record of the effects it applies.** The correct answer to what the log's board
   diff (`utils/boardDiff.ts`) approximates, and it **replaces** the diff rather than joining it. It is
   also the only way to log a reveal that leaves no trace in the state (Disclose, an event revealed

@@ -4,7 +4,7 @@ Two applications in one repository:
 
 - **The tracker** — a mobile-first progressive web app for tracking game state in tabletop games, supporting Star Wars: Unlimited and Star Wars X-Wing.
   **Live:** https://dmgctrl.app
-- **Sealed** (`sealed/`) — a playable digital Star Wars: Unlimited sealed-deck game: a full rules engine, card abilities, and a searching AI opponent with its own benchmark harness. Desktop browser only.
+- **Sealed** (`sealed/`) — a playable digital Star Wars: Unlimited sealed-deck game: a full rules engine, card abilities, and a searching AI opponent with its own benchmark harness. Served under `/sealed` as an app of its own, being redesigned for a phone as well as a desktop.
   **Live:** https://dmgctrl.app/sealed
 
 They are separate npm projects with separate dependencies, build steps and docs. Most changes touch one or the other, not both.
