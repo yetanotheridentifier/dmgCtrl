@@ -91,6 +91,22 @@ Both workflows need the `CLOUDFLARE_API_TOKEN` repository secret (a custom token
 - **Dependabot** (`.github/dependabot.yml`) proposes updates weekly for the three npm packages and for the actions, each only once it has been public for 7 days. Minor and patch updates come as one pull request per package; a major comes on its own. Security updates are raised as soon as an advisory is published. Dependabot's pull requests are exempt from `close-outside-prs.yml` and get no preview.
 - **Branch protection on `main` applies to admins.** `test` and `build` must pass, and the branch must be up to date with `main`, for every merge, the owner's included.
 
+### Pipeline: `.github/workflows/upstream-watch.yml`
+
+Some upgrades wait on an upstream release rather than on this project, and Dependabot gives no clear signal when one lands: the release arrives inside a grouped pull request without saying it unblocks anything. This workflow runs weekly (Monday 06:00 UTC) and on manual `workflow_dispatch`, and runs `node scripts/upstream-watch.mjs` over the entries in `.github/upstream-watch.json`.
+
+Each entry names a package, one of its peer dependencies, the version that peer range must accept, and the ticket waiting on it:
+
+```json
+{ "package": "typescript-eslint", "peer": "typescript", "version": "7.0.0", "blocks": 991 }
+```
+
+- **A watch clears** when the package's latest release on npm accepts the version. The run raises a ticket titled `chore/upstream-watch: <package> now accepts <peer> <version> (unblocks #<ticket>)`, once: the title is the record, so a later run that finds it, open or closed, stays quiet.
+- **Every watch is checked before any action**, so a registry failure fails the run and raises nothing, rather than reading as a cleared blocker.
+- **When every watch has cleared, the workflow disables itself.** To watch something new, add an entry and run `gh workflow enable upstream-watch.yml`. Remove an entry once its ticket is done.
+
+It uses only the job's own token, with `issues: write` (to raise the ticket) and `actions: write` (to disable itself). A raised ticket is not on the project board: the token cannot edit it, so it is added by hand.
+
 ### Pipeline: `.github/workflows/populate-base-aspects.yml`
 
 Triggered daily at midnight UTC and on manual `workflow_dispatch`. Runs `node scripts/populate-base-aspects.mjs` to refresh the `base_aspects` InfluxDB measurement (see below). This is necessary because InfluxDB Cloud free tier has a 30-day retention window — without periodic refresh, lookup records age out and the base popularity panel loses aspect colour coding.

@@ -1,0 +1,3 @@
+[
+  { "package": "typescript-eslint", "peer": "typescript", "version": "7.0.0", "blocks": 991 }
+]
