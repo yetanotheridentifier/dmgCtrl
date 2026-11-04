@@ -59,7 +59,7 @@ describe('SplitScreenLayout', () => {
     renderLayout()
     s.turnTo(90)
     expect(frame().style.transform).toMatch(/rotate\(-90deg\)/)
-    expect(frame()).toHaveStyle({ width: '100vh', height: '100vw' })
+    expect(frame().style).toMatchObject({ width: '100vh', height: '100vw' })
     s.turnTo(270)
     expect(frame().style.transform).toMatch(/rotate\(-270deg\)/)
     s.turnTo(0)
@@ -82,7 +82,7 @@ describe('SplitScreenLayout', () => {
     s.turnTo(270)
     expect(edges()).toEqual(['var(--screen-edge-right)', 'var(--screen-edge-bottom)', 'var(--screen-edge-left)', 'var(--screen-edge-top)'])
     for (const name of ['Theirs', 'Yours']) {
-      expect(screen.getByRole('region', { name })).toHaveStyle({ paddingTop: '8px', paddingLeft: '0px', paddingRight: '0px', paddingBottom: '0px' })
+      expect(screen.getByRole('region', { name }).style).toMatchObject({ paddingTop: '8px', paddingLeft: '', paddingRight: '', paddingBottom: '' })
     }
   })
 })

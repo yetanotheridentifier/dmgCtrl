@@ -37,8 +37,8 @@ describe('Button', () => {
 
   it('fills primary with the accent and secondary with the tonal colour', () => {
     render(<><Button variant="primary">Primary</Button><Button>Secondary</Button></>)
-    expect(screen.getByRole('button', { name: 'Primary' })).toHaveStyle({ background: 'var(--color-accent)' })
-    expect(screen.getByRole('button', { name: 'Secondary' })).toHaveStyle({ background: 'var(--color-tonal)' })
+    expect(screen.getByRole('button', { name: 'Primary' }).style).toMatchObject({ background: 'var(--color-accent)' })
+    expect(screen.getByRole('button', { name: 'Secondary' }).style).toMatchObject({ background: 'var(--color-tonal)' })
   })
 
   it('does not submit a surrounding form', () => {
@@ -295,8 +295,8 @@ describe('Sheet', () => {
       resize(400, 120)
       const layer = screen.getByTestId('sheet-backdrop').parentElement
       expect(layer).toHaveStyle({ position: 'fixed', inset: '0', overscrollBehavior: 'contain' })
-      expect(screen.getByRole('dialog')).toHaveStyle({ bottom: '0px', background: 'var(--color-sheet)', overscrollBehavior: 'contain' })
-      expect(screen.getByTestId('sheet-overhang')).toHaveStyle({ top: '100%', height: '100vh', background: 'var(--color-sheet)' })
+      expect(screen.getByRole('dialog').style).toMatchObject({ bottom: '0px', background: 'var(--color-sheet)', overscrollBehavior: 'contain' })
+      expect(screen.getByTestId('sheet-overhang').style).toMatchObject({ top: '100%', height: '100vh', background: 'var(--color-sheet)' })
     })
 
     it('scrolls the field being typed in to its top', () => {

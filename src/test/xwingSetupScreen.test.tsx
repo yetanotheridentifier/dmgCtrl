@@ -323,7 +323,7 @@ describe('XwingSetupScreen', () => {
     store.set('xwing_setup', JSON.stringify({ lastOpponentListId: 'empire' }))
     mockXwingLists.lists = [EMPIRE]
     renderSetup()
-    expect(within(card('opponent')).getByRole('button', { name: /Same as last game/ })).toHaveStyle({ background: 'var(--color-tonal)' })
+    expect(within(card('opponent')).getByRole('button', { name: /Same as last game/ }).style).toMatchObject({ background: 'var(--color-tonal)' })
   })
 
   it('sets its own text colour, so names stay readable on the dark cards', () => {

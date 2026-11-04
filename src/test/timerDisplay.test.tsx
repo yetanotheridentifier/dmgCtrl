@@ -18,7 +18,7 @@ describe('TimerDisplay', () => {
 
   it('applies style overrides', () => {
     render(<TimerDisplay remaining={400} style={{ fontSize: '10vmin' }} />)
-    expect(screen.getByTestId('timer-display')).toHaveStyle({ fontSize: '10vmin' })
+    expect(screen.getByTestId('timer-display').style).toMatchObject({ fontSize: '10vmin' })
   })
 
   // --- Colour thresholds ---

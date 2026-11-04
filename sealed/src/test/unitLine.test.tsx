@@ -33,7 +33,7 @@ describe('UnitLine — on-card damage overlay', () => {
     render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D', { damage: 2 })} interact={noInteract} />)
     const token = screen.getByTestId('board-unit-damage-u1')
     expect(token).toHaveTextContent('2')
-    expect(token).toHaveStyle({ background: 'var(--color-red)', color: 'var(--color-ink)' })
+    expect(token.style).toMatchObject({ background: 'var(--color-red)', color: 'var(--color-ink)' })
   })
 
   it('shows no damage overlay at 0 damage', () => {
@@ -82,7 +82,7 @@ describe('UnitLine — on-card damage overlay', () => {
     const token = screen.getByTestId(`board-unit-${kind}-u1`)
     expect(shown(token)).toBe(label)
     expect(token).not.toHaveTextContent('/')
-    expect(token).toHaveStyle({ background: colour, width: `${PILL_W}px`, height: `${TOKEN_H}px`, boxShadow: TOKEN_SHADOW })
+    expect(token.style).toMatchObject({ background: colour, width: `${PILL_W}px`, height: `${TOKEN_H}px`, boxShadow: TOKEN_SHADOW })
   })
 
   it('lays a stat pill’s figures out diagonally, power top-left and HP bottom-right, from the spec', () => {
@@ -150,7 +150,7 @@ describe('UnitLine — on-card damage overlay', () => {
     render(<UnitLine state={s} unit={unit('u1', 'TST_D')} interact={noInteract} />)
     const token = screen.getByTestId('board-unit-mod-u1')
     expect(shown(token)).toBe('+2 +2')
-    expect(token).toHaveStyle({ background: 'var(--color-token-buff)', width: `${PILL_W}px` })
+    expect(token.style).toMatchObject({ background: 'var(--color-token-buff)', width: `${PILL_W}px` })
     expect(screen.queryByTestId('board-unit-debuff-u1')).toBeNull()
   })
 
@@ -159,7 +159,7 @@ describe('UnitLine — on-card damage overlay', () => {
     render(<UnitLine state={s} unit={unit('u1', 'TST_D')} interact={noInteract} />)
     const token = screen.getByTestId('board-unit-debuff-u1')
     expect(shown(token)).toBe('-1 -1')
-    expect(token).toHaveStyle({ background: 'var(--color-token-debuff)' })
+    expect(token.style).toMatchObject({ background: 'var(--color-token-debuff)' })
     expect(screen.queryByTestId('board-unit-mod-u1')).toBeNull()
   })
 
