@@ -9,7 +9,8 @@ name: Delete pull request preview
 # API answers 404 for a Worker that does not exist. Anything else fails the run, so a preview that
 # could not be deleted is visible on the pull request rather than left behind silently.
 #
-# Same skip as the preview job: pull requests from forks get no secrets and no preview.
+# Same skips as the preview job: pull requests from forks and from Dependabot get no secrets and no
+# preview.
 
 on:
   pull_request:
@@ -26,11 +27,11 @@ concurrency:
 
 jobs:
   delete:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       # For scripts/pr-preview-comment.sh.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Delete the preview Worker
         env:

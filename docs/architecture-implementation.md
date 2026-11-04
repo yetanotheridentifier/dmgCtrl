@@ -186,8 +186,12 @@ public/
                                     (a test keeps the total under 500 KB)
 
 .github/
+  dependabot.yml                  Weekly version updates for the three npm packages and the actions, 7-day cooldown (see architecture-process.md)
   workflows/
     deploy.yml                    CI/CD pipeline
+    simulation-tests.yml          Sealed's simulation tests, on pull requests, pushes to main and nightly
+    preview-teardown.yml          Deletes a pull request's preview Worker when it is merged or closed
+    close-outside-prs.yml         Closes pull requests from outside the project (Dependabot's pass)
     populate-base-aspects.yml     Daily cron + manual dispatch — refreshes the base_aspects InfluxDB measurement (see architecture-process.md)
 
 scripts/
