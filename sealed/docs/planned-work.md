@@ -424,7 +424,8 @@ Sealed is redesigned for a phone as well as a desktop, as a separate PWA under `
 merge with the dmgCtrl PWA later. The UI shares the PWA's controls and colour tokens; the engine and
 AI share nothing.
 
-1. **The redesigned screens**: #883 game board for phone landscape, #884 game prompts, #885 game on
+1. **The redesigned screens**: #1007 the rest of the phone game board (leader menu, hold to zoom,
+   the opponent's turn on the board, regroup's NEW tags, game over), #884 game prompts, #885 game on
    desktop, #886 settings, #887 help.
 2. **Time the AI on a real phone** once the board plays there: the longest main-thread task per
    decision, and the time to the AI's move, beside the desktop figures in `experiments.md`. The

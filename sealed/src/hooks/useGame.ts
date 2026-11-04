@@ -39,6 +39,8 @@ export interface LogEntry {
    * action of its own. It sits directly after the entry for that action, so it is rewound with it.
    */
   outcome?: true
+  /** The round the action was taken in, 0 for setup: what the log groups its entries by. */
+  round: number
 }
 
 export interface GameValue {

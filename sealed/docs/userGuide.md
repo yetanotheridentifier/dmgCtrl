@@ -97,6 +97,18 @@ The AI opponent mulligans any hand without a turn-1 play and resources the pair 
 - **Log**: a running record of every action, in a panel on the **left** of the screen. Under an action, indented and with no **You** or **Opp** beside them, are the lines for **what it changed**: damage and healing on units and bases, upgrades and tokens gained or lost, units entering play, being defeated, leaving play or changing sides, and cards going to a discard pile. They say what happened, not which card caused it, and when one action does several things they are listed together. Damage that only lands once a later choice is answered is listed under that answer. Anything revealed or discarded is named, and you can hover it like any other card name. **Hidden cards are never named**: what your opponent draws, resources, holds in hand, or moves around their deck shows as "a card" or not at all. Undoing an action takes its lines with it.
 - **Reporting a bug**: off unless you turn it on, under **Show the bug report button** in **Settings**. With it on, the **bug button** in the header (beside the cog and **?**) opens a short form for a title and a description. Submitting copies a full report to your clipboard and opens GitHub's new-issue page with the title already filled in and the body left empty, so all you do is **paste and submit**. The issue is filed under **your own GitHub account**, so you need to be signed in there. The report carries the whole game so far, so the problem can be replayed exactly rather than guessed at, along with the build number and whether you were on dev or prod. If the clipboard can't be reached, the form stays open with the report shown for you to copy by hand.
 
+### On a phone
+
+Play with the phone **on its side**: held upright, the game asks you to **turn your phone sideways**, and carries on where it was when you do.
+
+- **The controls column** down the left holds, from the top: **Back** (leave the game), **Log** and **More**; the round and phase; the **opponent's counts** (resources ready of total, hand, deck, discard); the **prompt**, saying what the board is waiting for; **your counts**; and the **action buttons** (Mulligan and Keep hand, Take the initiative and Pass, Undo when it's on). **INITIATIVE**, **FORCE** and **CRED n** sit beside the heading of whoever holds them.
+- **The board** fills the rest: **Space** on the left and **Ground** on the right, each in two panels, the opponent's above and yours below, with both bases and leaders in the strip between them. Each unit sits in a square slot, four to a row (five once a side holds more than eight), turned sideways when exhausted, with its power and health in its bottom corners and a badge for what is on it: damage in the middle, **Shd** and **Exp** for Shield and Experience tokens, **+n** for upgrade cards, **Sentinel**, **Hidden**, and **LEADER** on a deployed leader, whose slot in the strip says **Deployed**.
+- **Your hand** runs under the board: playable cards are ringed blue (green to resource), the rest dimmed, and a long hand fans so it all fits.
+- **Attacking**: tap a ringed unit, which is then ringed **white**, then a red target. **Cancel attack** puts the unit down again.
+- **Piles**: tap a **DISC** count to see that discard pile. When a card lets you look at the top of your deck, tap your **DECK** count.
+- **The log** slides in from the left over the controls, leaving the board in view: newest first, under the round each action was taken in, each action in one row with what it changed beneath it. **Undo** sits at its foot when it's on.
+- **More** holds **Help**, **Settings** and **Concede**, which asks you to confirm. The bug report is not offered on a phone.
+
 ### Settings
 
 **Settings** opens from **More** on the setup screen and from the **cog** in the game's header alike. It opens **over** whatever you're doing, so changing something mid-game costs you nothing: your game is exactly where you left it when you close it, and a change takes effect straight away rather than at the next game. Settings are remembered on **this device, in this browser**, so they don't follow you to another machine.
@@ -150,7 +162,7 @@ Every upgrade **and every leader** (both sides) in the ASH set is implemented, a
 
 ## After the game
 
-The result banner offers a **Rematch** (fresh shuffle, same decks) or **Back to decks**. Completed games are recorded on-device for future analysis.
+The result banner offers a **Rematch** (fresh shuffle, same decks) or a **New setup**, back to choosing the decks. Completed games are recorded on-device for future analysis.
 
 ---
 
