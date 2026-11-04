@@ -794,7 +794,8 @@ The board is drawn with art-dominant cards, not text rows:
   delay, which the phone writes in the prompt (redacted as the log is) and rings with
   `boardLayout.actionFocus`; and `regroupDrawn`, the deck's shrink at the regroup draw, which tags
   the end of the hand NEW until the player resources. Game over is `PhoneGameOver`, a dialog over
-  the board that leaves the controls column uncovered.
+  the board that leaves the controls column uncovered. The button prompts are `PhonePrompt` (see
+  `choices.md`), not portalled, so `CardDetail`, drawn after it, opens over it.
 
 ## Storage tiers
 

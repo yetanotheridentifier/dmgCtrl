@@ -514,6 +514,15 @@ action looks like a heal that never happened.
   section of `architecture.md`). Where that is refused, the dedicated overlays block until answered,
   and the button overlay can only be put aside to read the board: the floating prompt then carries
   the question and a **Show choice** button in the Action column reopens it.
+- **On a phone the button prompts are one pattern**, `PhonePrompt` (`components/game/phoneLayout.tsx`):
+  a panel over the dimmed board with the card that asked (`choiceSourceCard`, tappable to open it
+  full size), the question (`describeChoiceQuestion`, the prompt without the card's name, which the
+  panel already shows), and the shared `Button`s, the first accepting answer primary
+  (`promptButtons`). The × is `cancelChoice` and appears only when it is offered; otherwise the
+  button choice gets **Look at the board** to put it aside, and Show choice is the primary button in
+  the controls column. The button choice, who resolves first, and the top card of a deck (beside the
+  question, with no ×) use it; the card pickers and the other dedicated overlays keep their desktop
+  frames on a phone for now.
 - **`CardSelectOverlay`** is the centre-screen card picker: click the highlighted card to choose it,
   with a Cancel only when the choice is optional. Token art included.
 - **"Look at a card" is PRIVATE.** The overlay renders only for the human's own choice, so the AI's

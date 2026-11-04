@@ -1,17 +1,17 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Button, IconButton, Sheet } from '@pwa-shared/controls'
 import type { GameState, PlayerId, UnitState } from '../../engine/types'
-import { useCardZoom } from '../useCardZoom'
+import { CardInspect, useCardZoom } from '../useCardZoom'
 import { outcomeBanner } from '../outcome'
 import type { LogEntry } from '../../hooks/useGame'
-import type { DescribePart } from '../../utils/describeAction'
+import { partsText, type DescribePart } from '../../utils/describeAction'
 import type { UnitInteraction } from '../gameScreen'
 import CardFace from '../cardFace'
 import { intentHighlight } from '../highlight'
 import type { Highlight } from '../highlight'
 import { DescribedParts } from '../cardRef'
 import { orderUnits } from '../boardLayout'
-import { BackIcon, DotsIcon, LogIcon } from '../icons'
+import { BackIcon, CloseIcon, DotsIcon, LogIcon } from '../icons'
 import { unitHasKeyword } from '../../engine/keywords'
 import { effectiveHp, effectivePower } from '../../engine/stats'
 import { friendlyCreditTokens, hasForceToken } from '../../engine/effects'
@@ -478,6 +478,124 @@ export function PhoneGameOver({ state, deckName, onRematch, onExit }: {
           <Button variant="primary" testId="rematch-btn" onClick={onRematch}>Rematch</Button>
         </div>
         <div className="mt-1 text-xs text-ink-faint">Rematch shuffles the same decks. The log is still under Log.</div>
+      </div>
+    </div>
+  )
+}
+
+/** One answer to a prompt: a shared button, tonal unless it is the prompt's one primary. */
+export interface PromptButton {
+  label: ReactNode
+  onClick: () => void
+  primary?: boolean
+  testId?: string
+}
+
+/**
+ * The one prompt pattern on a phone: a panel over the dimmed board with the card that asked (tap it to
+ * see it full size), the question, and its answers, one of them primary. A choice answered on the board
+ * never comes here: its question stays in the controls column's prompt.
+ *
+ * Getting out of it is the caller's to say. `onCancel` is the ×, which takes back your own move; the
+ * game screen offers it only while nothing hidden or random has been seen. Without it, `onSetAside`
+ * puts the question aside to look at the board (Show choice brings it back); with neither, it blocks.
+ *
+ * `bigCard` is for a card the question is about rather than one that asked (the top of your deck): the
+ * card stands on the left, and the question and the answers, one per line, beside it.
+ */
+export function PhonePrompt({ testId, state, cardId, eyebrow, question, questionTestId, note, bigCard = false, width = 400, children, buttons, onCancel, cancelLabel = 'Cancel', onSetAside }: {
+  testId: string
+  state: GameState
+  cardId?: string
+  eyebrow?: string
+  /** Parts are drawn with their card names, as the log draws them. */
+  question: string | DescribePart[]
+  questionTestId?: string
+  note?: ReactNode
+  bigCard?: boolean
+  width?: number
+  children?: ReactNode
+  buttons: PromptButton[]
+  onCancel?: () => void
+  cancelLabel?: string
+  onSetAside?: () => void
+}) {
+  const inspect = useContext(CardInspect)
+  const name = cardId ? state.cards[cardId]?.name ?? cardId : undefined
+  // The dialog is named by what it asks, as a screen reader would want it: the card, then the question.
+  const asked = typeof question === 'string' ? question : partsText(question)
+  const label = eyebrow ? `${eyebrow}: ${asked}` : asked
+  const card = cardId && (
+    <button
+      type="button"
+      aria-label={`${name}: see the card`}
+      onClick={() => inspect?.({ cardId })}
+      className="flex-none cursor-pointer border-none bg-transparent p-0"
+    >
+      <CardFace card={state.cards[cardId]} fallbackName={cardId} tight widthPx={bigCard ? 100 : 50} />
+    </button>
+  )
+  // The primary sits on the right of a row, and first in a column.
+  const ordered = bigCard ? [...buttons.filter(b => b.primary), ...buttons.filter(b => !b.primary)] : [...buttons.filter(b => !b.primary), ...buttons.filter(b => b.primary)]
+  const answers = (
+    <div className={`flex gap-2 ${bigCard ? 'flex-col' : '*:flex-1'}`}>
+      {ordered.map((b, i) => (
+        <Button key={b.testId ?? i} testId={b.testId} variant={b.primary ? 'primary' : 'secondary'} onClick={b.onClick} style={{ fontSize: '15px' }}>
+          {b.label}
+        </Button>
+      ))}
+    </div>
+  )
+  const setAside = onSetAside && (
+    <button type="button" onClick={onSetAside} className="self-center border-none bg-transparent px-3 py-1 text-xs text-ink-dim">
+      Look at the board
+    </button>
+  )
+  const heading = (
+    <div className="flex items-start gap-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        {eyebrow && <div className="text-xs tracking-[0.14em] text-accent">{eyebrow.toUpperCase()}</div>}
+        <div data-testid={questionTestId} className="text-base leading-[21px] text-ink first-letter:uppercase">
+          {typeof question === 'string' ? question : <DescribedParts state={state} parts={question} />}
+        </div>
+        {note && <div className="text-xs leading-4 text-ink-dim">{note}</div>}
+      </div>
+      {onCancel && (
+        <span data-testid="overlay-dismiss" className="flex-none">
+          <IconButton label={cancelLabel} onClick={onCancel}><CloseIcon /></IconButton>
+        </span>
+      )}
+    </div>
+  )
+  return (
+    <div data-testid={testId} className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,5,16,0.62)]">
+      <div
+        role="dialog"
+        aria-label={label}
+        className="flex max-h-[calc(100vh-16px)] flex-col gap-3 overflow-y-auto rounded-2xl bg-[var(--color-sheet)] p-4 shadow-[0_8px_32px_rgba(0,0,0,0.6)]"
+        style={{ width }}
+      >
+        {bigCard ? (
+          <div className="flex gap-4">
+            {card}
+            <div className="flex flex-1 flex-col gap-2">
+              {heading}
+              {children}
+              <div className="mt-auto">{answers}</div>
+              {setAside}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-start gap-3">
+              {card}
+              <div className="min-w-0 flex-1">{heading}</div>
+            </div>
+            {children}
+            {answers}
+            {setAside}
+          </>
+        )}
       </div>
     </div>
   )

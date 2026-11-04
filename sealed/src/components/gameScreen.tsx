@@ -1,4 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
+import { Button } from '@pwa-shared/controls'
 import { nameableCardNames, nameableTraits, zoneCards } from '../engine/legalMoves'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
@@ -8,7 +9,7 @@ import { leaderActions, mayLookAtDeckTop, triggerAbility } from '../engine/abili
 import type { Action } from '../engine/actions'
 import { describeAction, describeActionParts, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
-import { describeChoiceParts, answeredWithButtons, BOARD_TARGET_KINDS, allocation, isRepeatable } from '../utils/describeChoice'
+import { describeChoiceParts, describeChoiceQuestion, choiceSourceCard, answeredWithButtons, BOARD_TARGET_KINDS, allocation, isRepeatable } from '../utils/describeChoice'
 import { upgradeHostIds, upgradeHostName } from '../utils/upgradeHosts'
 import { buildReportMarkdown, issueUrl } from '../utils/bugReport'
 import { BugReportOverlay } from './bugReportOverlay'
@@ -38,8 +39,8 @@ import { CardZoomPopover } from './cardZoom'
 import { DeckPile, ResourceStack, DiscardPile, OpponentHand, EmptySlot } from './mat'
 import { friendlyCreditTokens, hasForceToken } from '../engine/effects'
 import { useMediaQuery, PHONE_LANDSCAPE_QUERY, PHONE_PORTRAIT_QUERY } from '../hooks/useMediaQuery'
-import { CardDetail, GameLogDrawer, LeaderMenu, MoreSheet, PhoneGameLayout, PhoneGameOver, PileSheet, TurnSideways } from './game/phoneLayout'
-import type { LeaderMenuItem } from './game/phoneLayout'
+import { CardDetail, GameLogDrawer, LeaderMenu, MoreSheet, PhoneGameLayout, PhoneGameOver, PhonePrompt, PileSheet, TurnSideways } from './game/phoneLayout'
+import type { LeaderMenuItem, PromptButton } from './game/phoneLayout'
 
 interface Props {
   deck: SavedDeck
@@ -525,14 +526,45 @@ function triggerLabel(state: GameState, t: PendingTrigger): string {
   return text ? `${name}: ${text}` : name
 }
 
-export function TriggerOrderOverlay({ state, mine, theirs, onPick, onDismiss }: {
+export function TriggerOrderOverlay({ state, mine, theirs, onPick, onDismiss, phone = false }: {
   state: GameState
   mine: PendingTrigger[]
   theirs: PendingTrigger[]
   onPick: (optionIndex: number) => void
   /** Cancels the action that raised the triggers; absent, the overlay blocks until answered. */
   onDismiss?: () => void
+  /** Asked in the phone's prompt panel: each side's triggers in a tile, the answers under them. */
+  phone?: boolean
 }) {
+  if (phone) {
+    const tile = (title: string, tone: string, triggers: PendingTrigger[], testId: string) => (
+      <div data-testid={testId} className="flex flex-col gap-1.5 rounded-xl bg-surface px-3 py-2.5">
+        <div className={`text-[11px] tracking-[0.14em] ${tone}`}>{title}</div>
+        {triggers.length === 0
+          ? <div className="text-sm text-ink-faint">Nothing waiting</div>
+          : triggers.map(t => <div key={t.id} className="text-sm leading-[19px] text-ink">{triggerLabel(state, t)}</div>)}
+      </div>
+    )
+    return (
+      <PhonePrompt
+        testId="trigger-order-overlay"
+        state={state}
+        width={560}
+        question="Abilities triggered on both sides. Who resolves first?"
+        buttons={[
+          { label: 'They resolve first', onClick: () => onPick(1), testId: 'trigger-order-theirs-btn' },
+          { label: 'I resolve first', onClick: () => onPick(0), primary: true, testId: 'trigger-order-mine-btn' },
+        ]}
+        onCancel={onDismiss}
+        cancelLabel={CANCEL_LABEL}
+      >
+        <div className="grid grid-cols-2 gap-2.5">
+          {tile('YOUR TRIGGERS', 'text-accent', mine, 'trigger-order-mine')}
+          {tile("OPPONENT'S TRIGGERS", 'text-[color:var(--color-opponent)]', theirs, 'trigger-order-theirs')}
+        </div>
+      </PhonePrompt>
+    )
+  }
   // The waiting abilities are information, not answers, so they are plain text: a boxed row reads as a
   // button, and the only buttons here are the two that answer.
   const column = (title: string, triggers: PendingTrigger[], testId: string) => (
@@ -714,6 +746,20 @@ export function ButtonChoiceOverlay({ state, prompt, actions, onPick, onDismiss,
       </OverlayButtons>
     </OverlayShell>
   )
+}
+
+/**
+ * A choice's answers as the phone prompt's buttons, each keeping its index in `actions` for its test
+ * id. One is primary, the first that accepts; a decline is never it.
+ */
+function promptButtons(state: GameState, actions: Action[], onPick: (action: Action) => void, testId: string): PromptButton[] {
+  const primary = actions.findIndex(a => a.type !== 'skipTrigger')
+  return actions.map((action, i): PromptButton => ({
+    label: describeAction(state, 'player', action),
+    onClick: () => onPick(action),
+    primary: i === primary,
+    testId: `${testId}-${i}`,
+  }))
 }
 
 /**
@@ -1817,7 +1863,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             {repeatable ? 'Done' : 'Decline'}
           </button>
         )}
-        {buttonChoiceHidden && (
+        {buttonChoiceHidden && phone && <Button variant="primary" testId="show-choice-btn" onClick={() => setHiddenChoice(null)}>Show choice</Button>}
+        {buttonChoiceHidden && !phone && (
           <button
             data-testid="show-choice-btn"
             onClick={() => setHiddenChoice(null)}
@@ -1894,6 +1941,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           theirs={waiting('opponent')}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: orderChoice.id, optionIndex })}
           onDismiss={cancel}
+          phone={phone}
         />
       )
     } else if (nextTriggerChoice) {
@@ -1903,6 +1951,25 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           candidates={nextTriggerChoice.candidates}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: nextTriggerChoice.id, optionIndex })}
           onDismiss={cancel}
+        />
+      )
+    } else if (phone && (lookChoice || discardTopChoice)) {
+      // On a phone the top card stands beside its question. A card has been seen, so there is no ×.
+      const top = (lookChoice ?? discardTopChoice)!
+      const asker = choiceSourceCard(gameState, top)
+      const yours = !discardTopChoice || discardTopChoice.deck === 'player'
+      choiceOverlay = (
+        <PhonePrompt
+          testId="card-choice-overlay"
+          state={gameState}
+          cardId={top.cardId}
+          bigCard
+          width={460}
+          eyebrow={`${asker ? `${gameState.cards[asker]?.name ?? asker} · ` : ''}Top of ${yours ? 'your' : "the opponent's"} deck`}
+          question={describeChoiceQuestion(gameState, top)}
+          questionTestId="card-choice-prompt"
+          note={yours ? 'Only you see this card.' : undefined}
+          buttons={promptButtons(gameState, lookChoice ? lookActions : discardTopActions, actAndClear, 'choice-btn')}
         />
       )
     } else if (lookChoice) {
@@ -2093,6 +2160,22 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           onCancel={() => setUpgradeHost(null)}
         />
       )
+    } else if (buttonChoice && !buttonChoiceHidden && phone) {
+      const asker = choiceSourceCard(gameState, buttonChoice)
+      choiceOverlay = (
+        <PhonePrompt
+          testId="choice-overlay"
+          state={gameState}
+          cardId={asker}
+          eyebrow={asker ? gameState.cards[asker]?.name ?? asker : undefined}
+          question={describeChoiceQuestion(gameState, buttonChoice)}
+          questionTestId="choice-overlay-prompt"
+          buttons={promptButtons(gameState, buttonChoiceActions, actAndClear, 'choice-option')}
+          onCancel={cancel}
+          cancelLabel={CANCEL_LABEL}
+          onSetAside={cancel ? undefined : () => setHiddenChoice(buttonChoice.id)}
+        />
+      )
     } else if (buttonChoice && !buttonChoiceHidden) {
       // Cancelled when it can be; otherwise put aside, and brought back from the action column.
       choiceOverlay = (
@@ -2115,7 +2198,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       ? undefined
       : upgradePick && pickedHost === null
         ? [upgradeHosts.some(id => baseHostOwner(id)) ? 'Choose the unit or base to defeat an upgrade from' : 'Choose the unit to defeat an upgrade from']
-        : actionPrompt ?? (anyPlayerChoice ? describeChoiceParts(gameState, anyPlayerChoice) : undefined)
+        : phone && buttonChoiceHidden && buttonChoice
+          ? [...describeChoiceParts(gameState, buttonChoice), '. Look at the board, then answer.']
+          : actionPrompt ?? (anyPlayerChoice ? describeChoiceParts(gameState, anyPlayerChoice) : undefined)
     const baseTarget = (side: PlayerId): BaseTarget | undefined => {
       // Step one of an upgrade pick: a base carrying a candidate (Fortify) is a host like a unit.
       if (upgradePick && pickedHost === null && upgradeHosts.includes(baseHostId(side))) return { onClick: () => setUpgradeHost(baseHostId(side)) }
