@@ -521,8 +521,15 @@ action looks like a heal that never happened.
   (`promptButtons`). The × is `cancelChoice` and appears only when it is offered; otherwise the
   button choice gets **Look at the board** to put it aside, and Show choice is the primary button in
   the controls column. The button choice, who resolves first, and the top card of a deck (beside the
-  question, with no ×) use it; the card pickers and the other dedicated overlays keep their desktop
-  frames on a phone for now.
+  question, with no ×) use it. So does every card pick: `CardGridOverlay` draws its cards in a row
+  in the panel, a selectable card itself the button (named with its action, "Loth-Wolf: Discard"),
+  the rest dimmed, any card opened full size when held, and a lone button beside the cards (Done,
+  Cancel) the primary. Naming a card or a Trait lists the first three matches as `OptionRow`s; the
+  one chosen is named by the primary **Name ...** button. The other dedicated overlays (which
+  resolves next) keep their desktop frames on a phone for now.
+- **The opponent's hand** dims the cards its discard cannot take and offers Done only when the legal
+  moves allow declining, both read from the legal moves (a non-unit for Bodhi Rook, an event for Jam
+  Communications, nothing to decline for Reveal Intentions).
 - **`CardSelectOverlay`** is the centre-screen card picker: click the highlighted card to choose it,
   with a Cancel only when the choice is optional. Token art included.
 - **"Look at a card" is PRIVATE.** The overlay renders only for the human's own choice, so the AI's

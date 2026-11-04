@@ -6,7 +6,7 @@ import {
   ButtonChoiceOverlay, CardChoiceOverlay, CardSelectOverlay, DeckTopsOverlay, GameOverOverlay, NameCardOverlay,
   NextTriggerOverlay, TriggerOrderOverlay,
 } from '../components/gameScreen'
-import { OVERLAY_TITLE, PANEL_BUTTON, PANEL_PRIMARY } from '../components/overlayShell'
+import { OVERLAY_TITLE, PANEL_BUTTON } from '../components/overlayShell'
 import { CARDS, card, state } from './helpers/engineFixtures'
 import type { PendingTrigger } from '../engine/types'
 
@@ -36,7 +36,7 @@ const overlays: [string, ReactElement][] = [
   ['which resolves next', <NextTriggerOverlay state={s} candidates={[{ triggerId: 't1', cardId: 'A' }, { triggerId: 't2', cardId: 'C' }]} onPick={noop} onDismiss={noop} />],
   ['name a card', <NameCardOverlay names={['Fleet Lieutenant', 'Admiral Ackbar']} onPick={noop} onDismiss={noop} />],
   ['select a card', <CardSelectOverlay state={s} prompt="Choose an upgrade to defeat" items={[{ cardId: 'A', optionIndex: 0 }]} onPick={noop} onCancel={noop} onDismiss={noop} />],
-  ['look at a card', <CardChoiceOverlay card={cards.A} cardId="A" prompt="Look at the top card of your deck"><button className={PANEL_PRIMARY}>Leave it</button></CardChoiceOverlay>],
+  ['look at a card', <CardChoiceOverlay state={s} cardId="A" prompt="Look at the top card of your deck" buttons={[{ label: 'Leave it', onClick: noop, primary: true }]} />],
   ['look at the top of each deck', <DeckTopsOverlay state={s} prompt="The top card of each deck" tops={[{ deck: 'player', cardId: 'A' }, { deck: 'opponent', cardId: 'C' }]} onDone={noop} />],
 ]
 

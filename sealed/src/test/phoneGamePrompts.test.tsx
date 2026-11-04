@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import GameScreen, { TriggerOrderOverlay } from '../components/gameScreen'
+import GameScreen, { CardSelectOverlay, NameCardOverlay, OpponentHandOverlay, SearchPlayFreeOverlay, TriggerOrderOverlay } from '../components/gameScreen'
 import { PhonePrompt } from '../components/game/phoneLayout'
 import { CardInspect } from '../components/useCardZoom'
 import { PHONE_LANDSCAPE_QUERY } from '../hooks/useMediaQuery'
@@ -121,6 +121,125 @@ describe('who resolves first, on a phone', () => {
     expect(theirs.compareDocumentPosition(mine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await userEvent.setup().click(mine)
     expect(onPick).toHaveBeenCalledWith(0)
+  })
+})
+
+describe('a card pick, on a phone', () => {
+  const cards = {
+    ...CARDS,
+    TST_A: card({ id: 'TST_A', name: 'Chirrut Imwe', type: 'unit', arena: 'space', cost: 4, power: 3, hp: 3 }),
+    TST_B: card({ id: 'TST_B', name: 'Loth-Wolf', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2 }),
+    TST_C: card({ id: 'TST_C', name: 'The Daughter', type: 'unit', arena: 'space', cost: 5, power: 4, hp: 5 }),
+    TST_E: card({ id: 'TST_E', name: 'Death Field', type: 'event', cost: 4 }),
+  }
+  const s = state({ cards, players: { player: player(), opponent: player({ hand: ['TST_E', 'TST_B'] }) } })
+  const free = { kind: 'searchPlayFree' as const, id: 'f', controller: 'player' as const, revealed: ['TST_A', 'TST_B', 'TST_C'], eligibleIndices: [0, 2], budget: 9 }
+  beforeEach(() => withMedia([PHONE_LANDSCAPE_QUERY]))
+  afterEach(() => withMedia([]))
+
+  it('asks in the prompt panel: valid cards are the buttons, the rest dimmed, and Done is the primary', async () => {
+    const onPick = vi.fn()
+    const onDone = vi.fn()
+    render(<SearchPlayFreeOverlay state={s} choice={free} onPick={onPick} onDone={onDone} />)
+    const dialog = screen.getByRole('dialog', { name: /play space units for free/i })
+    // The card is the button: no separate per-card action under it.
+    const pick = within(dialog).getByRole('button', { name: 'The Daughter: Play free' })
+    expect(within(dialog).getAllByTestId('search-free-pick-2')).toEqual([pick])
+    expect(within(dialog).getByRole('img', { name: "Loth-Wolf, can't be chosen" })).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: /loth-wolf/i })).toBeNull()
+    // The cards are answers in themselves: the lone button beside them is the primary.
+    expect(isPrimary(within(dialog).getByTestId('search-free-done'))).toBe(true)
+    // Nothing hidden can be taken back: no ×.
+    expect(within(dialog).queryByTestId('overlay-dismiss')).toBeNull()
+    const user = userEvent.setup()
+    await user.click(pick)
+    expect(onPick).toHaveBeenCalledWith(2)
+    await user.click(within(dialog).getByTestId('search-free-done'))
+    expect(onDone).toHaveBeenCalledOnce()
+  })
+
+  it('opens a held card full size', () => {
+    vi.useFakeTimers()
+    try {
+      const inspect = vi.fn()
+      render(
+        <CardInspect.Provider value={inspect}>
+          <SearchPlayFreeOverlay state={s} choice={free} onPick={vi.fn()} onDone={vi.fn()} />
+        </CardInspect.Provider>,
+      )
+      // Even a card that cannot be chosen can be read.
+      fireEvent.pointerDown(screen.getByRole('img', { name: "Loth-Wolf, can't be chosen" }), { pointerType: 'touch' })
+      act(() => { vi.advanceTimersByTime(500) })
+      expect(inspect).toHaveBeenCalledWith({ cardId: 'TST_B' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('offers the × and a Cancel only when the overlay is given them', async () => {
+    const onDismiss = vi.fn()
+    const onCancel = vi.fn()
+    const { rerender } = render(<CardSelectOverlay state={s} prompt="Return a card" items={[{ cardId: 'TST_A', optionIndex: 0 }]} onPick={vi.fn()} onDismiss={onDismiss} onCancel={onCancel} />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /cancel: take back/i }))
+    expect(onDismiss).toHaveBeenCalledOnce()
+    await user.click(screen.getByTestId('card-select-cancel'))
+    expect(onCancel).toHaveBeenCalledOnce()
+    rerender(<CardSelectOverlay state={s} prompt="Return a card" items={[{ cardId: 'TST_A', optionIndex: 0 }]} onPick={vi.fn()} />)
+    expect(screen.queryByTestId('overlay-dismiss')).toBeNull()
+    expect(screen.queryByTestId('card-select-cancel')).toBeNull()
+  })
+
+  it("shows the opponent's hand with only the cards you may discard bright, and no ×", async () => {
+    const onDiscard = vi.fn()
+    const look = { kind: 'lookAtHand' as const, id: 'h', controller: 'player' as const, target: 'opponent' as const, mayDiscard: true, discardFilter: 'nonUnit' as const }
+    render(<OpponentHandOverlay state={s} choice={look} discardable={[0]} onDiscard={onDiscard} onDone={vi.fn()} />)
+    const dialog = screen.getByRole('dialog', { name: /opponent's hand/i })
+    // A unit, which this discard cannot take.
+    expect(within(dialog).getByRole('img', { name: "Loth-Wolf, can't be chosen" })).toBeInTheDocument()
+    expect(within(dialog).queryByTestId('overlay-dismiss')).toBeNull()
+    expect(within(dialog).getByTestId('opp-hand-done')).toHaveTextContent('Done')
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Death Field: Discard' }))
+    expect(onDiscard).toHaveBeenCalledWith(0)
+  })
+
+  it("leaves Done off the opponent's hand when the card makes you discard", () => {
+    const look = { kind: 'lookAtHand' as const, id: 'h', controller: 'player' as const, target: 'opponent' as const, mayDiscard: true, mustDiscard: true }
+    render(<OpponentHandOverlay state={s} choice={look} discardable={[0, 1]} onDiscard={vi.fn()} />)
+    expect(screen.queryByTestId('opp-hand-done')).toBeNull()
+  })
+})
+
+describe('naming a card, on a phone', () => {
+  const cards = { ...CARDS, TST_Z: card({ id: 'TST_Z', name: 'Zuckuss', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 4 }) }
+  const s = state({ cards, players: { player: player({ units: [unit('z', 'TST_Z')] }), opponent: player() } })
+  const choice = { kind: 'nameCard' as const, id: 'n', controller: 'player' as const, unitId: 'z' }
+  const names = ['Praetorian Guard', 'Premonition of Doom', 'Priestesses of the Force', 'Loth-Wolf']
+
+  it('names the card that asked, filters the names as you type, and names the one chosen', async () => {
+    const onPick = vi.fn()
+    render(<NameCardOverlay names={names} onPick={onPick} phone={{ state: s, choice }} />)
+    const dialog = screen.getByRole('dialog', { name: /zuckuss/i })
+    expect(within(dialog).getByRole('button', { name: /zuckuss: see the card/i })).toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.type(within(dialog).getByRole('textbox', { name: /card name/i }), 'pr')
+    const options = within(within(dialog).getByRole('group', { name: 'Matching names' })).getAllByRole('button')
+    expect(options.map(o => o.textContent)).toEqual(['Praetorian Guard', 'Premonition of Doom', 'Priestesses of the Force'])
+    // Nothing is named until a name is chosen.
+    expect(within(dialog).queryByRole('button', { name: /^name /i })).toBeNull()
+    await user.click(options[1])
+    expect(options[1]).toHaveAttribute('aria-pressed', 'true')
+    const name = within(dialog).getByRole('button', { name: 'Name Premonition of Doom' })
+    expect(isPrimary(name)).toBe(true)
+    await user.click(name)
+    expect(onPick).toHaveBeenCalledWith('Premonition of Doom')
+  })
+
+  it('offers the × only when the naming can be taken back', () => {
+    const { rerender } = render(<NameCardOverlay names={names} onPick={vi.fn()} onDismiss={vi.fn()} phone={{ state: s, choice }} />)
+    expect(screen.getByTestId('overlay-dismiss')).toBeInTheDocument()
+    rerender(<NameCardOverlay names={names} onPick={vi.fn()} phone={{ state: s, choice }} />)
+    expect(screen.queryByTestId('overlay-dismiss')).toBeNull()
   })
 })
 

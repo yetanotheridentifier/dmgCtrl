@@ -2,17 +2,19 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
 import { CardChoiceOverlay } from '../components/gameScreen'
-import { card } from './helpers/engineFixtures'
+import { CARDS, card, state } from './helpers/engineFixtures'
 
 /** The reusable centre-screen "look at a card" overlay. */
 describe('CardChoiceOverlay', () => {
   it('shows the prompt, the card, and the action buttons', () => {
     const onPlay = vi.fn()
     render(
-      <CardChoiceOverlay card={card({ id: 'TOPU', name: 'Scout', type: 'unit' })} cardId="TOPU" prompt="Look at the top card of your deck">
-        <button data-testid="choice-btn-0" onClick={onPlay}>Play Scout free</button>
-        <button>Don't play</button>
-      </CardChoiceOverlay>,
+      <CardChoiceOverlay
+        state={state({ cards: { ...CARDS, TOPU: card({ id: 'TOPU', name: 'Scout', type: 'unit' }) } })}
+        cardId="TOPU"
+        prompt="Look at the top card of your deck"
+        buttons={[{ label: 'Play Scout free', testId: 'choice-btn-0', onClick: onPlay, primary: true }, { label: "Don't play", onClick: vi.fn(), primary: true }]}
+      />,
     )
     const overlay = screen.getByTestId('card-choice-overlay')
     expect(screen.getByTestId('card-choice-prompt')).toHaveTextContent(/look at the top card/i)
