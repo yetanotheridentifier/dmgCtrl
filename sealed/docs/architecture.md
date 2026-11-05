@@ -606,7 +606,9 @@ The board is drawn with art-dominant cards, not text rows:
   follows the rules: units are portrait (landscape when exhausted); bases and undeployed
   leaders are landscape; a deployed leader shows its unit (back) side, portrait. Missing
   or failed art falls back to a text summary (cost/name/power-HP/keywords/abilities).
-  Sizing constants live in `cardSizing.ts`; the roll-over zoom drives its `widthPx`.
+  Sizing constants live in `cardSizing.ts`; the roll-over zoom drives its `widthPx`. So does
+  the one card corner radius, `cardRadius(shortEdge)` (5px at board and hand sizes, 9px at full
+  size), used by every card face and by the empty outline a deployed leader leaves.
   Selection/target/actionable highlights are a 2px outline hugging the card edge (1px in /
   1px out, `outline-offset: -1px`) via the `highlight` prop. A target's colour is the choice's
   (or leader ability's) `intent`, mapped once in `components/highlight.ts`: green helps, red

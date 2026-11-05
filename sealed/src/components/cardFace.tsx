@@ -3,7 +3,7 @@ import type { EngineCard, KeywordInstance } from '../engine/types'
 import { highlightOutline } from './highlight'
 import type { Highlight } from './highlight'
 import { artUrl } from '../data/thumbnails'
-import { CARD_WIDTH_PX, longEdge } from './cardSizing'
+import { CARD_WIDTH_PX, cardRadius, longEdge } from './cardSizing'
 
 interface Props {
   card: EngineCard | undefined
@@ -99,9 +99,9 @@ export default function CardFace({
           rotates it 90°; the square already fits the card in any orientation,
           so rotated cards never overlap their neighbours. */}
       <div
-        style={{ width: artW, height: artH, ...highlightOutline(highlight) }}
+        style={{ width: artW, height: artH, borderRadius: cardRadius(short), ...highlightOutline(highlight) }}
         className={[
-          'relative overflow-hidden rounded-lg border border-line/60 bg-surface',
+          'relative overflow-hidden border border-line/60 bg-surface',
           // Exhausted: rotate and DIM, but stay opaque (a brightness filter, not
           // opacity) so anything behind the card — e.g. an upgrade — can't show
           // through.

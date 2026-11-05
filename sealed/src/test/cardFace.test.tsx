@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import CardFace from '../components/cardFace'
+import { cardRadius } from '../components/cardSizing'
 import type { EngineCard } from '../engine/types'
 
 const UNIT: EngineCard = {
@@ -19,6 +20,24 @@ const UNIT: EngineCard = {
   frontArt: 'https://cdn.swu-db.com/images/cards/ASH/118.png',
   text: 'Ambush. When this unit attacks, deal 1 damage to a ground unit.',
 }
+
+describe('cardRadius', () => {
+  it('rounds game-screen cards about a third less than the old fixed 8px, without squaring them', () => {
+    // Every short edge the board, hand, centre strip and prompts draw at, phone and desktop.
+    for (const short of [32, 40, 48, 50, 60, 84, 90, 100]) {
+      expect(cardRadius(short)).toBeGreaterThanOrEqual(4)
+      expect(cardRadius(short)).toBeLessThanOrEqual(6)
+    }
+  })
+
+  it('grows with the card, and a full-size card is no rounder than about the old radius', () => {
+    const sizes = [32, 60, 120, 180, 240]
+    const radii = sizes.map(cardRadius)
+    expect([...radii].sort((a, b) => a - b)).toEqual(radii)
+    expect(radii[0]).toBeLessThan(radii[radii.length - 1])
+    expect(cardRadius(250)).toBeLessThanOrEqual(9)
+  })
+})
 
 describe('CardFace', () => {
   it('renders the card art dominantly via the worker proxy when art is present', () => {
@@ -57,6 +76,13 @@ describe('CardFace', () => {
     expect(face).toHaveAttribute('data-orientation', 'portrait')
     // Square slot = long edge (168 at 50%); the portrait card sits centred inside it.
     expect(face).toHaveStyle({ width: '168px', height: '168px' })
+  })
+
+  it.each([32, 40, 60, 90, 250])('rounds a %ipx card by the one card radius, which scales with its size', widthPx => {
+    render(<CardFace card={UNIT} widthPx={widthPx} />)
+    const art = screen.getByTestId('card-face').firstElementChild as HTMLElement
+    expect(art).toHaveStyle({ borderRadius: `${cardRadius(widthPx)}px` })
+    expect(art.className).not.toMatch(/\brounded/)
   })
 
   it('accepts a size override (used by the roll-over zoom feature) — the slot scales with it', () => {
