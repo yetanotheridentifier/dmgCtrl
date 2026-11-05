@@ -495,11 +495,14 @@ surfaces write it, and one module reads it to act on it (`data/collection.ts`, s
 record holds" above):
 
 - **The notice** (`components/shareGamesNotice.tsx`), shown while the answer is `unasked`. `App`
-  passes it to `SetupScreen` as `notice`, a slot the screen renders under its two cards, above Go
-  to game; with it showing, the page scrolls rather than squeezing the cards. So the notice reads
-  the settings and the setup screen does not. It is a card in the page, never a dialog: it covers
-  nothing and the setup screen works untouched. Its two buttons share one class, so neither answer
-  is the highlighted one, and nothing is chosen in advance.
+  passes it to `SetupScreen` as `notice`, a slot the screen renders last, under Go to game, so it
+  never moves the cards or Go; where it does not fit, the page scrolls rather than squeezing them.
+  So the notice reads the settings and the setup screen does not. It is a banner in the page, never
+  a dialog: it covers nothing and the setup screen works untouched. It has the PWA install banner's
+  shape (one raised row: a title, a line under it, the answers at its end) and says what is sent in
+  one line, `ShareGamesSummary`, the same words and "What's sent" Help link as the settings switch's
+  note. Its two answers are the shared secondary `Button`, so neither is the highlighted one, and
+  nothing is chosen in advance.
 - **Starting a game.** `App` turns `unasked` into `no` as the first game starts, so ignoring the
   notice is a refusal and the question is put once.
 - **The settings sheet**, where a switch maps on to `yes` and off to `no`.
@@ -536,8 +539,8 @@ section follows the scroll. It is a copy of the PWA's help screen (`src/componen
 in shape and behaviour, so the two apps' help reads alike and a later merge is mechanical.
 
 It **opens at the section for the screen it came from** (`OPENS_AT` in `utils/helpSections.ts`):
-Decks from setup, Playing from a game. A link can name another: the settings sheet's "What's sent"
-opens it at `SHARING_HELP_SECTION`, After the game, which says what sharing games sends.
+Decks from setup, Playing from a game. A link can name another: "What's sent", in the settings
+sheet and in the setup screen's sharing notice, opens it at `SHARING_HELP_SECTION`, After the game, which says what sharing games sends.
 
 It covers the screen rather than replacing it, for the same reason settings does: help used to be
 a screen, so opening it mid-game unmounted `GameScreen` and the game with it, and coming back ran
@@ -585,7 +588,7 @@ choice opens a `Sheet`, and the only text box is the import sheet's.
   side, filling a phone's 844x390 without scrolling), portrait (stacked, the deck card taking the
   height the opponent card leaves, with the leader and base on it) and desktop (at least 1024x600:
   the cards in a column with the chosen deck's list beside them). On a phone the two cards share
-  one block that fills the height and never shrinks below them, so a notice under them scrolls the
+  one block that fills the height and never shrinks below them, so a notice under Go scrolls the
   page. The portrait query is the one the shared `Sheet` reads, so a sheet and its screen
   agree on the orientation.
 - **Back** goes to the site root, which is the dmgCtrl PWA's game select: a different app, so an

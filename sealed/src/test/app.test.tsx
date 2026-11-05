@@ -9,6 +9,7 @@ import { defaultSettings, loadSettings, STORAGE_KEY as SETTINGS_KEY } from '../d
 import type { Settings } from '../data/settingsStore'
 import type { SwuCard } from '../data/cards'
 import { retryPendingCollection } from '../data/collectionSend'
+import { SHARING_HELP_SECTION } from '../utils/helpSections'
 
 /**
  * The setup screen caches the set its generators are pointed at as soon as it opens, which would put
@@ -214,16 +215,74 @@ describe('App shell', () => {
    * never stand between the player and a game.
    */
   describe('the notice about sharing games', () => {
-    it('is on the setup screen on a first visit, under the two cards and not over them', () => {
+    it('is on the setup screen on a first visit, last in the page and over nothing', () => {
       render(<App />)
 
       const setup = screen.getByTestId('setup-screen')
       const notice = within(setup).getByTestId('share-games-notice')
       expect(screen.queryByRole('dialog')).toBeNull()
-      // After both cards in the page, so neither is pushed down by it.
+      // After both cards and Go to game, so none of them is pushed down or off the screen by it.
       const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
       expect(follows(screen.getByTestId('deck-card'), notice)).toBe(true)
       expect(follows(screen.getByTestId('opponent-card'), notice)).toBe(true)
+      expect(follows(screen.getByRole('button', { name: 'Go to game' }), notice)).toBe(true)
+    })
+
+    it('opens the Help section on what is sent from the notice, leaving it unanswered', async () => {
+      const user = userEvent.setup()
+      render(<App />)
+
+      await user.click(within(screen.getByTestId('share-games-notice')).getByRole('button', { name: "What's sent" }))
+
+      expect(currentHelpSection()).toEqual([SHARING_HELP_SECTION])
+      await user.click(screen.getByRole('button', { name: 'Back to setup' }))
+      expect(screen.getByTestId('share-games-notice')).toBeInTheDocument()
+      expect(loadSettings().shareGames).toBe('unasked')
+    })
+
+    /**
+     * The notice, the pill and the Settings switch are three views of one setting: an answer given
+     * in any of them shows in the others at once, with nothing to reload.
+     */
+    it('keeps the notice, the pill and the Settings switch in step', async () => {
+      const user = userEvent.setup()
+      render(<App />)
+      const shareSwitch = () => within(settingsSheet()!).getByRole('switch', { name: 'Share games to improve the bot' })
+      const pill = () => screen.getByTestId('share-games-pill')
+
+      await user.click(within(screen.getByTestId('share-games-notice')).getByRole('button', { name: 'Share my games' }))
+      expect(pill()).toHaveTextContent('Your games are improving the bot')
+
+      await user.click(pill())
+      expect(shareSwitch()).toHaveAttribute('aria-checked', 'true')
+      await user.click(shareSwitch())
+      expect(shareSwitch()).toHaveAttribute('aria-checked', 'false')
+      expect(loadSettings().shareGames).toBe('no')
+      expect(pill()).toHaveTextContent('Improve the bot')
+
+      await user.click(shareSwitch())
+      expect(loadSettings().shareGames).toBe('yes')
+      expect(pill()).toHaveTextContent('Your games are improving the bot')
+      expect(screen.queryByTestId('share-games-notice')).toBeNull()
+    })
+
+    /** Turning the switch is an answer too: the notice gives way to the pill without being touched. */
+    it.each([
+      [1, 'yes', 'Your games are improving the bot'],
+      [2, 'no', 'Improve the bot'],
+    ] as const)('answers the notice from the Settings switch (%i taps gives %s)', async (taps, stored, label) => {
+      const user = userEvent.setup()
+      render(<App />)
+
+      await fromMore(user, 'Settings')
+      for (let i = 0; i < taps; i++) {
+        await user.click(within(settingsSheet()!).getByRole('switch', { name: 'Share games to improve the bot' }))
+      }
+      await closeSettings(user)
+
+      expect(loadSettings().shareGames).toBe(stored)
+      expect(screen.queryByTestId('share-games-notice')).toBeNull()
+      expect(screen.getByTestId('share-games-pill')).toHaveTextContent(label)
     })
 
     /** While the card is asking, there is no pill anywhere. */
@@ -301,7 +360,7 @@ describe('App shell', () => {
       render(<App />)
 
       await fromMore(user, 'Settings')
-      await user.click(screen.getByRole('button', { name: "What's sent" }))
+      await user.click(within(settingsSheet()!).getByRole('button', { name: "What's sent" }))
 
       expect(currentHelpSection()).toEqual(['After the game'])
 

@@ -3,7 +3,7 @@ import { useSettings } from '../hooks/useSettings'
 import { useMediaQuery, PHONE_LANDSCAPE_QUERY, PHONE_PORTRAIT_QUERY } from '../hooks/useMediaQuery'
 import { OPPONENT_DELAYS_MS } from '../data/settingsStore'
 import type { BaseHealthDisplay } from '../data/settingsStore'
-import { SHARING_HELP_SECTION } from '../utils/helpSections'
+import { ShareGamesSummary } from './shareGamesNotice'
 
 const paceLabel = (index: number) => {
   const ms = OPPONENT_DELAYS_MS[index]
@@ -64,7 +64,7 @@ export function SettingsSheet({ open, onClose, onHelp, onAppSettings = openAppSe
           is an answer either way, so the setup screen's notice does not ask afterwards. */}
       <Switch
         label="Share games to improve the bot"
-        note={<>Both decks and every decision; nothing identifies you. <button type="button" className="text-accent underline" onClick={() => onHelp(SHARING_HELP_SECTION)}>What's sent</button></>}
+        note={<ShareGamesSummary onHelp={onHelp} />}
         checked={settings.shareGames === 'yes'}
         onChange={on => update({ shareGames: on ? 'yes' : 'no' })}
       />
