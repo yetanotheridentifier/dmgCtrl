@@ -559,8 +559,8 @@ the `CardDefinition` of a unit that prints it, or on `baseAbilities` for a base 
 `mayLookAtDeckTop(state, player)` is the one question asked of it: true while a unit the player
 controls still lists the card among its `abilityCardIds` (so it goes with a loss of abilities, and
 follows a change of control to the new controller and their own deck), or while `baseAbilityCardIds`
-of their base does. The game screen asks it for the human's own deck and makes that deck a click
-target (see `architecture.md`). Because looking never passes through `resolve`, it cannot reach the
+of their base does. The game screen asks it for the human's own deck and makes that deck's count
+open the top card (see `architecture.md`). Because looking never passes through `resolve`, it cannot reach the
 log, the replay data or the other seat, and a bot holding the permission is never waited on.
 
 A one-shot "look at the top card of your deck" inside an ability is a different thing: that is a

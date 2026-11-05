@@ -1,10 +1,10 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button, OptionRow } from '@pwa-shared/controls'
 import { nameableCardNames, nameableTraits, zoneCards } from '../engine/legalMoves'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
-import type { CapturedCard, EngineCard, GameState, PendingChoice, PendingTrigger, PlayerId, TargetIntent, UnitState, UpgradeAttachment } from '../engine/types'
+import type { EngineCard, GameState, PendingChoice, PendingTrigger, PlayerId, TargetIntent } from '../engine/types'
 import { baseEpicAction, leaderActions, mayLookAtDeckTop, triggerAbility } from '../engine/abilities'
 import type { Action } from '../engine/actions'
 import { describeAction, describeActionParts, handCardRef } from '../utils/describeAction'
@@ -15,30 +15,19 @@ import { buildReportMarkdown, issueUrl } from '../utils/bugReport'
 import { BugReportOverlay, GAME_FIELD } from './bugReportOverlay'
 import { GameLoadError, GameLoading, PrintedStatsNotice } from './game/gameEdgeStates'
 import { SettingsOverlay } from './settingsOverlay'
-import { BugIcon, GearIcon, HelpIcon } from './icons'
 import { useSettings } from '../hooks/useSettings'
 import { RELEASE, COMMIT_ID } from '../buildIdentity'
 import { isDev } from '../env'
-import { actionFocus, deployBlocker, orderUnits, phoneHandOverlap, PHONE_HAND_CARD_PX } from './boardLayout'
-import { outcomeBanner } from './outcome'
+import { actionFocus, BOARD_SCALE, boardLeft, deployBlocker, handOverlap, type BoardScale } from './boardLayout'
 import CardFace from './cardFace'
 import { intentHighlight } from './highlight'
-import type { Highlight } from './highlight'
 import { CardGridOverlay } from './cardGridOverlay'
-import { OVERLAY_DETAIL, OverlayButtons, OverlayHeader, OverlayShell, PANEL_BUTTON, PANEL_PRIMARY, PANEL_SECONDARY } from './overlayShell'
-import { CARD_WIDTH_PX } from './cardSizing'
-import { tokenLayout, TOKEN_H, PILL_W, TOKEN_SPEC, TOKEN_FIGURE_WEIGHT, TOKEN_FIGURE_LAYOUT, TOKEN_SHADOW, TOKEN_BORDER } from './tokens'
-import type { TokenKind } from './tokens'
-import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE, TOKEN_WEAKNESS } from '../engine/tokenUpgrades'
-import { unitHasKeyword } from '../engine/keywords'
+import { CARD_WIDTH_PX, longEdge } from './cardSizing'
 import { baseHostId, baseHostOwner } from '../engine/types'
-import { offCardStatDelta } from '../engine/stats'
 import { useCardZoom, CardInspect } from './useCardZoom'
 import type { InspectTarget } from './useCardZoom'
-import { CardRef, DescribedParts } from './cardRef'
+import { CardRef } from './cardRef'
 import { CardZoomPopover } from './cardZoom'
-import { DeckPile, ResourceStack, DiscardPile, OpponentHand, EmptySlot } from './mat'
-import { friendlyCreditTokens, hasForceToken } from '../engine/effects'
 import { useMediaQuery, PHONE_LANDSCAPE_QUERY, PHONE_PORTRAIT_QUERY } from '../hooks/useMediaQuery'
 import { CardDetail, GameLogDrawer, LeaderMenu, MoreSheet, PhoneGameLayout, PhoneGameOver, PhonePrompt, PileSheet, TurnSideways } from './game/phoneLayout'
 import type { LeaderMenuItem, PromptButton } from './game/phoneLayout'
@@ -72,315 +61,8 @@ export interface UnitInteraction {
   onClick?: () => void
 }
 
-/** How far each attached upgrade protrudes below the one in front of it. */
-const UPGRADE_STEP_PX = 34
-
-/**
- * How far each captured card protrudes below the capturing unit. Larger than the upgrade
- * step because a captured card is laid on its side (exhausted), so its exposed strip is its short
- * edge — this keeps it visible even when the capturing unit is itself exhausted and rotated.
- */
-const CAPTURED_STEP_PX = 46
-
-/**
- * One attached upgrade, positioned behind the unit and protruding from the bottom.
- * It carries its OWN Shift+hover / long-press zoom on its exposed strip, so you can
- * read it there (hovering the unit card zooms the unit, not the upgrade). It stays
- * upright when the unit is exhausted, dimming (opaque) along with it.
- */
-function AttachedUpgrade({ card, fallbackName, top, dim }: {
-  card: EngineCard | undefined
-  fallbackName: string
-  top: number
-  dim: boolean
-}) {
-  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
-  return (
-    <div ref={setAnchor} className="pointer-events-auto absolute left-1/2 -translate-x-1/2" style={{ top }} {...bind}>
-      <CardFace card={card} fallbackName={fallbackName} tight className={dim ? 'brightness-[0.55]' : ''} />
-      {zoomed && <CardZoomPopover card={card} fallbackName={fallbackName} anchorRef={anchorRef} />}
-    </div>
-  )
-}
-
-/**
- * The stack of attached upgrades behind the unit, protruding downward. The
- * first-played sits closest to the unit; each later one goes further back and
- * further down so every stat modifier shows. Rendered back-to-front (reversed) so
- * the fronts paint on top, all below the unit card in the tile.
- */
-function UpgradeStack({ state, upgrades, instanceId, exhausted }: {
-  state: GameState
-  upgrades: UpgradeAttachment[]
-  instanceId: string
-  exhausted: boolean
-}) {
-  if (upgrades.length === 0) return null
-  return (
-    <div data-testid={`board-unit-upgrades-${instanceId}`} className="pointer-events-none absolute inset-0">
-      {upgrades
-        .map((up, i) => ({ up, i }))
-        .reverse()
-        .map(({ up, i }) => (
-          <AttachedUpgrade
-            key={i}
-            card={state.cards[up.cardId]}
-            fallbackName={up.cardId}
-            top={(i + 1) * UPGRADE_STEP_PX}
-            dim={exhausted}
-          />
-        ))}
-    </div>
-  )
-}
-
-/**
- * Cards this unit has captured, stacked behind it and protruding below the upgrades.
- * Always drawn exhausted (turned) and heavily dimmed: a captured card is out of play and can't be
- * interacted with — the only way to "reach" it is to remove its captor, which springs it back into
- * its arena. It still carries its own zoom on the exposed strip so you can read what's held.
- */
-function CapturedStack({ state, captured, instanceId, topStart }: {
-  state: GameState
-  captured: CapturedCard[]
-  instanceId: string
-  topStart: number
-}) {
-  if (captured.length === 0) return null
-  return (
-    <div data-testid={`board-unit-captured-${instanceId}`} className="pointer-events-none absolute inset-0">
-      {captured
-        .map(({ cardId }, i) => ({ cardId, i }))
-        .reverse()
-        .map(({ cardId, i }) => (
-          <CapturedCardTile key={i} card={state.cards[cardId]} fallbackName={cardId} top={topStart + i * CAPTURED_STEP_PX} />
-        ))}
-    </div>
-  )
-}
-
-function CapturedCardTile({ card, fallbackName, top }: { card: EngineCard | undefined; fallbackName: string; top: number }) {
-  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
-  return (
-    <div ref={setAnchor} data-testid="captured-card" className="pointer-events-auto absolute left-1/2 -translate-x-1/2" style={{ top }} {...bind}>
-      {/* `exhausted` turns the card AND already dims it to 0.55; this filter compounds with that
-          (≈0.33 net) so a captured card reads as clearly further back than a dimmed upgrade,
-          while staying legible enough to identify. Tune here if it wants to be darker/lighter. */}
-      <CardFace card={card} fallbackName={fallbackName} exhausted className="brightness-[0.6] saturate-[0.6]" />
-      {zoomed && <CardZoomPopover card={card} fallbackName={fallbackName} anchorRef={anchorRef} />}
-    </div>
-  )
-}
-
-export function UnitLine({ state, unit, interact }: { state: GameState; unit: UnitState; interact: UnitInteraction }) {
-  const card = state.cards[unit.cardId]
-  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
-  // Only card upgrades stack behind the unit; token upgrades render as on-card
-  // tokens via CardTokens instead.
-  const cardUpgrades = unit.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token')
-  const captured = unit.captured ?? []
-  const clickable = (interact.actionable || interact.isTarget || interact.isUpgradeTarget) && interact.onClick
-  const highlight: Highlight | undefined = interact.selected
-    ? 'accent'
-    : interact.isTarget
-      ? intentHighlight(interact.intent)
-      : interact.isUpgradeTarget
-        ? intentHighlight('attach')
-        : interact.actionable
-          ? 'accent-dim'
-          : undefined
-  return (
-    <div
-      data-testid={`board-unit-${unit.instanceId}`}
-      data-actionable={interact.actionable}
-      data-selected={interact.selected}
-      data-target={interact.isTarget}
-      data-upgrade-target={Boolean(interact.isUpgradeTarget)}
-      onClick={clickable ? interact.onClick : undefined}
-      className={`relative w-fit shrink-0 ${clickable ? 'cursor-pointer' : ''}`}
-      style={{ paddingBottom: cardUpgrades.length * UPGRADE_STEP_PX + captured.length * CAPTURED_STEP_PX }}
-    >
-      <UpgradeStack state={state} upgrades={cardUpgrades} instanceId={unit.instanceId} exhausted={unit.exhausted} />
-      {/* Captured cards continue the stack below any upgrades, so the two never collide. */}
-      <CapturedStack
-        state={state}
-        captured={captured}
-        instanceId={unit.instanceId}
-        topStart={(cardUpgrades.length + 1) * UPGRADE_STEP_PX}
-      />
-      {/* The unit card carries the unit's own zoom — hover here, not the dead tile
-          padding; the upgrades zoom from their exposed strips instead. */}
-      <div ref={setAnchor} className="relative w-fit" {...bind}>
-        <CardFace card={card} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} highlight={highlight} />
-        <CardTokens state={state} unit={unit} />
-        {/* Keyword badges: Hidden (temporary, until next phase) and Sentinel
-            (a keyword — shown while the unit has it, gone if it loses it/defeated).
-            Stacked so both can show. */}
-        <div className="pointer-events-none absolute inset-x-0 top-1 flex flex-col items-center gap-0.5">
-          {unit.hidden && !unitHasKeyword(state, unit, 'Sentinel') && (
-            <span data-testid={`board-unit-hidden-${unit.instanceId}`} className="rounded bg-black/75 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-ink shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
-              Hidden
-            </span>
-          )}
-          {unitHasKeyword(state, unit, 'Sentinel') && (
-            <span data-testid={`board-unit-sentinel-${unit.instanceId}`} className="rounded bg-black/75 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-ink shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
-              Sentinel
-            </span>
-          )}
-        </div>
-      </div>
-      {zoomed && <CardZoomPopover card={card} deployed={unit.isLeader} fallbackName={unit.cardId} anchorRef={anchorRef} />}
-    </div>
-  )
-}
-
-/**
- * Effect tokens (physical-token style) laid over a unit card on this
- * non-rotating wrapper, so they stay upright when the card is exhausted. Damage
- * is a square; every other kind is a labelled pill. Fill, ink and width come
- * from `TOKEN_SPEC`, the one spec for all of them.
- */
-interface CardToken {
-  kind: TokenKind
-  /** A label pill's text ("Adv. 2"), or a stat pill's power and HP deltas. */
-  content: string | { power: string; hp: string }
-  /** The full meaning, for screen readers ("2 Experience"). */
-  title: string
-}
-
-/** Signed delta, e.g. 2 → "+2", -1 → "-1", 0 → "+0" (matches the physical +X/+Y token). */
-function signed(n: number): string {
-  return n >= 0 ? `+${n}` : `${n}`
-}
-
-/**
- * One figure on a stat pill, e.g. "-3". The sign is drawn rather than typed: a hyphen or minus
- * glyph sits wherever the font puts it (below the digits' middle in most), so the sign is an
- * inline box one cap-height tall standing on the baseline, with its bars centred in it. That puts
- * it exactly halfway up the digits in any font. `data-value` records the figure with a true minus
- * sign (U+2212) for anything reading it.
- */
-function StatFigure({ stat, value, color, place }: {
-  stat: 'power' | 'hp'
-  value: string
-  color: string | undefined
-  place: { top?: number; left?: number; bottom?: number; right?: number }
-}) {
-  const minus = value.startsWith('-')
-  const bar = { position: 'absolute', background: 'currentColor', borderRadius: 1, left: '50%', top: '50%', transform: 'translate(-50%, -50%)' } as const
-  return (
-    <span
-      data-stat={stat}
-      data-value={(minus ? '−' : '+') + value.slice(1)}
-      style={{ position: 'absolute', ...place, color, fontSize: `${TOKEN_FIGURE_LAYOUT.fontSize}px`, fontWeight: TOKEN_FIGURE_WEIGHT, lineHeight: 1 }}
-    >
-      <span data-sign={minus ? 'minus' : 'plus'} aria-hidden style={{ display: 'inline-block', position: 'relative', width: '0.5em', height: '1cap', marginRight: '0.06em' }}>
-        <span style={{ ...bar, width: '0.5em', height: '0.14em' }} />
-        {!minus && <span style={{ ...bar, width: '0.14em', height: '0.5em' }} />}
-      </span>
-      {value.slice(1)}
-    </span>
-  )
-}
-
-function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
-  const countToken = (id: string) => unit.upgrades.filter(u => u.cardId === id).length
-  const tokens: CardToken[] = []
-  if (unit.damage > 0) tokens.push({ kind: 'damage', content: String(unit.damage), title: `${unit.damage} damage` })
-  // Everything not printed on the card art or an attached upgrade card: the unit's own and its
-  // upgrades' conditional modifiers, other units' auras and "this phase" effects. Increases go on a
-  // white buff pill and decreases on a dark grey debuff pill, so a mixed +2/-1 shows as +2/+0 and
-  // +0/-1 rather than hiding either half.
-  const power = offCardStatDelta(state, unit, 'power')
-  const hp = offCardStatDelta(state, unit, 'hp')
-  // A zero figure takes the pill's own sign, so a debuff reads "-2 -0", never "-2 +0".
-  const statPill = (kind: TokenKind, name: string, p: number, h: number): CardToken => {
-    const negative = p < 0 || h < 0
-    const fig = (n: number) => (n === 0 && negative ? '-0' : signed(n))
-    return { kind, content: { power: fig(p), hp: fig(h) }, title: `${name} ${fig(p)}/${fig(h)}` }
-  }
-  if (power > 0 || hp > 0) tokens.push(statPill('mod', 'Buff', Math.max(power, 0), Math.max(hp, 0)))
-  if (power < 0 || hp < 0) tokens.push(statPill('debuff', 'Debuff', Math.min(power, 0), Math.min(hp, 0)))
-  // Token upgrades render as on-card pills, not cards behind the unit. Experience and Weakness are
-  // +1/+1 and -1/-1 each, so their pills read as the stat change, told apart from a buff and a
-  // debuff by colour.
-  const shields = countToken(TOKEN_SHIELD)
-  if (shields > 0) tokens.push({ kind: 'shield', content: `Shd. ${shields}`, title: `${shields} Shield` })
-  const experience = countToken(TOKEN_EXPERIENCE)
-  if (experience > 0) tokens.push(statPill('experience', 'Experience', experience, experience))
-  const advantage = countToken(TOKEN_ADVANTAGE)
-  if (advantage > 0) tokens.push({ kind: 'advantage', content: `Adv. ${advantage}`, title: `${advantage} Advantage` })
-  const weakness = countToken(TOKEN_WEAKNESS)
-  if (weakness > 0) tokens.push(statPill('weakness', 'Weakness', -weakness, -weakness))
-  if (tokens.length === 0) return null
-
-  const positions = tokenLayout(tokens.length, unit.exhausted ? 'landscape' : 'portrait')
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      {tokens.map((t, i) => {
-        const spec = TOKEN_SPEC[t.kind]
-        const pill = spec.width === PILL_W
-        return (
-          <span
-            key={t.kind}
-            data-testid={`board-unit-${t.kind}-${unit.instanceId}`}
-            aria-label={t.title}
-            className="absolute flex items-center justify-center whitespace-nowrap select-none tabular-nums"
-            style={{
-              left: `${positions[i].left}%`,
-              top: `${positions[i].top}%`,
-              transform: 'translate(-50%, -50%)',
-              width: spec.width,
-              height: TOKEN_H,
-              borderRadius: pill ? TOKEN_H / 2 : 6,
-              background: spec.background,
-              color: spec.ink,
-              fontSize: `${Math.round(TOKEN_H * (pill ? 0.5 : 0.6))}px`,
-              fontWeight: 700,
-              lineHeight: 1,
-              border: TOKEN_BORDER,
-              boxShadow: TOKEN_SHADOW,
-            }}
-          >
-            {typeof t.content === 'string' ? t.content : (
-              // A stat pill: bold power (top-left) and HP (bottom-right) figures in the kind's
-              // `figures` colours, laid out by TOKEN_FIGURE_LAYOUT.
-              <>
-                <StatFigure stat="power" value={t.content.power} color={spec.figures?.power} place={TOKEN_FIGURE_LAYOUT.power} />
-                <StatFigure stat="hp" value={t.content.hp} color={spec.figures?.hp} place={TOKEN_FIGURE_LAYOUT.hp} />
-              </>
-            )}
-          </span>
-        )
-      })}
-    </div>
-  )
-}
-
 /** What the corner button says when dismissing an overlay takes back the action that raised it. */
 const CANCEL_LABEL = 'Cancel: take back the action that raised this'
-
-/**
- * "Look at" / "reveal" overlay — a single card over a dark backdrop with a prompt and the
- * caller's action buttons. PRIVATE to the acting player. A thin wrapper over `CardGridOverlay`.
- */
-export function CardChoiceOverlay({ state, cardId, prompt, buttons }: {
-  state: GameState
-  cardId: string
-  prompt: string
-  buttons: PromptButton[]
-}) {
-  return (
-    <CardGridOverlay
-      idPrefix="card-choice"
-      prompt={prompt}
-      state={state}
-      items={[{ cardId, key: 0 }]}
-      fullWidthCards
-      buttons={buttons}
-    />
-  )
-}
 
 /**
  * "Select a card" overlay — pick one of several cards (Vane's upgrade-to-defeat, the unique
@@ -515,77 +197,42 @@ function triggerLabel(state: GameState, t: PendingTrigger): string {
   return text ? `${name}: ${text}` : name
 }
 
-export function TriggerOrderOverlay({ state, mine, theirs, onPick, onDismiss, phone = false }: {
+export function TriggerOrderOverlay({ state, mine, theirs, onPick, onDismiss }: {
   state: GameState
   mine: PendingTrigger[]
   theirs: PendingTrigger[]
   onPick: (optionIndex: number) => void
   /** Cancels the action that raised the triggers; absent, the overlay blocks until answered. */
   onDismiss?: () => void
-  /** Asked in the phone's prompt panel: each side's triggers in a tile, the answers under them. */
-  phone?: boolean
 }) {
-  if (phone) {
-    const tile = (title: string, tone: string, triggers: PendingTrigger[], testId: string) => (
-      <div data-testid={testId} className="flex flex-col gap-1.5 rounded-xl bg-surface px-3 py-2.5">
-        <div className={`text-[11px] tracking-[0.14em] ${tone}`}>{title}</div>
-        {triggers.length === 0
-          ? <div className="text-sm text-ink-faint">Nothing waiting</div>
-          : triggers.map(t => <div key={t.id} className="text-sm leading-[19px] text-ink">{triggerLabel(state, t)}</div>)}
-      </div>
-    )
-    return (
-      <PhonePrompt
-        testId="trigger-order-overlay"
-        state={state}
-        width={560}
-        question="Abilities triggered on both sides. Who resolves first?"
-        buttons={[
-          { label: 'They resolve first', onClick: () => onPick(1), testId: 'trigger-order-theirs-btn' },
-          { label: 'I resolve first', onClick: () => onPick(0), primary: true, testId: 'trigger-order-mine-btn' },
-        ]}
-        onCancel={onDismiss}
-        cancelLabel={CANCEL_LABEL}
-      >
-        <div className="grid grid-cols-2 gap-2.5">
-          {tile('YOUR TRIGGERS', 'text-accent', mine, 'trigger-order-mine')}
-          {tile("OPPONENT'S TRIGGERS", 'text-[color:var(--color-opponent)]', theirs, 'trigger-order-theirs')}
-        </div>
-      </PhonePrompt>
-    )
-  }
-  // The waiting abilities are information, not answers, so they are plain text: a boxed row reads as a
-  // button, and the only buttons here are the two that answer.
-  const column = (title: string, triggers: PendingTrigger[], testId: string) => (
-    <div data-testid={testId} className="min-w-[16rem] flex-1">
-      <p className={`mb-2 ${OVERLAY_DETAIL}`}>{title}</p>
-      <ul className="flex flex-col gap-2">
-        {triggers.length === 0
-          ? <li className="text-sm text-ink-faint">nothing waiting</li>
-          : triggers.map(t => (
-            <li key={t.id} className="text-sm text-ink">
-              {triggerLabel(state, t)}
-            </li>
-          ))}
-      </ul>
+  // Each side's triggers in a tile, the answers under them. The waiting abilities are information,
+  // not answers, so they are plain text: the only buttons are the two that answer.
+  const tile = (title: string, tone: string, triggers: PendingTrigger[], testId: string) => (
+    <div data-testid={testId} className="flex flex-col gap-1.5 rounded-xl bg-surface px-3 py-2.5">
+      <div className={`text-[11px] tracking-[0.14em] ${tone}`}>{title}</div>
+      {triggers.length === 0
+        ? <div className="text-sm text-ink-faint">Nothing waiting</div>
+        : triggers.map(t => <div key={t.id} className="text-sm leading-[19px] text-ink">{triggerLabel(state, t)}</div>)}
     </div>
   )
   return (
-    <OverlayShell testId="trigger-order-overlay" size="panel" onDismiss={onDismiss} dismissLabel={CANCEL_LABEL}>
-      <OverlayHeader title="Who resolves first?" detail="Abilities triggered on both sides." />
-      <div className="flex w-full flex-wrap justify-center gap-6 text-left">
-        {column('Your triggers', mine, 'trigger-order-mine')}
-        {column("Opponent's triggers", theirs, 'trigger-order-theirs')}
+    <PhonePrompt
+      testId="trigger-order-overlay"
+      state={state}
+      width={560}
+      question="Abilities triggered on both sides. Who resolves first?"
+      buttons={[
+        { label: 'They resolve first', onClick: () => onPick(1), testId: 'trigger-order-theirs-btn' },
+        { label: 'I resolve first', onClick: () => onPick(0), primary: true, testId: 'trigger-order-mine-btn' },
+      ]}
+      onCancel={onDismiss}
+      cancelLabel={CANCEL_LABEL}
+    >
+      <div className="grid grid-cols-2 gap-2.5">
+        {tile('YOUR TRIGGERS', 'text-accent', mine, 'trigger-order-mine')}
+        {tile("OPPONENT'S TRIGGERS", 'text-[color:var(--color-opponent)]', theirs, 'trigger-order-theirs')}
       </div>
-      <OverlayButtons>
-        <button data-testid="trigger-order-mine-btn" onClick={() => onPick(0)} className={PANEL_PRIMARY}>
-          I resolve first
-        </button>
-        <button data-testid="trigger-order-theirs-btn" onClick={() => onPick(1)} className={PANEL_SECONDARY}>
-          They resolve first
-        </button>
-      </OverlayButtons>
-    </OverlayShell>
+    </PhonePrompt>
   )
 }
 
@@ -596,14 +243,12 @@ export function TriggerOrderOverlay({ state, mine, theirs, onPick, onDismiss, ph
  * Each is named by its own card, which is the whole point of asking, since a unit's own ability and one
  * granted by an upgrade attached to it are otherwise indistinguishable.
  */
-export function NextTriggerOverlay({ state, candidates, onPick, onDismiss, phone = false }: {
+export function NextTriggerOverlay({ state, candidates, onPick, onDismiss }: {
   state: GameState
   candidates: { triggerId: string; cardId: string; sourceInstanceId?: string }[]
   onPick: (optionIndex: number) => void
   /** Cancels the action that raised the triggers; absent, the overlay blocks until answered. */
   onDismiss?: () => void
-  /** Asked in the phone's prompt panel: one answer per ability, a line each, the first primary. */
-  phone?: boolean
 }) {
   const owed = state.pendingTriggers ?? []
   const labels = candidates.map(c => {
@@ -617,190 +262,86 @@ export function NextTriggerOverlay({ state, candidates, onPick, onDismiss, phone
     const seen = labels.slice(0, i + 1).filter(l => l === labels[i]).length
     return duplicated ? `${labels[i]} (${seen})` : labels[i]
   }
-  if (phone) {
-    return (
-      <PhonePrompt
-        testId="next-trigger-overlay"
-        state={state}
-        question="Several of your abilities triggered at once. Which resolves next?"
-        note="Each will resolve in turn. You can still decline optional effects when they do."
-        buttons={[]}
-        onCancel={onDismiss}
-        cancelLabel={CANCEL_LABEL}
-      >
-        <div className="flex flex-col gap-2">
-          {candidates.map((c, i) => (
-            <Button key={c.triggerId} testId={`next-trigger-btn-${i}`} variant={i === 0 ? 'primary' : 'secondary'} onClick={() => onPick(i)} style={{ fontSize: '15px' }}>
-              {label(i)}
-            </Button>
-          ))}
-        </div>
-      </PhonePrompt>
-    )
-  }
+  // Picking here is not accepting the ability, and the difference is not obvious: there is no decline
+  // on this prompt because all of them resolve, and a "may" is turned down on its own choice once its
+  // turn comes. The note says so.
   return (
-    <OverlayShell testId="next-trigger-overlay" size="panel" onDismiss={onDismiss} dismissLabel={CANCEL_LABEL}>
-      <OverlayHeader title="Which resolves next?" detail="Several of your abilities triggered at once." />
-      <OverlayButtons stacked>
+    <PhonePrompt
+      testId="next-trigger-overlay"
+      state={state}
+      question="Several of your abilities triggered at once. Which resolves next?"
+      note="Each will resolve in turn. You can still decline optional effects when they do."
+      buttons={[]}
+      onCancel={onDismiss}
+      cancelLabel={CANCEL_LABEL}
+    >
+      <div className="flex flex-col gap-2">
         {candidates.map((c, i) => (
-          <button key={c.triggerId} data-testid={`next-trigger-btn-${i}`} onClick={() => onPick(i)} className={PANEL_PRIMARY}>
+          <Button key={c.triggerId} testId={`next-trigger-btn-${i}`} variant={i === 0 ? 'primary' : 'secondary'} onClick={() => onPick(i)} style={{ fontSize: '15px' }}>
             {label(i)}
-          </button>
+          </Button>
         ))}
-      </OverlayButtons>
-      {/* Picking here is not accepting the ability, and the difference is not obvious: there is no
-          decline on this prompt because all of them resolve, and a "may" is turned down on its own
-          choice once its turn comes. */}
-      <p className={OVERLAY_DETAIL}>
-        Each will resolve in turn. You can still decline optional effects when they do.
-      </p>
-    </OverlayShell>
+      </div>
+    </PhonePrompt>
   )
 }
 
 /**
- * "Name a card" overlay (Ryder Azadi): a text box that filters the nameable card list (every
- * card in the current game — both decks) by substring; clicking one names it. Portalled to body so it
- * clears the board's stacking context. The full-ASH-set list is a later extension (follow-up).
+ * "Name a card" overlay (Ryder Azadi): a text box that filters the nameable card list (every card in
+ * the current game, both decks) by substring, with the card that asked and its question.
  *
  * `what` names what is being picked, so "name a Trait" (The First Legion) uses the same overlay: the
  * two choices differ in the list and the heading and in nothing else.
  */
-/** How many matching names the phone lists: as many as fit beside the keyboard's half of the screen. */
-const PHONE_NAME_MATCHES = 3
+/** How many matching names are listed: as many as fit beside a phone keyboard's half of the screen. */
+const NAME_MATCHES = 3
 
-export function NameCardOverlay({ names, onPick, what = 'card', onDismiss, phone }: {
+export function NameCardOverlay({ state, choice, names, onPick, what = 'card', onDismiss }: {
+  state: GameState
+  choice: PendingChoice
   names: string[]
   onPick: (name: string) => void
   what?: string
   /** Cancels the action that asked for the name; absent, the overlay blocks until answered. */
   onDismiss?: () => void
-  /** Asked in the phone's prompt panel, with the card that asked and its question. */
-  phone?: { state: GameState; choice: PendingChoice }
 }) {
   const [query, setQuery] = useState('')
   const [chosen, setChosen] = useState<string | null>(null)
   const filtered = query.trim() ? names.filter(n => n.toLowerCase().includes(query.trim().toLowerCase())) : names
-  if (phone) {
-    // A name is chosen from the matches first and named by the primary button, so a slip of the
-    // finger in a short list does not answer the card.
-    const asker = choiceSourceCard(phone.state, phone.choice)
-    const shown = filtered.slice(0, PHONE_NAME_MATCHES)
-    return (
-      <PhonePrompt
-        testId="name-card-overlay"
-        state={phone.state}
-        cardId={asker}
-        eyebrow={asker ? phone.state.cards[asker]?.name ?? asker : undefined}
-        question={describeChoiceQuestion(phone.state, phone.choice)}
-        width={440}
-        buttons={chosen && shown.includes(chosen) ? [{ label: `Name ${chosen}`, testId: 'name-card-confirm', onClick: () => onPick(chosen), primary: true }] : []}
-        onCancel={onDismiss}
-        cancelLabel={CANCEL_LABEL}
-      >
-        <label className="flex flex-col gap-1.5 text-xs tracking-[0.14em] text-ink-dim">
-          {`${what.toUpperCase()} NAME`}
-          <input
-            data-testid="name-card-input"
-            autoFocus
-            aria-autocomplete="list"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            className={`h-11 ${GAME_FIELD}`}
-          />
-        </label>
-        <div role="group" aria-label="Matching names" className="flex flex-col gap-1">
-          {shown.map((n, i) => (
-            <OptionRow key={n} testId={`name-card-option-${i}`} title={n} selected={n === chosen} onClick={() => setChosen(n)} />
-          ))}
-          {filtered.length === 0 && <div className="py-2 text-sm text-ink-faint">No match</div>}
-        </div>
-      </PhonePrompt>
-    )
-  }
+  // A name is chosen from the matches first and named by the primary button, so a slip of the
+  // finger in a short list does not answer the card.
+  const asker = choiceSourceCard(state, choice)
+  const shown = filtered.slice(0, NAME_MATCHES)
   return (
-    <OverlayShell testId="name-card-overlay" size="panel" onDismiss={onDismiss} dismissLabel={CANCEL_LABEL}>
-      <OverlayHeader title={`Name a ${what}`} />
-      <input
-        data-testid="name-card-input"
-        autoFocus
-        value={query}
-        onChange={e => setQuery(e.target.value)}
-        placeholder="Type to search…"
-        className="w-72 rounded-xl border-2 border-line/60 bg-black/40 px-4 py-2 text-sm text-ink outline-none focus:border-accent"
-      />
-      <ul className="flex max-h-[50vh] w-72 flex-col gap-2 overflow-y-auto">
-        {filtered.slice(0, 50).map((n, i) => (
-          <li key={n}>
-            <button data-testid={`name-card-option-${i}`} onClick={() => onPick(n)} className={`${PANEL_SECONDARY} w-full`}>
-              {n}
-            </button>
-          </li>
+    <PhonePrompt
+      testId="name-card-overlay"
+      state={state}
+      cardId={asker}
+      eyebrow={asker ? state.cards[asker]?.name ?? asker : undefined}
+      question={describeChoiceQuestion(state, choice)}
+      width={440}
+      buttons={chosen && shown.includes(chosen) ? [{ label: `Name ${chosen}`, testId: 'name-card-confirm', onClick: () => onPick(chosen), primary: true }] : []}
+      onCancel={onDismiss}
+      cancelLabel={CANCEL_LABEL}
+    >
+      <label className="flex flex-col gap-1.5 text-xs tracking-[0.14em] text-ink-dim">
+        {`${what.toUpperCase()} NAME`}
+        <input
+          data-testid="name-card-input"
+          autoFocus
+          aria-autocomplete="list"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          className={`h-11 ${GAME_FIELD}`}
+        />
+      </label>
+      <div role="group" aria-label="Matching names" className="flex flex-col gap-1">
+        {shown.map((n, i) => (
+          <OptionRow key={n} testId={`name-card-option-${i}`} title={n} selected={n === chosen} onClick={() => setChosen(n)} />
         ))}
-        {filtered.length === 0 && <li className="py-2 text-sm text-ink-faint">No match</li>}
-      </ul>
-    </OverlayShell>
-  )
-}
-
-/**
- * The game-over screen: the outcome as the header's banner, and Rematch (in the winning green) or back
- * to the deck list. The reference the choice overlays are drawn to match.
- */
-export function GameOverOverlay({ winner, concededBy, onRematch, onExit }: {
-  winner: PlayerId | 'draw'
-  concededBy?: PlayerId
-  onRematch: () => void
-  onExit: () => void
-}) {
-  const outcome = outcomeBanner(winner, concededBy)
-  return (
-    <OverlayShell testId="game-over" panelTestId="game-over-banner" size="panel" tone="amber">
-      <OverlayHeader title={outcome.title} banner={outcome.tone} detail={outcome.detail} detailTestId="outcome-detail" />
-      <OverlayButtons>
-        <button data-testid="rematch-btn" onClick={onRematch} className={`${PANEL_BUTTON} border-green text-green shadow-[0_0_12px_rgba(34,197,94,0.3)] hover:bg-green/10`}>
-          Rematch
-        </button>
-        <button onClick={onExit} className={PANEL_SECONDARY}>
-          New setup
-        </button>
-      </OverlayButtons>
-    </OverlayShell>
-  )
-}
-
-/**
- * A triggered choice answered with buttons (choose one, pay or exhaust, a "may" on the leader): the
- * choice's own prompt and one button per answer, the decline muted. Every choice without a dedicated
- * overlay or a board affordance lands here, so the action column holds only what the player initiates.
- *
- * Always dismissible: `onDismiss` either cancels the action that raised it or, when that is not
- * possible, puts the overlay aside so the board can be read, and `dismissLabel` says which.
- */
-export function ButtonChoiceOverlay({ state, prompt, actions, onPick, onDismiss, dismissLabel }: {
-  state: GameState
-  prompt: DescribePart[]
-  actions: Action[]
-  onPick: (action: Action) => void
-  onDismiss: () => void
-  dismissLabel: string
-}) {
-  return (
-    <OverlayShell testId="choice-overlay" size="panel" onDismiss={onDismiss} dismissLabel={dismissLabel}>
-      <OverlayHeader testId="choice-overlay-prompt" title={<DescribedParts state={state} parts={prompt} />} />
-      <OverlayButtons>
-        {actions.map((action, i) => (
-          <button
-            key={i}
-            data-testid={`choice-option-${i}`}
-            onClick={() => onPick(action)}
-            className={action.type === 'skipTrigger' ? PANEL_SECONDARY : PANEL_PRIMARY}
-          >
-            {describeAction(state, 'player', action)}
-          </button>
-        ))}
-      </OverlayButtons>
-    </OverlayShell>
+        {filtered.length === 0 && <div className="py-2 text-sm text-ink-faint">No match</div>}
+      </div>
+    </PhonePrompt>
   )
 }
 
@@ -817,9 +358,6 @@ function promptButtons(state: GameState, actions: Action[], onPick: (action: Act
     testId: `${testId}-${i}`,
   }))
 }
-
-/** The desktop's look at the top card draws every answer in the accent colour. */
-const allPrimary = (buttons: PromptButton[]): PromptButton[] => buttons.map(b => ({ ...b, primary: true }))
 
 /**
  * "Search & play for free" overlay: reveals the searched cards; eligible ones get a "Play free"
@@ -933,29 +471,8 @@ export function DeckTopsOverlay({ state, prompt, tops, onDone }: {
       items={tops.map(({ deck, cardId }) => ({
         cardId, key: deck, caption: deck === 'player' ? 'Your deck' : "Opponent's deck", captionTestId: `deck-tops-caption-${deck}`,
       }))}
-      onBackdropClick={onDone}
       buttons={[{ label: 'Done', testId: 'deck-tops-done', onClick: onDone, primary: true }]}
     />
-  )
-}
-
-/**
- * One player's units in one arena, anchored to the battlefront. The grid cell's
- * alignment (items-end for the opponent, items-start for you) pins the lane to
- * the centre line; extra units wrap *away* from it. Keeps `{side}-{arena}-units`.
- */
-function ArenaZone({ state, side, arena, unitInteraction, anchor }: {
-  state: GameState
-  side: PlayerId
-  arena: 'ground' | 'space'
-  unitInteraction: (unit: UnitState) => UnitInteraction
-  anchor: 'top' | 'bottom'
-}) {
-  const units = orderUnits(state, state.players[side].units.filter(u => u.arena === arena), anchor)
-  return (
-    <div data-testid={`${side}-${arena}-units`} className="flex flex-wrap gap-2 justify-center">
-      {units.map(u => <UnitLine key={u.instanceId} state={state} unit={u} interact={unitInteraction(u)} />)}
-    </div>
   )
 }
 
@@ -1064,14 +581,14 @@ function BaseCard({ state, side, target, widthPx, attacked = false, menu }: {
   )
 }
 
-/** A leader: its card while undeployed, a marker once deployed. `widthPx` scales
- *  it down for the opponent's mat column; omitted, it renders at full size. */
-export function LeaderCard({ state, side, widthPx, interact, labelDeployed = false }: {
+/** A leader in the centre strip: its card while undeployed, an empty slot saying Deployed once it is a
+ *  unit. `widthPx` is the card's short edge. */
+export function LeaderCard({ state, side, widthPx = CARD_WIDTH_PX, interact, labelDeployed = false }: {
   state: GameState
   side: PlayerId
   widthPx?: number
   interact?: UnitInteraction
-  /** Say Deployed in the empty slot: on a phone the leader's unit is too small to tell at a glance. */
+  /** Say Deployed in the empty slot: the leader's unit is too small to tell at a glance. */
   labelDeployed?: boolean
 }) {
   const p = state.players[side]
@@ -1082,7 +599,7 @@ export function LeaderCard({ state, side, widthPx, interact, labelDeployed = fal
   if (p.leader.deployed) {
     return (
       <div data-testid={`${side}-leader-card`} className="relative w-fit">
-        <EmptySlot landscape widthPx={widthPx} />
+        <div style={{ width: longEdge(widthPx), height: widthPx }} className="rounded-lg border border-line/50" />
         {labelDeployed && <span className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-wider text-ink-dim">Deployed</span>}
       </div>
     )
@@ -1199,16 +716,6 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected, disc
   )
 }
 
-/**
- * The battlefield (#4): Ground and Space lanes flank a central strip holding both
- * players' bases and leaders. Reading down the centre — opponent leader, opponent
- * base, your base, your leader — so the bases sit closest together and the leaders
- * are outermost. Each grid row is one player, aligning their lanes with their cards.
- */
-/** The centre strip's cards on a phone (short edges): both fit a half of it, leader above base. */
-const PHONE_LEADER_PX = 50
-const PHONE_BASE_PX = 50
-
 /** Cards resourced during setup, before the first round (CR 5.2.1f). */
 const SETUP_RESOURCES = 2
 
@@ -1241,147 +748,6 @@ function setupPrompt(state: GameState): DescribePart[] | undefined {
   return undefined
 }
 
-function Board({ state, playerInteraction, opponentInteraction, baseTarget, leaderInteract, prompt }: {
-  state: GameState
-  playerInteraction: (unit: UnitState) => UnitInteraction
-  opponentInteraction: (unit: UnitState) => UnitInteraction
-  /** A side's base when it can be clicked (an attack, a choice that picks a base, an upgrade host). */
-  baseTarget?: (side: PlayerId) => BaseTarget | undefined
-  leaderInteract?: UnitInteraction
-  /** What the current board highlights are asking for; absent for self-evident base actions. */
-  prompt?: DescribePart[]
-}) {
-  // Space | Leaders+Bases | Ground. Set the template with an inline style rather
-  // than a Tailwind arbitrary value: the commas inside minmax() don't compile
-  // reliably as an arbitrary `grid-cols-[…]` value, which collapsed the grid. The
-  // battlefront (centre column) aligns with the opponent leader in the bar above.
-  const cols: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)', columnGap: '1rem' }
-  return (
-    // Transparent — the play-area container behind it supplies one continuous
-    // background across the opponent bar, battlefield and player bar. It
-    // grows to fill the play area's height, centring the board vertically.
-    <section data-testid="battlefield" className="flex flex-1 flex-col justify-center gap-1.5 px-2">
-      {/* Opponent half: everything anchored to the BOTTOM (the battlefront), so
-          the opponent base and front-line units meet the centre; extra units
-          stack upward, away from it. */}
-      <div className="items-end" style={cols}>
-        <ArenaZone state={state} side="opponent" arena="space" unitInteraction={opponentInteraction} anchor="bottom" />
-        {/* Opponent leader lives in their bar's centre column, so the strip
-            holds only their base here. */}
-        <div className="flex flex-col items-center gap-2">
-          <BaseCard state={state} side="opponent" target={baseTarget?.('opponent')} />
-        </div>
-        <ArenaZone state={state} side="opponent" arena="ground" unitInteraction={opponentInteraction} anchor="bottom" />
-      </div>
-
-      {/* Battlefront: Space / Ground labels (centred over their lanes) flank the
-          game state, which sits between the two bases. */}
-      <div className="items-center" style={cols}>
-        <div className="text-ink-faint text-sm uppercase tracking-widest text-center">Space</div>
-        <div data-testid="game-state" className="relative text-center text-sm text-ink leading-tight">
-          <div className="whitespace-nowrap"><span className="text-accent uppercase">Round:</span> {state.round} - <span className="capitalize">{state.phase}</span></div>
-          <div className="whitespace-nowrap"><span className="text-accent uppercase">Initiative:</span> {state.initiative === 'player' ? 'You' : 'Opponent'}</div>
-          {/* Floated out of the layout: the prompt comes and goes constantly, and in flow it
-              shunted the whole board up and down. `pointer-events-none` keeps clicks reaching
-              the cards it is describing — it has nothing interactive of its own. Card refs
-              inside it re-enable their own hover. */}
-          {prompt && (
-            <div
-              data-testid="action-prompt"
-              className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 w-64 -translate-x-1/2 rounded-xl border-2 border-accent/60 bg-surface-solid px-3 py-1.5 text-xs leading-snug text-ink-dim shadow-[0_4px_16px_rgba(0,0,0,0.5)]"
-            >
-              <DescribedParts state={state} parts={prompt} />
-            </div>
-          )}
-        </div>
-        <div className="text-ink-faint text-sm uppercase tracking-widest text-center">Ground</div>
-      </div>
-
-      {/* Player half: everything anchored to the TOP (the battlefront). Your base
-          sits just below the opponent's, so the two bases meet at the centre. */}
-      <div className="items-start" style={cols}>
-        <ArenaZone state={state} side="player" arena="space" unitInteraction={playerInteraction} anchor="top" />
-        <div className="flex flex-col items-center gap-2">
-          <BaseCard state={state} side="player" target={baseTarget?.('player')} />
-          <LeaderCard state={state} side="player" interact={leaderInteract} />
-        </div>
-        <ArenaZone state={state} side="player" arena="ground" unitInteraction={playerInteraction} anchor="top" />
-      </div>
-    </section>
-  )
-}
-
-/**
- * A labelled column within a player bar: its component with an accent
- * all-caps label rotated 90° anticlockwise on the left (vertical-rl + rotate
- * reads bottom-to-top on iOS, which lacks `sideways-lr`). A subtle background band
- * separates it from its neighbours over the shared play-area background.
- */
-function BarColumn({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex min-w-0 items-center gap-1.5 rounded-lg bg-surface px-1.5 py-1">
-      <span
-        className="shrink-0 text-accent text-[11px] uppercase tracking-[0.15em] font-light"
-        style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-      >
-        {label}
-      </span>
-      <div className="flex min-w-0 flex-1 items-center justify-center">{children}</div>
-    </div>
-  )
-}
-
-/**
- * The opponent bar: their leader in the centre so it lines up with the
- * bases and the player leader below, flanked by discard + hand on the left and
- * resources + deck on the right. Transparent, joined to the battlefield below.
- */
-function OpponentBar({ state }: { state: GameState }) {
-  const p = state.players.opponent
-  const ready = p.resources.filter(r => !r.exhausted).length
-  const exhausted = p.resources.length - ready
-  const cols: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)', columnGap: '1.5rem', alignItems: 'stretch' }
-  return (
-    <div data-testid="opponent-mat" className="px-2 py-2" style={cols}>
-      {/* Left: discard, then the hand filling the space up to the leader. */}
-      <div className="grid min-w-0 items-stretch gap-2" style={{ gridTemplateColumns: 'auto minmax(0, 1fr)' }}>
-        <BarColumn label="Discard"><DiscardPile state={state} side="opponent" /></BarColumn>
-        <BarColumn label="Hand"><OpponentHand count={p.hand.length} /></BarColumn>
-      </div>
-      {/* Centre column: the leader, aligned to the bottom so it meets the base. */}
-      <div className="flex items-end justify-center">
-        <LeaderCard state={state} side="opponent" widthPx={CARD_WIDTH_PX} />
-      </div>
-      <div className="flex min-w-0 items-stretch justify-end gap-2">
-        <BarColumn label="Resources"><ResourceStack ready={ready} exhausted={exhausted} credits={friendlyCreditTokens(state, 'opponent')} force={hasForceToken(state, 'opponent')} owner="opponent" /></BarColumn>
-        {/* Never `canLook`: the opponent's deck is theirs to look at, whatever they hold. */}
-        <BarColumn label="Deck"><DeckPile state={state} side="opponent" /></BarColumn>
-      </div>
-    </div>
-  )
-}
-
-/**
- * The player bar: Deck | Resources | Hand | Action | Discard, the hand
- * flexing to fill the remaining width (the most important area). The action column
- * is a fixed width so its buttons don't shift the layout between phases.
- */
-function PlayerBar({ state, hand, action }: { state: GameState; hand: ReactNode; action: ReactNode }) {
-  const p = state.players.player
-  const ready = p.resources.filter(r => !r.exhausted).length
-  const exhausted = p.resources.length - ready
-  const cols: CSSProperties = { display: 'grid', gridTemplateColumns: 'auto auto minmax(0, 1fr) 10rem auto', columnGap: '0.5rem', alignItems: 'stretch' }
-  return (
-    <div data-testid="player-mat" className="px-2 py-2" style={cols}>
-      <BarColumn label="Deck"><DeckPile state={state} side="player" canLook={mayLookAtDeckTop(state, 'player')} /></BarColumn>
-      <BarColumn label="Resources"><ResourceStack ready={ready} exhausted={exhausted} credits={friendlyCreditTokens(state, 'player')} force={hasForceToken(state, 'player')} owner="player" /></BarColumn>
-      <BarColumn label="Hand">{hand}</BarColumn>
-      <BarColumn label="Action">{action}</BarColumn>
-      <BarColumn label="Discard"><DiscardPile state={state} side="player" /></BarColumn>
-    </div>
-  )
-}
-
 export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOptions }: Props) {
   const { settings } = useSettings()
   // The opponent's pace is the player's setting; `gameOptions` (tests) may pin one of its own.
@@ -1403,24 +769,23 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // the clipboard refused it, so the report is shown to copy by hand rather than lost.
   const [reporting, setReporting] = useState(false)
   const [fallbackReport, setFallbackReport] = useState<string | undefined>(undefined)
-  // Conceding asks once more before it ends the game: a stray click on it is not undoable in play.
-  const [confirmingConcede, setConfirmingConcede] = useState(false)
   // Settings (#539): an overlay over the board, not a screen. Routing away would unmount this
   // component and the game with it (#541).
   const [settingsOpen, setSettingsOpen] = useState(false)
   // A button choice put aside to read the board (only where it cannot be cancelled): the id of the
   // choice whose overlay is hidden. Any action clears it, so the next choice always shows.
   const [hiddenChoice, setHiddenChoice] = useState<string | null>(null)
-  // A phone on its side gets the phone layout, with its log, More and piles opened from the controls
-  // column; held upright, it is asked to turn.
-  const phone = useMediaQuery(PHONE_LANDSCAPE_QUERY)
+  // One layout: a phone on its side, with its log, More and piles opened from the controls column,
+  // and the desktop, the same grown with the log docked. Held upright, a phone is asked to turn.
+  const scale: BoardScale = useMediaQuery(PHONE_LANDSCAPE_QUERY) ? 'phone' : 'desktop'
+  const sizes = BOARD_SCALE[scale]
   const upright = useMediaQuery(PHONE_PORTRAIT_QUERY)
   const [logOpen, setLogOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [pile, setPile] = useState<{ title: string; cards: string[] } | null>(null)
-  // A phone has no hover: a held card, or a name touched in the log, opens full size until closed.
+  // A held card, or a name touched in the log, opens full size until closed.
   const [inspecting, setInspecting] = useState<InspectTarget | null>(null)
-  // A phone opens your leader's actions as a menu from the leader.
+  // Your leader's actions open as a menu from the leader.
   const [leaderMenuOpen, setLeaderMenuOpen] = useState(false)
   // And your base's: its Epic Action and any action an upgrade on it gives.
   const [baseMenuOpen, setBaseMenuOpen] = useState(false)
@@ -1522,10 +887,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // Undeployed-leader activated abilities: click the leader to use a target-less
     // one, or to highlight its target units and then click one.
     const leaderAbilityMoves = legal.filter((a): a is Extract<Action, { type: 'useLeaderAbility' }> => a.type === 'useLeaderAbility')
-    const leaderTargetlessMove = leaderAbilityMoves.find(a => a.targetInstanceId === undefined)
     const leaderTargetIds = new Map<string, Action>()
     if (leaderSelected) for (const a of leaderAbilityMoves) if (a.targetInstanceId) leaderTargetIds.set(a.targetInstanceId, a)
-    // On a phone the leader opens its menu instead: each action, deploying, and the card.
+    // The leader opens its menu: each action, deploying, and the card.
     const deployMoves = legal.filter((a): a is Extract<Action, { type: 'deployLeader' }> => a.type === 'deployLeader')
     const takeLeaderAbility = (index: number) => {
       const moves = leaderAbilityMoves.filter(a => a.index === index)
@@ -1546,7 +910,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         ? deployMoves.map(a => ({ label: describeAction(gameState, 'player', a), onSelect: () => actAndClear(a) }))
         : [{ label: 'Deploy', detail: deployBlocker(gameState) }]),
     ]
-    // On a phone your base's actions are a menu on the base, as the leader's are.
+    // Your base's actions are a menu on the base, as the leader's are.
     const baseMoves = legal.filter((a): a is Extract<Action, { type: 'useBaseAbility' }> => a.type === 'useBaseAbility')
     const playerBase = gameState.players.player.base
     const epic = baseEpicAction(playerBase.cardId)
@@ -1561,27 +925,12 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         : []),
       ...baseMoves.filter(a => a.cardId !== undefined).map(a => ({ label: describeAction(gameState, 'player', a), onSelect: () => actAndClear(a) })),
     ]
-    const phoneLeaderInteract: UnitInteraction = {
+    const leaderInteract: UnitInteraction = {
       actionable: leaderAbilityMoves.length > 0 || deployMoves.length > 0,
       selected: leaderSelected || leaderMenuOpen,
       isTarget: false,
       onClick: () => (leaderSelected ? setLeaderSelected(false) : setLeaderMenuOpen(true)),
     }
-    const leaderInteract: UnitInteraction | undefined = phone
-      ? phoneLeaderInteract
-      : leaderAbilityMoves.length > 0
-      ? {
-          actionable: true,
-          selected: leaderSelected,
-          isTarget: false,
-          onClick: () => {
-            if (leaderTargetlessMove) { actAndClear(leaderTargetlessMove); return }
-            setSelectedAttacker(null)
-            setSelectedUpgrade(null)
-            setLeaderSelected(v => !v)
-          },
-        }
-      : undefined
 
     // Optional targeted pending choices — resolved by clicking a highlighted
     // board unit plus a Decline button, rather than one menu button per target.
@@ -1670,28 +1019,29 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           : undefined,
       }
 
-    // On a phone the opponent's action, while it is on show, rings the unit acting and its target.
-    const focus: ReturnType<typeof actionFocus> = phone && opponentAction ? actionFocus(opponentAction) : {}
+    // The opponent's action, while it is on show, rings the unit acting and its target.
+    const focus: ReturnType<typeof actionFocus> = opponentAction ? actionFocus(opponentAction) : {}
     const withActing = (interact: UnitInteraction, instanceId: string): UnitInteraction =>
       instanceId === focus.actorId ? { ...interact, acting: 'actor' } : instanceId === focus.targetId ? { ...interact, acting: 'target' } : interact
     const playerInteraction = (unit: { instanceId: string }) => withActing(playerInteractionBase(unit), unit.instanceId)
     const opponentInteraction = (unit: { instanceId: string }) => withActing(opponentInteractionBase(unit), unit.instanceId)
 
-    // Regroup on a phone: the cards just drawn, on the end of the hand, are tagged NEW until you resource.
-    const newFrom = phone && gameState.phase === 'regroup' && !gameState.regroupResourced.player ? hand.length - regroupDrawn : hand.length
+    // Regroup: the cards just drawn, on the end of the hand, are tagged NEW until you resource.
+    const newFrom = gameState.phase === 'regroup' && !gameState.regroupResourced.player ? hand.length - regroupDrawn : hand.length
 
-    // On a phone the hand is one row under the board, fanned (overlapping) once it is too long for it.
-    const fan = phone ? phoneHandOverlap(hand.length) : 0
+    // The hand is one row under the board, fanned (overlapping) once it is too long for it.
+    const fan = handOverlap(hand.length, scale)
     const playerHand = (
       <ul
         data-testid="player-hand"
         data-fanned={fan > 0}
-        className={phone ? 'flex h-[88px] flex-none items-end justify-center gap-1.5' : 'flex flex-wrap justify-center gap-1'}
+        className="flex flex-none items-end justify-center gap-1.5"
+        style={{ height: sizes.handRow }}
       >
         {hand.map((cardId, i) => (
           <li key={`${cardId}-${i}`} style={fan > 0 && i > 0 ? { marginLeft: -fan } : undefined}>
             <HandCard
-              widthPx={phone ? PHONE_HAND_CARD_PX : undefined}
+              widthPx={sizes.handCard}
               card={gameState.cards[cardId]}
               cardId={cardId}
               index={i}
@@ -1888,9 +1238,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       : undefined
     const buttonChoiceActions = buttonChoice ? unclaimed.filter(answers(buttonChoice.id)) : []
     const buttonChoiceHidden = buttonChoice !== undefined && hiddenChoice === buttonChoice.id
-    // A phone deploys from the leader's menu and uses the base's actions from the base's, so neither is
-    // a button there.
-    const menuActions = unclaimed.filter(a => !buttonChoiceActions.includes(a) && !(phone && (a.type === 'deployLeader' || a.type === 'useBaseAbility')))
+    // Deploying is in the leader's menu and the base's actions in the base's, so neither is a button.
+    const menuActions = unclaimed.filter(a => !buttonChoiceActions.includes(a) && a.type !== 'deployLeader' && a.type !== 'useBaseAbility')
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for a repeatable pick (`isRepeatable`), else "Decline".
     // An optional "defeat an upgrade" choice (Clan Vizsla Soldier, Vane's On Attack, #416): the
@@ -1904,14 +1253,14 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // pool is allocated.
     const distribute = targetChoice ? allocation(targetChoice) : undefined
     const repeatable = targetChoice !== undefined && isRepeatable(targetChoice)
-    // A phone's buttons are thumb-sized; conceding moves to More there, and choosing an attacker
-    // gets its own way back, since tapping the unit again is a small target.
-    const btn = phone ? 'min-h-11 px-3 text-sm' : 'px-3 py-1.5 text-xs'
+    // The buttons are thumb-sized; conceding is under More, and choosing an attacker gets its own way
+    // back, since tapping the unit again is a small target.
+    const btn = 'min-h-11 px-3 text-sm'
     const actionColumn = (
-      // Two to a row on a phone, where the column is short: a pair such as Take initiative and Pass
-      // side by side, and anything left over across the width.
-      <div className={phone ? 'flex flex-wrap gap-1.5 *:mt-0 *:min-w-0 *:flex-1 *:basis-[40%]' : 'flex flex-col items-stretch gap-1.5'}>
-        {phone && selectedAttacker && (
+      // Two to a row, where the column is short: a pair such as Take initiative and Pass side by side,
+      // and anything left over across the width.
+      <div className="flex flex-wrap gap-1.5 *:mt-0 *:min-w-0 *:flex-1 *:basis-[40%]">
+        {selectedAttacker && (
           <button
             data-testid="cancel-attack-btn"
             onClick={() => setSelectedAttacker(null)}
@@ -1920,16 +1269,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             Cancel attack
           </button>
         )}
-        {/* A phone says it as a count across the column, the question itself being in the prompt above. */}
-        {distribute && phone && (
+        {/* A count across the column, the question itself being in the prompt above. */}
+        {distribute && (
           <div data-testid="distribute-hud" role="status" className="flex h-[52px] basis-full items-center justify-center gap-2 rounded-xl bg-surface text-[15px] text-ink-dim">
             <b className="text-xl font-semibold text-ink">{distribute.spent}</b>
             {` of ${distribute.total} ${distribute.label === 'Healing' ? 'healed' : 'placed'}`}
-          </div>
-        )}
-        {distribute && !phone && (
-          <div data-testid="distribute-hud" className="rounded-xl border-2 border-accent/60 px-3 py-1.5 text-center text-xs text-ink-dim">
-            {distribute.label} allocated <span className="font-semibold text-ink">{distribute.spent} / {distribute.total}</span>
           </div>
         )}
         {declineButton && (
@@ -1941,16 +1285,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             {repeatable ? 'Done' : 'Decline'}
           </button>
         )}
-        {buttonChoiceHidden && phone && <Button variant="primary" testId="show-choice-btn" onClick={() => setHiddenChoice(null)}>Show choice</Button>}
-        {buttonChoiceHidden && !phone && (
-          <button
-            data-testid="show-choice-btn"
-            onClick={() => setHiddenChoice(null)}
-            className={`rounded-xl border-2 border-accent ${btn} text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10`}
-          >
-            Show choice
-          </button>
-        )}
+        {buttonChoiceHidden && <Button variant="primary" testId="show-choice-btn" onClick={() => setHiddenChoice(null)}>Show choice</Button>}
         {menuActions.map((action, i) => (
           <button
             key={i}
@@ -1979,35 +1314,6 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             Undo
           </button>
         )}
-        {/* Conceding, the player's own (#537): not a game action the menu lists, and muted like Undo
-            so it never reads as a move. On the player's turn only, and confirmed before it ends the game. */}
-        {!phone && gameState.winner === null && gameState.activePlayer === 'player' && (confirmingConcede ? (
-          <div className="mt-1.5 flex flex-col gap-1.5 text-center text-xs text-ink-dim">
-            <span>Concede the game?</span>
-            <button
-              data-testid="concede-confirm-btn"
-              onClick={() => { setConfirmingConcede(false); clearSelections(); act({ type: 'concede' }) }}
-              className="rounded-xl border-2 border-red px-3 py-1.5 text-xs text-red hover:bg-red/10"
-            >
-              Concede
-            </button>
-            <button
-              data-testid="concede-cancel-btn"
-              onClick={() => setConfirmingConcede(false)}
-              className="rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-faint hover:text-ink"
-            >
-              Keep playing
-            </button>
-          </div>
-        ) : (
-          <button
-            data-testid="concede-btn"
-            onClick={() => setConfirmingConcede(true)}
-            className="mt-1.5 rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-faint hover:text-ink"
-          >
-            Concede
-          </button>
-        ))}
       </div>
     )
 
@@ -2019,7 +1325,6 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           theirs={waiting('opponent')}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: orderChoice.id, optionIndex })}
           onDismiss={cancel}
-          phone={phone}
         />
       )
     } else if (nextTriggerChoice) {
@@ -2029,11 +1334,10 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           candidates={nextTriggerChoice.candidates}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: nextTriggerChoice.id, optionIndex })}
           onDismiss={cancel}
-          phone={phone}
         />
       )
-    } else if (phone && (lookChoice || discardTopChoice)) {
-      // On a phone the top card stands beside its question. A card has been seen, so there is no ×.
+    } else if (lookChoice || discardTopChoice) {
+      // The top card stands beside its question. A card has been seen, so there is no ×.
       const top = (lookChoice ?? discardTopChoice)!
       const asker = choiceSourceCard(gameState, top)
       const yours = !discardTopChoice || discardTopChoice.deck === 'player'
@@ -2049,19 +1353,6 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           questionTestId="card-choice-prompt"
           note={yours ? 'Only you see this card.' : undefined}
           buttons={promptButtons(gameState, lookChoice ? lookActions : discardTopActions, actAndClear, 'choice-btn')}
-        />
-      )
-    } else if (lookChoice) {
-      choiceOverlay = (
-        <CardChoiceOverlay state={gameState} cardId={lookChoice.cardId} prompt="Look at the top card of your deck" buttons={allPrimary(promptButtons(gameState, lookActions, actAndClear, 'choice-btn'))} />
-      )
-    } else if (discardTopChoice) {
-      choiceOverlay = (
-        <CardChoiceOverlay
-          state={gameState}
-          cardId={discardTopChoice.cardId}
-          prompt={`Look at the top of ${discardTopChoice.deck === 'player' ? 'your' : "opponent's"} deck`}
-          buttons={allPrimary(promptButtons(gameState, discardTopActions, actAndClear, 'choice-btn'))}
         />
       )
     } else if (searchChoice) {
@@ -2134,7 +1425,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           names={nameableCardNames(gameState)}
           onPick={cardName => actAndClear({ type: 'acceptChoice', choiceId: nameCardChoice.id, cardName })}
           onDismiss={cancel}
-          phone={phone ? { state: gameState, choice: nameCardChoice } : undefined}
+          state={gameState}
+          choice={nameCardChoice}
         />
       )
     } else if (nameTraitChoice) {
@@ -2144,7 +1436,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           names={nameableTraits(gameState)}
           onPick={traitName => actAndClear({ type: 'acceptChoice', choiceId: nameTraitChoice.id, traitName })}
           onDismiss={cancel}
-          phone={phone ? { state: gameState, choice: nameTraitChoice } : undefined}
+          state={gameState}
+          choice={nameTraitChoice}
         />
       )
     } else if (selectUpgradeChoice && pickedHost !== null) {
@@ -2223,7 +1516,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           onCancel={() => setUpgradeHost(null)}
         />
       )
-    } else if (buttonChoice && !buttonChoiceHidden && phone) {
+    } else if (buttonChoice && !buttonChoiceHidden) {
+      // Cancelled when it can be; otherwise put aside, and brought back from the action column.
       const asker = choiceSourceCard(gameState, buttonChoice)
       choiceOverlay = (
         <PhonePrompt
@@ -2239,29 +1533,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           onSetAside={cancel ? undefined : () => setHiddenChoice(buttonChoice.id)}
         />
       )
-    } else if (buttonChoice && !buttonChoiceHidden) {
-      // Cancelled when it can be; otherwise put aside, and brought back from the action column.
-      choiceOverlay = (
-        <ButtonChoiceOverlay
-          state={gameState}
-          prompt={describeChoiceParts(gameState, buttonChoice)}
-          actions={buttonChoiceActions}
-          onPick={actAndClear}
-          onDismiss={cancel ?? (() => setHiddenChoice(buttonChoice.id))}
-          dismissLabel={cancel ? CANCEL_LABEL : 'Hide: look at the board, then reopen it from the action column'}
-        />
-      )
     }
 
-    // What the board's highlights are asking for. Suppressed entirely while the bug form is open: it
-    // is board decoration and must not compete with a modal, whatever the stacking order says.
+    // What the board's highlights are asking for. None while a prompt panel asks its own question.
     // Step one of the upgrade pick has its own instruction; it is computed after the choice is found,
     // so it overrides the general prompt here rather than inside it.
-    const boardPrompt = reporting || choiceOverlay
+    const boardPrompt = choiceOverlay
       ? undefined
       : upgradePick && pickedHost === null
         ? [upgradeHosts.some(id => baseHostOwner(id)) ? 'Choose the unit or base to defeat an upgrade from' : 'Choose the unit to defeat an upgrade from']
-        : phone && buttonChoiceHidden && buttonChoice
+        : buttonChoiceHidden && buttonChoice
           ? [...describeChoiceParts(gameState, buttonChoice), '. Look at the board, then answer.']
           : actionPrompt ?? (anyPlayerChoice ? describeChoiceParts(gameState, anyPlayerChoice) : undefined)
     const baseTarget = (side: PlayerId): BaseTarget | undefined => {
@@ -2272,102 +1553,86 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       return pick ? { onClick: () => actAndClear(pick), intent: targetChoice?.intent } : undefined
     }
 
-    // The play area: one continuous background across the opponent bar, the
-    // battlefield, and the player bar — joined, edge-to-edge, filling the height.
+    const state = gameState
+    const attacker = selectedAttacker ? state.players.player.units.find(u => u.instanceId === selectedAttacker) : undefined
+    // The opponent's chosen action, said while it waits to be shown, redacted as the log is.
+    const opponentPrompt: DescribePart[] | undefined = opponentAction && state.activePlayer === 'opponent'
+      ? ['Opponent: ', ...describeActionParts(state, 'opponent', opponentAction, { redact: true })]
+      : undefined
+    const leaderName = state.cards[state.players.player.leader.cardId]?.name ?? state.players.player.leader.cardId
     playContent = (
-      <div data-testid="game-board" className="flex min-h-0 flex-1 flex-col">
-        <OpponentBar state={gameState} />
-        <Board
-          state={gameState}
-          prompt={boardPrompt}
-          playerInteraction={playerInteraction}
-          opponentInteraction={opponentInteraction}
-          baseTarget={baseTarget}
-          leaderInteract={leaderInteract}
+      <>
+      {leaderMenuOpen && !state.players.player.leader.deployed && (
+        <LeaderMenu
+          name={leaderName}
+          items={leaderMenuItems}
+          onSee={() => setInspecting({ cardId: state.players.player.leader.cardId })}
+          onClose={() => setLeaderMenuOpen(false)}
         />
-        <PlayerBar state={gameState} hand={playerHand} action={actionColumn} />
-      </div>
+      )}
+      {baseMenuOpen && baseMenuItems.length > 0 && (
+        <LeaderMenu
+          name={state.cards[playerBase.cardId]?.name ?? playerBase.cardId}
+          kind="BASE"
+          items={baseMenuItems}
+          onSee={() => setInspecting({ cardId: playerBase.cardId })}
+          onClose={() => setBaseMenuOpen(false)}
+        />
+      )}
+      <PhoneGameLayout
+        state={state}
+        scale={scale}
+        log={log}
+        prompt={opponentPrompt ?? boardPrompt}
+        attacker={attacker ? state.cards[attacker.cardId]?.name ?? attacker.cardId : undefined}
+        actions={actionColumn}
+        hand={playerHand}
+        centre={{
+          opponentLeader: <LeaderCard state={state} side="opponent" widthPx={sizes.centreCard} labelDeployed />,
+          opponentBase: <BaseCard state={state} side="opponent" target={baseTarget('opponent')} widthPx={sizes.centreCard} />,
+          playerBase: (
+            <BaseCard
+              state={state}
+              side="player"
+              target={baseTarget('player')}
+              attacked={focus.targetBase}
+              widthPx={sizes.centreCard}
+              menu={baseMenuItems.length > 0 ? { open: baseMenuOpen, actionable: baseMoves.length > 0, onOpen: () => setBaseMenuOpen(true) } : undefined}
+            />
+          ),
+          playerLeader: <LeaderCard state={state} side="player" widthPx={sizes.centreCard} interact={leaderInteract} labelDeployed />,
+        }}
+        playerInteraction={playerInteraction}
+        opponentInteraction={opponentInteraction}
+        onExit={onExit}
+        onLog={() => setLogOpen(true)}
+        onMore={() => setMoreOpen(true)}
+        onDiscard={side => setPile({ title: side === 'player' ? 'Your discard' : "Opponent's discard", cards: state.players[side].discard })}
+        onDeck={mayLookAtDeckTop(state, 'player') ? () => setPile({ title: 'Top of your deck', cards: state.players.player.deck.slice(0, 1) }) : undefined}
+      />
+      </>
     )
-
-    if (phone) {
-      const state = gameState
-      const attacker = selectedAttacker ? state.players.player.units.find(u => u.instanceId === selectedAttacker) : undefined
-      // The opponent's chosen action, said while it waits to be shown, redacted as the log is.
-      const opponentPrompt: DescribePart[] | undefined = opponentAction && state.activePlayer === 'opponent'
-        ? ['Opponent: ', ...describeActionParts(state, 'opponent', opponentAction, { redact: true })]
-        : undefined
-      const leaderName = state.cards[state.players.player.leader.cardId]?.name ?? state.players.player.leader.cardId
-      playContent = (
-        <>
-        {leaderMenuOpen && !state.players.player.leader.deployed && (
-          <LeaderMenu
-            name={leaderName}
-            items={leaderMenuItems}
-            onSee={() => setInspecting({ cardId: state.players.player.leader.cardId })}
-            onClose={() => setLeaderMenuOpen(false)}
-          />
-        )}
-        {baseMenuOpen && baseMenuItems.length > 0 && (
-          <LeaderMenu
-            name={state.cards[playerBase.cardId]?.name ?? playerBase.cardId}
-            kind="BASE"
-            items={baseMenuItems}
-            onSee={() => setInspecting({ cardId: playerBase.cardId })}
-            onClose={() => setBaseMenuOpen(false)}
-          />
-        )}
-        <PhoneGameLayout
-          state={state}
-          prompt={opponentPrompt ?? boardPrompt}
-          attacker={attacker ? state.cards[attacker.cardId]?.name ?? attacker.cardId : undefined}
-          actions={actionColumn}
-          hand={playerHand}
-          centre={{
-            opponentLeader: <LeaderCard state={state} side="opponent" widthPx={PHONE_LEADER_PX} labelDeployed />,
-            opponentBase: <BaseCard state={state} side="opponent" target={baseTarget('opponent')} widthPx={PHONE_BASE_PX} />,
-            playerBase: (
-              <BaseCard
-                state={state}
-                side="player"
-                target={baseTarget('player')}
-                attacked={focus.targetBase}
-                widthPx={PHONE_BASE_PX}
-                menu={baseMenuItems.length > 0 ? { open: baseMenuOpen, actionable: baseMoves.length > 0, onOpen: () => setBaseMenuOpen(true) } : undefined}
-              />
-            ),
-            playerLeader: <LeaderCard state={state} side="player" widthPx={PHONE_LEADER_PX} interact={leaderInteract} labelDeployed />,
-          }}
-          playerInteraction={playerInteraction}
-          opponentInteraction={opponentInteraction}
-          onExit={onExit}
-          onLog={() => setLogOpen(true)}
-          onMore={() => setMoreOpen(true)}
-          onDiscard={side => setPile({ title: side === 'player' ? 'Your discard' : "Opponent's discard", cards: state.players[side].discard })}
-          onDeck={mayLookAtDeckTop(state, 'player') ? () => setPile({ title: 'Top of your deck', cards: state.players.player.deck.slice(0, 1) }) : undefined}
-        />
-        </>
-      )
-    }
   }
 
-  if (edgeScreen) return edgeScreen
+  if (edgeScreen || !gameState) return edgeScreen
   // Held upright, a phone is asked to turn; the game carries on underneath and is there when it does.
-  if (upright && gameState) return <TurnSideways />
-  const notice = unresolvedPrintings.length > 0 && !noticeDismissed
-    ? (placement: string) => <PrintedStatsNotice names={unresolvedPrintings.map(u => u.name ?? u.id)} onDismiss={() => setNoticeDismissed(true)} className={placement} />
-    : () => null
-
-  if (phone && gameState) {
-    const inspectedUnit = inspecting?.instanceId
-      ? [...gameState.players.player.units, ...gameState.players.opponent.units].find(u => u.instanceId === inspecting.instanceId)
-      : undefined
-    return (
-      <CardInspect.Provider value={setInspecting}>
-      <div data-testid="game-screen" className="h-screen w-full">
-        {playContent}
-        {/* Over the board, clear of the controls column (196px and the padding either side of it). */}
-        {notice('fixed right-2 top-2 left-[222px]')}
-        {choiceOverlay}
+  if (upright) return <TurnSideways />
+  const inspectedUnit = inspecting?.instanceId
+    ? [...gameState.players.player.units, ...gameState.players.opponent.units].find(u => u.instanceId === inspecting.instanceId)
+    : undefined
+  return (
+    <CardInspect.Provider value={setInspecting}>
+    <div data-testid="game-screen" className="h-screen w-full">
+      {playContent}
+      {/* Over the board, clear of the controls column. */}
+      {unresolvedPrintings.length > 0 && !noticeDismissed && (
+        <div className="fixed right-2 top-2 z-40" style={{ left: boardLeft(scale) + 8 }}>
+          <PrintedStatsNotice names={unresolvedPrintings.map(u => u.name ?? u.id)} onDismiss={() => setNoticeDismissed(true)} />
+        </div>
+      )}
+      {choiceOverlay}
+      {/* The desktop docks the log in the column; a phone opens it as a drawer. */}
+      {scale === 'phone' && (
         <GameLogDrawer
           open={logOpen}
           state={gameState}
@@ -2375,100 +1640,17 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           onClose={() => setLogOpen(false)}
           onUndo={settings.allowUndo && canUndo ? () => { clearSelections(); undo() } : undefined}
         />
-        <MoreSheet
-          open={moreOpen}
-          onClose={() => setMoreOpen(false)}
-          onHelp={() => onHelp()}
-          onSettings={() => setSettingsOpen(true)}
-          onConcede={gameState.winner === null && gameState.activePlayer === 'player' ? () => { clearSelections(); act({ type: 'concede' }) } : undefined}
-        />
-        <PileSheet state={gameState} title={pile?.title ?? ''} cards={pile?.cards ?? null} onClose={() => setPile(null)} />
-        {settingsOpen && <SettingsOverlay onClose={() => setSettingsOpen(false)} onHelp={onHelp} />}
-        {!logOpen && <PhoneGameOver state={gameState} deckName={deck.name} onRematch={rematch} onExit={onExit} />}
-        {inspecting && <CardDetail state={gameState} cardId={inspecting.cardId} unit={inspectedUnit} onClose={() => setInspecting(null)} />}
-      </div>
-      </CardInspect.Provider>
-    )
-  }
-
-  return (
-    // 19rem, not 16: the log column's header carries the exit icon, the dmgCtrl wordmark and
-    // up to three buttons, and at 16rem the wordmark truncated once the settings gear joined
-    // them. The wordmark keeps `truncate` as a backstop rather than overflowing the column.
-    <div data-testid="game-screen" className="grid h-screen w-full" style={{ gridTemplateColumns: '19rem 1fr' }}>
-      {/* Left column: the header (on the core theme background, like the page
-          header) above the log panel — no divider to the play area. */}
-      <div className="flex min-h-0 flex-col">
-        <header className="flex items-center justify-between px-2 py-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <button data-testid="exit-btn" onClick={onExit} aria-label="Exit to decks" className="shrink-0 rounded-lg hover:opacity-80">
-              <img src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`} alt="dmgCtrl" className="h-9 w-9" />
-            </button>
-            <span className="truncate text-xl font-extralight tracking-[0.1em] text-ink">dmgCtrl</span>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {settings.showBugReport && (
-              <button
-                data-testid="bug-report-btn"
-                onClick={() => setReporting(true)}
-                aria-label="Report a bug"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-line text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
-              >
-                <BugIcon />
-              </button>
-            )}
-            <button
-              data-testid="settings-btn"
-              onClick={() => setSettingsOpen(true)}
-              aria-label="Settings"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-line text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
-            >
-              <GearIcon />
-            </button>
-            <button
-              onClick={() => onHelp()}
-              aria-label="Help"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-line text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
-            >
-              <HelpIcon />
-            </button>
-          </div>
-        </header>
-        {/* `dir=rtl` on the scroll container puts the scrollbar on the LEFT; the inner
-            wrapper restores `dir=ltr` so the text reads normally. Newest entries render
-            at the TOP (reverse the list; keys stay the original append index). */}
-        <aside dir="rtl" data-testid="game-log-panel" className="ml-2 mt-3 mb-2 min-h-0 flex-1 overflow-y-auto rounded-lg bg-surface p-3">
-          <div dir="ltr">
-            <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Log</h3>
-            <ol data-testid="game-log" className="mt-2 space-y-0.5 text-xs text-ink-dim">
-              {log.map((entry, i) => (
-                // Actor in its own fixed-width column so the actions line up. What an action changed
-                // sits under it with that column left empty: it is an outcome, not another action.
-                <li key={i} data-testid={entry.outcome ? 'log-outcome' : undefined} className={`flex gap-2 ${entry.outcome ? 'pl-2 opacity-80' : ''}`}>
-                  <span className={`w-8 shrink-0 ${entry.by === 'player' ? 'text-accent' : 'text-amber'}`}>
-                    {entry.outcome ? '' : entry.by === 'player' ? 'You' : 'Opp'}
-                  </span>
-                  <DescribedParts state={gameState} parts={entry.parts} />
-                </li>
-              )).reverse()}
-            </ol>
-          </div>
-        </aside>
-      </div>
-
-      {/* Right column: the play area, edge-to-edge to the top and right. It is
-          transparent (starfield); the bars carry the surface background, so the
-          battlefield between them shows the stars. */}
-      <div className="relative flex min-h-0 flex-col">
-        {playContent}
-        {notice('absolute inset-x-2 top-2')}
-      </div>
-
-      {/* "Look at a card" overlay (Camtono) — centre-screen, over the board. */}
-      {choiceOverlay}
-
-      {/* Bug report (#373): sits above the board, but below the zoom so a card can still be read
-          while describing what went wrong. */}
+      )}
+      <MoreSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        onHelp={() => onHelp()}
+        onSettings={() => setSettingsOpen(true)}
+        onReport={scale === 'desktop' && settings.showBugReport ? () => setReporting(true) : undefined}
+        onConcede={gameState.winner === null && gameState.activePlayer === 'player' ? () => { clearSelections(); act({ type: 'concede' }) } : undefined}
+      />
+      <PileSheet state={gameState} title={pile?.title ?? ''} cards={pile?.cards ?? null} onClose={() => setPile(null)} />
+      {/* The bug report, opened from More on the desktop, sits above the board and its sheets. */}
       {reporting && (
         <BugReportOverlay
           onSubmit={submitReport}
@@ -2476,13 +1658,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           fallbackReport={fallbackReport}
         />
       )}
-
       {settingsOpen && <SettingsOverlay onClose={() => setSettingsOpen(false)} onHelp={onHelp} />}
-
-      {/* Game over — a modal overlay over the whole screen. */}
-      {gameState && gameState.winner !== null && (
-        <GameOverOverlay winner={gameState.winner} concededBy={gameState.concededBy} onRematch={rematch} onExit={onExit} />
-      )}
+      {!logOpen && <PhoneGameOver state={gameState} deckName={deck.name} onRematch={rematch} onExit={onExit} scale={scale} />}
+      {inspecting && <CardDetail state={gameState} cardId={inspecting.cardId} unit={inspectedUnit} onClose={() => setInspecting(null)} />}
     </div>
+    </CardInspect.Provider>
   )
 }
+

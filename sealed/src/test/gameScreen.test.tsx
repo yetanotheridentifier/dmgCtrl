@@ -71,6 +71,17 @@ function seedSettings(patch: Partial<Settings>) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), ...patch }))
 }
 
+type User = ReturnType<typeof userEvent.setup>
+
+/** Opens More from the controls column and picks one of its entries. */
+async function fromMore(user: User, entry: RegExp) {
+  await user.click(screen.getByRole('button', { name: /more/i }))
+  await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: entry }))
+}
+
+/** Your ready resources of the total, as the column counts them. */
+const resources = () => within(screen.getByTestId('player-summary')).getByTestId('stat-res')
+
 async function renderBoard(onExit = vi.fn()) {
   renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={onExit} onHelp={vi.fn()} gameOptions={OPTS} />)
   await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
@@ -111,33 +122,12 @@ describe('GameScreen', () => {
     expect(screen.getByTestId('opponent-base-hp')).toHaveTextContent(/^0$/)
   })
 
-  it('shows resources on the mat and the opponent hand face-down', async () => {
+  it("counts your resources and the opponent's hand in the column, the hand unseen", async () => {
     await renderBoard()
-    // Player mat: 2 ready resources, none exhausted yet.
-    const playerMat = screen.getByTestId('player-mat')
-    expect(within(playerMat).getByTestId('resources-ready')).toHaveTextContent('2')
-    expect(within(playerMat).queryByTestId('resources-exhausted')).toBeNull()
-    // Opponent hand is face-down: one card back per card (4 in hand after setup).
-    const oppFan = within(screen.getByTestId('opponent-mat')).getByTestId('opponent-hand-fan')
-    expect(oppFan.children).toHaveLength(4)
-  })
-
-  it('labels the mat columns; the opponent leader column is unlabelled', async () => {
-    await renderBoard()
-    const playerMat = screen.getByTestId('player-mat')
-    for (const label of ['Deck', 'Resources', 'Hand', 'Action', 'Discard']) {
-      expect(within(playerMat).getByText(label)).toBeInTheDocument()
-    }
-    // The opponent's leader column carries no label (it's obviously the leader);
-    // the other four columns are labelled, and there's no Action column.
-    const opponentMat = screen.getByTestId('opponent-mat')
-    for (const label of ['Deck', 'Resources', 'Hand', 'Discard']) {
-      expect(within(opponentMat).getByText(label)).toBeInTheDocument()
-    }
-    expect(within(opponentMat).queryByText('Action')).toBeNull()
-    expect(within(opponentMat).queryByText('Leader')).toBeNull()
-    // ...but the leader card itself is present in the mat.
-    expect(within(opponentMat).getByTestId('opponent-leader-card')).toBeInTheDocument()
+    // Two ready resources, none exhausted yet.
+    expect(resources()).toHaveTextContent('2/2RES')
+    // The opponent's hand is a count: 4 in hand after setup, and none of its cards drawn.
+    expect(within(screen.getByTestId('opponent-summary')).getByTestId('stat-hand')).toHaveTextContent('4HAND')
   })
 
   it('lists the hand with unplayable cards marked', async () => {
@@ -266,14 +256,14 @@ describe('GameScreen', () => {
       seedSettings({ allowUndo: true, opponentDelayMs: 2000 })
       renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={PASSIVE} />)
       await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
-      expect(screen.getByTestId('concede-btn')).toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: /keep hand/i }))
 
       expect(screen.getByText('Opponent…')).toBeInTheDocument()
       expect(screen.queryByTestId('undo-btn')).toBeNull()
-      expect(screen.queryByTestId('concede-btn')).toBeNull()
-      expect(within(screen.getByTestId('player-mat')).queryAllByRole('button')).toEqual([])
+      expect(within(screen.getByTestId('phone-actions')).queryAllByRole('button')).toEqual([])
+      await user.click(screen.getByRole('button', { name: /more/i }))
+      expect(within(screen.getByRole('dialog', { name: 'More' })).queryByTestId('concede-btn')).toBeNull()
     })
 
     it('plays instantly with the setting at instant', async () => {
@@ -308,38 +298,16 @@ describe('GameScreen', () => {
   })
 
   /**
-   * #370: the board highlights alone don't say what is being asked. The prompt appears for
-   * decisions raised by a trigger — never for the base actions (playing a card, choosing an
-   * attacker), which are self-evident and would just add noise.
+   * The board highlights alone don't say what is being asked. In ordinary play the prompt says only
+   * what clicking does; a decision raised by a trigger gets its own question.
    */
-  it('shows no action prompt during ordinary play', async () => {
+  it('says what clicking does during ordinary play', async () => {
     const user = userEvent.setup()
     await renderBoard()
-    expect(screen.queryByTestId('action-prompt')).toBeNull()
+    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/your action\. click a highlighted card/i)
 
     await user.click(screen.getByTestId('hand-card-3'))
-    expect(screen.queryByTestId('action-prompt')).toBeNull()
-  })
-
-  /**
-   * The prompt floats over the board rather than sitting in the layout: appearing and
-   * disappearing must not reflow the cards underneath, and it must not swallow clicks meant
-   * for the board it is explaining.
-   */
-  it('overlays the board without displacing it or blocking clicks', async () => {
-    const user = userEvent.setup()
-    renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
-    await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /keep hand/i }))
-
-    const prompt = screen.getByTestId('action-prompt')
-    expect(prompt).toHaveClass('absolute', 'pointer-events-none')
-    // Opaque fill: `bg-surface` is itself rgba(…, 0.45), so it can never be opaque however it
-    // is applied — the panel must use the solid token, or card art reads through the text.
-    expect(prompt).toHaveClass('bg-surface-solid')
-    expect(prompt).not.toHaveClass('bg-surface')
-    // Taken out of flow, so the round tracker above it keeps its own box.
-    expect(screen.getByTestId('game-state')).toHaveClass('relative')
+    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/your action\. click a highlighted card/i)
   })
 
   it('prompts for the two setup resources, counting them off', async () => {
@@ -357,9 +325,9 @@ describe('GameScreen', () => {
     await user.click(screen.getByTestId('hand-card-0'))
     expect(screen.getByTestId('action-prompt')).toHaveTextContent(/1 of 2/i)
 
-    // Second pick completes setup — the prompt goes with it.
+    // Second pick completes setup, and the prompt moves on to the action phase.
     await user.click(screen.getByTestId('hand-card-0'))
-    expect(screen.queryByTestId('action-prompt')).toBeNull()
+    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/your action/i)
   })
 
   it('prompts for the optional resource in the regroup phase', async () => {
@@ -370,7 +338,7 @@ describe('GameScreen', () => {
     expect(screen.getByTestId('action-prompt')).toHaveTextContent(/resource.*or skip/i)
 
     await user.click(screen.getByRole('button', { name: /don't resource/i }))
-    expect(screen.queryByTestId('action-prompt')).toBeNull()
+    expect(screen.getByTestId('action-prompt')).not.toHaveTextContent(/resource/i)
   })
 
   /**
@@ -384,22 +352,14 @@ describe('GameScreen', () => {
    * offers on its first action-phase turn: the screen path is the same whatever made it offer.
    */
   describe('conceding', () => {
-    it('concedes the game after the player confirms', async () => {
+    // Keep playing is covered with the phone's More, the same sheet.
+    it('concedes the game from More after the player confirms', async () => {
       const user = userEvent.setup()
       await renderBoard()
-      await user.click(screen.getByTestId('concede-btn'))
+      await fromMore(user, /^concede$/i)
       await user.click(screen.getByTestId('concede-confirm-btn'))
       expect(await screen.findByText('You lost')).toBeInTheDocument()
       expect(screen.getByTestId('outcome-detail')).toHaveTextContent('You conceded')
-    })
-
-    it('keeps playing when the player thinks better of it', async () => {
-      const user = userEvent.setup()
-      await renderBoard()
-      await user.click(screen.getByTestId('concede-btn'))
-      await user.click(screen.getByTestId('concede-cancel-btn'))
-      expect(screen.queryByText('You lost')).toBeNull()
-      expect(screen.getByTestId('concede-btn')).toBeInTheDocument()
     })
 
     const offering: UseGameOptions = {
@@ -439,32 +399,18 @@ describe('GameScreen', () => {
     // The button is a setting now, so seed it rather than depending on the build's default.
     beforeEach(() => seedSettings({ showBugReport: true }))
 
-    const openReport = async (user: ReturnType<typeof userEvent.setup>) => {
-      await user.click(screen.getByTestId('bug-report-btn'))
+    const openReport = async (user: User) => {
+      await fromMore(user, /report a bug/i)
       await user.type(screen.getByTestId('bug-report-title'), 'Game hung')
       await user.type(screen.getByTestId('bug-report-description'), 'After the initiative.')
     }
 
-    /** The form is modal: board decoration must not paint over it or distract from it. */
-    it('hides the action prompt while the form is open', async () => {
-      const user = userEvent.setup()
-      renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
-      await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
-      expect(screen.getByTestId('action-prompt')).toBeInTheDocument() // the mulligan prompt
-
-      await user.click(screen.getByTestId('bug-report-btn'))
-      expect(screen.queryByTestId('action-prompt')).toBeNull()
-
-      await user.click(screen.getByTestId('bug-report-cancel'))
-      expect(screen.getByTestId('action-prompt')).toBeInTheDocument()
-    })
-
-    it('sits in the header beside Help and opens the form', async () => {
+    it('opens the form from More, and closes it again', async () => {
       const user = userEvent.setup()
       await renderBoard()
       expect(screen.queryByTestId('bug-report-overlay')).toBeNull()
 
-      await user.click(screen.getByTestId('bug-report-btn'))
+      await fromMore(user, /report a bug/i)
       expect(screen.getByTestId('bug-report-overlay')).toBeInTheDocument()
       await user.click(screen.getByTestId('bug-report-cancel'))
       expect(screen.queryByTestId('bug-report-overlay')).toBeNull()
@@ -532,9 +478,9 @@ describe('GameScreen', () => {
     expect(within(screen.getByTestId('game-log')).getAllByText(/pass/i).length).toBeGreaterThan(0)
   })
 
-  it('keeps the pass/initiative choices in the mat Action column, not play/attack', async () => {
+  it('keeps the pass/initiative choices in the action buttons, not play/attack', async () => {
     await renderBoard()
-    const actionCol = within(screen.getByTestId('player-mat'))
+    const actionCol = within(screen.getByTestId('phone-actions'))
     // Menu-only choices are buttons; playing/attacking are click affordances, not buttons.
     expect(actionCol.getByRole('button', { name: /^pass$/i })).toBeInTheDocument()
     expect(actionCol.queryByRole('button', { name: /play big test unit/i })).toBeNull()
@@ -583,7 +529,7 @@ describe('GameScreen', () => {
     // In the setup resource step, hand cards are clickable and highlighted GREEN.
     expect(within(screen.getByTestId('hand-card-0')).getByTestId('card-face')).toHaveAttribute('data-highlight', 'green')
     await user.click(screen.getByTestId('hand-card-0'))
-    expect(within(screen.getByTestId('player-mat')).getByTestId('resources-ready')).toHaveTextContent('1')
+    expect(resources()).toHaveTextContent('1/1RES')
   })
 
   it('highlights playable hand cards blue (accent) in the action phase', async () => {
@@ -595,8 +541,8 @@ describe('GameScreen', () => {
   it('renders hand cards in a tight portrait frame — no square-slot padding', async () => {
     await renderBoard()
     const face = within(screen.getByTestId('hand-card-3')).getByTestId('card-face')
-    // Portrait card, tight: the frame is the card itself (120×168), not the 168 square slot.
-    expect(face).toHaveStyle({ width: '120px', height: '168px' })
+    // Portrait card, tight: the frame is the desktop's hand card itself (90×126), not a square slot.
+    expect(face).toHaveStyle({ width: '90px', height: '126px' })
   })
 
   it('clicking a hand card in the regroup phase resources it (#6)', async () => {
@@ -611,7 +557,7 @@ describe('GameScreen', () => {
     await user.click(screen.getByTestId('hand-card-0'))
 
     // Started round 2 with a third resource (2 starting + 1 just resourced), all ready.
-    expect(within(screen.getByTestId('player-mat')).getByTestId('resources-ready')).toHaveTextContent('3')
+    expect(resources()).toHaveTextContent('3/3RES')
   })
 
   it('clicking an unplayable hand card does nothing', async () => {
@@ -672,10 +618,10 @@ describe('GameScreen', () => {
     expect(unitTile.tagName).toBe('DIV') // no <li> marker dots
     expect(unitTile).toHaveAttribute('data-actionable', 'true')
     await user.click(unitTile)
-    // Choosing an attacker is a base action — no prompt, it would only add noise (#370).
-    expect(screen.queryByTestId('action-prompt')).toBeNull()
+    // The prompt names the attacker and says what to click; the attacker is ringed white.
+    expect(screen.getByTestId('action-prompt')).toHaveTextContent('Big Test Unit attacks. Click a red target.')
     expect(screen.getByTestId('board-unit-u1')).toHaveAttribute('data-selected', 'true')
-    expect(within(screen.getByTestId('board-unit-u1')).getAllByTestId('card-face')[0]).toHaveAttribute('data-highlight', 'accent')
+    expect(within(screen.getByTestId('board-unit-u1')).getAllByTestId('card-face')[0]).toHaveAttribute('data-highlight', 'white')
 
     // The enemy base is now a highlighted target — its card shows the red highlight
     const baseTarget = screen.getByTestId('target-opponent-base')
@@ -706,38 +652,31 @@ describe('GameScreen', () => {
     expect(screen.getByTestId('board-unit-u1')).toHaveAttribute('data-actionable', 'false')
   })
 
-  it('shows bases in a central strip with your leader below, opponent leader in their mat (#4)', async () => {
+  it('shows the leaders and bases in a central strip, leaders outermost', async () => {
     await renderBoard()
-    // The opponent's leader has moved to their mat, so the strip holds both bases
-    // and only your leader (below your base).
-    const order = within(screen.getByTestId('battlefield'))
+    const order = within(screen.getByTestId('game-board'))
       .getAllByTestId(/-(base|leader)-card$/)
       .map(el => el.getAttribute('data-testid'))
     expect(order).toEqual([
+      'opponent-leader-card',
       'opponent-base-card',
       'player-base-card',
       'player-leader-card',
     ])
-    // The opponent leader is in their mat's Leader column, not the battlefield.
-    expect(within(screen.getByTestId('opponent-mat')).getByTestId('opponent-leader-card')).toBeInTheDocument()
   })
 
-  it('renders the log in a left-hand side panel', async () => {
+  it('docks the log in the controls column', async () => {
     await renderBoard()
-    const panel = screen.getByTestId('game-log-panel')
-    expect(panel.tagName).toBe('ASIDE')
-    expect(within(panel).getByTestId('game-log')).toBeInTheDocument()
+    expect(within(screen.getByTestId('phone-controls')).getByRole('log', { name: 'Log' })).toBe(screen.getByTestId('game-log'))
   })
 
-  it('puts the game state (round/phase/initiative) between the bases in the battlefield', async () => {
+  it('puts the round and phase in the column, and the initiative beside its holder', async () => {
     await renderBoard()
-    const gameState = within(screen.getByTestId('battlefield')).getByTestId('game-state')
-    expect(gameState).toHaveTextContent(/round/i)
-    expect(gameState).toHaveTextContent(/action/i) // phase
-    expect(gameState).toHaveTextContent(/init/i)
+    expect(screen.getByTestId('round-phase')).toHaveTextContent('Round 1 · Action')
+    expect(within(screen.getByTestId('player-summary')).getByText('INITIATIVE')).toBeInTheDocument()
   })
 
-  /** What an action changed is a line of its own under the action, with no actor repeated beside it. */
+  /** What an action changed sits in the action's row under it, with no actor repeated beside it. */
   it('renders an outcome line under its action, with no actor label', async () => {
     const user = userEvent.setup()
     await renderBoard()
@@ -748,9 +687,9 @@ describe('GameScreen', () => {
     await user.click(screen.getByTestId('board-unit-u1'))
     await user.click(screen.getByTestId('target-opponent-base'))
 
-    const outcomes = within(screen.getByTestId('game-log')).getAllByTestId('log-outcome')
-    expect(outcomes.some(o => /Opponent's base takes \d+ damage/.test(o.textContent ?? ''))).toBe(true)
-    for (const o of outcomes) expect(o).not.toHaveTextContent(/^(You|Opp)(?![a-z])/)
+    const row = within(screen.getByTestId('game-log')).getAllByTestId('log-row')
+      .find(r => /Opponent's base takes \d+ damage/.test(r.textContent ?? ''))!
+    expect(within(row).getAllByText(/^(You|Opp)$/)).toHaveLength(1)
   })
 
   it('does not label an empty arena "empty"', async () => {
@@ -812,7 +751,7 @@ describe('GameScreen', () => {
     // Card names are now their own elements (hover-to-zoom refs), so match the entry's whole
     // text rather than a single text node.
     expect(screen.getByTestId('game-log').textContent).toMatch(/test upgrade.*cheap unit/i)
-    expect(within(screen.getByTestId('player-ground-units')).getByTestId(/^board-unit-upgrades-u\d+$/)).toBeInTheDocument()
+    expect(within(screen.getByTestId('player-ground-units')).getByTestId('unit-badge-upgrades')).toHaveTextContent('+1')
   })
 
   it('shows the diagnostic detail when card loading fails', async () => {
@@ -868,12 +807,12 @@ describe('GameScreen', () => {
    * overlay over the board.
    */
   describe('settings overlay', () => {
-    it('opens from the game header and closes again', async () => {
+    it('opens from More and closes again', async () => {
       const user = userEvent.setup()
       await renderBoard()
       expect(screen.queryByTestId('settings-overlay')).toBeNull()
 
-      await user.click(screen.getByTestId('settings-btn'))
+      await fromMore(user, /^settings$/i)
       expect(screen.getByTestId('settings-overlay')).toBeInTheDocument()
 
       await user.click(screen.getByTestId('settings-close'))
@@ -886,7 +825,7 @@ describe('GameScreen', () => {
       await user.click(screen.getByTestId('hand-card-3'))
       const logBefore = screen.getByTestId('game-log').textContent
 
-      await user.click(screen.getByTestId('settings-btn'))
+      await fromMore(user, /^settings$/i)
       await user.click(screen.getByTestId('settings-close'))
 
       // The board is still the same game, not a fresh one: same unit, same log.
@@ -894,24 +833,26 @@ describe('GameScreen', () => {
       expect(screen.getByTestId('game-log').textContent).toBe(logBefore)
     })
 
-    it('hides the bug report button when that setting is off, and shows it when on', async () => {
+    it('offers Report a bug under More once that setting is turned on', async () => {
       const user = userEvent.setup()
       seedSettings({ showBugReport: false })
       await renderBoard()
-      expect(screen.queryByTestId('bug-report-btn')).toBeNull()
 
-      await user.click(screen.getByTestId('settings-btn'))
+      await fromMore(user, /^settings$/i)
       await user.click(screen.getByTestId('setting-show-bug-report'))
       await user.click(screen.getByTestId('settings-close'))
 
-      expect(screen.getByTestId('bug-report-btn')).toBeInTheDocument()
+      await fromMore(user, /report a bug/i)
+      expect(screen.getByTestId('bug-report-overlay')).toBeInTheDocument()
     })
 
-    /** The gear is the way back to the settings, so it is never hidden by a setting. */
-    it('keeps the settings button itself visible with everything else turned off', async () => {
+    /** More is the way back to the settings, so Settings is never hidden by a setting. */
+    it('keeps Settings under More with everything else turned off', async () => {
+      const user = userEvent.setup()
       seedSettings({ showBugReport: false, allowUndo: false })
       await renderBoard()
-      expect(screen.getByTestId('settings-btn')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /more/i }))
+      expect(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: /^settings$/i })).toBeInTheDocument()
     })
 
     /** Turning undo on mid-game takes effect without restarting: that is the point of the setting. */
@@ -922,7 +863,7 @@ describe('GameScreen', () => {
       await user.click(screen.getByTestId('hand-card-3'))
       expect(screen.queryByTestId('undo-btn')).toBeNull()
 
-      await user.click(screen.getByTestId('settings-btn'))
+      await fromMore(user, /^settings$/i)
       await user.click(screen.getByTestId('setting-allow-undo'))
       await user.click(screen.getByTestId('settings-close'))
 

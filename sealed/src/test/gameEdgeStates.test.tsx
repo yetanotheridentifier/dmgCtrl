@@ -167,7 +167,9 @@ describe('the bug report', () => {
     withMedia([])
     renderGame(<GameScreen deck={DECK} opponentDeck={OPPONENT} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
     await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
-    await userEvent.setup().click(screen.getByTestId('bug-report-btn'))
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /more/i }))
+    await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: 'Report a bug' }))
 
     const form = screen.getByRole('dialog', { name: 'Report a bug' })
     expect(within(form).getByLabelText('Title')).toBeInTheDocument()

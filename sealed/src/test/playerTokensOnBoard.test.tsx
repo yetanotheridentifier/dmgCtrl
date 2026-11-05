@@ -72,9 +72,10 @@ async function start(playerDeck: SavedDeck) {
   return user
 }
 
-const mat = (side: PlayerId) => within(screen.getByTestId(`${side}-mat`))
-const credits = (side: PlayerId) => mat(side).queryByTestId('credit-tokens')
-const force = (side: PlayerId) => mat(side).queryByTestId('force-token')
+/** Each side's tokens are pills beside its heading in the controls column. */
+const summary = (side: PlayerId) => within(screen.getByTestId(`${side}-summary`))
+const credits = (side: PlayerId) => summary(side).queryByRole('img', { name: /credit token/i })
+const force = (side: PlayerId) => summary(side).queryByRole('img', { name: /the force is with/i })
 const creditButtons = () => screen.queryAllByRole('button', { name: /defeat a credit token/i })
 
 describe('the tokens a player holds, on the game screen', () => {
@@ -93,7 +94,7 @@ describe('the tokens a player holds, on the game screen', () => {
     }
   })
 
-  it('shows your Credit tokens in your bar, with the count', async () => {
+  it('shows your Credit tokens beside your counts, with the count', async () => {
     const user = await start(deck('TST_970'))
     await user.click(screen.getByTestId('hand-card-0'))
     await waitFor(() => expect(credits('player')).toHaveTextContent('2'))
@@ -117,7 +118,7 @@ describe('the tokens a player holds, on the game screen', () => {
     expect(within(screen.getByTestId('player-ground-units')).queryAllByTestId(/^board-unit-u\d+$/)).toHaveLength(2)
   })
 
-  it('shows your Force token in your bar', async () => {
+  it('shows your Force token beside your counts', async () => {
     const user = await start(deck('TST_972'))
     await user.click(screen.getByTestId('hand-card-0'))
     await waitFor(() => expect(force('player')).toHaveTextContent(/force/i))
@@ -126,7 +127,7 @@ describe('the tokens a player holds, on the game screen', () => {
     expect(credits('player')).toBeNull()
   })
 
-  it("shows the opponent's Credit tokens and Force token in their bar", async () => {
+  it("shows the opponent's Credit tokens and Force token beside their counts", async () => {
     const user = await start(deck('TST_973'))
     await user.click(screen.getByTestId('hand-card-0'))
     await waitFor(() => expect(credits('opponent')).toHaveTextContent('3'))

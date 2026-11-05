@@ -493,28 +493,18 @@ action looks like a heal that never happened.
   `choiceSource.test.ts` that every one a real game raises carries one.
 - **A choice answered with buttons is asked in a centre-screen overlay.** Kinds with a dedicated
   overlay (the ordering prompts, the card pickers, searches, naming) use it; whatever is left goes to
-  `ButtonChoiceOverlay` with the `describeChoiceParts` prompt and one `describeAction` button per
-  answer, but only when `answeredWithButtons` holds: every answer is a plain accept or the decline,
+  the button prompt with the choice's question and one `describeAction` button per answer, but only
+  when `answeredWithButtons` holds: every answer is a plain accept or the decline,
   and at least one is not the decline. An answer that is an attack (Ambush, Support, `mayAttack`,
   `mayAttackAnyUnit`) or names a unit, a base or a hand card (the board-target kinds,
   `peekTopDiscard`, `mayPreventDamage`, `playUnitFromHand`) keeps the choice where it is answered,
-  with its decline and any unit-named buttons in the Action column. So does a choice sharing the
+  with its decline and any unit-named buttons in the action buttons. So does a choice sharing the
   screen with a board-target choice.
-- **All of them share `OverlayShell`**, the game-over screen's frame: `panel` size for the ones
-  answered with buttons, `cards` for the card pickers.
-- **And one appearance inside it.** Every overlay, the game-over screen included, builds its contents
-  from the pieces next to the shell: `OverlayHeader` (the question in the button choice prompt's
-  type, an optional second line under it; the game-over outcome is its `banner` variant),
-  `OverlayButtons` (a centred row, or `stacked` for answers as long as an ability's text) holding
-  `PANEL_PRIMARY` and `PANEL_SECONDARY` buttons, and `OVERLAY_DETAIL` for anything said in passing.
-  An overlay keeps only what is particular to it (the ordering overlay's two lists of waiting
-  abilities, the name search box, the cards), and information it lists is plain text, never boxed
-  like a button. `overlayOneLook.test.tsx` pins this for each overlay.
 - **Dismissing an overlay on your own trigger cancels the action** (`cancelChoice`, see the undo
   section of `architecture.md`). Where that is refused, the dedicated overlays block until answered,
-  and the button overlay can only be put aside to read the board: the floating prompt then carries
-  the question and a **Show choice** button in the Action column reopens it.
-- **On a phone the button prompts are one pattern**, `PhonePrompt` (`components/game/phoneLayout.tsx`):
+  and the button prompt can only be put aside to read the board: the column's prompt then carries
+  the question and a **Show choice** button in the action buttons reopens it.
+- **Every prompt is one pattern**, on a phone and the desktop alike, `PhonePrompt` (`components/game/phoneLayout.tsx`):
   a panel over the dimmed board with the card that asked (`choiceSourceCard`, tappable to open it
   full size), the question (`describeChoiceQuestion`, the prompt without the card's name, which the
   panel already shows), and the shared `Button`s, the first accepting answer primary
@@ -523,14 +513,15 @@ action looks like a heal that never happened.
   the controls column. The button choice, who resolves first, and the top card of a deck (beside the
   question, with no ×) use it. So does every card pick: `CardGridOverlay` draws its cards in a row
   in the panel, a selectable card itself the button (named with its action, "Loth-Wolf: Discard"),
-  the rest dimmed, any card opened full size when held, and a lone button beside the cards (Done,
+  the rest dimmed, any card opened full size when held (or shown with Shift over it, with a mouse),
+  and a lone button beside the cards (Done,
   Cancel) the primary. Naming a card or a Trait lists the first three matches as `OptionRow`s; the
   one chosen is named by the primary **Name ...** button. Which resolves next lists one answer per
   waiting ability, a line each, the first primary.
-- **A distribution on a phone** (damage, tokens, indirect damage, healing) is answered on the board;
+- **A distribution** (damage, tokens, indirect damage, healing) is answered on the board;
   its question stays in the controls column's prompt and `allocation` is drawn under it as a count,
   "1 of 2 placed" ("healed" for healing).
-- **Your base's actions on a phone** are not action buttons: tapping the base opens a `LeaderMenu`
+- **Your base's actions** are not action buttons: tapping the base opens a `LeaderMenu`
   as a `BASE`, holding **Use Epic Action** (greyed with "Used this game" once spent) and any action an
   upgrade on the base gives, each answering its `useBaseAbility` move.
 - **The opponent's hand** dims the cards its discard cannot take and offers Done only when the legal
@@ -542,7 +533,7 @@ action looks like a heal that never happened.
   look-at never surfaces and hidden information is preserved. A future public "reveal" reuses the
   shell with a public prompt and a confirm action.
 - **A look "at any time" is not a choice at all.** A card that lets its player look at the top card
-  of their deck whenever they like raises nothing: the deck itself is the click target, for the
+  of their deck whenever they like raises nothing: the deck count itself opens the card, for the
   human's own deck only (see "A standing permission to look" in `abilities.md`).
 - **A triggered look that decides nothing is a view-only choice.** Grand Admiral Thrawn looks at the
   top card of each player's deck as the action phase starts. It has to be a choice, because it
@@ -550,7 +541,7 @@ action looks like a heal that never happened.
   the cards that were on top when the ability resolved (`tops`, the controller's own deck first, an
   empty deck left out, and no choice at all when both are empty), and its one legal answer is the
   Done (`skipTrigger`), which changes nothing. `DeckTopsOverlay` shows the cards with whose deck each
-  is on, and Done or a click beside them answers it, since it comes round every action phase. The
+  is on, and Done, its one button and so the primary, answers it. The
   card identities live only in the choice and the overlay: the prompt text does not name them, the
   answer carries only the choice id, so the log line reads "Done" for either seat and a replay's
   moves hold no card. The kind is in `REVEALING_KINDS`, so a move that led to it cannot be cancelled.

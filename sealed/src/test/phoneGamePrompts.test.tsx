@@ -101,7 +101,6 @@ describe('who resolves first, on a phone', () => {
     const onPick = vi.fn()
     render(
       <TriggerOrderOverlay
-        phone
         state={board}
         mine={[trigger({ id: 'ours', controller: 'player', cardId: 'ASH_153' })]}
         theirs={[trigger({ id: 'theirs', controller: 'opponent', cardId: 'ASH_116' })]}
@@ -127,7 +126,6 @@ describe('who resolves first, on a phone', () => {
     const onPick = vi.fn()
     render(
       <NextTriggerOverlay
-        phone
         state={board}
         candidates={[{ triggerId: 't1', cardId: 'ASH_153' }, { triggerId: 't2', cardId: 'ASH_116' }]}
         onPick={onPick}
@@ -276,7 +274,7 @@ describe('naming a card, on a phone', () => {
 
   it('names the card that asked, filters the names as you type, and names the one chosen', async () => {
     const onPick = vi.fn()
-    render(<NameCardOverlay names={names} onPick={onPick} phone={{ state: s, choice }} />)
+    render(<NameCardOverlay names={names} onPick={onPick} state={s} choice={choice} />)
     const dialog = screen.getByRole('dialog', { name: /zuckuss/i })
     expect(within(dialog).getByRole('button', { name: /zuckuss: see the card/i })).toBeInTheDocument()
     const user = userEvent.setup()
@@ -293,10 +291,21 @@ describe('naming a card, on a phone', () => {
     expect(onPick).toHaveBeenCalledWith('Premonition of Doom')
   })
 
+  it('says so when no name matches, case aside', async () => {
+    render(<NameCardOverlay names={names} onPick={vi.fn()} state={s} choice={choice} />)
+    const user = userEvent.setup()
+    const box = screen.getByRole('textbox', { name: /card name/i })
+    await user.type(box, 'LOTH')
+    expect(screen.getAllByTestId(/^name-card-option-/).map(o => o.textContent)).toEqual(['Loth-Wolf'])
+    await user.clear(box)
+    await user.type(box, 'zzz')
+    expect(screen.getByText('No match')).toBeInTheDocument()
+  })
+
   it('offers the × only when the naming can be taken back', () => {
-    const { rerender } = render(<NameCardOverlay names={names} onPick={vi.fn()} onDismiss={vi.fn()} phone={{ state: s, choice }} />)
+    const { rerender } = render(<NameCardOverlay names={names} onPick={vi.fn()} onDismiss={vi.fn()} state={s} choice={choice} />)
     expect(screen.getByTestId('overlay-dismiss')).toBeInTheDocument()
-    rerender(<NameCardOverlay names={names} onPick={vi.fn()} phone={{ state: s, choice }} />)
+    rerender(<NameCardOverlay names={names} onPick={vi.fn()} state={s} choice={choice} />)
     expect(screen.queryByTestId('overlay-dismiss')).toBeNull()
   })
 })

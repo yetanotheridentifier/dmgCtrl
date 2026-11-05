@@ -13,7 +13,7 @@ import { SettingsProvider } from '../hooks/useSettings'
 
 /**
  * "You may look at the top card of your deck at any time", on the game screen: the player who holds
- * the permission clicks their own deck to see its top card. Looking is not a move, so it reaches
+ * the permission clicks their own deck count to see its top card. Looking is not a move, so it reaches
  * neither the log nor the opponent, and the opponent's deck is never a click target whoever holds what.
  */
 
@@ -58,7 +58,10 @@ async function start(playerDeck: SavedDeck, opponentDeck: SavedDeck) {
   return user
 }
 
-const lookButton = () => screen.queryByTestId('player-deck-look')
+/** A side's deck count, which opens the top card when it may be looked at, and is disabled otherwise. */
+const deckCount = (side: 'player' | 'opponent') => within(screen.getByTestId(`${side}-summary`)).getByTestId('stat-deck') as HTMLButtonElement
+const lookButton = () => (deckCount('player').disabled ? null : deckCount('player'))
+const topCard = () => screen.queryByRole('dialog', { name: 'Top of your deck' })
 const logText = () => screen.getByTestId('game-log').textContent
 
 describe('looking at the top card of your deck, on the game screen', () => {
@@ -72,17 +75,16 @@ describe('looking at the top card of your deck, on the game screen', () => {
   it('offers nothing on the deck until a card gives the permission', async () => {
     await start(deck('TST_980'), deck('TST_300'))
     expect(lookButton()).toBeNull()
-    expect(screen.queryByTestId('opponent-deck-look')).toBeNull()
+    expect(deckCount('opponent')).toBeDisabled()
   })
 
-  it('makes your deck a highlighted click target once the card is in play, and shows its top card', async () => {
+  it('makes your deck count open its top card once the card is in play', async () => {
     const user = await start(deck('TST_980'), deck('TST_300'))
     await user.click(screen.getByTestId('hand-card-0'))
     await waitFor(() => expect(lookButton()).not.toBeNull())
-    expect(within(screen.getByTestId('player-mat')).getByTestId('player-deck-look')).toHaveAttribute('data-highlight', 'accent-dim')
 
     await user.click(lookButton()!)
-    const overlay = screen.getByTestId('deck-top-overlay')
+    const overlay = topCard()!
     expect(within(overlay).getAllByTestId('card-face')).toHaveLength(1)
     expect(overlay).toHaveTextContent('Secret On Top')
   })
@@ -94,9 +96,9 @@ describe('looking at the top card of your deck, on the game screen', () => {
     const before = logText()
 
     await user.click(lookButton()!)
-    expect(screen.getByTestId('deck-top-overlay')).toHaveTextContent('Secret On Top')
-    await user.click(screen.getByTestId('deck-top-overlay'))
-    expect(screen.queryByTestId('deck-top-overlay')).toBeNull()
+    expect(topCard()).toHaveTextContent('Secret On Top')
+    await user.click(within(topCard()!).getByRole('button', { name: 'Close' }))
+    expect(topCard()).toBeNull()
 
     expect(logText()).toBe(before)
     expect(logText()).not.toContain('Secret On Top')
@@ -107,7 +109,7 @@ describe('looking at the top card of your deck, on the game screen', () => {
     const user = await start(deck('TST_300'), deck('TST_980'))
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
     await waitFor(() => expect(within(screen.getByTestId('opponent-ground-units')).queryAllByTestId(/^board-unit-u\d+$/)).toHaveLength(1))
-    expect(screen.queryByTestId('opponent-deck-look')).toBeNull()
+    expect(deckCount('opponent')).toBeDisabled()
     expect(lookButton()).toBeNull()
     expect(screen.getByTestId('game-board')).not.toHaveTextContent('Secret On Top')
   })

@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import type { ReactElement } from 'react'
 import userEvent from '@testing-library/user-event'
 import GameScreen from '../components/gameScreen'
-import { actionFocus, phoneHandOverlap } from '../components/boardLayout'
+import { actionFocus, BOARD_SCALE, handOverlap } from '../components/boardLayout'
 import type { UnitInteraction } from '../components/gameScreen'
 import { PhoneArena, PhoneUnit, PlayerSummary, GameLogDrawer, CardDetail, LeaderMenu } from '../components/game/phoneLayout'
 import { PHONE_LANDSCAPE_QUERY, PHONE_PORTRAIT_QUERY } from '../hooks/useMediaQuery'
@@ -209,12 +209,13 @@ describe('phone board pieces', () => {
     expect(arena(9)).toEqual({ perRow: '5', shown: 9 })
   })
 
-  it('fans a long hand to fit its row, and leaves a short one spread', () => {
-    for (let n = 1; n <= 9; n++) expect(phoneHandOverlap(n)).toBe(0)
+  it.each(['phone', 'desktop'] as const)('fans a long hand to fit its row, and leaves a short one spread (%s)', scale => {
+    const { handCard, handWidth } = BOARD_SCALE[scale]
+    for (let n = 1; n <= 9; n++) expect(handOverlap(n, scale)).toBe(0)
     for (let n = 10; n <= 20; n++) {
-      const overlap = phoneHandOverlap(n)
+      const overlap = handOverlap(n, scale)
       expect(overlap).toBeGreaterThan(0)
-      expect(n * 60 + (n - 1) * (6 - overlap)).toBeLessThanOrEqual(600)
+      expect(n * handCard + (n - 1) * (6 - overlap)).toBeLessThanOrEqual(handWidth)
     }
   })
 
@@ -458,6 +459,60 @@ describe('GameScreen on a phone in landscape', () => {
     await user.click(more.getByRole('button', { name: /^concede$/i }))
     await user.click(more.getByTestId('concede-confirm-btn'))
     expect(screen.getByTestId('game-over-banner')).toBeInTheDocument()
+  })
+})
+
+describe('GameScreen on a desktop', () => {
+  beforeEach(async () => {
+    withMedia([])
+    await db.cards.clear()
+    await db.games.clear()
+    localStorage.clear()
+    for (const c of SWU_CARDS) await db.cards.put({ id: `TST_${c.Number}`, json: c, fetchedAt: 1 })
+  })
+
+  it('runs the phone layout grown, with the log docked in a wider column', async () => {
+    const { user } = await renderPhone()
+    expect(screen.getByTestId('phone-layout')).toHaveAttribute('data-scale', 'desktop')
+    expect(screen.getByTestId('phone-controls')).toHaveStyle({ width: '300px' })
+    const controls = within(screen.getByTestId('phone-controls'))
+    expect(controls.getByRole('button', { name: /leave the game/i })).toBeInTheDocument()
+    expect(controls.getByRole('button', { name: /more/i })).toBeInTheDocument()
+    expect(controls.queryByRole('button', { name: /^log$/i })).toBeNull()
+    expect(controls.getByTestId('round-phase')).toHaveTextContent('Round 1 · Setup')
+    await user.click(controls.getByRole('button', { name: /keep hand/i }))
+    const log = within(controls.getByRole('log', { name: 'Log' }))
+    expect(log.getAllByTestId('log-round').map(el => el.textContent)).toContain('Setup')
+    expect(log.getAllByTestId('log-row')[0]).toHaveTextContent(/keep/i)
+    // The header's bug, cog and ? buttons are gone: they live under More.
+    expect(screen.queryByTestId('settings-btn')).toBeNull()
+    expect(screen.queryByTestId('bug-report-btn')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^help$/i })).toBeNull()
+  })
+
+  it('grows the cards: the hand in its taller row, units in larger slots', async () => {
+    const { user } = await renderPhone()
+    expect(screen.getByTestId('player-hand')).toHaveStyle({ height: '132px' })
+    await user.click(screen.getByRole('button', { name: /keep hand/i }))
+    await user.click(screen.getByTestId('hand-card-0'))
+    await user.click(screen.getByTestId('hand-card-0'))
+    await user.click(screen.getByTestId('hand-card-3'))
+    expect(screen.getByTestId('board-unit-u1')).toHaveStyle({ width: '84px', height: '84px' })
+  })
+
+  it('holds Report a bug under More when it is turned on, and opens the form', async () => {
+    seedSettings({ showBugReport: true })
+    const { user } = await renderPhone()
+    await user.click(screen.getByRole('button', { name: /more/i }))
+    await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: /report a bug/i }))
+    expect(screen.getByTestId('bug-report-overlay')).toBeInTheDocument()
+  })
+
+  it('has no Report a bug under More while it is turned off', async () => {
+    seedSettings({ showBugReport: false })
+    const { user } = await renderPhone()
+    await user.click(screen.getByRole('button', { name: /more/i }))
+    expect(within(screen.getByRole('dialog', { name: 'More' })).queryByRole('button', { name: /report a bug/i })).toBeNull()
   })
 })
 
