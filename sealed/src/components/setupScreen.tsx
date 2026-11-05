@@ -108,16 +108,19 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
   const deckCard = () => {
     if (!chosen) {
       const none = s.decks.length === 0
+      // Side by side in landscape, where stacked they push Go to game off a 844x390 screen.
+      const row = layout === 'landscape'
+      const each = row ? { flex: 1 } : undefined
       return (
         <div data-testid="deck-card" style={cardStyle}>
           <div style={{ ...labelStyle, minHeight: '44px', display: 'flex', alignItems: 'center' }}>Your deck</div>
           <div style={{ fontSize: '1.25rem' }}>Choose your deck</div>
           <p style={mutedStyle}>{none ? 'Generate one from any set to play straight away, or import a deck\'s JSON.' : 'One of your saved decks, a generated one, or a new import.'}</p>
-          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: row ? 'row' : 'column', gap: '8px' }}>
             {none ? (
               <>
-                <Button onClick={() => { s.generate(); setStack(['generate']) }}>Generate a deck</Button>
-                <Button onClick={() => setStack(['import'])}>Import deck JSON</Button>
+                <Button onClick={() => { s.generate(); setStack(['generate']) }} style={each}>Generate a deck</Button>
+                <Button onClick={() => setStack(['import'])} style={each}>Import deck JSON</Button>
               </>
             ) : <Button onClick={() => setStack(['deck'])}>Choose a deck</Button>}
           </div>
