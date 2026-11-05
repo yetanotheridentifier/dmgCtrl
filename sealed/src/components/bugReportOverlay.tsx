@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react'
+import { Button, IconButton } from '@pwa-shared/controls'
+import { CloseIcon } from './icons'
+
+/** A text field in a game dialog: the name-a-card prompt's input and the bug report's two fields. */
+export const GAME_FIELD = 'rounded-xl border-2 border-line/60 bg-[var(--color-surface)] px-3 text-base tracking-normal text-ink outline-none focus:border-accent'
+
+/** A field's label: small capitals above it. */
+const LABEL = 'flex flex-col gap-1.5 text-xs uppercase tracking-[0.14em] text-ink-dim'
 
 /**
- * The bug-report form (#373): a title and a description over a dark backdrop.
+ * The bug-report form, desktop only: a title and what happened, over a dimmed board.
  *
  * Purely presentational. Assembling the report, putting it on the clipboard and opening GitHub all
  * live with the caller, which is what holds the game state. `fallbackReport` is set when the
@@ -21,73 +29,64 @@ export function BugReportOverlay({ onSubmit, onCancel, fallbackReport }: {
     return () => window.removeEventListener('keydown', onKey)
   }, [onCancel])
 
-  const field = 'w-full rounded-lg border-2 border-line/60 bg-bg-dark px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none'
-
   return (
     // Above every other layer, the card zoom (z-100) included: nothing on the board is worth
     // reading while the form is open, and a stray element painting over it loses typed text.
-    <div data-testid="bug-report-overlay" className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4">
-      <div className="w-full max-w-lg rounded-xl border-2 border-line/60 bg-surface-solid p-4 shadow-[0_8px_32px_rgba(0,0,0,0.7)]">
-        <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Report a bug</h2>
+    <div data-testid="bug-report-overlay" className="fixed inset-0 z-[120] flex items-center justify-center bg-[var(--color-backdrop)] p-4">
+      <div role="dialog" aria-label="Report a bug" className="flex w-full max-w-[560px] flex-col gap-3 rounded-2xl bg-[var(--color-sheet)] p-5 shadow-[0_8px_32px_rgba(0,0,0,0.6)]">
+        <div className="flex items-center gap-3">
+          <h2 className="m-0 flex-1 text-xl font-medium">Report a bug</h2>
+          <IconButton label="Close" onClick={onCancel}><CloseIcon /></IconButton>
+        </div>
+
+        <label className={LABEL}>
+          Title
+          <input data-testid="bug-report-title" value={title} onChange={e => setTitle(e.target.value)} className={`h-11 ${GAME_FIELD}`} />
+        </label>
+        <label className={LABEL}>
+          What happened
+          <textarea
+            data-testid="bug-report-description"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            className={`h-[110px] resize-none py-2.5 text-sm leading-5 ${GAME_FIELD}`}
+          />
+        </label>
+
         {/* The paste step is explained here rather than prefilled into the issue body, where it
             would survive into every filed report. */}
-        <p className="mt-1 text-xs text-ink-faint">
-          Submitting copies the report, including the game so far, and opens GitHub.
-          <strong className="text-ink-dim"> Paste it into the issue body</strong> and submit there.
+        <p className="m-0 text-[13px] leading-[19px] text-ink-dim">
+          This copies the whole game so far to your clipboard and opens a new GitHub issue with this
+          title. Paste into the issue and submit; you'll need to be signed in to GitHub.
         </p>
 
-        <label className="mt-3 block text-xs text-ink-dim" htmlFor="bug-title">Title</label>
-        <input
-          id="bug-title"
-          data-testid="bug-report-title"
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          placeholder="What went wrong, in a few words"
-          className={`mt-1 ${field}`}
-        />
-
-        <label className="mt-3 block text-xs text-ink-dim" htmlFor="bug-description">Description</label>
-        <textarea
-          id="bug-description"
-          data-testid="bug-report-description"
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          rows={5}
-          placeholder="What you did, what you expected, what happened instead"
-          className={`mt-1 ${field}`}
-        />
-
         {fallbackReport !== undefined && (
-          <div className="mt-3">
-            <p data-testid="bug-report-error" className="text-xs text-amber">
+          <div className="flex flex-col gap-1.5">
+            <p data-testid="bug-report-error" className="m-0 text-xs text-amber">
               Couldn&apos;t reach the clipboard. Copy the report below, then paste it into the issue.
             </p>
             <textarea
               data-testid="bug-report-fallback"
+              aria-label="The report, to copy"
               readOnly
               value={fallbackReport}
               rows={6}
-              className={`mt-1 font-mono text-[10px] ${field}`}
+              className={`py-2 font-mono text-[10px] ${GAME_FIELD}`}
             />
           </div>
         )}
 
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            data-testid="bug-report-cancel"
-            onClick={onCancel}
-            className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink"
-          >
-            Cancel
-          </button>
-          <button
-            data-testid="bug-report-submit"
+        <div className="flex justify-end gap-2.5">
+          <Button testId="bug-report-cancel" onClick={onCancel} style={{ width: 140 }}>Cancel</Button>
+          <Button
+            variant="primary"
+            testId="bug-report-submit"
             disabled={title.trim().length === 0}
             onClick={() => onSubmit(title.trim(), description.trim())}
-            className="rounded-xl border-2 border-accent px-4 py-1.5 text-xs text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10 disabled:cursor-not-allowed disabled:border-line/40 disabled:text-ink-faint disabled:shadow-none"
+            style={{ width: 260, fontSize: '0.95rem' }}
           >
-            Submit
-          </button>
+            Copy report and open GitHub
+          </Button>
         </div>
       </div>
     </div>

@@ -89,7 +89,7 @@ describe('Clan Vizsla Soldier: the may-defeat-an-upgrade choice is reachably opt
 
     // Pass through to round 2 so Clan Vizsla Soldier (played this round) is ready to attack.
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
-    await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+    await user.click(screen.getByRole('button', { name: /don't resource/i }))
 
     // Attack the Defender: Clan Vizsla Soldier deals 2 (Defender survives at 20 HP), the Defender's
     // 5 power defeats Clan Vizsla Soldier, raising its "when defeated" choice.

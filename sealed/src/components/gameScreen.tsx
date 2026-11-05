@@ -12,7 +12,8 @@ import type { DescribePart } from '../utils/describeAction'
 import { describeChoiceParts, describeChoiceQuestion, choiceSourceCard, answeredWithButtons, BOARD_TARGET_KINDS, allocation, isRepeatable } from '../utils/describeChoice'
 import { upgradeHostIds, upgradeHostName } from '../utils/upgradeHosts'
 import { buildReportMarkdown, issueUrl } from '../utils/bugReport'
-import { BugReportOverlay } from './bugReportOverlay'
+import { BugReportOverlay, GAME_FIELD } from './bugReportOverlay'
+import { GameLoadError, GameLoading, PrintedStatsNotice } from './game/gameEdgeStates'
 import { SettingsOverlay } from './settingsOverlay'
 import { BugIcon, GearIcon, HelpIcon } from './icons'
 import { useSettings } from '../hooks/useSettings'
@@ -705,7 +706,7 @@ export function NameCardOverlay({ names, onPick, what = 'card', onDismiss, phone
             aria-autocomplete="list"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            className="h-11 rounded-xl border-2 border-line/60 bg-[var(--color-surface)] px-3 text-base tracking-normal text-ink outline-none focus:border-accent"
+            className={`h-11 ${GAME_FIELD}`}
           />
         </label>
         <div role="group" aria-label="Matching names" className="flex flex-col gap-1">
@@ -1384,7 +1385,7 @@ function PlayerBar({ state, hand, action }: { state: GameState; hand: ReactNode;
 export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOptions }: Props) {
   const { settings } = useSettings()
   // The opponent's pace is the player's setting; `gameOptions` (tests) may pin one of its own.
-  const { status, errorDetail, gameState, legal, log, act, undo, canUndo, cancelChoice, rematch, replayData, unresolvedPrintings, opponentAction, regroupDrawn } = useGame(deck, opponentDeck, { opponentDelayMs: settings.opponentDelayMs, ...gameOptions })
+  const { status, errorDetail, loadProgress, gameState, legal, log, act, undo, canUndo, cancelChoice, rematch, replayData, unresolvedPrintings, opponentAction, regroupDrawn } = useGame(deck, opponentDeck, { opponentDelayMs: settings.opponentDelayMs, ...gameOptions })
   // Board affordance: click an actionable friendly unit to select it,
   // then click a highlighted target to attack. Any action clears the selection.
   const [selectedAttacker, setSelectedAttacker] = useState<string | null>(null)
@@ -1423,6 +1424,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   const [leaderMenuOpen, setLeaderMenuOpen] = useState(false)
   // And your base's: its Epic Action and any action an upgrade on it gives.
   const [baseMenuOpen, setBaseMenuOpen] = useState(false)
+  // The notice naming cards that play with printed stats only, once put away, stays away this game.
+  const [noticeDismissed, setNoticeDismissed] = useState(false)
 
   async function submitReport(title: string, description: string) {
     const { initialState, moves } = replayData()
@@ -1456,33 +1459,17 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     act(action)
   }
 
-  // The play area (right of the log) shows loading, an error, or the live board.
-  // The surrounding frame — icon (exit) + help + log — always renders, so leaving
-  // and Help stay available even while cards load or a load fails.
-  let playContent: ReactNode
+  // Until the board is dealt the whole screen is the game starting, or why it could not; the way
+  // back to setup is in its corner. After that the play area is the live board.
+  let edgeScreen: ReactNode = null
+  let playContent: ReactNode = null
   // A "look at a card" overlay (Camtono): shown centre-screen while the human
   // resolves a mayPlayTopFree choice. Rendered over everything in the main return.
   let choiceOverlay: ReactNode = null
   if (status === 'loading') {
-    playContent = (
-      <div data-testid="game-loading" className="p-6 text-ink-dim text-sm">
-        Hydrating cards…
-      </div>
-    )
+    edgeScreen = <GameLoading title={`${deck.name} against ${opponentDeck.name}`} progress={loadProgress} onExit={onExit} />
   } else if (status === 'error' || !gameState) {
-    playContent = (
-      <div data-testid="game-error" className="max-w-xl p-6">
-        <p className="text-red text-sm">Couldn't load the cards for this deck — check your connection and try again.</p>
-        {errorDetail && (
-          <p data-testid="game-error-detail" className="mt-2 text-ink-dim text-xs font-mono">
-            {errorDetail}
-          </p>
-        )}
-        <button data-testid="error-back-btn" onClick={onExit} className="mt-4 px-5 py-2 text-sm border-2 border-line/60 rounded-xl text-ink-dim hover:text-ink">
-          Back to decks
-        </button>
-      </div>
-    )
+    edgeScreen = <GameLoadError deckName={deck.name} detail={errorDetail} offline={!navigator.onLine} onRetry={rematch} onExit={onExit} />
   } else {
     // What clicking each hand card does, keyed by hand index: play it in the action
     // phase, resource it in the setup or regroup phase (#6). Derived from the
@@ -1971,7 +1958,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             onClick={() => actAndClear(action)}
             className={`rounded-xl border-2 border-accent ${btn} text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10`}
           >
-            {phone && action.type === 'skipResource' ? "Don't resource" : describeAction(gameState, 'player', action)}
+            {describeAction(gameState, 'player', action)}
           </button>
         ))}
         {declineChoice === undefined && menuActions.length === 0 && legal.length === 0 && gameState.winner === null && (
@@ -2363,8 +2350,12 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     }
   }
 
+  if (edgeScreen) return edgeScreen
   // Held upright, a phone is asked to turn; the game carries on underneath and is there when it does.
   if (upright && gameState) return <TurnSideways />
+  const notice = unresolvedPrintings.length > 0 && !noticeDismissed
+    ? (placement: string) => <PrintedStatsNotice names={unresolvedPrintings.map(u => u.name ?? u.id)} onDismiss={() => setNoticeDismissed(true)} className={placement} />
+    : () => null
 
   if (phone && gameState) {
     const inspectedUnit = inspecting?.instanceId
@@ -2374,6 +2365,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       <CardInspect.Provider value={setInspecting}>
       <div data-testid="game-screen" className="h-screen w-full">
         {playContent}
+        {/* Over the board, clear of the controls column (196px and the padding either side of it). */}
+        {notice('fixed right-2 top-2 left-[222px]')}
         {choiceOverlay}
         <GameLogDrawer
           open={logOpen}
@@ -2444,16 +2437,6 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         {/* `dir=rtl` on the scroll container puts the scrollbar on the LEFT; the inner
             wrapper restores `dir=ltr` so the text reads normally. Newest entries render
             at the TOP (reverse the list; keys stay the original append index). */}
-        {/* Cards whose printing could not be matched to a Normal id play as vanilla bodies. Named
-            here because the symptom (an ability simply not happening) is otherwise
-            indistinguishable from a broken implementation. */}
-        {unresolvedPrintings.length > 0 && (
-          <div data-testid="unresolved-printings" className="ml-2 mt-3 rounded-lg border-2 border-amber/60 bg-surface p-2 text-[11px] leading-snug text-ink-dim">
-            <span className="font-semibold text-amber">Playing without abilities:</span>{' '}
-            {unresolvedPrintings.map(u => u.name ?? u.id).join(', ')}. Their printing could not be
-            identified, so only printed stats and keywords apply.
-          </div>
-        )}
         <aside dir="rtl" data-testid="game-log-panel" className="ml-2 mt-3 mb-2 min-h-0 flex-1 overflow-y-auto rounded-lg bg-surface p-3">
           <div dir="ltr">
             <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Log</h3>
@@ -2476,8 +2459,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       {/* Right column: the play area, edge-to-edge to the top and right. It is
           transparent (starfield); the bars carry the surface background, so the
           battlefield between them shows the stars. */}
-      <div className="flex min-h-0 flex-col">
+      <div className="relative flex min-h-0 flex-col">
         {playContent}
+        {notice('absolute inset-x-2 top-2')}
       </div>
 
       {/* "Look at a card" overlay (Camtono) — centre-screen, over the board. */}

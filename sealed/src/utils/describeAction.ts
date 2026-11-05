@@ -640,7 +640,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       return `Resource ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
     }
     case 'skipResource':
-      return 'Skip resourcing'
+      return "Don't resource"
     case 'mulligan':
       return 'Mulligan'
     case 'keepHand':
