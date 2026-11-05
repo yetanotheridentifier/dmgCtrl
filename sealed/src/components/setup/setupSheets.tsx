@@ -11,6 +11,7 @@ import type { GenerationOptions } from '../../deckgen/randomDeck'
 import type { ParseDeckError } from '../../utils/parseProtectThePod'
 import type { ImportResult } from '../../hooks/useDecks'
 import { ANY_OF_MY_DECKS, SET_CODES } from '../../hooks/useSealedSetup'
+import { Disclosure } from '../disclosure'
 import { AspectIcons } from './deckParts'
 import { deckAspects, deckLine } from './deckSummary'
 import { aspectIconSrc, aspectName, mutedStyle } from './setupStyle'
@@ -323,38 +324,32 @@ const TYPE_LABEL: Record<keyof TypeCounts, string> = {
 /** One set: its code and how much of it is built, opening on a tap to the count of each card type. */
 function SetSupport({ set }: { set: SetProgress }) {
   const [open, setOpen] = useState(false)
-  const breakdownId = useId()
   const done = sumCounts(set.done)
   const total = sumCounts(set.total)
   const all = done === total
   return (
-    <div data-testid={`set-progress-${set.code}`} style={{ display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={open ? breakdownId : undefined}
-        onClick={() => setOpen(o => !o)}
-        style={{ minHeight: '44px', border: 'none', borderRadius: '12px', background: 'var(--color-surface)', color: 'var(--color-text-primary)', padding: '0 14px', display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}
-      >
-        <span style={{ width: '44px', fontSize: '0.95rem', fontWeight: 600 }}>{set.code}</span>
-        <span style={{ flex: 1, fontSize: '0.8rem', color: all ? 'var(--color-text-muted)' : 'var(--color-warning)' }}>
+    <Disclosure
+      testId={`set-progress-${set.code}`}
+      open={open}
+      onToggle={() => setOpen(o => !o)}
+      summary={<>
+        <span style={{ width: '44px', fontWeight: 600 }}>{set.code}</span>
+        <span style={{ fontSize: '0.8rem', color: all ? 'var(--color-text-muted)' : 'var(--color-warning)' }}>
           {all ? `All ${total} cards` : `${done} of ${total} cards`}
         </span>
-        <span aria-hidden="true" style={{ color: 'var(--color-text-muted)', transform: open ? 'rotate(90deg)' : undefined }}>▸</span>
-      </button>
-      {open && (
-        <dl id={breakdownId} style={{ margin: 0, padding: '4px 14px' }}>
-          {CARD_TYPES.map(type => (
-            <div key={type} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '2px 0' }}>
-              <dt style={{ color: 'var(--color-text-muted)' }}>{TYPE_LABEL[type]}</dt>
-              <dd data-testid={`set-${set.code}-${type}`} style={{ margin: 0, color: set.done[type] === set.total[type] ? 'var(--color-accent)' : 'var(--color-text-disabled)' }}>
-                {set.done[type]} / {set.total[type]}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
-    </div>
+      </>}
+    >
+      <dl style={{ margin: 0 }}>
+        {CARD_TYPES.map(type => (
+          <div key={type} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '2px 0' }}>
+            <dt style={{ color: 'var(--color-text-muted)' }}>{TYPE_LABEL[type]}</dt>
+            <dd data-testid={`set-${set.code}-${type}`} style={{ margin: 0, color: set.done[type] === set.total[type] ? 'var(--color-accent)' : 'var(--color-text-disabled)' }}>
+              {set.done[type]} / {set.total[type]}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </Disclosure>
   )
 }
 

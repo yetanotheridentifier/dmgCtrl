@@ -85,31 +85,40 @@ body {
   color: var(--color-text-primary);
 }
 
-/* Rendered-markdown styling for the help screen (content arrives as raw HTML). */
+/* The help page's rendered markdown: a copy of the PWA stylesheet's `.help-content` rules for
+   the elements Sealed's guide uses. Each `##` is its own block, headed in small capitals. */
+.help-content section + section {
+  margin-top: 12px;
+}
+.help-content section > :last-child,
+.help-content section div > :last-child {
+  margin-bottom: 0;
+}
 .help-content h2 {
   color: var(--color-accent);
-  font-weight: 300;
-  font-size: 1rem;
+  font-weight: 600;
+  font-size: 0.87em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  margin: 1.5rem 0 0.5rem;
-}
-.help-content h3 {
-  color: var(--color-text-primary);
-  font-weight: 500;
-  font-size: 0.95rem;
-  margin: 1rem 0 0.25rem;
+  margin: 0 0 0.5em 0;
 }
 .help-content p {
-  margin: 0.5rem 0;
+  color: var(--color-text-body);
+  font-weight: 300;
+  font-size: 1em;
+  line-height: 1.65;
+  margin: 0 0 0.6em 0;
 }
 .help-content ul,
 .help-content ol {
-  margin: 0.5rem 0;
-  padding-left: 1.5rem;
+  color: var(--color-text-body);
+  font-weight: 300;
+  font-size: 1em;
+  line-height: 1.65;
+  margin: 0 0 0.6em 0;
+  padding-left: 1.4em;
 }
-/* Restore bullets/numbers — Tailwind's preflight strips list markers, which left
-   these reading as bald indented blocks. */
+/* Tailwind's preflight strips list markers, which the PWA does not load. */
 .help-content ul {
   list-style: disc;
 }
@@ -117,11 +126,14 @@ body {
   list-style: decimal;
 }
 .help-content li {
-  display: list-item;
-  margin: 0.25rem 0;
+  margin-bottom: 0.25em;
 }
 .help-content strong {
   color: var(--color-text-primary);
-  font-weight: 600;
+  font-weight: 400;
+}
+.help-content em {
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 

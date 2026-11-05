@@ -43,7 +43,7 @@ export function ShareGamesPill({ onOpenSettings }: { onOpenSettings: () => void 
  * `App` hands it to the setup screen, which puts it under the two cards. The screen spaces it, so the
  * card has no margin of its own, and once answered it renders nothing.
  *
- * The card's wording is the Help section's ("Improving the bot" in `docs/userGuide.md`), and a test
+ * The card's wording is the Help's ("Improving the bot", under After the game in `docs/userGuide.md`), and a test
  * holds the two together.
  */
 export function ShareGamesNotice() {

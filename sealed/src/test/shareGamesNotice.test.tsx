@@ -7,7 +7,7 @@ import { ShareGamesNotice, ShareGamesPill } from '../components/shareGamesNotice
 import { SettingsProvider } from '../hooks/useSettings'
 import { defaultSettings, loadSettings, saveSettings, STORAGE_KEY } from '../data/settingsStore'
 import type { ShareGames } from '../data/settingsStore'
-import { splitSections, SHARING_HELP_SECTION } from '../utils/helpSections'
+import { parseGuide, SHARING_HELP_SECTION } from '../utils/helpSections'
 
 /**
  * The setup screen asks once whether finished games may be sent to train the bot, as a card that
@@ -204,7 +204,7 @@ describe('ShareGamesNotice', () => {
   /** The Help section repeats the notice, so the two cannot be allowed to say different things. */
   it('says nothing the Help section does not also say', () => {
     setup()
-    const section = splitSections(userGuideHtml).sections.find(s => s.title === SHARING_HELP_SECTION)!
+    const section = parseGuide(userGuideHtml).sections.find(s => s.title === SHARING_HELP_SECTION)!
     const help = text(section.html)
 
     const paragraphs = [...screen.getByTestId('share-games-notice').querySelectorAll('p')]

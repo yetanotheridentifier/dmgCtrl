@@ -49,6 +49,10 @@ async function fromMore(user: User, name: string) {
   await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name }))
 }
 
+const helpPage = () => screen.queryByTestId('help-page')
+const currentHelpSection = () =>
+  within(screen.getByRole('navigation', { name: 'Sections' })).getAllByRole('button')
+    .filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent)
 const settingsSheet = () => screen.queryByRole('dialog', { name: 'Sealed settings' })
 const closeSettings = (user: User) => user.click(within(settingsSheet()!).getByRole('button', { name: 'Close' }))
 const healthLeft = () => within(settingsSheet()!).getByRole('button', { name: 'Health left' })
@@ -126,12 +130,12 @@ describe('App shell', () => {
     render(<App />)
 
     await fromMore(user, 'Help')
-    expect(screen.getByTestId('help-overlay')).toBeInTheDocument()
+    expect(helpPage()).toBeInTheDocument()
     // The setup screen stays mounted underneath, rather than being replaced.
     expect(screen.getByTestId('setup-screen')).toBeInTheDocument()
 
-    await user.click(screen.getByTestId('help-overlay'))
-    expect(screen.queryByTestId('help-overlay')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back to setup' }))
+    expect(helpPage()).not.toBeInTheDocument()
     expect(screen.getByTestId('setup-screen')).toBeInTheDocument()
   })
 
@@ -150,8 +154,9 @@ describe('App shell', () => {
     const logBefore = screen.getByTestId('game-log').textContent
 
     await fromMore(user, 'Help')
-    expect(screen.getByTestId('help-overlay')).toBeInTheDocument()
-    await user.click(screen.getByTestId('help-overlay'))
+    expect(helpPage()).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back to the game' }))
+    expect(helpPage()).not.toBeInTheDocument()
 
     // Still the same game: past the mulligan, same log, never remounted.
     expect(screen.getByTestId('game-board')).toBeInTheDocument()
@@ -159,25 +164,21 @@ describe('App shell', () => {
     expect(screen.getByTestId('game-log').textContent).toBe(logBefore)
   })
 
-  /** Help is for the screen you opened it from. */
-  it('shows the setup screen’s help from setup', async () => {
+  /** Help opens at the part for the screen you opened it from. */
+  it('opens help at Decks from setup', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     await fromMore(user, 'Help')
-    const content = screen.getByTestId('help-content').innerHTML
-    expect(content).toContain('Choosing your deck')
-    expect(content).not.toContain('Turn structure')
+    expect(currentHelpSection()).toEqual(['Decks'])
   })
 
-  it('shows the game’s help from a game', async () => {
+  it('opens help at Playing from a game', async () => {
     const user = userEvent.setup()
     await startGame(user)
 
     await fromMore(user, 'Help')
-    const content = screen.getByTestId('help-content').innerHTML
-    expect(content).toContain('Turn structure')
-    expect(content).not.toContain('Choosing your deck')
+    expect(currentHelpSection()).toEqual(['Playing'])
   })
 
   /** Settings open over whatever is on screen rather than replacing it. */
@@ -202,7 +203,7 @@ describe('App shell', () => {
     await closeSettings(user)
 
     await fromMore(user, 'Help')
-    await user.click(screen.getByTestId('help-overlay'))
+    await user.click(screen.getByRole('button', { name: 'Back to setup' }))
     await fromMore(user, 'Settings')
 
     expect(healthLeft()).toHaveAttribute('aria-pressed', 'true')
@@ -302,15 +303,13 @@ describe('App shell', () => {
       await fromMore(user, 'Settings')
       await user.click(screen.getByRole('button', { name: "What's sent" }))
 
-      const content = screen.getByTestId('help-content')
-      expect(within(content).getByRole('heading', { name: 'Improving the bot' })).toBeInTheDocument()
-      expect(content.innerHTML).not.toContain('Choosing your deck')
+      expect(currentHelpSection()).toEqual(['After the game'])
 
-      // Help from More is the setup screen's whole help again afterwards.
-      await user.click(screen.getByTestId('help-overlay'))
+      // Help from More opens at the setup screen's own section again afterwards.
+      await user.click(screen.getByRole('button', { name: 'Back to setup' }))
       await closeSettings(user)
       await fromMore(user, 'Help')
-      expect(screen.getByTestId('help-content').innerHTML).toContain('Choosing your deck')
+      expect(currentHelpSection()).toEqual(['Decks'])
     })
 
     /** Settings opens in a game too, where the game's own help does not carry this section. */
@@ -321,9 +320,7 @@ describe('App shell', () => {
       await fromMore(user, 'Settings')
       await user.click(screen.getByRole('button', { name: "What's sent" }))
 
-      const content = screen.getByTestId('help-content')
-      expect(within(content).getByRole('heading', { name: 'Improving the bot' })).toBeInTheDocument()
-      expect(content.innerHTML).not.toContain('Turn structure')
+      expect(currentHelpSection()).toEqual(['After the game'])
       expect(screen.getByTestId('game-board')).toBeInTheDocument()
     })
   })

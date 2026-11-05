@@ -32,10 +32,10 @@ When behaviour changes, update the doc that owns that concern. When a plan chang
 `planned-work.md`.
 
 `userGuide.md` is **imported at build time as the in-app Help page**, so editing it changes what
-players see. It is **sliced by screen**: help opened on the deck screen shows some top-level
-sections and help opened in a game shows the others, per `HELP_SECTIONS` in
-`src/utils/helpSections.ts`. **A new `##` section must be assigned to a screen there**, or it
-appears in neither; `helpSections.test.ts` fails until it is.
+players see. Each `##` is a section of the one help page, listed in its section links, and each
+`###` within a section a topic that opens on a tap; help opens at the section `OPENS_AT` in
+`src/utils/helpSections.ts` names for the screen it came from. `helpSections.test.ts` pins the
+section list, so adding or renaming a `##` means updating that test.
 
 Also worth knowing: `sealed/README.md` is a quick orientation and decisions log, and the root
 `docs/` folder belongs to the PWA (X-Wing, SWU tracking, Kill Team), not to Sealed.
