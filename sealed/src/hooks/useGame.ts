@@ -43,10 +43,14 @@ export interface LogEntry {
   round: number
 }
 
+export interface LoadProgress { done: number; total: number }
+
 export interface GameValue {
   status: GameStatus
   /** Populated when status is 'error' — names the card/cause for diagnosis. */
   errorDetail: string | null
+  /** While loading: how many of the two decks' distinct cards are in hand so far, of how many. */
+  loadProgress: LoadProgress
   gameState: GameState | null
   /** Legal moves for the human — empty while the AI acts or when over. */
   legal: Action[]
@@ -196,6 +200,7 @@ export function cancelPoint(history: readonly { by: PlayerId; state: GameState }
 export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options: UseGameOptions = {}): GameValue {
   const [status, setStatus] = useState<GameStatus>('loading')
   const [errorDetail, setErrorDetail] = useState<string | null>(null)
+  const [loadProgress, setLoadProgress] = useState<LoadProgress>({ done: 0, total: 0 })
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [log, setLog] = useState<LogEntry[]>([])
   const [generation, setGeneration] = useState(0)
@@ -380,12 +385,14 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
         // of it (a deck's IBH_052 is served as IBH_52), so each deck id remembers the id it came back as.
         const cards: SwuCard[] = []
         const servedAs = new Map<string, string>()
+        setLoadProgress({ done: 0, total: ids.size })
         for (const id of ids) {
           const ref = cardRefFromId(id)
           if (!ref) throw new Error(`Malformed card id in deck: ${id}`)
           const card = await getCard(ref.set, ref.number)
           cards.push(card)
           servedAs.set(id, cardId(card.Set, card.Number))
+          if (!cancelled) setLoadProgress({ done: cards.length, total: ids.size })
         }
 
         if (cancelled) return
@@ -525,5 +532,5 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
 
   // Once the game is over the record has been written — rewinding past that would leave a saved
   // game disagreeing with what is on screen.
-  return { status, errorDetail, gameState, legal, log, act, undo, canUndo: canUndo && gameState?.winner === null, cancelChoice, rematch, replayData, unresolvedPrintings, opponentAction, regroupDrawn }
+  return { status, errorDetail, loadProgress, gameState, legal, log, act, undo, canUndo: canUndo && gameState?.winner === null, cancelChoice, rematch, replayData, unresolvedPrintings, opponentAction, regroupDrawn }
 }

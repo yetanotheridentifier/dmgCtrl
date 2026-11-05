@@ -182,7 +182,8 @@ printing's own **art rides along**, so you still see the card you own.
   marks the ones the table does not yet collapse.
 - **Unresolvable cards keep their own id and play vanilla**, which is the previous behaviour, so
   being offline degrades rather than breaks. They are reported through
-  `GameValue.unresolvedPrintings`, shown above the log and included in bug reports: the symptom
+  `GameValue.unresolvedPrintings`, named in a dismissible notice over the board and included in
+  bug reports: the symptom
   (an ability simply not happening) is otherwise indistinguishable from a broken implementation.
 - Saved decks keep the printings you own; only play is canonical. Two printings of one card in a
   deck collapse to a single entry, correct for play and merely meaning one of the two arts shows.
@@ -769,6 +770,13 @@ The board is drawn with art-dominant cards, not text rows:
   damage is clamped to it, so an overkill reads as a full base or as zero remaining, never
   as more damage than the base has HP nor as negative health. The preference is display
   only: the engine counts damage up either way, and the win threshold stays `damage >= hp`.
+- **Edge states** (`components/game/gameEdgeStates.tsx`): until the board is dealt, `GameScreen` is
+  one whole screen on either layout, with the way back to setup in its corner. `GameLoading` names
+  both decks and fills a progress bar from `GameValue.loadProgress` (distinct cards fetched, of the
+  two decks' total). `GameLoadError` says in plain words that cards couldn't be loaded (offline or
+  not), keeps `errorDetail` underneath for diagnosis, and offers **Try again**, which is `rematch`:
+  the load re-runs from the start. `PrintedStatsNotice` names `unresolvedPrintings` over the top
+  of the board until dismissed for that game.
 - **Phone layout** (`components/game/phoneLayout.tsx`): `GameScreen` picks its layout by media
   query (`hooks/useMediaQuery.ts`). `PHONE_LANDSCAPE_QUERY` (landscape, at most 500px tall) draws
   `PhoneGameLayout`: a 196px controls column (leave, log, more; round and phase; each side's

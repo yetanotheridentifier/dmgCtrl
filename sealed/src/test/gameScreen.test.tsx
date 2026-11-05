@@ -369,7 +369,7 @@ describe('GameScreen', () => {
 
     expect(screen.getByTestId('action-prompt')).toHaveTextContent(/resource.*or skip/i)
 
-    await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+    await user.click(screen.getByRole('button', { name: /don't resource/i }))
     expect(screen.queryByTestId('action-prompt')).toBeNull()
   })
 
@@ -547,7 +547,7 @@ describe('GameScreen', () => {
 
     await user.click(screen.getByTestId('hand-card-3'))
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
-    await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+    await user.click(screen.getByRole('button', { name: /don't resource/i }))
     // Attack the base by clicking the ready unit then the highlighted base target.
     await user.click(screen.getByTestId('board-unit-u1'))
     await user.click(screen.getByTestId('target-opponent-base'))
@@ -653,7 +653,7 @@ describe('GameScreen', () => {
 
     // Pass through regroup so the unit readies for round 2
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
-    await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+    await user.click(screen.getByRole('button', { name: /don't resource/i }))
 
     expect(within(screen.getByTestId('player-ground-units')).getByTestId('card-face'))
       .toHaveAttribute('data-orientation', 'portrait')
@@ -665,7 +665,7 @@ describe('GameScreen', () => {
     await user.click(screen.getByTestId('hand-card-3'))
     // pass through regroup so the unit readies
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
-    await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+    await user.click(screen.getByRole('button', { name: /don't resource/i }))
 
     // The ready unit is actionable — and its card (not the slot) carries the highlight
     const unitTile = screen.getByTestId('board-unit-u1')
@@ -689,7 +689,7 @@ describe('GameScreen', () => {
     await renderBoard()
     await user.click(screen.getByTestId('hand-card-3'))
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
-    await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+    await user.click(screen.getByRole('button', { name: /don't resource/i }))
 
     await user.click(screen.getByTestId('board-unit-u1'))
     await user.click(screen.getByTestId('board-unit-u1'))
@@ -744,7 +744,7 @@ describe('GameScreen', () => {
     await user.click(screen.getByTestId('hand-card-3'))
     // Pass through the regroup so the unit readies, then attack the base with it.
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
-    await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+    await user.click(screen.getByRole('button', { name: /don't resource/i }))
     await user.click(screen.getByTestId('board-unit-u1'))
     await user.click(screen.getByTestId('target-opponent-base'))
 
@@ -853,7 +853,7 @@ describe('GameScreen', () => {
       await renderBoard()
       await user.click(screen.getByTestId('hand-card-3'))
       await user.click(screen.getByRole('button', { name: /^pass$/i }))
-      await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+      await user.click(screen.getByRole('button', { name: /don't resource/i }))
       await user.click(screen.getByTestId('board-unit-u1'))
       // 40 power into a 30-HP base.
       await user.click(screen.getByTestId('target-opponent-base'))
