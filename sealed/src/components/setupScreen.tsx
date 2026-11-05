@@ -27,7 +27,10 @@ interface Props {
   onBack: () => void
   /** Beside More in the header: what the caller wants there (the share-games pill). */
   headerExtra?: ReactNode
-  /** Under the two cards: a notice the caller owns (the share-games question, until answered). */
+  /**
+   * Last on the page, under Go to game, so it never moves the cards or Go: a notice the caller owns
+   * (the share-games question, until answered).
+   */
   notice?: ReactNode
 }
 
@@ -205,8 +208,8 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
       <div style={{ flex: '1 1 340px', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {deckCard()}
         {opponentCard()}
-        {notice}
         <div style={{ marginTop: 'auto' }}>{go}</div>
+        {notice}
       </div>
       {beside}
     </div>
@@ -218,8 +221,8 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
         {deckCard()}
         {opponentCard()}
       </div>
-      {notice}
       {go}
+      {notice}
     </>
   )
 

@@ -71,9 +71,9 @@ function AppShell() {
           // Setup only, since the game screen has its own header. Absent until the notice in the
           // page is answered.
           headerExtra={<ShareGamesPill onOpenSettings={() => setSettingsOpen(true)} />}
-          // Part of the page, under the two cards: it covers nothing, and every control works
-          // whether or not it has been answered. Passed in so the setup screen needs no settings.
-          notice={<ShareGamesNotice />}
+          // Part of the page, last on it: it covers nothing, and every control works whether or not
+          // it has been answered. Passed in so the setup screen needs no settings.
+          notice={<ShareGamesNotice onHelp={openHelp} />}
           onPlay={(deck, opponent) => {
             // The notice is put once. A player who starts a game without answering it has not
             // agreed, so that is recorded as a no and the header pill replaces it.

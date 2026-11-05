@@ -19,14 +19,14 @@ import { parseGuide, SHARING_HELP_SECTION } from '../utils/helpSections'
  * container so a test can say which of the two drew something.
  */
 
-function setup(onOpenSettings = vi.fn()) {
+function setup(onOpenSettings = vi.fn(), onHelp = vi.fn()) {
   render(
     <SettingsProvider>
       <div data-testid="pill-place">
         <ShareGamesPill onOpenSettings={onOpenSettings} />
       </div>
       <div data-testid="card-place">
-        <ShareGamesNotice />
+        <ShareGamesNotice onHelp={onHelp} />
       </div>
     </SettingsProvider>,
   )
@@ -41,22 +41,39 @@ const text = (html: string) => {
   return (el.textContent ?? '').replace(/\s+/g, ' ')
 }
 
+// The shared secondary Button's fill, as `@pwa-shared/controls` draws it.
+const SHARED_SECONDARY_FILL = 'var(--color-tonal)'
+
 describe('ShareGamesNotice', () => {
   beforeEach(() => {
     localStorage.clear()
   })
 
   describe('before the player has answered', () => {
-    it('shows the notice as a card, with what is and is not sent', () => {
+    /**
+     * Unobtrusive but informative: one short line on what it is and what is sent, the same words
+     * the Settings switch uses, with the full account a tap away in Help rather than on the screen.
+     */
+    it('shows the notice as a short banner saying what is sent, the words Settings uses', () => {
       setup()
       const card = screen.getByTestId('share-games-notice')
 
-      expect(within(card).getByRole('heading', { name: 'Help improve gameplay' })).toBeInTheDocument()
-      expect(card).toHaveTextContent('The AI bot gets better by learning from real games. If you opt in, each game you finish is sent to train it.')
-      expect(card).toHaveTextContent('What is sent: both decks as loaded, every decision made in the game by you and the bot, who won, how long it took, and the app version.')
-      expect(card).toHaveTextContent('What is not sent: your name, your deck names, or anything else that identifies you. There is no account, and your IP address is not linked to games. Because of that, a game cannot be traced back to you, and it also cannot be found and deleted later.')
-      expect(card).toHaveTextContent('This data export is disabled unless you turn it on, and you can change it at any time in Settings.')
+      expect(within(card).getByRole('heading', { name: 'Help improve the bot' })).toBeInTheDocument()
+      expect(card).toHaveTextContent("Share the games you finish to train the AI bot. Both decks and every decision; nothing identifies you. What's sent")
+      expect(card.querySelectorAll('p')).toHaveLength(1)
       expect(screen.queryByTestId('share-games-pill')).toBeNull()
+    })
+
+    it("opens the Help section on what is sent from its link, changing nothing", async () => {
+      const user = userEvent.setup()
+      const onHelp = vi.fn()
+      setup(vi.fn(), onHelp)
+
+      await user.click(within(screen.getByTestId('share-games-notice')).getByRole('button', { name: "What's sent" }))
+
+      expect(onHelp).toHaveBeenCalledExactlyOnceWith(SHARING_HELP_SECTION)
+      expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+      expect(screen.getByTestId('share-games-notice')).toBeInTheDocument()
     })
 
     /** The pill's place holds nothing at all while the card is asking, not an empty wrapper. */
@@ -77,13 +94,17 @@ describe('ShareGamesNotice', () => {
       expect(card.className).not.toMatch(/\bfixed\b|\babsolute\b|inset-0/)
     })
 
-    /** Neither answer is favoured: the two buttons are styled identically and neither takes focus. */
-    it('offers yes and no as two buttons of equal weight, with nothing chosen for the player', () => {
+    /**
+     * Neither answer is favoured: both are the shared secondary Button, styled identically, and
+     * neither takes focus.
+     */
+    it('offers yes and no as two shared buttons of equal weight, with nothing chosen for the player', () => {
       setup()
       const yes = screen.getByRole('button', { name: 'Share my games' })
       const no = screen.getByRole('button', { name: 'Not now' })
 
-      expect(yes.className).toBe(no.className)
+      expect(yes.style.background).toBe(SHARED_SECONDARY_FILL)
+      expect(yes.getAttribute('style')).toBe(no.getAttribute('style'))
       expect(yes).not.toHaveFocus()
       expect(no).not.toHaveFocus()
       expect(within(screen.getByTestId('share-games-notice')).queryByRole('checkbox')).toBeNull()
@@ -201,16 +222,13 @@ describe('ShareGamesNotice', () => {
     })
   })
 
-  /** The Help section repeats the notice, so the two cannot be allowed to say different things. */
-  it('says nothing the Help section does not also say', () => {
-    setup()
+  /** The banner's link is the full account: the Help section it opens says what is and is not sent. */
+  it('links to a Help section that says what is and is not sent', () => {
     const section = parseGuide(userGuideHtml).sections.find(s => s.title === SHARING_HELP_SECTION)!
     const help = text(section.html)
 
-    const paragraphs = [...screen.getByTestId('share-games-notice').querySelectorAll('p')]
-    expect(paragraphs).toHaveLength(4)
-    for (const p of paragraphs) {
-      expect(help).toContain((p.textContent ?? '').replace(/\s+/g, ' ').trim())
-    }
+    expect(help).toContain('What is sent: both decks as loaded, every decision made in the game by you and the bot')
+    expect(help).toContain('What is not sent: your name, your deck names, or anything else that identifies you.')
+    expect(help).toContain('This data export is disabled unless you turn it on')
   })
 })
