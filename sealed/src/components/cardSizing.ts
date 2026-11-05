@@ -6,6 +6,14 @@ export const CARD_WIDTH_PX = Math.round(FULL_CARD_WIDTH_PX * 0.5) // 120
 /** The roll-over zoom short edge — full size. The one place the zoom scale lives. */
 export const ZOOM_WIDTH_PX = FULL_CARD_WIDTH_PX // 240
 
+/**
+ * A card's corner radius, from its short edge: the one radius every card face and card outline uses.
+ * About 5px at board and hand sizes, growing gently to 9px at full size.
+ */
+export function cardRadius(shortPx: number): number {
+  return Math.round(4 + shortPx / 50)
+}
+
 /** Portrait cards are 5:7; the long edge is 7/5 of the short edge. */
 export function longEdge(shortPx: number): number {
   return Math.round((shortPx * 7) / 5)

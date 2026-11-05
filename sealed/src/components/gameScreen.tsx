@@ -24,7 +24,7 @@ import { actionFocus, BOARD_SCALE, boardLeft, deployBlocker, handOverlap, type B
 import CardFace from './cardFace'
 import { intentHighlight } from './highlight'
 import { CardGridOverlay } from './cardGridOverlay'
-import { CARD_WIDTH_PX, longEdge } from './cardSizing'
+import { CARD_WIDTH_PX, cardRadius, longEdge } from './cardSizing'
 import { baseHostId, baseHostOwner } from '../engine/types'
 import { useCardZoom, CardInspect } from './useCardZoom'
 import type { InspectTarget } from './useCardZoom'
@@ -641,7 +641,7 @@ export function LeaderCard({ state, side, widthPx = CARD_WIDTH_PX, interact, lab
   if (p.leader.deployed) {
     return (
       <div data-testid={`${side}-leader-card`} className="relative w-fit">
-        <div style={{ width: longEdge(widthPx), height: widthPx }} className="rounded-lg border border-line/50" />
+        <div style={{ width: longEdge(widthPx), height: widthPx, borderRadius: cardRadius(widthPx) }} className="border border-line/50" />
         {labelDeployed && <span className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-wider text-ink-dim">Deployed</span>}
       </div>
     )
