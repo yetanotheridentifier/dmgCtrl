@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import SetupScreen from './components/setupScreen'
 import GameScreen from './components/gameScreen'
 import { HelpOverlay } from './components/helpOverlay'
-import { SettingsOverlay } from './components/settingsOverlay'
+import { SettingsSheet } from './components/settingsSheet'
 import { ShareGamesNotice, ShareGamesPill } from './components/shareGamesNotice'
 import { SettingsProvider, useSettings } from './hooks/useSettings'
 import { useUpdateOnDeckScreen } from './hooks/useUpdateOnDeckScreen'
@@ -35,7 +35,7 @@ function AppShell() {
   const [screen, setScreen] = useState<Screen>('decks')
   const [selectedDeck, setSelectedDeck] = useState<SavedDeck | null>(null)
   const [opponentDeck, setOpponentDeck] = useState<SavedDeck | null>(null)
-  // Settings are an overlay, not a screen: the game screen has its own entry point, and routing
+  // Settings are a sheet, not a screen: the game screen has its own entry point, and routing
   // away from a game in progress would unmount it (#541).
   const [settingsOpen, setSettingsOpen] = useState(false)
   // Help likewise, and for the same reason: it used to be a screen, so opening it mid-game
@@ -85,12 +85,12 @@ function AppShell() {
         />
       )}
 
-      {/* The game screen opens settings from its own header, so this covers the other screens. */}
-      {settingsOpen && screen !== 'game' && <SettingsOverlay onClose={() => setSettingsOpen(false)} onHelp={openHelp} />}
+      {/* The game screen opens settings from its own More, so this covers the other screens. */}
+      <SettingsSheet open={settingsOpen && screen !== 'game'} onClose={() => setSettingsOpen(false)} onHelp={openHelp} />
 
       {/* Help serves both screens from here: it renders over whichever is mounted, and takes
-          its content from the screen it was opened on. Rendered after settings, so help opened
-          from a link in the settings form sits over it and closing help returns there. */}
+          its content from the screen it was opened on. It sits above the settings sheet, so help
+          opened from a link in the sheet covers it and closing help returns there. */}
       {helpOpen && (
         <HelpOverlay
           context={screen === 'game' ? 'game' : 'decks'}

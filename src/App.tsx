@@ -55,14 +55,16 @@ function AppScreens() {
   const xwingTournament = useXwingTournament()
   // Where the app opens is settled once, at launch. SWU setup that has no card data yet shows the
   // splash or the offline screen in its place (below), so nothing else waits for SWU card data.
-  const [screen, setScreen] = useState<Screen>(() => launchScreen({
+  // Sealed, a separate app, opens Settings at ?settings: every game's, with Back to game select.
+  const [settingsLink] = useState(() => new URLSearchParams(window.location.search).has('settings'))
+  const [screen, setScreen] = useState<Screen>(() => settingsLink ? 'settings' : launchScreen({
     tournamentInProgress: tournament !== null,
     xwingTournamentInProgress: xwingTournament.tournament !== null,
     route: gameFromPath(window.location.pathname, import.meta.env.BASE_URL),
     startScreen,
     lastGame: readLastGame(),
   }))
-  const [backStack, setBackStack] = useState<Screen[]>([])
+  const [backStack, setBackStack] = useState<Screen[]>(() => settingsLink ? ['gameSelect'] : [])
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
   // Two players: their base. Held for this session only, so a tournament resumed after a reload plays one-player.
   const [selectedTheirBase, setSelectedTheirBase] = useState<Base | null>(null)

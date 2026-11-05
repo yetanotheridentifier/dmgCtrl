@@ -14,7 +14,7 @@ import { upgradeHostIds, upgradeHostName } from '../utils/upgradeHosts'
 import { buildReportMarkdown, issueUrl } from '../utils/bugReport'
 import { BugReportOverlay, GAME_FIELD } from './bugReportOverlay'
 import { GameLoadError, GameLoading, PrintedStatsNotice } from './game/gameEdgeStates'
-import { SettingsOverlay } from './settingsOverlay'
+import { SettingsSheet } from './settingsSheet'
 import { useSettings } from '../hooks/useSettings'
 import { RELEASE, COMMIT_ID } from '../buildIdentity'
 import { isDev } from '../env'
@@ -769,8 +769,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // the clipboard refused it, so the report is shown to copy by hand rather than lost.
   const [reporting, setReporting] = useState(false)
   const [fallbackReport, setFallbackReport] = useState<string | undefined>(undefined)
-  // Settings (#539): an overlay over the board, not a screen. Routing away would unmount this
-  // component and the game with it (#541).
+  // Settings: a sheet over the board, not a screen. Routing away would unmount this component and
+  // the game with it.
   const [settingsOpen, setSettingsOpen] = useState(false)
   // A button choice put aside to read the board (only where it cannot be cancelled): the id of the
   // choice whose overlay is hidden. Any action clears it, so the next choice always shows.
@@ -1658,7 +1658,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           fallbackReport={fallbackReport}
         />
       )}
-      {settingsOpen && <SettingsOverlay onClose={() => setSettingsOpen(false)} onHelp={onHelp} />}
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} onHelp={onHelp} />
       {!logOpen && <PhoneGameOver state={gameState} deckName={deck.name} onRematch={rematch} onExit={onExit} scale={scale} />}
       {inspecting && <CardDetail state={gameState} cardId={inspecting.cardId} unit={inspectedUnit} onClose={() => setInspecting(null)} />}
     </div>

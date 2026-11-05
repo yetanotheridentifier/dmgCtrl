@@ -185,22 +185,37 @@ interface OptionRowProps {
   icon?: ReactNode
 }
 
-interface SwitchProps {
+interface ControlRowProps {
   label: string
-  note?: string
-  checked: boolean
-  onChange: (v: boolean) => void
+  // A line under the label, which may carry a link.
+  note?: ReactNode
+  children: ReactNode
 }
 
-// An on/off choice as a row: its label (and an optional note under it) beside the switch. The
-// button is 44px tall so the track is easy to hit.
-export function Switch({ label, note, checked, onChange }: SwitchProps) {
+// A setting as a row: its label (and an optional note under it) beside its control.
+export function ControlRow({ label, note, children }: ControlRowProps) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minHeight: '44px' }}>
       <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
         <span style={{ fontSize: '15px', color: 'var(--color-text-primary)' }}>{label}</span>
         {note && <span style={{ fontSize: '12px', lineHeight: '16px', color: 'var(--color-text-muted)' }}>{note}</span>}
       </span>
+      {children}
+    </div>
+  )
+}
+
+interface SwitchProps {
+  label: string
+  note?: ReactNode
+  checked: boolean
+  onChange: (v: boolean) => void
+}
+
+// An on/off choice as a row. The button is 44px tall so the track is easy to hit.
+export function Switch({ label, note, checked, onChange }: SwitchProps) {
+  return (
+    <ControlRow label={label} note={note}>
       <button
         type="button"
         role="switch"
@@ -223,7 +238,7 @@ export function Switch({ label, note, checked, onChange }: SwitchProps) {
           <span style={{ width: '26px', height: '26px', borderRadius: '13px', background: checked ? 'var(--color-on-accent)' : 'var(--color-text-muted)' }} />
         </span>
       </button>
-    </div>
+    </ControlRow>
   )
 }
 
@@ -264,6 +279,10 @@ interface StepperProps {
   max: number
   step?: number
   onChange: (v: number) => void
+  // How the value reads, such as a pace stepped through by its index.
+  format?: (v: number) => string
+  // Off when a ControlRow carries the label beside it.
+  showLabel?: boolean
 }
 
 const stepButtonStyle = (disabled: boolean): React.CSSProperties => ({
@@ -276,14 +295,14 @@ const stepButtonStyle = (disabled: boolean): React.CSSProperties => ({
   ...(disabled ? DISABLED : {}),
 })
 
-export function Stepper({ label, value, min, max, step = 1, onChange }: StepperProps) {
+export function Stepper({ label, value, min, max, step = 1, onChange, format = String, showLabel = true }: StepperProps) {
   const name = label.toLowerCase()
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       <button type="button" aria-label={`Decrease ${name}`} disabled={value <= min} onClick={() => onChange(Math.max(min, value - step))} style={stepButtonStyle(value <= min)}>−</button>
-      <span style={{ minWidth: '48px', textAlign: 'center', fontSize: '1.3rem', fontWeight: 300, color: 'var(--color-text-primary)' }}>{value}</span>
+      <span style={{ minWidth: '48px', textAlign: 'center', fontSize: '1.3rem', fontWeight: 300, color: 'var(--color-text-primary)' }}>{format(value)}</span>
       <button type="button" aria-label={`Increase ${name}`} disabled={value >= max} onClick={() => onChange(Math.min(max, value + step))} style={stepButtonStyle(value >= max)}>+</button>
-      <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>{label}</span>
+      {showLabel && <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>{label}</span>}
     </div>
   )
 }

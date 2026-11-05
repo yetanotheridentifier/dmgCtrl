@@ -7,7 +7,7 @@ interface SettingsValue {
   settings: Settings
   /**
    * Apply a partial change. One function rather than a setter per field: adding a setting then
-   * costs a line in `Settings` and a row in the overlay, with nothing to wire up in between.
+   * costs a line in `Settings` and a row in the sheet, with nothing to wire up in between.
    */
   update: (patch: Partial<Settings>) => void
 }

@@ -806,17 +806,21 @@ describe('GameScreen', () => {
    * Routing to a screen unmounts GameScreen and starts a different game (#541), so this is an
    * overlay over the board.
    */
-  describe('settings overlay', () => {
+  describe('settings sheet', () => {
+    const settingsSheet = () => screen.queryByRole('dialog', { name: 'Sealed settings' })
+    const closeSettings = (user: User) => user.click(within(settingsSheet()!).getByRole('button', { name: 'Close' }))
+    const toggle = (name: string) => within(settingsSheet()!).getByRole('switch', { name })
+
     it('opens from More and closes again', async () => {
       const user = userEvent.setup()
       await renderBoard()
-      expect(screen.queryByTestId('settings-overlay')).toBeNull()
+      expect(settingsSheet()).toBeNull()
 
       await fromMore(user, /^settings$/i)
-      expect(screen.getByTestId('settings-overlay')).toBeInTheDocument()
+      expect(settingsSheet()).toBeInTheDocument()
 
-      await user.click(screen.getByTestId('settings-close'))
-      expect(screen.queryByTestId('settings-overlay')).toBeNull()
+      await closeSettings(user)
+      expect(settingsSheet()).toBeNull()
     })
 
     it('leaves the game in progress untouched', async () => {
@@ -826,7 +830,7 @@ describe('GameScreen', () => {
       const logBefore = screen.getByTestId('game-log').textContent
 
       await fromMore(user, /^settings$/i)
-      await user.click(screen.getByTestId('settings-close'))
+      await closeSettings(user)
 
       // The board is still the same game, not a fresh one: same unit, same log.
       expect(within(screen.getByTestId('player-ground-units')).getAllByTestId('card-face')).toHaveLength(1)
@@ -839,8 +843,8 @@ describe('GameScreen', () => {
       await renderBoard()
 
       await fromMore(user, /^settings$/i)
-      await user.click(screen.getByTestId('setting-show-bug-report'))
-      await user.click(screen.getByTestId('settings-close'))
+      await user.click(toggle('Report a bug button'))
+      await closeSettings(user)
 
       await fromMore(user, /report a bug/i)
       expect(screen.getByTestId('bug-report-overlay')).toBeInTheDocument()
@@ -864,8 +868,8 @@ describe('GameScreen', () => {
       expect(screen.queryByTestId('undo-btn')).toBeNull()
 
       await fromMore(user, /^settings$/i)
-      await user.click(screen.getByTestId('setting-allow-undo'))
-      await user.click(screen.getByTestId('settings-close'))
+      await user.click(toggle('Allow undo'))
+      await closeSettings(user)
 
       expect(screen.getByTestId('undo-btn')).toBeInTheDocument()
     })

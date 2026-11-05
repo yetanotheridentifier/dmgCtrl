@@ -445,7 +445,7 @@ describe('GameScreen on a phone in landscape', () => {
 
     await user.click(screen.getByRole('button', { name: /more/i }))
     await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name: /^settings$/i }))
-    expect(screen.getByTestId('settings-overlay')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Sealed settings' })).toBeInTheDocument()
   })
 
   it('concedes from More only after confirming', async () => {

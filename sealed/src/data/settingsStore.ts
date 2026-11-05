@@ -14,7 +14,7 @@ export interface Settings {
   allowUndo: boolean
   baseHealthDisplay: BaseHealthDisplay
   /**
-   * Whether the bug report button is offered in the game header. Developer chrome: filing a
+   * Whether Report a bug is offered under More in a game, on desktop. Developer chrome: filing a
    * report opens GitHub's new-issue page, which is not where a player belongs mid-game. On
    * while developing, off in the shipped build, and available to anyone who wants to report.
    */

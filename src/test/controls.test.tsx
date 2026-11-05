@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Button, IconButton, SegmentedControl, SelectButton, Stepper, Sheet, Switch } from '../components/shared/controls'
+import { Button, ControlRow, IconButton, SegmentedControl, SelectButton, Stepper, Sheet, Switch } from '../components/shared/controls'
 import { FIELD_STYLE } from '../styles/field'
 
 const mockOrientation = { isPortrait: false, vmin: 390 }
@@ -151,7 +151,23 @@ describe('Switch', () => {
   })
 })
 
+describe('ControlRow', () => {
+  it('sets a label and a note, which may hold a link, beside its control', () => {
+    render(<ControlRow label="Share games" note={<>Nothing identifies you. <button type="button">What's sent</button></>}><span>control</span></ControlRow>)
+    expect(screen.getByText('Share games')).toBeInTheDocument()
+    expect(screen.getByText(/Nothing identifies you/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: "What's sent" })).toBeInTheDocument()
+    expect(screen.getByText('control')).toBeInTheDocument()
+  })
+})
+
 describe('Stepper', () => {
+  it('shows the value as formatted, and can leave its label to the row it sits in', () => {
+    const { container } = render(<Stepper label="Pace" value={0} min={0} max={4} format={v => (v === 0 ? 'Instant' : `${v} s`)} showLabel={false} onChange={vi.fn()} />)
+    expect(container).toHaveTextContent(/^−Instant\+$/)
+    expect(screen.getByRole('button', { name: 'Increase pace' })).toBeInTheDocument()
+  })
+
   it('shows the label and value', () => {
     render(<Stepper label="Deficit" value={2} min={0} max={4} onChange={vi.fn()} />)
     expect(screen.getByText('Deficit')).toBeInTheDocument()
