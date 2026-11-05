@@ -844,6 +844,21 @@ describe('SetupScreen', () => {
       expect(cards).toContainElement(screen.getByTestId('opponent-card'))
       expect(cards).toHaveStyle({ flexShrink: '0' })
     })
+
+    // jsdom does no layout, so this pins the structure that keeps Go to game on a 844x390 screen with
+    // no decks saved: the deck card's two buttons in one row in landscape, stacked elsewhere.
+    it.each([['landscape', 'row', []], ['portrait', 'column', [PORTRAIT_QUERY]], ['desktop', 'column', [DESKTOP_QUERY]]])(
+      'lays out Generate and Import in a %s deck card as a %s',
+      (layout, direction, media) => {
+        withMedia(media as string[])
+        renderSetup()
+        expect(screen.getByTestId('setup-screen')).toHaveAttribute('data-layout', layout)
+        const generate = within(deckCard()).getByRole('button', { name: 'Generate a deck' })
+        const row = generate.parentElement!
+        expect(row).toContainElement(within(deckCard()).getByRole('button', { name: 'Import deck JSON' }))
+        expect(row).toHaveStyle({ flexDirection: direction })
+      },
+    )
   })
 
   /** The card catalogue column's reference panel, moved to More › Card support. */

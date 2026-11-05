@@ -585,7 +585,8 @@ choice opens a `Sheet`, and the only text box is the import sheet's.
   and the list in CSS columns with each type heading kept with its first card. A tap on any card
   shows it full size in an `OverlayShell`.
 - **Three layouts**, by media query (`hooks/useMediaQuery.ts`): landscape (the two cards side by
-  side, filling a phone's 844x390 without scrolling), portrait (stacked, the deck card taking the
+  side, filling a phone's 844x390 without scrolling, with no saved deck's Generate and Import side
+  by side so Go to game stays on screen), portrait (stacked, the deck card taking the
   height the opponent card leaves, with the leader and base on it) and desktop (at least 1024x600:
   the cards in a column with the chosen deck's list beside them). On a phone the two cards share
   one block that fills the height and never shrinks below them, so a notice under Go scrolls the
