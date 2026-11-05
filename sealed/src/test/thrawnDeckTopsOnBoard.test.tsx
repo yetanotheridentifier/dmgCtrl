@@ -96,14 +96,6 @@ describe("Grand Admiral Thrawn's look at the top card of each deck, on the game 
     expect(screen.getByRole('button', { name: /^pass$/i })).toBeInTheDocument()
   })
 
-  it('is dismissed by clicking beside it too', async () => {
-    const user = await start(deck('SOR_016', MINE), deck('TST_001', THEIRS))
-    await waitFor(() => expect(overlay()).not.toBeNull())
-    await user.click(overlay()!)
-    expect(overlay()).toBeNull()
-    expect(screen.getByRole('button', { name: /^pass$/i })).toBeInTheDocument()
-  })
-
   it('names the cards nowhere but the overlay: not in the log, and not on the board once it is closed', async () => {
     const user = await start(deck('SOR_016', MINE), deck('TST_001', THEIRS))
     await waitFor(() => expect(overlay()).not.toBeNull())

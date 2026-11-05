@@ -83,6 +83,11 @@ async function start(playerDeck: SavedDeck, resource: [number, number] = [3, 3])
 const unitsOn = (side: PlayerId) => within(screen.getByTestId(`${side}-ground-units`)).queryAllByTestId(/^board-unit-u\d+$/)
 const creditButtons = () => screen.queryAllByRole('button', { name: /defeat a credit token/i })
 const doneButton = () => screen.queryByRole('button', { name: /^done$/i })
+/** Your leader's action is taken from the menu the leader opens. */
+async function useLeaderAction(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId('player-leader-card'))
+  await user.click(screen.getByRole('menuitem', { name: /use action/i }))
+}
 const handSize = () => screen.queryAllByTestId(/^hand-card-\d+$/).length
 
 describe('the paying step on the other doors, on the game screen', () => {
@@ -99,7 +104,7 @@ describe('the paying step on the other doors, on the game screen', () => {
     await waitFor(() => expect(unitsOn('player')).toHaveLength(1))
     const before = handSize()
     // Three to pay with two resources: one token is needed, so there is no Done yet.
-    await user.click(screen.getByTestId('player-leader-card'))
+    await useLeaderAction(user)
     expect(screen.getByTestId('choice-overlay-prompt')).toHaveTextContent(/defeat credit tokens to pay for test leader's action \(3 to pay\)/i)
     expect(creditButtons()).toHaveLength(1)
     expect(doneButton()).toBeNull()
@@ -116,23 +121,23 @@ describe('the paying step on the other doors, on the game screen', () => {
     await user.click(screen.getByTestId('hand-card-0')) // the Banker
     await waitFor(() => expect(unitsOn('player')).toHaveLength(1))
     // Only the player holds any, so theirs is the one pill on screen.
-    const tokens = () => screen.getByTestId('credit-tokens').textContent
+    const tokens = () => screen.getByRole('img', { name: /credit token/i }).textContent
     const before = handSize()
-    await user.click(screen.getByTestId('player-leader-card'))
+    await useLeaderAction(user)
     await user.click(creditButtons()[0])
     // A token is picked and not yet defeated: the count holds until the step finishes.
-    expect(tokens()).toBe('Cred. 2')
+    expect(tokens()).toBe('CRED 2')
     await user.click(screen.getByRole('button', { name: /cancel: take back the action/i }))
     expect(creditButtons()).toHaveLength(0)
     expect(screen.queryByTestId('choice-overlay')).toBeNull()
-    expect(tokens()).toBe('Cred. 2')
+    expect(tokens()).toBe('CRED 2')
     expect(handSize()).toBe(before)
     // The action is still there to take, and this time it is paid for.
-    await user.click(screen.getByTestId('player-leader-card'))
+    await useLeaderAction(user)
     await user.click(creditButtons()[0])
     await user.click(doneButton()!)
     await waitFor(() => expect(handSize()).toBe(before + 1))
-    expect(tokens()).toBe('Cred. 1')
+    expect(tokens()).toBe('CRED 1')
   })
 
   it("pays a unit action's cost by clicking a unit that pays as a resource", async () => {

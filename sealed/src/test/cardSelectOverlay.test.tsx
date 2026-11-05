@@ -42,7 +42,9 @@ describe('CardSelectOverlay', () => {
       { cardId: 'TST_U2', optionIndex: -1, disabled: true, key: 1 },
     ]
     render(<CardSelectOverlay state={s} prompt="Play an upgrade from your resources" items={revealItems} onPick={onPick} />)
-    expect(screen.getByTestId('card-select-1')).toBeDisabled() // revealed but not selectable
+    // Revealed but not selectable: shown, not a button.
+    expect(screen.getByTestId('card-select-1')).toHaveAccessibleName(/can't be chosen/)
+    expect(screen.getByTestId('card-select-1').tagName).not.toBe('BUTTON')
     fireEvent.click(screen.getByTestId('card-select-1'))
     expect(onPick).not.toHaveBeenCalled()
     fireEvent.click(screen.getByTestId('card-select-0'))

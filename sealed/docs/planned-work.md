@@ -425,8 +425,8 @@ merge with the dmgCtrl PWA later. The UI shares the PWA's controls and colour to
 AI share nothing.
 
 1. **The redesigned screens**: #1012 the last of the phone game prompts (left: the Credit stepper,
-   waiting on a decision, and the 844x390 screenshots), #1015 the desktop game as the phone layout
-   grown, #886 settings, #887 help.
+   waiting on a decision, and the screenshots: the prompts at 844x390, and the game at 1280x720 and
+   844x390 for G19 and G26 to G29), #886 settings, #887 help.
 2. **Time the AI on a real phone** once the board plays there: the longest main-thread task per
    decision, and the time to the AI's move, beside the desktop figures in `experiments.md`. The
    search runs in a worker; only a desktop with CPU throttling has been measured.

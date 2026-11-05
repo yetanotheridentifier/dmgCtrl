@@ -43,8 +43,9 @@ async function goWith(user: User, deckId: string) {
 }
 
 /** Open one of More's entries. */
+/** More, on setup or in a game, where its name also lists what it holds. */
 async function fromMore(user: User, name: string) {
-  await user.click(screen.getByRole('button', { name: 'More' }))
+  await user.click(screen.getByRole('button', { name: /^more/i }))
   await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name }))
 }
 
@@ -98,15 +99,14 @@ describe('App shell', () => {
     expect(retryPendingCollection).toHaveBeenCalledTimes(1)
   })
 
-  it('exits the game via the dmgCtrl icon, returning to setup', async () => {
+  it('leaves the game from the back button, returning to setup', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network')))
     const user = userEvent.setup()
     const deck = saveDeck({ name: 'Ready Deck', leader: 'SOR_010', base: 'SOR_029', cards: [] })
     render(<App />)
     await goWith(user, deck.id)
 
-    // On the game screen the dmgCtrl icon (in the log column header) is the exit control.
-    await user.click(await screen.findByTestId('exit-btn'))
+    await user.click(await screen.findByRole('button', { name: 'Leave the game' }))
     expect(screen.getByTestId('setup-screen')).toBeInTheDocument()
   })
 
@@ -145,7 +145,7 @@ describe('App shell', () => {
     expect(screen.queryByRole('button', { name: /keep hand/i })).toBeNull()
     const logBefore = screen.getByTestId('game-log').textContent
 
-    await user.click(screen.getByRole('button', { name: /help/i }))
+    await fromMore(user, 'Help')
     expect(screen.getByTestId('help-overlay')).toBeInTheDocument()
     await user.click(screen.getByTestId('help-overlay'))
 
@@ -170,7 +170,7 @@ describe('App shell', () => {
     const user = userEvent.setup()
     await startGame(user)
 
-    await user.click(screen.getByRole('button', { name: /help/i }))
+    await fromMore(user, 'Help')
     const content = screen.getByTestId('help-content').innerHTML
     expect(content).toContain('Turn structure')
     expect(content).not.toContain('Choosing your deck')
@@ -269,7 +269,7 @@ describe('App shell', () => {
       expect(loadSettings().shareGames).toBe('no')
 
       // Back on setup it is the pill, and the question is not asked again.
-      await user.click(screen.getByTestId('exit-btn'))
+      await user.click(screen.getByRole('button', { name: 'Leave the game' }))
       expect(screen.queryByTestId('share-games-notice')).toBeNull()
       expect(screen.getByTestId('share-games-pill')).toHaveTextContent('Improve the bot')
     })
@@ -315,7 +315,7 @@ describe('App shell', () => {
       const user = userEvent.setup()
       await startGame(user)
 
-      await user.click(screen.getByRole('button', { name: /settings/i }))
+      await fromMore(user, 'Settings')
       await user.click(screen.getByRole('button', { name: 'What is sent?' }))
 
       const content = screen.getByTestId('help-content')

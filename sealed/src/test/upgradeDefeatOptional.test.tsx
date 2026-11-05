@@ -85,7 +85,7 @@ describe('Clan Vizsla Soldier: the may-defeat-an-upgrade choice is reachably opt
     await user.click(screen.getByTestId('hand-card-0')) // Test Upgrade: click it, then its target
     const hostTile = within(screen.getByTestId('player-ground-units')).getByText('Upgrade Host').closest('[data-testid^="board-unit-"]')!
     await user.click(hostTile)
-    await waitFor(() => expect(within(screen.getByTestId('player-ground-units')).getByTestId(/^board-unit-upgrades-u\d+$/)).toBeInTheDocument())
+    await waitFor(() => expect(within(screen.getByTestId('player-ground-units')).getByTestId('unit-badge-upgrades')).toBeInTheDocument())
 
     // Pass through to round 2 so Clan Vizsla Soldier (played this round) is ready to attack.
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
@@ -106,7 +106,7 @@ describe('Clan Vizsla Soldier: the may-defeat-an-upgrade choice is reachably opt
     await user.click(decline)
 
     // Declining leaves the upgrade in place and clears the choice.
-    expect(within(screen.getByTestId('player-ground-units')).getByTestId(/^board-unit-upgrades-u\d+$/)).toBeInTheDocument()
+    expect(within(screen.getByTestId('player-ground-units')).getByTestId('unit-badge-upgrades')).toHaveTextContent('+1')
     expect(screen.queryByTestId('decline-choice-btn')).not.toBeInTheDocument()
   })
 })

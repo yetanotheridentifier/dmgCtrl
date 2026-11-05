@@ -10,7 +10,8 @@ import CardFace from '../cardFace'
 import { intentHighlight } from '../highlight'
 import type { Highlight } from '../highlight'
 import { DescribedParts } from '../cardRef'
-import { orderUnits } from '../boardLayout'
+import { BOARD_SCALE, boardLeft, orderUnits, type BoardScale } from '../boardLayout'
+import { CardZoomPopover } from '../cardZoom'
 import { BackIcon, CloseIcon, DotsIcon, LogIcon } from '../icons'
 import { unitHasKeyword } from '../../engine/keywords'
 import { effectiveHp, effectivePower } from '../../engine/stats'
@@ -18,16 +19,14 @@ import { friendlyCreditTokens, hasForceToken } from '../../engine/effects'
 import { TOKEN_EXPERIENCE, TOKEN_SHIELD } from '../../engine/tokenUpgrades'
 
 /**
- * The game screen on a phone in landscape: a 196 px column of controls on the left (leave, log and
- * more; the round; each side's counts; the prompt; the action buttons), and the board filling the
- * rest, with the hand under it. Everything fits the screen at 844×390: nothing scrolls.
+ * The game screen: a column of controls on the left (leave, log and more; the round; each side's
+ * counts; the prompt; the action buttons), and the board filling the rest, with the hand under it.
+ * On a phone in landscape everything fits the screen at 844×390: nothing scrolls. The desktop runs
+ * the same layout grown (`BOARD_SCALE`), with the log docked in its wider column.
  *
- * Presentational: the game screen works out what can be done and hands the pieces in, so this
- * layout and the desktop one answer the same moves the same way.
+ * Presentational: the game screen works out what can be done and hands the pieces in.
  */
 
-/** A unit's square slot, and the short edge of its card, four to a row. */
-const SLOT = { normal: { slot: 56, card: 40 }, crowded: { slot: 45, card: 32 } }
 /** A half holding more units than this lays them five to a row, smaller. */
 const CROWDED_AFTER = 8
 
@@ -51,6 +50,10 @@ const OPPONENT_BORDER = `border-[color:var(--color-opponent)] ${OPPONENT_TEXT}`
 
 const BADGE = 'pointer-events-none whitespace-nowrap rounded-md px-[3px] text-[7px] font-bold leading-[11px] shadow-[0_1px_2px_rgba(0,0,0,0.7)]'
 
+/** A unit's power and HP: a disc in each bottom corner, `size` across. */
+const STAT = 'pointer-events-none absolute bottom-0 rounded-full text-center font-bold text-white'
+const statStyle = (size: number): CSSProperties => ({ width: size, height: size, lineHeight: `${size}px`, fontSize: Math.round(size * 0.62) })
+
 /**
  * A unit in its square slot: the card art, turned sideways when exhausted, with its power and HP
  * and a badge for each thing on it. The badges stay upright on an exhausted unit.
@@ -58,14 +61,17 @@ const BADGE = 'pointer-events-none whitespace-nowrap rounded-md px-[3px] text-[7
  * The attacker is ringed white, a target in the colour of what picking it does (`intentHighlight`),
  * and a unit that can act in blue.
  */
-export function PhoneUnit({ state, unit, interact, size = 'normal' }: {
+export function PhoneUnit({ state, unit, interact, size = 'normal', scale = 'phone' }: {
   state: GameState
   unit: UnitState
   interact: UnitInteraction
-  size?: keyof typeof SLOT
+  size?: 'normal' | 'crowded'
+  scale?: BoardScale
 }) {
-  const { slot, card } = SLOT[size]
-  const { bind } = useCardZoom({ cardId: unit.cardId, instanceId: unit.instanceId })
+  const { slot, card } = BOARD_SCALE[scale].unit[size]
+  const stat = BOARD_SCALE[scale].unitStat
+  // A held card opens full size; with a mouse, Shift over it shows it beside the board.
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom({ cardId: unit.cardId, instanceId: unit.instanceId })
   const clickable = (interact.actionable || interact.isTarget || interact.isUpgradeTarget) && interact.onClick
   const highlight: Highlight | undefined = interact.acting === 'actor'
     ? 'amber'
@@ -100,6 +106,7 @@ export function PhoneUnit({ state, unit, interact, size = 'normal' }: {
     {/* Outside the unit, so a tap in it never reaches the unit's own tap or hold. */}
     {capturedOpen && <CapturedCards state={state} guard={name} captured={captured} onClose={() => setCapturedOpen(false)} />}
     <div
+      ref={setAnchor}
       data-testid={`board-unit-${unit.instanceId}`}
       data-actionable={interact.actionable}
       data-selected={interact.selected}
@@ -138,8 +145,9 @@ export function PhoneUnit({ state, unit, interact, size = 'normal' }: {
       {upgrades > 0 && (
         <span data-testid="unit-badge-upgrades" aria-label={`${upgrades} upgrades`} className={`${BADGE} absolute right-0 top-1/2 bg-[var(--color-surface-raised)] text-ink`}>+{upgrades}</span>
       )}
-      <span className="pointer-events-none absolute bottom-0 left-0 h-3.5 w-3.5 rounded-full bg-red text-center text-[9px] font-bold leading-[14px] text-white">{effectivePower(state, unit)}</span>
-      <span className="pointer-events-none absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-token-hp text-center text-[9px] font-bold leading-[14px] text-white">{effectiveHp(state, unit)}</span>
+      <span className={`${STAT} left-0 bg-red`} style={statStyle(stat)}>{effectivePower(state, unit)}</span>
+      <span className={`${STAT} right-0 bg-token-hp`} style={statStyle(stat)}>{effectiveHp(state, unit)}</span>
+      {zoomed && <CardZoomPopover card={state.cards[unit.cardId]} fallbackName={unit.cardId} deployed={unit.isLeader} anchorRef={anchorRef} />}
     </div>
     </>
   )
@@ -188,11 +196,12 @@ function CapturedCards({ state, guard, captured, onClose }: {
  * One side's half of an arena. The opponent's units grow up from the gap and yours down from it, so
  * both front rows meet in the middle; Sentinels sit in the front row (`orderUnits`).
  */
-export function PhoneArena({ state, side, arena, unitInteraction }: {
+export function PhoneArena({ state, side, arena, unitInteraction, scale = 'phone' }: {
   state: GameState
   side: PlayerId
   arena: 'ground' | 'space'
   unitInteraction: (unit: UnitState) => UnitInteraction
+  scale?: BoardScale
 }) {
   const anchor = side === 'opponent' ? 'bottom' : 'top'
   const units = orderUnits(state, state.players[side].units.filter(u => u.arena === arena), anchor)
@@ -205,7 +214,7 @@ export function PhoneArena({ state, side, arena, unitInteraction }: {
       className={PANEL}
       style={{ ...(arena === 'space' ? STARFIELD : GROUND), flexWrap: side === 'opponent' ? 'wrap-reverse' : 'wrap', alignContent: 'flex-start' }}
     >
-      {units.map(u => <PhoneUnit key={u.instanceId} state={state} unit={u} interact={unitInteraction(u)} size={size} />)}
+      {units.map(u => <PhoneUnit key={u.instanceId} state={state} unit={u} interact={unitInteraction(u)} size={size} scale={scale} />)}
     </div>
   )
 }
@@ -222,16 +231,17 @@ function Notch({ label, edge }: { label: string; edge: 'left' | 'right' }) {
   )
 }
 
-function Arena({ state, arena, playerInteraction, opponentInteraction }: {
+function Arena({ state, arena, playerInteraction, opponentInteraction, scale }: {
   state: GameState
   arena: 'ground' | 'space'
   playerInteraction: (unit: UnitState) => UnitInteraction
   opponentInteraction: (unit: UnitState) => UnitInteraction
+  scale: BoardScale
 }) {
   return (
-    <div role="region" aria-label={arena === 'space' ? 'Space arena' : 'Ground arena'} className="relative flex min-w-0 flex-col gap-[18px]">
-      <PhoneArena state={state} side="opponent" arena={arena} unitInteraction={opponentInteraction} />
-      <PhoneArena state={state} side="player" arena={arena} unitInteraction={playerInteraction} />
+    <div role="region" aria-label={arena === 'space' ? 'Space arena' : 'Ground arena'} className="relative flex min-w-0 flex-col" style={{ gap: BOARD_SCALE[scale].arenaGap }}>
+      <PhoneArena state={state} side="opponent" arena={arena} unitInteraction={opponentInteraction} scale={scale} />
+      <PhoneArena state={state} side="player" arena={arena} unitInteraction={playerInteraction} scale={scale} />
       <Notch label={arena === 'space' ? 'SPACE' : 'GROUND'} edge={arena === 'space' ? 'left' : 'right'} />
     </div>
   )
@@ -279,7 +289,7 @@ export function PlayerSummary({ state, side, onDiscard, onDeck }: {
         {mine ? 'YOU' : 'OPPONENT'}
         {state.initiative === side && <Pill className={`border ${mine ? 'border-accent text-accent' : OPPONENT_BORDER}`}>INITIATIVE</Pill>}
         {hasForceToken(state, side) && <Pill className="bg-token-force text-ink" label={`The Force is with ${mine ? 'you' : 'the opponent'}`}>FORCE</Pill>}
-        {credits > 0 && <Pill className="bg-token-credit text-ink">CRED {credits}</Pill>}
+        {credits > 0 && <Pill className="bg-token-credit text-ink" label={`${credits} Credit token${credits === 1 ? '' : 's'}`}>CRED {credits}</Pill>}
       </div>
       <div className="flex gap-1">
         <Stat value={`${readyCount}/${p.resources.length}`} label="RES" name={`${whose} resources: ${readyCount} ready of ${p.resources.length}`} tonal={mine} />
@@ -296,19 +306,10 @@ function roundTitle(round: number): string {
 }
 
 /**
- * The log, sliding in from the left over the controls and leaving the board in view: newest first,
- * under the round each action was taken in, each action in one row with what it changed beneath it.
- * Card names are coloured by their owner and a tap opens the card. Undo sits at its foot when it is on.
+ * The log's entries: newest first, under the round each action was taken in, each action in one row
+ * with what it changed beneath it. Card names are coloured by their owner and a tap opens the card.
  */
-export function GameLogDrawer({ open, state, log, onClose, onUndo }: {
-  open: boolean
-  state: GameState | null
-  log: LogEntry[]
-  onClose: () => void
-  onUndo?: () => void
-}) {
-  useEscape(open, onClose)
-  if (!open) return null
+function LogRounds({ state, log }: { state: GameState | null; log: LogEntry[] }) {
   const rounds: { round: number; rows: { action: LogEntry; outcomes: LogEntry[] }[] }[] = []
   for (const entry of log) {
     const last = rounds[rounds.length - 1]
@@ -320,16 +321,7 @@ export function GameLogDrawer({ open, state, log, onClose, onUndo }: {
     rounds[rounds.length - 1].rows.push({ action: entry, outcomes: [] })
   }
   return (
-    <aside
-      data-testid="game-log-drawer"
-      aria-label="Log"
-      className="fixed inset-y-0 left-0 z-40 flex w-[300px] flex-col gap-2 overflow-y-auto bg-[var(--color-sheet)] shadow-[4px_0_16px_rgba(0,0,0,0.6)]"
-      style={{ paddingTop: 'var(--edge-top)', paddingBottom: 'var(--edge-bottom)', paddingLeft: 'var(--edge-left)', paddingRight: '12px' }}
-    >
-      <div className="flex min-h-11 items-center gap-3">
-        <h2 className="m-0 flex-1 text-lg font-medium">Log</h2>
-        <IconButton label="Close the log" onClick={onClose}><span aria-hidden="true">×</span></IconButton>
-      </div>
+    <>
       {log.length === 0 && <div className="text-ink-faint">No actions yet</div>}
       {[...rounds].reverse().map((r, i) => (
         <section key={`${r.round}-${i}`} className="flex flex-col gap-1">
@@ -345,6 +337,35 @@ export function GameLogDrawer({ open, state, log, onClose, onUndo }: {
           ))}
         </section>
       ))}
+    </>
+  )
+}
+
+/**
+ * The log on a phone, sliding in from the left over the controls and leaving the board in view.
+ * Undo sits at its foot when it is on.
+ */
+export function GameLogDrawer({ open, state, log, onClose, onUndo }: {
+  open: boolean
+  state: GameState | null
+  log: LogEntry[]
+  onClose: () => void
+  onUndo?: () => void
+}) {
+  useEscape(open, onClose)
+  if (!open) return null
+  return (
+    <aside
+      data-testid="game-log-drawer"
+      aria-label="Log"
+      className="fixed inset-y-0 left-0 z-40 flex w-[300px] flex-col gap-2 overflow-y-auto bg-[var(--color-sheet)] shadow-[4px_0_16px_rgba(0,0,0,0.6)]"
+      style={{ paddingTop: 'var(--edge-top)', paddingBottom: 'var(--edge-bottom)', paddingLeft: 'var(--edge-left)', paddingRight: '12px' }}
+    >
+      <div className="flex min-h-11 items-center gap-3">
+        <h2 className="m-0 flex-1 text-lg font-medium">Log</h2>
+        <IconButton label="Close the log" onClick={onClose}><span aria-hidden="true">×</span></IconButton>
+      </div>
+      <LogRounds state={state} log={log} />
       {onUndo && (
         <Button testId="log-undo-btn" onClick={onUndo}>Undo</Button>
       )}
@@ -352,12 +373,23 @@ export function GameLogDrawer({ open, state, log, onClose, onUndo }: {
   )
 }
 
-/** More: Help, Settings and conceding, which asks once more. No bug report on a phone. */
-export function MoreSheet({ open, onClose, onHelp, onSettings, onConcede }: {
+/** The log on the desktop, docked in the controls column and filling what it leaves. */
+function DockedLog({ state, log }: { state: GameState; log: LogEntry[] }) {
+  return (
+    <div role="log" aria-label="Log" data-testid="game-log" className="flex min-h-[160px] flex-1 flex-col gap-1.5 overflow-y-auto rounded-xl bg-[var(--color-sheet)] px-2.5 py-2">
+      <LogRounds state={state} log={log} />
+    </div>
+  )
+}
+
+/** More: Help, Settings, Report a bug (on the desktop, when turned on) and conceding, which asks once more. */
+export function MoreSheet({ open, onClose, onHelp, onSettings, onReport, onConcede }: {
   open: boolean
   onClose: () => void
   onHelp: () => void
   onSettings: () => void
+  /** Absent on a phone, and while the bug report is turned off in Settings. */
+  onReport?: () => void
   /** Absent while conceding is not open to you: the opponent is acting, or the game is over. */
   onConcede?: () => void
 }) {
@@ -367,6 +399,7 @@ export function MoreSheet({ open, onClose, onHelp, onSettings, onConcede }: {
     <Sheet open={open} title="More" onClose={close}>
       <Button onClick={() => { close(); onHelp() }}>Help</Button>
       <Button onClick={() => { close(); onSettings() }}>Settings</Button>
+      {onReport && <Button onClick={() => { close(); onReport() }}>Report a bug</Button>}
       {onConcede && (confirming ? (
         <div className="flex flex-col gap-2 rounded-xl bg-surface p-3">
           <span className="text-sm text-ink-dim">Concede the game?</span>
@@ -508,14 +541,15 @@ export function LeaderMenu({ name, kind = 'LEADER', items, onSee, onClose }: {
 }
 
 /**
- * The game over, on a phone: a card over the board saying who won and how, which decks played, and
- * Rematch or a new setup. The controls column stays uncovered, so the log is still under Log.
+ * The game over: a card over the board saying who won and how, which decks played, and Rematch or a
+ * new setup. The controls column stays uncovered, so the log is still to hand.
  */
-export function PhoneGameOver({ state, deckName, onRematch, onExit }: {
+export function PhoneGameOver({ state, deckName, onRematch, onExit, scale = 'phone' }: {
   state: GameState
   deckName: string
   onRematch: () => void
   onExit: () => void
+  scale?: BoardScale
 }) {
   if (state.winner === null) return null
   const outcome = outcomeBanner(state.winner, state.concededBy)
@@ -526,7 +560,7 @@ export function PhoneGameOver({ state, deckName, onRematch, onExit }: {
   const opp = state.players.opponent
   const against = `${deckName} against ${state.cards[opp.leader.cardId]?.name ?? opp.leader.cardId} · ${baseName('opponent')}`
   return (
-    <div data-testid="game-over" className="fixed inset-y-0 right-0 z-30 flex items-center justify-center bg-[rgba(0,5,16,0.62)]" style={{ left: 214 }}>
+    <div data-testid="game-over" className="fixed inset-y-0 right-0 z-30 flex items-center justify-center bg-[rgba(0,5,16,0.62)]" style={{ left: boardLeft(scale) }}>
       <div role="dialog" aria-label={`Game over: ${outcome.title.toLowerCase()}`} data-testid="game-over-banner" className="flex w-[380px] flex-col items-center gap-1.5 rounded-2xl bg-[var(--color-sheet)] p-5 text-center shadow-[0_8px_32px_rgba(0,0,0,0.6)]">
         <div className="text-xs tracking-[0.14em] text-accent">GAME OVER</div>
         <div className={`text-[30px] font-light tracking-[0.06em] ${outcome.tone}`}>{outcome.title}</div>
@@ -536,7 +570,7 @@ export function PhoneGameOver({ state, deckName, onRematch, onExit }: {
           <Button onClick={onExit}>New setup</Button>
           <Button variant="primary" testId="rematch-btn" onClick={onRematch}>Rematch</Button>
         </div>
-        <div className="mt-1 text-xs text-ink-faint">Rematch shuffles the same decks. The log is still under Log.</div>
+        <div className="mt-1 text-xs text-ink-faint">{`Rematch shuffles the same decks. The log is still ${scale === 'phone' ? 'under Log' : 'beside the board'}.`}</div>
       </div>
     </div>
   )
@@ -675,15 +709,19 @@ export function TurnSideways() {
 }
 
 /** What the prompt says when the move in hand needs no instruction of its own. */
-function idlePrompt(state: GameState, attacker: string | undefined): DescribePart[] {
+function idlePrompt(state: GameState, attacker: string | undefined, scale: BoardScale): DescribePart[] {
+  const tap = scale === 'phone' ? 'Tap' : 'Click'
   if (state.winner !== null) return ['The game is over.']
   if (state.activePlayer !== 'player') return ['The opponent is acting.']
-  if (attacker) return [`${attacker} attacks. Tap a red target.`]
-  return ['Your action. Tap a highlighted card to play it, or a ready unit to attack.']
+  if (attacker) return [`${attacker} attacks. ${tap} a red target.`]
+  return [`Your action. ${tap} a highlighted card to play it, or a ready unit to attack.`]
 }
 
-export function PhoneGameLayout({ state, prompt, attacker, actions, hand, centre, playerInteraction, opponentInteraction, onExit, onLog, onMore, onDiscard, onDeck }: {
+export function PhoneGameLayout({ state, scale, log, prompt, attacker, actions, hand, centre, playerInteraction, opponentInteraction, onExit, onLog, onMore, onDiscard, onDeck }: {
   state: GameState
+  scale: BoardScale
+  /** The log, docked in the column on the desktop; a phone opens it from Log as a drawer instead. */
+  log: LogEntry[]
   /** What the board's highlights are asking for, when they need saying. */
   prompt: DescribePart[] | undefined
   /** The name of the unit chosen to attack, while its target is being picked. */
@@ -701,34 +739,48 @@ export function PhoneGameLayout({ state, prompt, attacker, actions, hand, centre
   onDeck?: () => void
 }) {
   const phase = state.phase.charAt(0).toUpperCase() + state.phase.slice(1)
+  const S = BOARD_SCALE[scale]
+  const phone = scale === 'phone'
+  const roundPhase = (
+    <div data-testid="round-phase" className={phone ? 'px-0.5 pt-0.5 text-[15px]' : 'flex-1 self-center pl-1 text-[17px]'}>Round {state.round} · {phase}</div>
+  )
+  const actionPrompt = (
+    <div data-testid="action-prompt" className={`max-h-full w-full overflow-y-auto rounded-xl border border-accent/40 text-ink-dim ${phone ? 'px-2.5 py-2 text-xs leading-4' : 'px-3 py-2.5 text-sm leading-[19px]'}`}>
+      <DescribedParts state={state} parts={prompt ?? idlePrompt(state, attacker, scale)} />
+    </div>
+  )
   return (
     <div
       data-testid="phone-layout"
-      className="flex h-screen w-full gap-2.5 overflow-hidden"
-      style={{ paddingTop: 8, paddingBottom: 8, paddingLeft: 'max(env(safe-area-inset-left, 0px), 8px)', paddingRight: 'max(env(safe-area-inset-right, 0px), 8px)' }}
+      data-scale={scale}
+      className="flex h-screen w-full overflow-hidden"
+      style={{ gap: S.gap, paddingTop: S.pad, paddingBottom: S.pad, paddingLeft: `max(env(safe-area-inset-left, 0px), ${S.pad}px)`, paddingRight: `max(env(safe-area-inset-right, 0px), ${S.pad}px)` }}
     >
-      <div data-testid="phone-controls" className="flex w-[196px] flex-none flex-col gap-1.5">
+      <div data-testid="phone-controls" className={`flex flex-none flex-col ${phone ? 'gap-1.5' : 'gap-2'}`} style={{ width: S.column }}>
         <div className="flex gap-2">
           <IconButton label="Leave the game" onClick={onExit}><BackIcon /></IconButton>
-          <div className="flex-1" />
-          <IconButton label="Log" onClick={onLog}><LogIcon /></IconButton>
+          {phone ? <div className="flex-1" /> : roundPhase}
+          {phone && <IconButton label="Log" onClick={onLog}><LogIcon /></IconButton>}
           <IconButton label="More: help, settings, concede" onClick={onMore}><DotsIcon /></IconButton>
         </div>
-        <div data-testid="round-phase" className="px-0.5 pt-0.5 text-[15px]">Round {state.round} · {phase}</div>
+        {phone && roundPhase}
         <PlayerSummary state={state} side="opponent" onDiscard={onDiscard} />
-        <div className="flex min-h-0 flex-1 items-center overflow-hidden">
-          <div data-testid="action-prompt" className="max-h-full w-full overflow-y-auto rounded-xl border border-accent/40 px-2.5 py-2 text-xs leading-4 text-ink-dim">
-            <DescribedParts state={state} parts={prompt ?? idlePrompt(state, attacker)} />
-          </div>
-        </div>
+        {phone ? (
+          <div className="flex min-h-0 flex-1 items-center overflow-hidden">{actionPrompt}</div>
+        ) : (
+          <>
+            {actionPrompt}
+            <DockedLog state={state} log={log} />
+          </>
+        )}
         <PlayerSummary state={state} side="player" onDiscard={onDiscard} onDeck={onDeck} />
         <div data-testid="phone-actions" className="mt-1 max-h-[45%] overflow-y-auto">{actions}</div>
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <section data-testid="game-board" className="grid min-h-0 flex-1 gap-x-2" style={{ gridTemplateColumns: 'minmax(0, 1fr) 84px minmax(0, 1fr)' }}>
-          <Arena state={state} arena="space" playerInteraction={playerInteraction} opponentInteraction={opponentInteraction} />
-          <div className="flex flex-col gap-[18px]">
+        <section data-testid="game-board" className="grid min-h-0 flex-1 gap-x-2" style={{ gridTemplateColumns: `minmax(0, 1fr) ${S.centre}px minmax(0, 1fr)` }}>
+          <Arena state={state} arena="space" playerInteraction={playerInteraction} opponentInteraction={opponentInteraction} scale={scale} />
+          <div className="flex flex-col" style={{ gap: S.arenaGap }}>
             <div className="flex flex-1 flex-col items-center justify-end gap-1.5">
               {centre.opponentLeader}
               {centre.opponentBase}
@@ -738,7 +790,7 @@ export function PhoneGameLayout({ state, prompt, attacker, actions, hand, centre
               {centre.playerLeader}
             </div>
           </div>
-          <Arena state={state} arena="ground" playerInteraction={playerInteraction} opponentInteraction={opponentInteraction} />
+          <Arena state={state} arena="ground" playerInteraction={playerInteraction} opponentInteraction={opponentInteraction} scale={scale} />
         </section>
         {hand}
       </div>

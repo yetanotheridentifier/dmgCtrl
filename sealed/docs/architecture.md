@@ -6,9 +6,9 @@ Build plan and epic breakdown: `docs/swu-ai-handoff.html` (repo root).
 
 ## Platform, and its place beside the PWA
 
-**Sealed targets a phone and a desktop browser.** The current screens are laid out for a desktop:
-they render on a phone, but the board needs more screen than a phone has. The phone layout is a
-redesign rather than a set of breakpoints, and is in progress (see [planned-work.md](planned-work.md)).
+**Sealed targets a phone and a desktop browser.** The game is laid out for a phone held sideways
+and grown for the desktop (see Layout under UI); the remaining screens' redesign is in
+[planned-work.md](planned-work.md).
 
 - **Sealed is its own app.** It has its own package, build, tests and docs, and is served under
   `/sealed`. It installs as a PWA of its own ("dmgCtrl Sealed"), with a manifest whose `id`,
@@ -512,17 +512,16 @@ lighter than the icon buttons. The game screen has its own header, so the pill i
 a game. The header row never wraps for it: the label stays on one line, and below Tailwind's `sm`
 width (640px) the pill is hidden, leaving More › Settings as the route to the setting.
 
-The surface is an **overlay** (`SettingsOverlay`), opened from the cog in the app header and
-from the cog in the game header. Not a screen: routing away unmounts `GameScreen` and the game
+The surface is an **overlay** (`SettingsOverlay`), opened from More on the setup screen and from
+More in the game. Not a screen: routing away unmounts `GameScreen` and the game
 with it, since the game lives entirely in `useGame`'s state and refs. `bugReportOverlay` and
 `cardGridOverlay` are the same pattern. It reads the context directly rather than taking props,
 unlike the presentational overlays, because a settings form has no caller-held state to be given.
 Its one callback besides closing is `onHelp(section)`, which the "What is sent?" link uses to open
 Help on a single section of the guide.
 
-The header chrome icons (bug, cog, question mark) live together in `components/icons.tsx` and
-share one `ICON_PROPS` spec, so a mismatch between neighbours is visible in one file. The cog
-and question mark are copies of the PWA's paths.
+The icons for the shared `IconButton` live together in `components/icons.tsx`, the back, more and
+log icons copies of the PWA's, so a mismatch between neighbours is visible in one file.
 
 ## Help
 
@@ -616,19 +615,11 @@ The board is drawn with art-dominant cards, not text rows:
   (or leader ability's) `intent`, mapped once in `components/highlight.ts`: green helps, red
   harms, yellow (`--color-yellow`) is cunning, white attaches a real upgrade card (including one
   placed from hand); a target with no intent is an attack, so red. Accent blue stays selection
-  and dimmed accent "can act". A base takes the same colours through `BaseCard`'s `target`. Unit effects are drawn as
-  physical-style **tokens** (`tokens.ts`, where `tokenLayout` places 1 to 7 over the art: one
-  centred column when ready, two to a row when exhausted) on the non-rotating wrapper, so they
-  stay upright when the card is exhausted. Damage is a deep-red rounded square with a white
-  number; every other kind (buff, debuff, Shield, Experience, Advantage, Weakness) is a pill the
-  same height and twice as wide, carrying a short label and its value; the stat pills (buff,
-  debuff, Experience, Weakness) print bold power (top-left) and HP (bottom-right) figures in
-  their kind's `figures` colours (red and blue on the white buff, white on the rest), placed by
-  `TOKEN_FIGURE_LAYOUT`, with each sign drawn as a box one cap-height tall so it sits halfway up
-  the digits in any font, and every token
-  shares one drop shadow and edge (`TOKEN_SHADOW`, `TOKEN_BORDER`). `TOKEN_SPEC` is the one
-  spec for fill, ink and width, with the fills as `--color-token-*` properties in `index.css`. The
-  buff and debuff pills show `stats.offCardStatDelta`, split by sign.
+  and dimmed accent "can act". A base takes the same colours through `BaseCard`'s `target`. A unit in play is a
+  `PhoneUnit` tile (see Layout below): its effective power and HP in discs at its foot, its damage
+  over the art, and a badge for each thing on it, all on the non-rotating wrapper so they stay
+  upright when the card is exhausted. What a unit carries in full (each upgrade and token by name)
+  is in `CardDetail`.
 - **Roll-over zoom** (`useCardZoom` + `CardZoomPopover`): **Shift+hover** (mouse, so plain
   hovering doesn't obscure play) or **touch-long-press** shows a full-size, upright
   copy floating above the board (absolute, centred on the source; viewport-edge clamping is not yet
@@ -686,28 +677,23 @@ The board is drawn with art-dominant cards, not text rows:
   snapshot's `logLength` cuts back to, so undo and cancel remove them with the action. The bug
   report prints them indented under the action. Saved game records hold moves, not the log.
 - **Action prompt**: `describeChoiceParts` says what the current board highlights are
-  asking for, rendered between the two bases. It covers the `BOARD_TARGET_KINDS` choices, the
+  asking for, in the controls column between the two sides' counts. It covers the `BOARD_TARGET_KINDS` choices, the
   ones resolved by clicking a highlighted card rather than a menu button, plus upgrade
   placement, which is local UI state rather than a pending choice. That constant is shared with
   the component's highlight logic so the two cannot drift. It also covers the steps that are
   *not* resolved on the board: the two **resourcing** steps (setup, and the regroup pick), where
   clicking a hand card is indistinguishable from playing one, and the **mulligan**, which is
-  answered only from the Action column. Without a prompt a new player clicks their hand, gets
-  no response, and has nothing on screen explaining why. It stays silent for the base actions
-  (playing a card, choosing an attacker):
-  those are self-evident, and a permanent prompt would train the player to ignore the panel.
-  The prompt leads with the card that raised the choice. **Every** choice can name one: the
+  answered only from the action buttons. Without a prompt a new player clicks their hand, gets
+  no response, and has nothing on screen explaining why. Otherwise it says only what clicking
+  does (your action, the attacker chosen, the opponent acting, the game over), or, while the
+  opponent's paced action waits to be shown, what it is. The prompt leads with the card that raised the choice. **Every** choice can name one: the
   ability dispatcher stamps `PendingChoice.source` automatically at the five places an effect is
   invoked, rather than it being passed at each of the ~185 `pushChoice` call sites, and follow-up
   choices inherit it from the choice being answered. `choiceSource.test.ts` plays the whole coverage
-  deck set and fails if any choice reaches a player unattributed. The panel is **absolutely
-  positioned and `pointer-events-none`**: in
-  flow it reflowed the whole board every time it appeared or cleared, and being click-through
-  lets it sit over the play area without stealing a click meant for a card. `CardRef` sets
-  `pointer-events-auto` on itself so references inside it stay hoverable. Its fill uses
-  `--color-surface-solid`, not `--color-surface`: the latter is itself `rgba(…, 0.45)`, so card
-  art reads through it however it is applied.
-- **Bug report**: the header's bug button opens a title/description form; submitting copies
+  deck set and fails if any choice reaches a player unattributed. While a prompt panel asks its
+  own question, the column's prompt does not repeat it.
+- **Bug report**: on the desktop, with the setting on, **Report a bug** under More opens a
+  title/description form; a phone does not offer it. Submitting copies
   the assembled markdown to the clipboard and opens GitHub's prefilled new-issue page. Report
   assembly is pure (`utils/bugReport.ts`) and so is unit-tested; the hook exposes `replayData()`,
   a function rather than a value so nothing re-renders as the game runs.
@@ -722,48 +708,12 @@ The board is drawn with art-dominant cards, not text rows:
   The issue body is prefilled **empty**: a "paste the report here" line got pasted around rather
   than replaced, leaving the instruction in every filed issue. Transient guidance belongs in
   the form, not in the permanent record.
-- **Screen layout**: the game screen is full-bleed, a two-column grid
-  (`19rem 1fr`), no divider between them. The left column is sized to fit its whole header
-  row, exit icon, wordmark and up to three buttons, without truncating the wordmark.
-  Backgrounds follow one rule: the **play area,
-  the bars and the two headers use the core theme background** (transparent → the body
-  starfield), while the **log and the individual pile columns use `bg-surface`**. So the
-  **left column** header (the transparent **dmgCtrl icon = exit** with the **dmgCtrl**
-  wordmark, and the **bug = report**, **cog = settings** and **? = help** buttons aligned
-  to the log's right edge) sits on the starfield
-  like the page header, above the **log**, a `bg-surface` panel filling the height. The
-  **right column** is the **play area**, edge-to-edge to the top and right and transparent,
-  so the opponent leader reads as joined with it. The frame (icon/help/log) renders even
-  while cards load or a load fails, so leaving/Help are always available.
-- **Bars**: a **bar** is a player's off-battlefield row of piles. Convention:
-  - **Player bar** (`PlayerBar`): Deck | Resources | Hand | Action | Discard. The **hand
-    flexes** to fill the width (the most important area); the **action** column is a fixed
-    width so its buttons don't shift the layout between phases. Small columns are `auto`.
-  - **Opponent bar** (`OpponentBar`): a `1fr auto 1fr` grid, with discard + hand on the left,
-    **their leader centred** (so it lines up with the bases and the player leader below),
-    resources + deck on the right. The opponent leader lives here, not on the battlefield.
-  - Each pile sits in a `BarColumn`: a `bg-surface` column (the same background as the log)
-    with an accent all-caps label rotated 90° anticlockwise on its left. The opponent leader
-    has no column: it sits directly on the transparent play area, joined with the board.
-  - The tokens a player holds rather than a unit (Credit tokens, the Force token) are pills in
-    the **Resources** column of that player's bar, drawn by `ResourceStack` from
-    `PLAYER_TOKEN_SPEC` (`components/tokens.ts`) in the unit tokens' pill shape. They are
-    absolutely placed over the foot of the two resource slots, so holding one never changes a
-    column's width, and they read the engine's own `friendlyCreditTokens` and `hasForceToken`.
-  - A deck is face down and inert for both players. While `mayLookAtDeckTop` holds for the human,
-    `PlayerBar` passes `canLook` to their `DeckPile`, which then carries the clickable outline
-    (`accent-dim`, as a leader with a usable ability does) and opens a view-only `CardGridOverlay`
-    of the top card, dismissed by clicking outside it like the discard pile's. It is component
-    state only: no action is dispatched, so nothing is logged or recorded, the card shown is read
-    live from the deck, and the overlay closes if the permission goes. `OpponentBar` never passes
-    `canLook`, whatever the opponent holds.
-- **Battlefield layout** (`Board`): a three-column grid, **Space | Leaders+Bases | Ground**,
-  set with an inline `grid-template-columns` (Tailwind can't compile a `minmax(0,1fr)`
-  arbitrary value). It's transparent and grows to fill the play area's height, centring the
-  board vertically. The opponent half is bottom-anchored and your half top-anchored, so
-  the two bases meet at the **battlefront** in the centre and units line up along it,
-  stacking away as more are played. `boardLayout.orderUnits` keeps Sentinels at the front.
-  Each base shows either the **damage it has taken** counting up to the card's HP (the
+- **Battlefield**: a three-column grid, **Space | Leaders+Bases | Ground**, set with an inline
+  `grid-template-columns` (Tailwind can't compile a `minmax(0,1fr)` arbitrary value). The centre
+  strip reads down opponent leader, opponent base, your base, your leader, so the bases meet at the
+  **battlefront** and the leaders are outermost. The opponent's half of each arena grows up from
+  the gap and yours down from it, so both front rows meet in the middle, and
+  `boardLayout.orderUnits` keeps Sentinels at the front. Each base shows either the **damage it has taken** counting up to the card's HP (the
   default) or the **health remaining** counting down, per the `baseHealthDisplay` setting,
   as a large number overlaid on the card (PWA game-screen style: light weight, accent glow,
   ~50% of card height). The HP is read from the card (dynamic, never a hardcoded 30) and the
@@ -777,33 +727,40 @@ The board is drawn with art-dominant cards, not text rows:
   not), keeps `errorDetail` underneath for diagnosis, and offers **Try again**, which is `rematch`:
   the load re-runs from the start. `PrintedStatsNotice` names `unresolvedPrintings` over the top
   of the board until dismissed for that game.
-- **Phone layout** (`components/game/phoneLayout.tsx`): `GameScreen` picks its layout by media
-  query (`hooks/useMediaQuery.ts`). `PHONE_LANDSCAPE_QUERY` (landscape, at most 500px tall) draws
-  `PhoneGameLayout`: a 196px controls column (leave, log, more; round and phase; each side's
-  `PlayerSummary` with its INITIATIVE, FORCE and CRED pills; the prompt; the action column) beside
-  the board, with the hand under it, all fitting 844×390 without scrolling. `PHONE_PORTRAIT_QUERY`
-  (portrait, at most 500px wide) draws `TurnSideways` instead; the game stays mounted, so turning
-  back resumes it. Anything else is the desktop layout. The layout is presentational: `GameScreen`
-  computes the interactions, the prompt (`boardPrompt`), the base targets and the action column
-  once and hands the same pieces to either layout, so a move is answered the same way on both.
-  The phone draws its own unit tile (`PhoneUnit`: art at a 40px short edge in a 56px square slot,
-  32 in 45 once a half holds more than eight, with power, HP and badges in place of the token
-  pills and upgrade stack) and reuses `HandCard`, `BaseCard` and `LeaderCard` at a phone
-  `widthPx`; the hand's fan is `boardLayout.phoneHandOverlap`. Its log is `GameLogDrawer`, a left
-  panel grouping `LogEntry`s by their `round` (0 is setup) with outcomes folded into their
-  action's row; More (`MoreSheet`) and the piles (`PileSheet`) are the PWA's shared `Sheet`.
-  Conceding lives in More on a phone, not the action column, and the bug report is not offered.
-  The phone screen provides `CardInspect` (`useCardZoom.ts`): under it a long press on a card that
+- **Layout** (`components/game/phoneLayout.tsx`): the game is one layout at two scales.
+  `GameScreen` reads `PHONE_LANDSCAPE_QUERY` (landscape, at most 500px tall; `hooks/useMediaQuery.ts`)
+  for the `phone` scale and draws everything else at `desktop`; `PHONE_PORTRAIT_QUERY` (portrait,
+  at most 500px wide) draws `TurnSideways` instead, and the game stays mounted, so turning back
+  resumes it. Every size the two scales draw at is in `boardLayout.BOARD_SCALE`: the controls
+  column (196px on a phone, 300 on the desktop), a unit's slot and card (56/40 and 45/32 once a
+  half holds more than eight; 84/60 and 68/48), the centre strip and its cards, and the hand's
+  row and card (88/60; 132/90). `PhoneGameLayout` draws the controls column (leave, log, more;
+  round and phase; each side's `PlayerSummary` with its INITIATIVE, FORCE and CRED pills; the
+  prompt; the action buttons) beside the board, with the hand under it. On a phone it fits
+  844×390 without scrolling and the log is `GameLogDrawer`, a left panel opened from Log; on the
+  desktop the log is docked in the column under the prompt, filling what the column leaves, and
+  there is no Log button. Both group `LogEntry`s by their `round` (0 is setup) with outcomes
+  folded into their action's row. The layout is presentational: `GameScreen` computes the
+  interactions, the prompt (`boardPrompt`), the base targets and the action buttons once.
+  `PhoneUnit` draws a unit (art, power and HP, badges) and `HandCard`, `BaseCard` and
+  `LeaderCard` take the scale's `widthPx`; the hand's fan is `boardLayout.handOverlap`. More
+  (`MoreSheet`) and the piles (`PileSheet`) are the PWA's shared `Sheet`. More holds Help,
+  Settings, Report a bug (desktop only, when the setting is on) and Concede, which is not in the
+  action buttons. A deck is face down for both players; while `mayLookAtDeckTop` holds for the
+  human, their DECK count opens the top card in a `PileSheet`. It is component state only: no
+  action is dispatched, so nothing is logged or recorded. The opponent's DECK count never opens.
+  The screen provides `CardInspect` (`useCardZoom.ts`): under it a long press on a card that
   hands `useCardZoom` its target, and a tap on a `CardRef` name, opens `CardDetail` (the card full
-  size and, for a unit in play, what is on it) until closed, instead of the hold-only popover.
-  The leader opens `LeaderMenu` (each `leaderActions` ability, the `deployLeader` moves or
-  `boardLayout.deployBlocker`'s reason, and the card), so deploying leaves the action column there.
+  size and, for a unit in play, what is on it) until closed; with a mouse, Shift over a card shows
+  the popover as before. The leader opens `LeaderMenu` (each `leaderActions` ability, the
+  `deployLeader` moves or `boardLayout.deployBlocker`'s reason, and the card), and the base opens
+  the same menu for its Epic Action, so neither deploying nor the base's actions are buttons.
   `useGame` publishes `opponentAction`, the paced opponent's chosen action while it waits out the
-  delay, which the phone writes in the prompt (redacted as the log is) and rings with
+  delay, which the prompt says (redacted as the log is) and the board rings with
   `boardLayout.actionFocus`; and `regroupDrawn`, the deck's shrink at the regroup draw, which tags
   the end of the hand NEW until the player resources. Game over is `PhoneGameOver`, a dialog over
-  the board that leaves the controls column uncovered. The button prompts, the card picks
-  (`CardGridOverlay` reads the phone query itself) and naming a card are `PhonePrompt` (see
+  the board that leaves the controls column uncovered. Every prompt (the button choices, the card
+  picks in `CardGridOverlay`, ordering triggers, naming a card) is `PhonePrompt` (see
   `choices.md`), not portalled, so `CardDetail`, drawn after it, opens over it.
 
 ## Storage tiers

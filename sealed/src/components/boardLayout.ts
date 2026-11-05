@@ -33,17 +33,51 @@ export function orderUnits(state: GameState, units: UnitState[], anchor: 'top' |
   return anchor === 'top' ? [...sentinels, ...others] : [...others, ...sentinels]
 }
 
-/** A hand card's short edge on a phone, and the width of the row under the board it shares. */
-export const PHONE_HAND_CARD_PX = 60
-const PHONE_HAND_ROW_PX = 600
-const PHONE_HAND_GAP_PX = 6
+/**
+ * The game screen is one layout at two scales: a phone on its side, and the desktop, where the same
+ * layout is grown. Every size the layout draws at is here, so the two read side by side.
+ *
+ * - `pad` and `gap`: the screen's padding, and the gap between the controls column and the board.
+ * - `column`: the controls column's width.
+ * - `unit`: a unit's square slot and its card's short edge, four to a row, and five once crowded;
+ *   `unitStat` the diameter of its power and HP.
+ * - `centre`: the centre strip's width, and `centreCard` the short edge of a leader or base in it.
+ * - `arenaGap`: the gap between the two sides' halves of an arena.
+ * - `handCard`, `handRow`, `handWidth`: a hand card's short edge, the hand row's height, and the
+ *   width the row may fill before a long hand fans.
+ */
+export const BOARD_SCALE = {
+  phone: {
+    pad: 8, gap: 10, column: 196,
+    unit: { normal: { slot: 56, card: 40 }, crowded: { slot: 45, card: 32 } }, unitStat: 14,
+    centre: 84, centreCard: 50, arenaGap: 18,
+    handCard: 60, handRow: 88, handWidth: 600,
+  },
+  desktop: {
+    pad: 16, gap: 16, column: 300,
+    unit: { normal: { slot: 84, card: 60 }, crowded: { slot: 68, card: 48 } }, unitStat: 20,
+    centre: 125, centreCard: 84, arenaGap: 22,
+    handCard: 90, handRow: 132, handWidth: 900,
+  },
+} as const
+
+export type BoardScale = keyof typeof BOARD_SCALE
+
+/** Where the board starts: past the screen's padding, the controls column and the gap beside it. */
+export function boardLeft(scale: BoardScale): number {
+  const { pad, column, gap } = BOARD_SCALE[scale]
+  return pad + column + gap
+}
+
+const HAND_GAP_PX = 6
 
 /**
- * How far each hand card on a phone overlaps the one before it: none while the hand fits its row,
- * then just enough to fit it, so a long hand fans rather than running off the screen.
+ * How far each hand card overlaps the one before it: none while the hand fits its row, then just
+ * enough to fit it, so a long hand fans rather than running off the screen.
  */
-export function phoneHandOverlap(count: number): number {
-  const width = count * PHONE_HAND_CARD_PX + (count - 1) * PHONE_HAND_GAP_PX
-  if (count < 2 || width <= PHONE_HAND_ROW_PX) return 0
-  return Math.ceil((width - PHONE_HAND_ROW_PX) / (count - 1))
+export function handOverlap(count: number, scale: BoardScale = 'phone'): number {
+  const { handCard, handWidth } = BOARD_SCALE[scale]
+  const width = count * handCard + (count - 1) * HAND_GAP_PX
+  if (count < 2 || width <= handWidth) return 0
+  return Math.ceil((width - handWidth) / (count - 1))
 }

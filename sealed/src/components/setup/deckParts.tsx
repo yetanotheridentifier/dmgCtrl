@@ -24,7 +24,7 @@ export function AspectIcons({ aspects, size }: { aspects: string[]; size: number
 /** The card shown full size, over everything, until a tap puts it away (see `useCardShown`). */
 export function CardShown({ card, name, onClose }: { card: EngineCard | undefined; name: string; onClose: () => void }) {
   return (
-    <OverlayShell testId="card-shown" size="cards" onBackdropClick={onClose} onDismiss={onClose}>
+    <OverlayShell testId="card-shown" onBackdropClick={onClose} onDismiss={onClose}>
       <CardFace card={card} fallbackName={name} widthPx={ZOOM_WIDTH_PX} tight />
     </OverlayShell>
   )

@@ -97,7 +97,7 @@ async function opponentUnitThenPlay(user: Awaited<ReturnType<typeof start>>) {
 }
 
 const unitsOn = (side: PlayerId) => within(screen.getByTestId(`${side}-ground-units`)).queryAllByTestId(/^board-unit-u\d+$/)
-const actionColumn = () => within(screen.getByTestId('player-mat'))
+const actionColumn = () => within(screen.getByTestId('phone-actions'))
 // No button per candidate: none reading "Choose ...", and none naming a unit or base on offer.
 const noChooseButtons = () => expect(actionColumn().queryByRole('button', { name: /^choose |plain unit|dealer unit|test base/i })).toBeNull()
 
@@ -137,7 +137,7 @@ describe('unit and base picks answered on the board', () => {
 
     // Defeated by the damage (the opponent then plays another unit on its turn).
     expect(screen.queryByTestId(enemyId)).toBeNull()
-    expect(screen.queryByTestId('action-prompt')).toBeNull()
+    expect(screen.getByTestId('action-prompt')).not.toHaveTextContent(/choose/i)
   })
 
   it('answers an optional return pick on the board, with Decline in the action column', async () => {
@@ -161,11 +161,11 @@ describe('unit and base picks answered on the board', () => {
 
     noChooseButtons()
     expect(screen.getByTestId('decline-choice-btn')).toHaveTextContent('Done')
-    expect(screen.getByTestId('distribute-hud')).toHaveTextContent(/healing allocated 0 \/ 2/i)
+    expect(screen.getByTestId('distribute-hud')).toHaveTextContent('0 of 2 healed')
     // Healing your own base is good for it: green, not the red of an attack.
     expect(within(screen.getByTestId('target-player-base')).getByTestId('card-face')).toHaveAttribute('data-highlight', 'green')
     await user.click(screen.getByTestId('target-player-base'))
-    expect(screen.getByTestId('distribute-hud')).toHaveTextContent(/healing allocated 1 \/ 2/i)
+    expect(screen.getByTestId('distribute-hud')).toHaveTextContent('1 of 2 healed')
     await user.click(screen.getByTestId('decline-choice-btn'))
     expect(screen.queryByTestId('distribute-hud')).toBeNull()
   })
@@ -176,9 +176,11 @@ describe('unit and base picks answered on the board', () => {
 
     noChooseButtons()
     expect(screen.queryByTestId('decline-choice-btn')).toBeNull()
-    expect(screen.getByTestId('distribute-hud')).toHaveTextContent(/indirect damage allocated 0 \/ 2/i)
+    expect(screen.getByTestId('distribute-hud')).toHaveTextContent('0 of 2 placed')
+    // The prompt above says what is being placed.
+    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/indirect damage/i)
     await user.click(screen.getByTestId('target-player-base'))
-    expect(screen.getByTestId('distribute-hud')).toHaveTextContent(/indirect damage allocated 1 \/ 2/i)
+    expect(screen.getByTestId('distribute-hud')).toHaveTextContent('1 of 2 placed')
   })
 
   it('picks bases one at a time on the board, with Done', async () => {

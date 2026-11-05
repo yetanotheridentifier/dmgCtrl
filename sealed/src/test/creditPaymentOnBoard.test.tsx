@@ -126,6 +126,6 @@ describe('the standing paying step on the game screen', () => {
     await user.click(creditButtons()[0])
     await user.click(creditButtons()[0])
     expect(creditButtons()).toHaveLength(0)
-    expect(within(unitsOn('player')[0]).getByText(/pricey gear/i)).toBeInTheDocument()
+    expect(within(unitsOn('player')[0]).getByTestId('unit-badge-upgrades')).toHaveTextContent('+1')
   })
 })

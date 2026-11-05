@@ -96,15 +96,13 @@ describe('triggered choices in the game screen', () => {
     await user.click(screen.getByTestId('hand-card-0'))
 
     const overlay = screen.getByTestId('choice-overlay')
-    // Answered with buttons, so drawn at the game-over screen's size.
-    expect(overlay.querySelector('section')).toHaveAttribute('data-size', 'panel')
     expect(within(overlay).getByTestId('choice-overlay-prompt')).toHaveTextContent(/choose one effect/i)
     expect(within(overlay).getByTestId('choice-option-0')).toHaveTextContent('Ground units: +1 power')
     expect(within(overlay).getByTestId('choice-option-1')).toHaveTextContent('Space units: +1 power')
     // The action column no longer carries the options.
-    expect(within(screen.getByTestId('player-mat')).queryByRole('button', { name: /units: \+1 power/i })).toBeNull()
-    // The overlay carries the prompt, so the floating one under the round tracker is not shown twice.
-    expect(screen.queryByTestId('action-prompt')).toBeNull()
+    expect(within(screen.getByTestId('phone-actions')).queryByRole('button', { name: /units: \+1 power/i })).toBeNull()
+    // The overlay carries the question, so the column's prompt does not ask it twice.
+    expect(screen.getByTestId('action-prompt')).not.toHaveTextContent(/choose one effect/i)
   })
 
   it('answers the choice from the overlay', async () => {
@@ -120,7 +118,7 @@ describe('triggered choices in the game screen', () => {
     await user.click(screen.getByTestId('hand-card-0'))
     expect(unitsOn('player')).toHaveLength(1)
 
-    await user.click(within(screen.getByTestId('choice-overlay')).getByTestId('overlay-dismiss'))
+    await user.click(within(screen.getByTestId('choice-overlay')).getByRole('button', { name: /^cancel/i }))
     expect(screen.queryByTestId('choice-overlay')).toBeNull()
     // The unit is back in hand and off the board: the play never happened.
     expect(unitsOn('player')).toHaveLength(0)
@@ -136,7 +134,9 @@ describe('triggered choices in the game screen', () => {
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
     expect(unitsOn('opponent')).toHaveLength(1)
 
-    await user.click(within(screen.getByTestId('choice-overlay')).getByTestId('overlay-dismiss'))
+    // No × here: the only way out is to set it aside.
+    expect(within(screen.getByTestId('choice-overlay')).queryByTestId('overlay-dismiss')).toBeNull()
+    await user.click(within(screen.getByTestId('choice-overlay')).getByRole('button', { name: 'Look at the board' }))
     expect(screen.queryByTestId('choice-overlay')).toBeNull()
     // Nothing was taken back: the opponent's unit is still in play, and the choice is still owed.
     expect(unitsOn('opponent')).toHaveLength(1)
@@ -151,7 +151,7 @@ describe('triggered choices in the game screen', () => {
     const user = await start(deck('p', 'TST_962'), allOf('TST_300'))
     await user.click(screen.getByTestId('hand-card-0'))
     const overlay = screen.getByTestId('name-card-overlay')
-    await user.click(within(overlay).getByTestId('overlay-dismiss'))
+    await user.click(within(overlay).getByRole('button', { name: /^cancel/i }))
     expect(screen.queryByTestId('name-card-overlay')).toBeNull()
     expect(unitsOn('player')).toHaveLength(0)
   })
@@ -175,7 +175,7 @@ describe('triggered choices in the game screen', () => {
     await user.click(screen.getByTestId('hand-card-0'))
 
     expect(screen.queryByTestId('choice-overlay')).toBeNull()
-    expect(within(screen.getByTestId('player-mat')).getByRole('button', { name: /don't ambush/i })).toBeInTheDocument()
+    expect(within(screen.getByTestId('phone-actions')).getByRole('button', { name: /don't ambush/i })).toBeInTheDocument()
 
     const [ambusher] = unitsOn('player')
     expect(ambusher).toHaveAttribute('data-actionable', 'true')
