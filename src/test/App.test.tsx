@@ -1268,6 +1268,20 @@ describe('App start', () => {
     await waitForSetup()
   })
 
+  // Sealed is a separate app, so its App settings link opens this one at ?settings.
+  it('?settings opens every game’s Settings, and Back goes to game select', async () => {
+    window.history.replaceState(null, '', '/?settings')
+    mockUserSettings.startScreen = 'swu'
+    const user = userEvent.setup()
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Star Wars: Unlimited' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'X-Wing' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(gameSelectShown()).toBeInTheDocument())
+  })
+
   it('a tournament in progress opens ahead of /xwing', async () => {
     window.history.replaceState(null, '', '/xwing')
     mockUseTournament.tournament = {

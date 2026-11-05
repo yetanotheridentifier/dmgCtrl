@@ -464,7 +464,7 @@ game the moment it is decided without changing who wins it. The coverage sweep t
 
 `data/settingsStore.ts` holds the shape, the defaults and the reading of the stored blob;
 `hooks/useSettings.ts` wraps it in a context provider around the whole app. Consumers read
-`settings` and call one `update(patch)`, so adding a setting is a field and an overlay row
+`settings` and call one `update(patch)`, so adding a setting is a field and a sheet row
 with nothing to wire between them.
 
 Four properties are load-bearing:
@@ -485,8 +485,8 @@ Four properties are load-bearing:
   reads at every opponent step, unlike its init-only options.
 
 `opponentDelayMs` is one of `OPPONENT_DELAYS_MS` (zero is instant) and defaults to 500 in every
-build. The form's options are that list, so a stored value outside it, which the form could
-not show, reads as the default.
+build. The sheet's stepper walks that list by index, so a stored value outside it, which the
+stepper could not show, reads as the default.
 
 `shareGames` is the player's answer about sending finished games to train the bot: `unasked`
 (the default in every build), `yes` or `no`. It is opt-in, so only `yes` permits anything, and a
@@ -502,23 +502,26 @@ record holds" above):
   is the highlighted one, and nothing is chosen in advance.
 - **Starting a game.** `App` turns `unasked` into `no` as the first game starts, so ignoring the
   notice is a refusal and the question is put once.
-- **The settings form**, where a checkbox maps on to `yes` and off to `no`.
+- **The settings sheet**, where a switch maps on to `yes` and off to `no`.
 
 Once the answer is not `unasked`, the notice renders nothing. In its place `ShareGamesPill` (same
 file) shows in the setup header, passed as `headerExtra` and rendered immediately before More, and
-opens the settings form: "Improve the bot" after a no, and a fainter "Your games are improving the
+opens the settings sheet: "Improve the bot" after a no, and a fainter "Your games are improving the
 bot" after a yes. It carries no badge, count or animation in either state, and is smaller and
 lighter than the icon buttons. The game screen has its own header, so the pill is not shown during
 a game. The header row never wraps for it: the label stays on one line, and below Tailwind's `sm`
 width (640px) the pill is hidden, leaving More › Settings as the route to the setting.
 
-The surface is an **overlay** (`SettingsOverlay`), opened from More on the setup screen and from
-More in the game. Not a screen: routing away unmounts `GameScreen` and the game
-with it, since the game lives entirely in `useGame`'s state and refs. `bugReportOverlay` and
-`cardGridOverlay` are the same pattern. It reads the context directly rather than taking props,
-unlike the presentational overlays, because a settings form has no caller-held state to be given.
-Its one callback besides closing is `onHelp(section)`, which the "What is sent?" link uses to open
-Help on a single section of the guide.
+The surface is the PWA's shared `Sheet` (`SettingsSheet`, "Sealed settings"), built from the
+shared `Switch`, `Stepper`, `SegmentedControl` and `ControlRow`, opened from More on the setup
+screen (rendered by `App`) and from More in the game (rendered by `GameScreen`). Not a screen:
+routing away unmounts `GameScreen` and the game with it, since the game lives entirely in
+`useGame`'s state and refs. It reads the context directly rather than taking props, because a
+settings form has no caller-held state to be given. Its callbacks besides closing are
+`onHelp(section)`, which the "What's sent" link uses to open Help on a single section of the guide,
+and `onAppSettings`, which by default leaves for the PWA's Settings page at `/?settings` (the PWA
+opens every game's settings there, with Back to game select). The Report a bug switch shows only
+where neither phone query matches, since the report itself is desktop only.
 
 The icons for the shared `IconButton` live together in `components/icons.tsx`, the back, more and
 log icons copies of the PWA's, so a mismatch between neighbours is visible in one file.
@@ -549,10 +552,10 @@ closes that: the map must claim every section in the guide, and name no section 
 
 **A link can ask for one section.** `HelpOverlay` takes an optional `section`, a heading, and then
 shows that section and the footer alone (`helpSectionContent`), whichever screen is underneath.
-The settings form's "What is sent?" link uses it for "Improving the bot", which belongs to the deck
-screen and so is absent from the game's own help, while the form itself opens in a game too. Help
-renders after the settings form, so it sits over it and closing help by a click outside returns to
-the form. Escape closes both, since each overlay listens for it.
+The settings sheet's "What's sent" link uses it for "Improving the bot", which belongs to the deck
+screen and so is absent from the game's own help, while the sheet itself opens in a game too. Help
+sits above the sheet, so closing help by a click outside returns to the sheet. Escape closes both,
+since each listens for it.
 
 Layout note: the **overlay** is the scroll container, not the panel. A panel capped at a
 fraction of the viewport with the content scrolling inside it depends on a flex chain resolving

@@ -49,6 +49,10 @@ async function fromMore(user: User, name: string) {
   await user.click(within(screen.getByRole('dialog', { name: 'More' })).getByRole('button', { name }))
 }
 
+const settingsSheet = () => screen.queryByRole('dialog', { name: 'Sealed settings' })
+const closeSettings = (user: User) => user.click(within(settingsSheet()!).getByRole('button', { name: 'Close' }))
+const healthLeft = () => within(settingsSheet()!).getByRole('button', { name: 'Health left' })
+
 /**
  * Start a real game through the setup screen. The cards are seeded so no network is needed. With no
  * set cached the generated opponent falls back to one of the saved decks, which with one saved deck
@@ -182,11 +186,11 @@ describe('App shell', () => {
     render(<App />)
 
     await fromMore(user, 'Settings')
-    expect(screen.getByTestId('settings-overlay')).toBeInTheDocument()
+    expect(settingsSheet()).toBeInTheDocument()
     expect(screen.getByTestId('setup-screen')).toBeInTheDocument()
 
-    await user.click(screen.getByTestId('settings-close'))
-    expect(screen.queryByTestId('settings-overlay')).not.toBeInTheDocument()
+    await closeSettings(user)
+    expect(settingsSheet()).not.toBeInTheDocument()
   })
 
   it('keeps a setting changed from More, across screens', async () => {
@@ -194,14 +198,14 @@ describe('App shell', () => {
     render(<App />)
 
     await fromMore(user, 'Settings')
-    await user.selectOptions(screen.getByTestId('setting-base-health'), 'remaining')
-    await user.click(screen.getByTestId('settings-close'))
+    await user.click(healthLeft())
+    await closeSettings(user)
 
     await fromMore(user, 'Help')
     await user.click(screen.getByTestId('help-overlay'))
     await fromMore(user, 'Settings')
 
-    expect(screen.getByTestId('setting-base-health')).toHaveValue('remaining')
+    expect(healthLeft()).toHaveAttribute('aria-pressed', 'true')
   })
 
   /**
@@ -288,8 +292,7 @@ describe('App shell', () => {
 
       await user.click(screen.getByTestId('share-games-pill'))
 
-      expect(screen.getByTestId('settings-overlay')).toBeInTheDocument()
-      expect(screen.getByRole('checkbox', { name: 'Share games to improve the bot' })).not.toBeChecked()
+      expect(within(settingsSheet()!).getByRole('switch', { name: 'Share games to improve the bot' })).toHaveAttribute('aria-checked', 'false')
     })
 
     it('opens the Help section on what is sent from Settings', async () => {
@@ -297,7 +300,7 @@ describe('App shell', () => {
       render(<App />)
 
       await fromMore(user, 'Settings')
-      await user.click(screen.getByRole('button', { name: 'What is sent?' }))
+      await user.click(screen.getByRole('button', { name: "What's sent" }))
 
       const content = screen.getByTestId('help-content')
       expect(within(content).getByRole('heading', { name: 'Improving the bot' })).toBeInTheDocument()
@@ -305,7 +308,7 @@ describe('App shell', () => {
 
       // Help from More is the setup screen's whole help again afterwards.
       await user.click(screen.getByTestId('help-overlay'))
-      await user.click(screen.getByTestId('settings-close'))
+      await closeSettings(user)
       await fromMore(user, 'Help')
       expect(screen.getByTestId('help-content').innerHTML).toContain('Choosing your deck')
     })
@@ -316,7 +319,7 @@ describe('App shell', () => {
       await startGame(user)
 
       await fromMore(user, 'Settings')
-      await user.click(screen.getByRole('button', { name: 'What is sent?' }))
+      await user.click(screen.getByRole('button', { name: "What's sent" }))
 
       const content = screen.getByTestId('help-content')
       expect(within(content).getByRole('heading', { name: 'Improving the bot' })).toBeInTheDocument()
