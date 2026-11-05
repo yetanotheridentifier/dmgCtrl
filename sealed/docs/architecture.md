@@ -528,40 +528,29 @@ log icons copies of the PWA's, so a mismatch between neighbours is visible in on
 
 ## Help
 
-`HelpOverlay` shows `userGuide.md`, and shows only the part belonging to the screen it was
-opened from: choosing decks, the opponent and card support on the setup screen, playing and the
-board in a game.
+`HelpPage` (`components/helpPage.tsx`) is one page, "Sealed help", built from `userGuide.md`: a
+header with Back, section links (`OptionRow`, the current one pressed) in a column on the left in
+landscape and in two rows across the top in portrait, and the sections beside or below them, each
+a block of its own in one scrolling column. Tapping a link scrolls to its section, and the current
+section follows the scroll. It is a copy of the PWA's help screen (`src/components/helpScreen.tsx`)
+in shape and behaviour, so the two apps' help reads alike and a later merge is mechanical.
 
-It is an overlay for the same reason settings is, and it is the reason that reason is known:
-help used to be a screen, so opening it mid-game unmounted `GameScreen` and the game with it,
-and coming back ran `initGame` again on a fresh seed. The overlay is held by `App` rather than
-duplicated per screen, taking its context from `screen`, and renders over whichever screen is
-mounted. Dismissed by Escape or a click outside the panel; there is no close button, so nothing
-has to stay in view as the guide scrolls.
+It **opens at the section for the screen it came from** (`OPENS_AT` in `utils/helpSections.ts`):
+Decks from setup, Playing from a game. A link can name another: the settings sheet's "What's sent"
+opens it at `SHARING_HELP_SECTION`, After the game, which says what sharing games sends.
 
-**The guide stays one file.** `utils/helpSections.ts` splits the rendered HTML into a preamble,
-its `<h2>` sections and the trailing footer, and `HELP_SECTIONS` maps each section to a screen.
-Splitting on `<h2>` only, so a section keeps its subsections. The preamble and the footer (the
-fan-content disclaimer) go into every context. Per-screen files would have matched the PWA, at
-the cost of a copy of the disclaimer in each and three files free to drift.
+It covers the screen rather than replacing it, for the same reason settings does: help used to be
+a screen, so opening it mid-game unmounted `GameScreen` and the game with it, and coming back ran
+`initGame` again on a fresh seed. `App` holds it, so one page serves both screens, and renders it
+over whichever screen is mounted and above the settings sheet, so closing help opened from the
+sheet returns there. Back or Escape closes it.
 
-The cost of slicing one file is that the map is keyed on heading prose, so a renamed or newly
-added section would silently vanish from the help rather than fail anything. `helpSections.test.ts`
-closes that: the map must claim every section in the guide, and name no section the guide lacks.
-**Adding a section to the user guide without assigning it to a screen fails the suite.**
-
-**A link can ask for one section.** `HelpOverlay` takes an optional `section`, a heading, and then
-shows that section and the footer alone (`helpSectionContent`), whichever screen is underneath.
-The settings sheet's "What's sent" link uses it for "Improving the bot", which belongs to the deck
-screen and so is absent from the game's own help, while the sheet itself opens in a game too. Help
-sits above the sheet, so closing help by a click outside returns to the sheet. Escape closes both,
-since each listens for it.
-
-Layout note: the **overlay** is the scroll container, not the panel. A panel capped at a
-fraction of the viewport with the content scrolling inside it depends on a flex chain resolving
-to a definite height, and that did not hold here: the game's help ran off the screen unreachably
-while the deck screen's shorter help fitted and looked correct. `min-h-full` with `items-center`
-centres a short panel and lets a tall one grow downward, so the top stays reachable.
+**The guide is the page.** `parseGuide` splits the rendered HTML on its headings: the `#` is the
+page title, each `##` a section and a section link, and each `###` within a section a topic that
+opens on a tap (`components/disclosure.tsx`, shared with Card support's sets), one at a time. A new
+`##` therefore appears as a section with no code change. `helpSections.test.ts` pins the section
+list and The board's topics, so a renamed heading that `OPENS_AT` or the settings link names fails
+the suite. The fan-content disclaimer is the PWA's app help page's, which covers Sealed's cards.
 
 ## UI (SetupScreen)
 

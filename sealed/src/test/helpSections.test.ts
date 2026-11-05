@@ -1,126 +1,62 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import userGuideHtml from '../../docs/userGuide.md'
-import { splitSections, helpContentFor, helpSectionContent, HELP_SECTIONS, SHARING_HELP_SECTION } from '../utils/helpSections'
-import type { HelpContext } from '../utils/helpSections'
+import { parseGuide, OPENS_AT, SHARING_HELP_SECTION } from '../utils/helpSections'
 
-const CONTEXTS: HelpContext[] = ['decks', 'game']
+const guide = parseGuide(userGuideHtml)
+const section = (title: string) => guide.sections.find(s => s.title === title)!
 
 describe('help sections', () => {
-  describe('splitSections', () => {
-    const { preamble, sections, footer } = splitSections(userGuideHtml)
+  describe('parseGuide', () => {
+    it('splits a page into its h2 sections, and a section into its h3 topics', () => {
+      const page = parseGuide('<h1>Title</h1>\n<p>gone</p>\n<h2>One</h2>\n<p>a</p>\n<h2>Two</h2>\n<p>b</p>\n<h3>Topic &amp; more</h3>\n<p>c</p>\n<h3>Last</h3>\n<p>d</p>\n')
 
-    it('finds the guide’s top-level sections, in order', () => {
-      expect(sections.map(s => s.title)).toEqual([
-        'Choosing your deck',
-        'Caching a full set',
-        'Choosing an opponent',
-        'Card support',
-        'Improving the bot',
-        'Playing a game',
-        'After the game',
+      expect(page.title).toBe('Title')
+      expect(page.sections.map(s => s.title)).toEqual(['One', 'Two'])
+      expect(page.sections[0]).toMatchObject({ html: '<h2>One</h2>\n<p>a</p>\n', topics: [] })
+      expect(page.sections[1].html).toBe('<h2>Two</h2>\n<p>b</p>\n')
+      expect(page.sections[1].topics).toEqual([
+        { title: 'Topic & more', html: '<p>c</p>\n' },
+        { title: 'Last', html: '<p>d</p>\n' },
       ])
     })
-
-    it('keeps a section’s subsections with it rather than splitting on them', () => {
-      const playing = sections.find(s => s.title === 'Playing a game')!
-      expect(playing.html).toContain('Turn structure')
-      expect(playing.html).toContain('Keywords, upgrades &amp; card abilities')
-    })
-
-    it('takes the opening paragraph as a preamble, without the title', () => {
-      expect(preamble).toContain('against an AI opponent')
-      expect(preamble).not.toContain('<h1')
-    })
-
-    /** The disclaimer trails the last section but belongs to no section. */
-    it('separates the trailing footer from the last section', () => {
-      expect(footer).toContain('unofficial fan site')
-      expect(sections.find(s => s.title === 'After the game')!.html).not.toContain('unofficial fan site')
-    })
   })
 
-  describe('the context map', () => {
-    /**
-     * The guide is the single source and is sliced by heading, so a renamed or newly added
-     * section would silently vanish from the help rather than failing a build. These two
-     * assertions are what make that loud.
-     */
-    it('claims every section of the guide exactly once', () => {
-      const claimed = CONTEXTS.flatMap(c => HELP_SECTIONS[c])
-      const inGuide = splitSections(userGuideHtml).sections.map(s => s.title)
-
-      expect([...claimed].sort()).toEqual([...inGuide].sort())
-      expect(new Set(claimed).size).toBe(claimed.length)
+  describe('the guide', () => {
+    it('is titled Sealed help', () => {
+      expect(guide.title).toBe('Sealed help')
     })
 
-    it('names no section the guide does not have', () => {
-      const inGuide = new Set(splitSections(userGuideHtml).sections.map(s => s.title))
-      for (const context of CONTEXTS) {
-        for (const title of HELP_SECTIONS[context]) {
-          expect(inGuide.has(title), `${context} names a missing section: ${title}`).toBe(true)
-        }
-      }
-    })
-  })
-
-  describe('helpContentFor', () => {
-    it('gives the deck screen importing and opponent choice, not how to play', () => {
-      const html = helpContentFor('decks')
-      expect(html).toContain('Choosing your deck')
-      expect(html).toContain('Choosing an opponent')
-      expect(html).not.toContain('Turn structure')
-      expect(html).not.toContain('After the game')
+    it('has the six sections of the design, in order, and no Settings section', () => {
+      expect(guide.sections.map(s => s.title)).toEqual(['Decks', 'Opponent', 'Playing', 'The board', 'Prompts', 'After the game'])
     })
 
-    it('gives the game screen play and not deck importing', () => {
-      const html = helpContentFor('game')
-      expect(html).toContain('Playing a game')
-      expect(html).toContain('Turn structure')
-      expect(html).toContain('After the game')
-      expect(html).not.toContain('Choosing your deck')
-    })
-
-    /** Both are legal notices or orientation: they belong wherever help is opened. */
-    it('carries the preamble and the disclaimer into every context', () => {
-      for (const context of CONTEXTS) {
-        expect(helpContentFor(context)).toContain('against an AI opponent')
-        expect(helpContentFor(context)).toContain('unofficial fan site')
+    it('splits The board into its tap-to-open topics, and no other section', () => {
+      expect(section('The board').topics.map(t => t.title)).toEqual([
+        'Arenas, bases and leaders',
+        'Damage, tokens and badges',
+        'Target colours',
+        'The Force and Credit tokens',
+        'Seeing a card and the log',
+      ])
+      for (const s of guide.sections.filter(s => s.title !== 'The board')) {
+        expect(s.topics, s.title).toEqual([])
       }
     })
 
-    it('never renders the guide’s own title', () => {
-      for (const context of CONTEXTS) {
-        expect(helpContentFor(context)).not.toContain('<h1')
-      }
+    /** The disclaimer is the app help page's, which covers Sealed's cards too. */
+    it('carries no disclaimer, which the app help page holds', () => {
+      expect(userGuideHtml).not.toMatch(/unofficial fan site/i)
+      const appHelp = readFileSync(new URL('../../../docs/appHelp.md', import.meta.url), 'utf8')
+      expect(appHelp).toMatch(/unofficial fan site/)
+      expect(appHelp).toContain('Star Wars: Unlimited cards')
     })
 
-    /** The notice and the pill are on the deck screen, so that is where its help belongs. */
-    it('gives the deck screen the section on sharing games', () => {
-      expect(HELP_SECTIONS.decks).toContain(SHARING_HELP_SECTION)
-      expect(helpContentFor('decks')).toContain('Improving the bot')
-      expect(helpContentFor('game')).not.toContain('Improving the bot')
-    })
-  })
-
-  /**
-   * Settings links straight to one section, and Settings opens in a game as well, where the
-   * game's help does not carry it. So one section can be asked for by name, from either screen.
-   */
-  describe('helpSectionContent', () => {
-    it('gives that section alone, with the disclaimer', () => {
-      const html = helpSectionContent(SHARING_HELP_SECTION)
-
-      expect(html).toContain('Improving the bot')
-      expect(html).toContain('What is sent')
-      expect(html).toContain('does not recall games already sent')
-      expect(html).toContain('unofficial fan site')
-      expect(html).not.toContain('Choosing your deck')
-      expect(html).not.toContain('Turn structure')
-      expect(html).not.toContain('<h1')
-    })
-
-    it('gives nothing for a section the guide does not have', () => {
-      expect(helpSectionContent('No such section')).toBe('')
+    it('opens at a section the guide has, from each screen and from the link on sharing games', () => {
+      const titles = guide.sections.map(s => s.title)
+      expect(OPENS_AT).toEqual({ decks: 'Decks', game: 'Playing' })
+      expect(titles).toContain(SHARING_HELP_SECTION)
+      expect(section(SHARING_HELP_SECTION).html).toContain('What is sent')
     })
   })
 })

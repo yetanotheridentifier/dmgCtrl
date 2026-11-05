@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import SetupScreen from './components/setupScreen'
 import GameScreen from './components/gameScreen'
-import { HelpOverlay } from './components/helpOverlay'
+import { HelpPage } from './components/helpPage'
 import { SettingsSheet } from './components/settingsSheet'
 import { ShareGamesNotice, ShareGamesPill } from './components/shareGamesNotice'
 import { SettingsProvider, useSettings } from './hooks/useSettings'
@@ -42,7 +42,7 @@ function AppShell() {
   // unmounted GameScreen and started a different game on the way back (#541). Held here rather
   // than in GameScreen so one overlay serves both screens, with the context taken from `screen`.
   const [helpOpen, setHelpOpen] = useState(false)
-  // Set when help was opened by a link to one section of the guide, which it then shows alone.
+  // Set when help was opened by a link to one section of the guide, which it then opens at.
   const [helpSection, setHelpSection] = useState<string | undefined>(undefined)
   const openHelp = (section?: string) => {
     setHelpSection(section)
@@ -88,11 +88,10 @@ function AppShell() {
       {/* The game screen opens settings from its own More, so this covers the other screens. */}
       <SettingsSheet open={settingsOpen && screen !== 'game'} onClose={() => setSettingsOpen(false)} onHelp={openHelp} />
 
-      {/* Help serves both screens from here: it renders over whichever is mounted, and takes
-          its content from the screen it was opened on. It sits above the settings sheet, so help
-          opened from a link in the sheet covers it and closing help returns there. */}
+      {/* Help serves both screens from here: it renders over whichever is mounted, and opens at
+          the section for the screen it was opened on. */}
       {helpOpen && (
-        <HelpOverlay
+        <HelpPage
           context={screen === 'game' ? 'game' : 'decks'}
           section={helpSection}
           onClose={() => setHelpOpen(false)}
