@@ -593,9 +593,11 @@ choice opens a `Sheet`, and the only text box is the import sheet's.
   and the list in CSS columns with each type heading kept with its first card. A tap on any card
   shows it full size in an `OverlayShell`.
 - **Three layouts**, by media query (`hooks/useMediaQuery.ts`): landscape (the two cards side by
-  side, filling a phone's 844x390 without scrolling), portrait (stacked, the leader and base on the
-  deck card) and desktop (at least 1024x600: the cards in a column with the chosen deck's list
-  beside them). The portrait query is the one the shared `Sheet` reads, so a sheet and its screen
+  side, filling a phone's 844x390 without scrolling), portrait (stacked, the deck card taking the
+  height the opponent card leaves, with the leader and base on it) and desktop (at least 1024x600:
+  the cards in a column with the chosen deck's list beside them). On a phone the two cards share
+  one block that fills the height and never shrinks below them, so a notice under them scrolls the
+  page. The portrait query is the one the shared `Sheet` reads, so a sheet and its screen
   agree on the orientation.
 - **Back** goes to the site root, which is the dmgCtrl PWA's game select: a different app, so an
   installed Sealed may open it outside its own window.

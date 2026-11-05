@@ -130,7 +130,7 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
       </>
     )
     return (
-      <div data-testid="deck-card" style={{ ...cardStyle, flex: portrait ? 1 : undefined }}>
+      <div data-testid="deck-card" style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minHeight: '44px' }}>
           <div style={{ ...labelStyle, flex: 1 }}>Your deck</div>
           {!portrait && buttons}
@@ -200,38 +200,28 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
     </div>
   )
 
-  const body = {
-    portrait: (
-      <>
+  const body = layout === 'desktop' ? (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'stretch' }}>
+      <div style={{ flex: '1 1 340px', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {deckCard()}
         {opponentCard()}
         {notice}
-        {go}
-      </>
-    ),
-    landscape: (
-      <>
-        {/* Fills the height, and never shrinks below its cards: with the notice showing, the page scrolls. */}
-        <div style={{ flex: '1 0 auto', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
-          {deckCard()}
-          {opponentCard()}
-        </div>
-        {notice}
-        {go}
-      </>
-    ),
-    desktop: (
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'stretch' }}>
-        <div style={{ flex: '1 1 340px', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {deckCard()}
-          {opponentCard()}
-          {notice}
-          <div style={{ marginTop: 'auto' }}>{go}</div>
-        </div>
-        {beside}
+        <div style={{ marginTop: 'auto' }}>{go}</div>
       </div>
-    ),
-  }[layout]
+      {beside}
+    </div>
+  ) : (
+    <>
+      {/* Fills the height, and never shrinks below its cards: with the notice showing, the page scrolls.
+          Stacked in portrait, the deck card taking the height the opponent card leaves. */}
+      <div data-testid="setup-cards" style={{ flex: '1 0 auto', display: 'grid', gap: '16px', ...(portrait ? { gridTemplateRows: '1fr auto' } : { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }) }}>
+        {deckCard()}
+        {opponentCard()}
+      </div>
+      {notice}
+      {go}
+    </>
+  )
 
   const pickThenBack = (fn: (v: string) => void) => (v: string) => { fn(v); back() }
 

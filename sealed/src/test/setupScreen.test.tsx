@@ -832,6 +832,18 @@ describe('SetupScreen', () => {
       expect(screen.getByTestId('setup-screen')).toHaveAttribute('data-layout', 'portrait')
       expect(await within(deckCard()).findByRole('button', { name: /^Darth Vader.*: see the card$/ })).toBeInTheDocument()
     })
+
+    // jsdom does no layout, so this pins the structure that keeps a notice under the cards from
+    // squeezing them on a phone: both cards in one block that never shrinks, so the page scrolls.
+    it.each([['portrait', [PORTRAIT_QUERY]], ['landscape', []]])('keeps the cards at full height under a notice in %s', (layout, media) => {
+      withMedia(media)
+      render(<SetupScreen onPlay={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} onBack={vi.fn()} notice={<aside>Share your games?</aside>} />)
+      expect(screen.getByTestId('setup-screen')).toHaveAttribute('data-layout', layout)
+      const cards = screen.getByTestId('setup-cards')
+      expect(cards).toContainElement(screen.getByTestId('deck-card'))
+      expect(cards).toContainElement(screen.getByTestId('opponent-card'))
+      expect(cards).toHaveStyle({ flexShrink: '0' })
+    })
   })
 
   /** The card catalogue column's reference panel, moved to More › Card support. */
