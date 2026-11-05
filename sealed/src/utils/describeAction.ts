@@ -409,6 +409,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       }
       if (choice.kind === 'payWith') {
         // The two ways to pay besides resources: a Credit token is defeated, a paying unit is exhausted.
+        if (action.credits !== undefined) return `Defeat ${action.credits === 1 ? 'a Credit token' : `${action.credits} Credit tokens`} to pay`
         if (action.targetInstanceId === undefined) return 'Defeat a Credit token'
         return `Exhaust ${anyUnitName(state, action.targetInstanceId) ?? 'unit'} to pay`
       }

@@ -4,7 +4,7 @@ import type { DelayedEffect, HowPlayed, IfYouDo, IndirectDamageFollowUp, Pending
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, isFortify, isPlot, recordBaseActionUsed, upgradeSideId, PLAYED_FROM_HAND, PLAYED_ELSEWHERE } from './types'
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, recordActionStarted, markAbilityUsed, spendNextUnitGrants, addDiscardPlayGrant, dropDiscardPlayGrant, removeTraitFromCards } from './types'
 import { addResourceFromHand, readyAllResources } from './resources'
-import { pay, payAsked, payable, payingStepFor, pickPayWith, finishPayWith, withoutPaying, unitCostPayers } from './payment'
+import { pay, payAsked, payable, payingStepFor, pickPayWith, payPayWith, finishPayWith, withoutPaying, unitCostPayers } from './payment'
 import { legalMoves, canTakePilot, effectiveCost, exploitTerms, exploitCost, exploitAffordable, raiseExploit, discardUnitPicks, discardForCostIndices, canAffordFromHand, affordableHandUnits, handUnitCost, offerAttack, ambushHasTarget, zoneCards, zoneCardOwner, zoneHolder, grantZoneRef, playFromCost, playFromBudget, playFromCandidates, validPlayTargets, selfPayingResource, smuggleTerms, smuggleCostUnits, type PlayFromTerms } from './legalMoves'
 import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectAbilityUsed, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
@@ -130,7 +130,11 @@ function withoutOffer(state: GameState): GameState {
 function resolveAction(state: GameState, action: Action): GameState {
   const step = state.pendingChoices?.find((c): c is Extract<PendingChoice, { kind: 'payWith' }> => c.kind === 'payWith')
   if (step && state.winner === null && (action.type === 'skipTrigger' || action.type === 'acceptChoice') && action.choiceId === step.id) {
-    return withoutPaying(action.type === 'skipTrigger' ? finishPayWith(state, step, dispatchAction) : pickPayWith(state, step, action.targetInstanceId, dispatchAction))
+    return withoutPaying(action.type === 'skipTrigger'
+      ? finishPayWith(state, step, dispatchAction)
+      : action.credits !== undefined
+        ? payPayWith(state, step, action.credits, dispatchAction)
+        : pickPayWith(state, step, action.targetInstanceId, dispatchAction))
   }
   const asks = payingStepFor(state, action, dispatchAction)
   return asks ? pushChoice(state, asks) : dispatchAction(state, action)

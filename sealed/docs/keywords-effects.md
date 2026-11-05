@@ -453,11 +453,12 @@ of them:
 2. **Ask.** If a cost was asked for, it raises a `payWith` choice and does nothing else. Nothing is
    paid, marked used or handed over, so backing out of the step takes the whole action back. The
    choice holds the action itself as `resume`, which is the whole continuation, as plain data.
-3. **Resume.** The player picks Credit tokens (one answer, since they cannot be told apart) and
-   paying units (by instance id), each paying 1, up to the cost. Done is offered once ready resources
-   cover what is left, and the step finishes by itself when the picks cover the cost or nothing is
-   left to pick. Only then are the tokens defeated and the units exhausted, and the action runs with
-   that much prepaid: `pay` takes it off the cost and exhausts resources for the rest.
+3. **Resume.** The player picks paying units (by instance id), an answer each, and finishes with Pay
+   (how many Credit tokens, in one answer, since they cannot be told apart) or Done (none). Each pays
+   1, up to the cost. Done is offered once ready resources cover what is left, and the step finishes
+   by itself when the units picked cover the cost or none is left to pick. Only then are the tokens
+   defeated and the units exhausted, and the action runs with that much prepaid: `pay` takes it off
+   the cost and exhausts resources for the rest.
 
 **The step is asked whether or not ready resources would cover the cost**, because which currency to
 spend is a real decision: a token can be worth more spent than kept (it can be taken, and some cards
@@ -469,11 +470,12 @@ token or a paying unit plays move for move as it would without any of this.
 `GameState.paying` carries the dry run and the prepaid amount inside one `resolve` call. No state
 that leaves the resolver has it, so replay data and bench records never see it.
 
-On the game screen a Credit pick is one button ("Defeat a Credit token"), since a Credit token is the
-player's and not on the board, and a unit that pays is clicked on the board like any other unit
-pick, with the button beside it when both are on offer. The prompt names what is being paid for and
-how much. Done appears once what is left is affordable (`creditPaymentOnBoard.test.tsx`,
-`payingStepDoorsOnBoard.test.tsx`).
+On the game screen the step is a prompt (`PayWithPrompt`) naming what is being paid for and how
+much, with the shared stepper for how many Credit tokens, held between what ready resources leave
+uncovered and what is held, the amount left for resources, and **Pay**. A unit that pays is clicked
+on the board like any other unit pick: while one is on offer the step stays on the board, with a
+"Defeat n Credit tokens to pay" button for each count beside it in the controls column
+(`creditPaymentOnBoard.test.tsx`, `payingStepDoorsOnBoard.test.tsx`).
 
 **One card raises a Credit step of its own**, to hear the answer: Jabba the Hutt's deployed action
 ("If you defeated a Credit while paying its cost, that unit gains Ambush"). That is an `exploit`
