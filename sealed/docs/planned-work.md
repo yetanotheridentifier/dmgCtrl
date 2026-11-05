@@ -424,9 +424,8 @@ Sealed is redesigned for a phone as well as a desktop, as a separate PWA under `
 merge with the dmgCtrl PWA later. The UI shares the PWA's controls and colour tokens; the engine and
 AI share nothing.
 
-1. **The redesigned screens**: #1012 the last of the phone game prompts (left: the Credit stepper,
-   waiting on a decision, and the screenshots: the prompts at 844x390, and the game at 1280x720 and
-   844x390 for G19 and G26 to G29).
+1. **The redesigned screens**: #1012 the last of the phone game prompts (left: the screenshots: the
+   prompts at 844x390, and the game at 1280x720 and 844x390 for G19 and G26 to G29).
 2. **Time the AI on a real phone** once the board plays there: the longest main-thread task per
    decision, and the time to the AI's move, beside the desktop figures in `experiments.md`. The
    search runs in a worker; only a desktop with CPU throttling has been measured.

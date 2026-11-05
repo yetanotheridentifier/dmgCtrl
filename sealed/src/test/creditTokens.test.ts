@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { exploitTerms } from '../engine/legalMoves'
+import { describeAction } from '../utils/describeAction'
 import { createCreditTokens, defeatCreditTokens, takeControlOfCreditTokens, friendlyCreditTokens } from '../engine/effects'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
@@ -41,6 +42,8 @@ const choice = (s: GameState): PendingChoice => {
 }
 const answers = (s: GameState) => legalMoves(s).filter(m => m.type === 'acceptChoice' || m.type === 'skipTrigger') as Action[]
 const optionIndices = (s: GameState) => answers(s).flatMap(m => (m.type === 'acceptChoice' && m.optionIndex !== undefined ? [m.optionIndex] : []))
+const creditCounts = (s: GameState) => answers(s).flatMap(m => (m.type === 'acceptChoice' && m.credits !== undefined ? [m.credits] : []))
+const payCredits = (s: GameState, credits: number) => resolve(s, { type: 'acceptChoice', choiceId: choice(s).id, credits })
 const canFinish = (s: GameState) => answers(s).some(m => m.type === 'skipTrigger')
 const pickOption = (s: GameState, optionIndex: number) => resolve(s, { type: 'acceptChoice', choiceId: choice(s).id, optionIndex })
 const done = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: choice(s).id })
@@ -123,15 +126,51 @@ describe('Credit tokens as a payment: the paying step in front of a card played 
     expect(choice(s)).toMatchObject({ kind: 'payWith', cost: 6, credits: 0 })
   })
 
-  it('picks one token at a time, up to what is held', () => {
-    let s = resolve(board(2, ['PLAIN'], 3), { type: 'playUnit', handIndex: 0 })
+  it('offers Pay N once for every count the tokens held, the cost and the ready resources allow', () => {
+    // Cost 4 with 2 ready: at least 2 tokens, at most the 3 held. No Done, since 4 > 2.
+    const s = resolve(board(2, ['PLAIN'], 3), { type: 'playUnit', handIndex: 0 })
     expect(choice(s)).toMatchObject({ kind: 'payWith', cost: 4, credits: 0 })
-    // Tokens are fungible, so one move stands for the next of them.
-    expect(optionIndices(s)).toEqual([0])
+    expect(creditCounts(s)).toEqual([2, 3])
+    expect(canFinish(s)).toBe(false)
+    expect(optionIndices(s)).toEqual([])
+    // Ready resources that cover it all: Done, then every count up to the cost.
+    const rich = resolve(board(5, ['EVT'], 5), { type: 'playEvent', handIndex: 0 })
+    expect(canFinish(rich)).toBe(true)
+    expect(creditCounts(rich)).toEqual([1, 2, 3])
+  })
+
+  it('Pay N defeats N tokens and pays the rest from resources, in one move', () => {
+    let s = resolve(board(2, ['PLAIN'], 3), { type: 'playUnit', handIndex: 0 })
+    s = payCredits(s, 2)
+    expect(s.pendingChoices ?? []).toHaveLength(0)
+    expect(s.players.player.units.some(u => u.cardId === 'PLAIN')).toBe(true)
+    expect(friendlyCreditTokens(s, 'player')).toBe(1)
+    expect(readyLeft(s)).toBe(0)
+  })
+
+  it('refuses a Pay N past the tokens held, past the cost, or leaving more than the ready resources', () => {
+    const s = resolve(board(2, ['PLAIN'], 3), { type: 'playUnit', handIndex: 0 })
+    // The step stands as it was and nothing is paid (the resolver still moves its random seed on).
+    const unchanged = (from: GameState, to: GameState) => expect({ ...to, rngSeed: 0 }).toEqual({ ...from, rngSeed: 0 })
+    unchanged(s, payCredits(s, 4)) // 3 held
+    unchanged(s, payCredits(s, 1)) // leaves 3 for 2 ready
+    const rich = resolve(board(5, ['EVT'], 5), { type: 'playEvent', handIndex: 0 })
+    unchanged(rich, payCredits(rich, 4)) // the event costs 3
+  })
+
+  it('logs a Pay as one line naming the tokens it defeats', () => {
+    const s = resolve(board(2, ['PLAIN'], 3), { type: 'playUnit', handIndex: 0 })
+    expect(describeAction(s, 'player', { type: 'acceptChoice', choiceId: choice(s).id, credits: 2 })).toBe('Defeat 2 Credit tokens to pay')
+    expect(describeAction(s, 'player', { type: 'acceptChoice', choiceId: choice(s).id, credits: 1 })).toBe('Defeat a Credit token to pay')
+  })
+
+  it('still takes one token per answer from a game recorded before Pay N', () => {
+    let s = resolve(board(2, ['PLAIN'], 3), { type: 'playUnit', handIndex: 0 })
     s = pickOption(s, 0)
     expect(friendlyCreditTokens(s, 'player')).toBe(3) // not spent until Done/finish
     expect(choice(s)).toMatchObject({ credits: 1 })
-    expect(optionIndices(s)).toEqual([1])
+    // What is left to offer counts from the token already picked.
+    expect(creditCounts(s)).toEqual([1, 2])
   })
 
   it('never takes more tokens than the cost', () => {

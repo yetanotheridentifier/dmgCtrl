@@ -139,19 +139,29 @@ function tokenName(state: GameState, id: string): string {
 
 /** A card's printed name for use inside a prompt sentence, degrading to a neutral noun. */
 /** What a paying step's cost is for, named from the action it stands in front of. */
-function paidFor(state: GameState, choice: Extract<PendingChoice, { kind: 'payWith' }>): string {
+export function paidFor(state: GameState, choice: Extract<PendingChoice, { kind: 'payWith' }>): string {
+  const id = paidForCard(state, choice)
+  switch (choice.resume.type) {
+    case 'playUnit': case 'playEvent': case 'playUpgrade': case 'playBaseUpgrade':
+    case 'smuggle': case 'playFromDiscard': case 'useDiscardAction': return id ? cardName(state, id) : 'this card'
+    case 'useAbility': case 'useLeaderAbility': case 'useBaseAbility': return `${cardName(state, id ?? '')}'s action`
+    default: return id ? cardName(state, id) : 'this cost'
+  }
+}
+
+/** The card a paying step's cost is for: the card being played, or the card whose action it is. */
+export function paidForCard(state: GameState, choice: Extract<PendingChoice, { kind: 'payWith' }>): string | undefined {
   const a = choice.resume
   const p = state.players[choice.controller]
-  const named = (id: string | undefined) => (id ? cardName(state, id) : 'this card')
   switch (a.type) {
-    case 'playUnit': case 'playEvent': case 'playUpgrade': case 'playBaseUpgrade': return named(p.hand[a.handIndex])
-    case 'smuggle': return named(p.resources[a.resourceIndex]?.cardId)
-    case 'playFromDiscard': return named(state.discardPlayGrants?.[a.grantIndex]?.cardId)
-    case 'useDiscardAction': return named(p.discard[a.discardIndex])
-    case 'useAbility': return `${cardName(state, a.cardId)}'s action`
-    case 'useLeaderAbility': return `${cardName(state, p.leader.cardId)}'s action`
-    case 'useBaseAbility': return `${cardName(state, a.cardId ?? p.base.cardId)}'s action`
-    default: return choice.source ? cardName(state, choice.source.cardId) : 'this cost'
+    case 'playUnit': case 'playEvent': case 'playUpgrade': case 'playBaseUpgrade': return p.hand[a.handIndex]
+    case 'smuggle': return p.resources[a.resourceIndex]?.cardId
+    case 'playFromDiscard': return state.discardPlayGrants?.[a.grantIndex]?.cardId
+    case 'useDiscardAction': return p.discard[a.discardIndex]
+    case 'useAbility': return a.cardId
+    case 'useLeaderAbility': return p.leader.cardId
+    case 'useBaseAbility': return a.cardId ?? p.base.cardId
+    default: return choice.source?.cardId
   }
 }
 

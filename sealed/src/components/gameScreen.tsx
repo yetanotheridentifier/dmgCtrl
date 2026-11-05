@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react'
-import { Button, OptionRow } from '@pwa-shared/controls'
+import { Button, OptionRow, Stepper } from '@pwa-shared/controls'
+import { payWithCreditRange, payWithPicked, usableCreditTokens } from '../engine/payment'
+import { readyResourceCount } from '../engine/resources'
 import { nameableCardNames, nameableTraits, zoneCards } from '../engine/legalMoves'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
@@ -9,7 +11,7 @@ import { baseEpicAction, leaderActions, mayLookAtDeckTop, triggerAbility } from 
 import type { Action } from '../engine/actions'
 import { describeAction, describeActionParts, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
-import { describeChoiceParts, describeChoiceQuestion, choiceSourceCard, answeredWithButtons, BOARD_TARGET_KINDS, allocation, isRepeatable } from '../utils/describeChoice'
+import { describeChoiceParts, describeChoiceQuestion, choiceSourceCard, answeredWithButtons, BOARD_TARGET_KINDS, allocation, isRepeatable, paidFor, paidForCard } from '../utils/describeChoice'
 import { upgradeHostIds, upgradeHostName } from '../utils/upgradeHosts'
 import { buildReportMarkdown, issueUrl } from '../utils/bugReport'
 import { BugReportOverlay, GAME_FIELD } from './bugReportOverlay'
@@ -195,6 +197,46 @@ function triggerLabel(state: GameState, t: PendingTrigger): string {
   const name = state.cards[t.cardId]?.name ?? (source ? state.cards[source.cardId]?.name : undefined) ?? t.cardId
   const text = triggerAbility(t)?.description
   return text ? `${name}: ${text}` : name
+}
+
+/**
+ * Paying with Credit tokens: how many to defeat, on the shared stepper held between what ready
+ * resources leave uncovered and what is held, the rest from resources, then Pay. One tap is one
+ * answer, so one move and one line in the log. Paying units are not asked here: they are picked on
+ * the board, an answer each, and their step keeps its Pay buttons in the controls column.
+ */
+export function PayWithPrompt({ state, choice, onPay, onCancel, onSetAside }: {
+  state: GameState
+  choice: Extract<PendingChoice, { kind: 'payWith' }>
+  onPay: (credits: number) => void
+  onCancel?: () => void
+  onSetAside?: () => void
+}) {
+  const { min, max } = payWithCreditRange(state, choice)
+  const [picked, setPicked] = useState(min)
+  const credits = Math.min(max, Math.max(min, picked))
+  const held = usableCreditTokens(state, choice.controller) - choice.credits
+  return (
+    <PhonePrompt
+      testId="pay-with-overlay"
+      state={state}
+      cardId={paidForCard(state, choice)}
+      eyebrow={`Paying for ${paidFor(state, choice)} · cost ${choice.cost}`}
+      question="Each Credit token you defeat pays 1. Use as many as you like, then the rest comes from your resources."
+      buttons={[{ label: 'Pay', onClick: () => onPay(credits), primary: true, testId: 'pay-btn' }]}
+      onCancel={onCancel}
+      cancelLabel={CANCEL_LABEL}
+      onSetAside={onSetAside}
+    >
+      <div role="group" aria-label="Credit tokens to defeat" className="flex items-center gap-2.5">
+        <Stepper label="Credit tokens" value={credits} min={min} max={max} onChange={setPicked} showLabel={false} />
+        <div className="text-sm leading-[17px] text-ink-dim">Credit tokens<br />you have {held}</div>
+      </div>
+      <div data-testid="pay-from-resources" className="text-sm text-ink-dim">
+        Then <b className="text-ink">{choice.cost - payWithPicked(choice) - credits}</b> from resources · {readyResourceCount(state.players[choice.controller])} ready
+      </div>
+    </PhonePrompt>
+  )
 }
 
 export function TriggerOrderOverlay({ state, mine, theirs, onPick, onDismiss }: {
@@ -1514,6 +1556,18 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: uniqueChoice.id, optionIndex })}
           onDismiss={cancel}
           onCancel={() => setUpgradeHost(null)}
+        />
+      )
+    } else if (buttonChoice?.kind === 'payWith' && !buttonChoiceHidden) {
+      const id = buttonChoice.id
+      choiceOverlay = (
+        <PayWithPrompt
+          key={id}
+          state={gameState}
+          choice={buttonChoice}
+          onPay={credits => actAndClear(credits === 0 ? { type: 'skipTrigger', choiceId: id } : { type: 'acceptChoice', choiceId: id, credits })}
+          onCancel={cancel}
+          onSetAside={cancel ? undefined : () => setHiddenChoice(id)}
         />
       )
     } else if (buttonChoice && !buttonChoiceHidden) {

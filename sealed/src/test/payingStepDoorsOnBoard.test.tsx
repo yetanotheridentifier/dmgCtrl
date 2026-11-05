@@ -19,9 +19,8 @@ import { SettingsProvider } from '../hooks/useSettings'
  * game screen: an ability's cost (a leader's action, a unit's action), a cost a choice carries ("you
  * may pay 2"), and a card played out of another zone (Smuggle).
  *
- * A Credit token is paid with a button, a unit that pays as a resource is clicked on the board, and
- * Done is there once what is left is affordable. The step once showed only Undo and Concede: each
- * door is checked for something to press.
+ * Credit tokens are paid with the stepper and Pay, and a unit that pays as a resource is clicked on the
+ * board. The step once showed only Undo and Concede: each door is checked for something to press.
  */
 
 const CARDS: SwuCard[] = [
@@ -81,7 +80,8 @@ async function start(playerDeck: SavedDeck, resource: [number, number] = [3, 3])
 }
 
 const unitsOn = (side: PlayerId) => within(screen.getByTestId(`${side}-ground-units`)).queryAllByTestId(/^board-unit-u\d+$/)
-const creditButtons = () => screen.queryAllByRole('button', { name: /defeat a credit token/i })
+const payPrompt = () => screen.queryByTestId('pay-with-overlay')
+const payButton = () => within(screen.getByTestId('pay-with-overlay')).getByRole('button', { name: 'Pay' })
 const doneButton = () => screen.queryByRole('button', { name: /^done$/i })
 /** Your leader's action is taken from the menu the leader opens. */
 async function useLeaderAction(user: ReturnType<typeof userEvent.setup>) {
@@ -98,22 +98,18 @@ describe('the paying step on the other doors, on the game screen', () => {
     for (const c of CARDS) await db.cards.put({ id: `TST_${c.Number}`, json: c, fetchedAt: 1 })
   })
 
-  it("pays a leader action's cost with a Credit token button, and says what is being paid for", async () => {
+  it("pays a leader action's cost with Credit tokens, and says what is being paid for", async () => {
     const user = await start(deck('TST_970'))
     await user.click(screen.getByTestId('hand-card-0')) // the Banker: two Credit tokens
     await waitFor(() => expect(unitsOn('player')).toHaveLength(1))
     const before = handSize()
-    // Three to pay with two resources: one token is needed, so there is no Done yet.
+    // Three to pay with two resources: one token is needed.
     await useLeaderAction(user)
-    expect(screen.getByTestId('choice-overlay-prompt')).toHaveTextContent(/defeat credit tokens to pay for test leader's action \(3 to pay\)/i)
-    expect(creditButtons()).toHaveLength(1)
-    expect(doneButton()).toBeNull()
-    await user.click(creditButtons()[0])
-    // One token and two resources cover it: Done is there, and so is the second token.
-    expect(doneButton()).not.toBeNull()
-    await user.click(doneButton()!)
+    expect(within(payPrompt()!).getByText("PAYING FOR TEST LEADER'S ACTION · COST 3")).toBeInTheDocument()
+    expect(within(payPrompt()!).getByTestId('pay-from-resources')).toHaveTextContent('Then 2 from resources · 2 ready')
+    await user.click(payButton())
     await waitFor(() => expect(handSize()).toBe(before + 1))
-    expect(creditButtons()).toHaveLength(0)
+    expect(payPrompt()).toBeNull()
   })
 
   it('backs out of the step with nothing paid: the tokens, the resources and the leader are as they were', async () => {
@@ -124,18 +120,16 @@ describe('the paying step on the other doors, on the game screen', () => {
     const tokens = () => screen.getByRole('img', { name: /credit token/i }).textContent
     const before = handSize()
     await useLeaderAction(user)
-    await user.click(creditButtons()[0])
-    // A token is picked and not yet defeated: the count holds until the step finishes.
+    await user.click(screen.getByRole('button', { name: 'Increase credit tokens' }))
+    // Set on the stepper and not yet paid: the count holds until Pay.
     expect(tokens()).toBe('CRED 2')
     await user.click(screen.getByRole('button', { name: /cancel: take back the action/i }))
-    expect(creditButtons()).toHaveLength(0)
-    expect(screen.queryByTestId('choice-overlay')).toBeNull()
+    expect(payPrompt()).toBeNull()
     expect(tokens()).toBe('CRED 2')
     expect(handSize()).toBe(before)
     // The action is still there to take, and this time it is paid for.
     await useLeaderAction(user)
-    await user.click(creditButtons()[0])
-    await user.click(doneButton()!)
+    await user.click(payButton())
     await waitFor(() => expect(handSize()).toBe(before + 1))
     expect(tokens()).toBe('CRED 1')
   })
@@ -164,27 +158,18 @@ describe('the paying step on the other doors, on the game screen', () => {
     await user.click(screen.getByTestId('hand-card-0')) // the Toll Taker: "you may pay 3"
     const before = handSize()
     await user.click(await screen.findByRole('button', { name: /draw a card/i }))
-    expect(creditButtons()).toHaveLength(1)
-    expect(doneButton()).toBeNull()
-    await user.click(creditButtons()[0])
-    await user.click(creditButtons()[0])
-    // Two tokens and one resource: the step is still open with nothing more to pick, so Done ends it.
-    if (doneButton()) await user.click(doneButton()!)
+    await user.click(payButton())
     await waitFor(() => expect(handSize()).toBe(before + 1))
   })
 
-  it('pays for a Smuggle play with a Credit token, and keeps the tokens when Done is pressed first', async () => {
+  it('pays for a Smuggle play with Credit tokens', async () => {
     // The Contraband is resourced (hand position 1), so it can be smuggled for 3 with two resources.
     const user = await start(deck('TST_970', 'TST_974'), [1, 1])
     await user.click(screen.getByTestId('hand-card-0')) // the Banker
     await waitFor(() => expect(unitsOn('player')).toHaveLength(1))
     await user.click(await screen.findByRole('button', { name: /smuggle/i }))
-    expect(screen.getByTestId('choice-overlay-prompt')).toHaveTextContent(/defeat credit tokens to pay for contraband \(3 to pay\)/i)
-    expect(creditButtons()).toHaveLength(1)
-    expect(doneButton()).toBeNull()
-    await user.click(creditButtons()[0])
-    expect(doneButton()).not.toBeNull()
-    await user.click(doneButton()!)
+    expect(within(payPrompt()!).getByText('PAYING FOR CONTRABAND · COST 3')).toBeInTheDocument()
+    await user.click(payButton())
     await waitFor(() => expect(unitsOn('player')).toHaveLength(2))
   })
 
@@ -194,6 +179,6 @@ describe('the paying step on the other doors, on the game screen', () => {
     await waitFor(() => expect(unitsOn('player')).toHaveLength(1))
     // Two resources against a cost of three: the action is simply not there.
     expect(screen.queryByRole('button', { name: /use tinkerer/i })).toBeNull()
-    expect(creditButtons()).toHaveLength(0)
+    expect(payPrompt()).toBeNull()
   })
 })

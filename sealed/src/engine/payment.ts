@@ -183,18 +183,40 @@ export function payWithUnits(state: GameState, choice: PayWith): string[] {
 export const payWithPicked = (choice: PayWith): number => choice.credits + choice.units.length
 
 /** Whether a `payWith` step may take another Credit token: one is left, and the cost is not yet covered. */
-export function payWithCredit(state: GameState, choice: PayWith): boolean {
+function payWithCredit(state: GameState, choice: PayWith): boolean {
   return payWithPicked(choice) < choice.cost && choice.credits < usableCreditTokens(state, choice.controller)
 }
 
 /** Whether a `payWith` step could finish now: ready resources cover what its picks leave. */
-export function payWithAffordable(state: GameState, choice: PayWith): boolean {
-  return choice.cost - payWithPicked(choice) <= readyResourceCount(state.players[choice.controller])
+export const payWithAffordable = (state: GameState, choice: PayWith): boolean => payWithCreditRange(state, choice).min === 0
+
+/**
+ * How many Credit tokens a `payWith` step's Pay may defeat: at least what ready resources leave
+ * uncovered after the picks so far, at most what is held and what is left of the cost. `min` is above
+ * `max` when no number of tokens finishes it, and a paying unit has to be picked first.
+ */
+export function payWithCreditRange(state: GameState, choice: PayWith): { min: number; max: number } {
+  const left = choice.cost - payWithPicked(choice)
+  return {
+    min: Math.max(0, left - readyResourceCount(state.players[choice.controller])),
+    max: Math.min(left, usableCreditTokens(state, choice.controller) - choice.credits),
+  }
+}
+
+/**
+ * A `payWith` step's Pay: defeat `count` more Credit tokens and pay the rest from ready resources, in
+ * one answer. A count outside `payWithCreditRange` changes nothing.
+ */
+export function payPayWith(state: GameState, choice: PayWith, count: number, run: (s: GameState, a: Action) => GameState): GameState {
+  const { min, max } = payWithCreditRange(state, choice)
+  if (count < min || count > max) return state
+  return finishPayWith(state, { ...choice, credits: choice.credits + count }, run)
 }
 
 /**
  * One more pick for a `payWith` step: a Credit token, or the unit named. The step finishes by itself
- * once the cost is covered or nothing is left to pick, and is offered again otherwise.
+ * once the cost is covered or nothing is left to pick, and is offered again otherwise. Nothing offers
+ * the single token any more (Pay does), but a game recorded before Pay still answers with it.
  */
 export function pickPayWith(state: GameState, choice: PayWith, unitId: string | undefined, run: (s: GameState, a: Action) => GameState): GameState {
   const next: PayWith = unitId === undefined

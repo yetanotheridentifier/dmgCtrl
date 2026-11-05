@@ -2,7 +2,7 @@ import type { Action } from './actions'
 import type { AspectWaiver, AttackerFilter, CapturedCard, DiscardPlayGrant, EngineCard, GameState, HandCardRef, KeywordInstance, PendingChoice, PlayFromRef, PlayFromZone, PlayerId, UnitState } from './types'
 import { opponentOf, hasPendingChoices, plotCostDelta, pushChoice, isFortify, upgradeSideId } from './types'
 import { readyResourceCount } from './resources'
-import { canPay, payable, unitCostPayers, usableCreditTokens, payWithAffordable, payWithCredit, payWithUnits } from './payment'
+import { canPay, payable, unitCostPayers, usableCreditTokens, payWithAffordable, payWithCreditRange, payWithUnits } from './payment'
 import { cardHasTrait, grantMatches, keywordValue, unitHasKeyword, unitCannotAttack,unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
 import { abilityCardIds, cardAbilitiesBlanked, getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, leaderAbilitiesBlanked, baseEpicAction, usableBaseActions } from './abilities'
 import { friendlyCreditTokens, discloseRemaining, hasForceToken } from './effects'
@@ -1106,10 +1106,12 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'payWith': {
-        // Done first, once ready resources cover what the picks leave. Then one move for a Credit
-        // token (they are fungible, so there is only ever one to offer) and one for each paying unit.
+        // Done first, once ready resources cover what the picks leave. Then Pay, one move for each
+        // number of Credit tokens that finishes it (they are fungible, so the count is all there is to
+        // choose), and one for each paying unit, which is exhausted an answer at a time.
         if (payWithAffordable(state, choice)) moves.push({ type: 'skipTrigger', choiceId: choice.id })
-        if (payWithCredit(state, choice)) moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: choice.credits })
+        const { min, max } = payWithCreditRange(state, choice)
+        for (let credits = Math.max(1, min); credits <= max; credits++) moves.push({ type: 'acceptChoice', choiceId: choice.id, credits })
         if (choice.credits + choice.units.length < choice.cost) {
           for (const id of payWithUnits(state, choice)) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         }

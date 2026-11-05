@@ -16,9 +16,9 @@ import { SettingsProvider } from '../hooks/useSettings'
 /**
  * The standing paying step, as a player answers it on the game screen.
  *
- * A Credit token is not on the board, so its pick is a button, pressed once per token, with Done beside it
- * once what is left is affordable. A unit that pays as a resource is on the board and is clicked
- * there. The step is asked for a unit and for an upgrade played from hand alike.
+ * A Credit token is not on the board, so how many to defeat is set on a stepper and paid with one Pay,
+ * the rest from resources. A unit that pays as a resource is on the board and is clicked there, one
+ * at a time. The step is asked for a unit and for an upgrade played from hand alike.
  */
 
 const CARDS: SwuCard[] = [
@@ -72,7 +72,8 @@ async function startWithCredits(playerDeck: SavedDeck) {
 }
 
 const unitsOn = (side: PlayerId) => within(screen.getByTestId(`${side}-ground-units`)).queryAllByTestId(/^board-unit-u\d+$/)
-const creditButtons = () => screen.queryAllByRole('button', { name: /defeat a credit token/i })
+/** The shared Stepper's count, between its two buttons. */
+const stepperValue = (dialog: HTMLElement) => within(dialog).getByRole('button', { name: 'Decrease credit tokens' }).nextElementSibling?.textContent
 
 describe('the standing paying step on the game screen', () => {
   beforeEach(async () => {
@@ -82,16 +83,39 @@ describe('the standing paying step on the game screen', () => {
     for (const c of CARDS) await db.cards.put({ id: `TST_${c.Number}`, json: c, fetchedAt: 1 })
   })
 
-  it('offers a button for each Credit token while paying for a unit, and plays it once they cover the cost', async () => {
+  it('asks how many Credit tokens on a stepper, says what the resources pay, and plays it on one Pay', async () => {
     const user = await startWithCredits(deck('TST_981'))
     expect(unitsOn('player')).toHaveLength(1)
-    // Four to pay with two resources: both tokens are needed, so there is no Done yet.
+    // Four to pay with two resources: both tokens are needed, so the stepper is held at 2.
     await user.click(screen.getByTestId('hand-card-0'))
-    expect(creditButtons().length).toBeGreaterThan(0)
-    expect(screen.queryByRole('button', { name: /^done$/i })).toBeNull()
-    await user.click(creditButtons()[0])
-    await user.click(creditButtons()[0])
+    const dialog = screen.getByRole('dialog', { name: /paying for pricey unit/i })
+    expect(within(dialog).getByText('PAYING FOR PRICEY UNIT · COST 4')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /pricey unit: see the card/i })).toBeInTheDocument()
+    expect(stepperValue(dialog)).toBe('2')
+    expect(within(dialog).getByRole('button', { name: 'Decrease credit tokens' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Increase credit tokens' })).toBeDisabled()
+    expect(within(dialog).getByTestId('pay-from-resources')).toHaveTextContent('Then 2 from resources · 2 ready')
+    await user.click(within(dialog).getByRole('button', { name: 'Pay' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
     expect(unitsOn('player')).toHaveLength(2)
+    expect(screen.queryByRole('img', { name: /credit token/i })).toBeNull()
+  })
+
+  it('holds the stepper between what the resources leave and what is held, and pays that many', async () => {
+    // Three to pay with two resources and two tokens: at least 1 token, at most 2.
+    const user = await startWithCredits(deck('TST_984'))
+    await user.click(screen.getByTestId('hand-card-0'))
+    const dialog = screen.getByRole('dialog', { name: /paying for mid unit/i })
+    expect(stepperValue(dialog)).toBe('1')
+    expect(within(dialog).getByRole('button', { name: 'Decrease credit tokens' })).toBeDisabled()
+    expect(within(dialog).getByTestId('pay-from-resources')).toHaveTextContent('Then 2 from resources · 2 ready')
+    await user.click(within(dialog).getByRole('button', { name: 'Increase credit tokens' }))
+    expect(stepperValue(dialog)).toBe('2')
+    expect(within(dialog).getByRole('button', { name: 'Increase credit tokens' })).toBeDisabled()
+    expect(within(dialog).getByTestId('pay-from-resources')).toHaveTextContent('Then 1 from resources · 2 ready')
+    await user.click(within(dialog).getByRole('button', { name: 'Pay' }))
+    expect(unitsOn('player')).toHaveLength(2)
+    expect(screen.queryByRole('img', { name: /credit token/i })).toBeNull()
   })
 
   it('pays with units that count as resources by clicking them on the board', async () => {
@@ -122,10 +146,8 @@ describe('the standing paying step on the game screen', () => {
     const [banker] = unitsOn('player')
     await user.click(screen.getByTestId('hand-card-0'))
     await user.click(banker)
-    expect(creditButtons().length).toBeGreaterThan(0)
-    await user.click(creditButtons()[0])
-    await user.click(creditButtons()[0])
-    expect(creditButtons()).toHaveLength(0)
+    await user.click(within(screen.getByRole('dialog', { name: /paying for pricey gear/i })).getByRole('button', { name: 'Pay' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
     expect(within(unitsOn('player')[0]).getByTestId('unit-badge-upgrades')).toHaveTextContent('+1')
   })
 })

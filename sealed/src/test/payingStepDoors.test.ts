@@ -307,15 +307,14 @@ describe('the paying step itself', () => {
     const base = board(smuggle, { resources: 1, means: 'droids' })
     const s = { ...base, players: { ...base.players, player: { ...base.players.player, creditTokens: 5 } } }
     const asked = take(s, smuggle)
-    const picks = stepMoves(asked).filter(m => m.type === 'acceptChoice')
-    expect(picks.filter(m => m.type === 'acceptChoice' && m.targetInstanceId !== undefined)).toHaveLength(2)
-    expect(picks.filter(m => m.type === 'acceptChoice' && m.optionIndex !== undefined)).toHaveLength(1)
-    // One Droid and then Credit tokens: the step finishes by itself once the whole cost is covered.
+    const counts = (s: GameState) => stepMoves(s).flatMap(m => (m.type === 'acceptChoice' && m.credits !== undefined ? [m.credits] : []))
+    expect(stepMoves(asked).filter(m => m.type === 'acceptChoice' && m.targetInstanceId !== undefined)).toHaveLength(2)
+    // Cost 4 with 1 ready: Pay 3 or Pay 4, never more than the cost although 5 are held.
+    expect(counts(asked)).toEqual([3, 4])
+    // A Droid is one answer of its own, and Pay then covers the rest in one more.
     let next = resolve(asked, { type: 'acceptChoice', choiceId: step(asked)!.id, targetInstanceId: 'droid0' })
-    for (let i = 0; i < 3; i++) {
-      expect(step(next)).toBeDefined()
-      next = resolve(next, stepMoves(next).find(m => m.type === 'acceptChoice' && m.optionIndex !== undefined)!)
-    }
+    expect(counts(next)).toEqual([2, 3])
+    next = resolve(next, { type: 'acceptChoice', choiceId: step(next)!.id, credits: 3 })
     expect(step(next)).toBeUndefined()
     expect(has(next, 'SMUG')).toBe(true)
     expect(credits(next)).toBe(2)
@@ -324,8 +323,9 @@ describe('the paying step itself', () => {
     expect(next.players.player.resources.filter(r => r.exhausted)).toHaveLength(1)
   })
 
-  it('keeps the Credit tokens until the step finishes', () => {
-    const asked = pick(take(board(smuggle, { resources: 4, means: 'credits' }), smuggle))
+  it('keeps the Credit tokens until the step finishes, answered a token at a time as a recorded game may be', () => {
+    const taken = take(board(smuggle, { resources: 4, means: 'credits' }), smuggle)
+    const asked = resolve(taken, { type: 'acceptChoice', choiceId: step(taken)!.id, optionIndex: 0 })
     expect(step(asked)).toMatchObject({ credits: 1 })
     expect(credits(asked)).toBe(2)
     expect(credits(done(asked))).toBe(1)
@@ -349,10 +349,12 @@ describe('the paying step itself', () => {
     const asked = take(board(smuggle, { resources: 3, means: 'credits' }), smuggle)
     expect(JSON.parse(JSON.stringify(asked))).toEqual(asked)
     expect(step(asked)!.resume).toEqual({ type: 'smuggle', resourceIndex: 0 })
-    const end = pick(asked)
+    // A token picked the way a recorded game may pick it leaves the step standing, and Pay finishes it.
+    const picked = resolve(asked, { type: 'acceptChoice', choiceId: step(asked)!.id, optionIndex: 0 })
     expect('paying' in asked).toBe(false)
-    expect('paying' in end).toBe(false)
-    expect('paying' in done(end)).toBe(false)
+    expect('paying' in picked).toBe(false)
+    expect('paying' in done(picked)).toBe(false)
+    expect('paying' in pick(asked)).toBe(false)
   })
 
   it("does not offer an opponent's suppressed Credit tokens", () => {

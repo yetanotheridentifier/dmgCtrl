@@ -670,10 +670,16 @@ place, holding the cost, the picks so far and the action itself as `resume`. See
   answer, with the `mayPayThen` still pending underneath.
 - **It is asked even when ready resources would cover the cost**, and never of a player who has
   nothing but resources to pay with.
-- **Answers**: `acceptChoice` with an `optionIndex` takes one more Credit token (one move, since tokens
-  cannot be told apart), `acceptChoice` with a `targetInstanceId` takes a paying unit, and
-  `skipTrigger` is Done, offered once ready resources cover what the picks leave. Covering the whole
-  cost, or running out of picks, finishes it without a Done.
+- **Answers**: `acceptChoice` with `credits` is Pay: it defeats that many Credit tokens and pays the
+  rest from ready resources, finishing the step in one move. Tokens cannot be told apart, so the
+  count is all there is to choose, and one is offered for each count that finishes it
+  (`payWithCreditRange`: at least what ready resources leave uncovered, at most what is held and what
+  is left of the cost). `acceptChoice` with a `targetInstanceId` takes a paying unit, one answer a
+  unit, and `skipTrigger` is Done, offered once ready resources cover what the picks leave. Covering
+  the whole cost with units, or running out of units to pick, finishes it without a Done.
+- **A recorded game may answer a token at a time.** `acceptChoice` with an `optionIndex` and no
+  `credits` was the token answer before Pay. Nothing offers it now, but it still takes one more token
+  and leaves the step standing, so an older report or bench record replays move for move.
 - **Nothing is spent until it finishes.** Tokens are defeated and units exhausted as the action
   resumes, so the count a player sees holds until then, and cancelling the step leaves nothing paid,
   nothing marked used and the turn where it was.

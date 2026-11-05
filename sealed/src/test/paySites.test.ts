@@ -24,7 +24,7 @@ const READY_READ = /readyResourceCount\(|!\s*r\.exhausted/g
 const EXPECTED_READS: Record<string, number> = {
   // The count itself (two), and `canAfford` and `payCost` reading it.
   'resources.ts': 4,
-  // `payable` counts them, `pay` in a dry run exhausts what there is, and the step's Done reads what is left.
+  // `payable` counts them, `pay` in a dry run exhausts what there is, and the step's Pay range reads what is left.
   'payment.ts': 3,
   // Greater Sarlacc's step picks ready resources, so its terms count them, and a card's own Credit
   // step (Jabba the Hutt) has only ready resources left to finish with.

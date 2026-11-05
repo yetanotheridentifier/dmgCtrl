@@ -76,7 +76,6 @@ async function start(playerDeck: SavedDeck) {
 const summary = (side: PlayerId) => within(screen.getByTestId(`${side}-summary`))
 const credits = (side: PlayerId) => summary(side).queryByRole('img', { name: /credit token/i })
 const force = (side: PlayerId) => summary(side).queryByRole('img', { name: /the force is with/i })
-const creditButtons = () => screen.queryAllByRole('button', { name: /defeat a credit token/i })
 
 describe('the tokens a player holds, on the game screen', () => {
   beforeEach(async () => {
@@ -107,12 +106,11 @@ describe('the tokens a player holds, on the game screen', () => {
     const user = await start(deck('TST_970', 'TST_971'))
     await user.click(screen.getByTestId('hand-card-0'))
     await waitFor(() => expect(credits('player')).toHaveTextContent('2'))
-    // Three to pay with two resources: one token covers it, and Done leaves the other.
+    // Three to pay with two resources: Pay with the one token the stepper starts at leaves the other.
     await user.click(screen.getByTestId('hand-card-0'))
-    await user.click(creditButtons()[0])
-    // A token picked is defeated when the step is finished, so the count holds until then.
+    // The count holds while the stepper is set, and drops on Pay.
     expect(credits('player')).toHaveTextContent('2')
-    await user.click(screen.getByRole('button', { name: /^done$/i }))
+    await user.click(screen.getByRole('button', { name: 'Pay' }))
     await waitFor(() => expect(credits('player')).toHaveTextContent('1'))
     expect(credits('player')).toHaveAccessibleName('1 Credit token')
     expect(within(screen.getByTestId('player-ground-units')).queryAllByTestId(/^board-unit-u\d+$/)).toHaveLength(2)
