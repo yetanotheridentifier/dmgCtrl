@@ -3,7 +3,9 @@ import baylanExhaust from '../fixtures/reports/baylanExhaust.json'
 import cassianBaseAttackerAttacked from '../fixtures/reports/cassianBaseAttackerAttacked.json'
 import exhaustedLeaderDraw from '../fixtures/reports/exhaustedLeaderDraw.json'
 import haulcraftPrompt from '../fixtures/reports/haulcraftPrompt.json'
+import hondoDeckTopGreedy from '../fixtures/reports/hondoDeckTopGreedy.json'
 import hondoTopCard from '../fixtures/reports/hondoTopCard.json'
+import lawSet from '../fixtures/lawSet.json'
 import attackBuffPersists from '../fixtures/reports/attackBuffPersists.json'
 import advantageToEnemy from '../fixtures/reports/advantageToEnemy.json'
 import debuffOnOwnUnit from '../fixtures/reports/debuffOnOwnUnit.json'
@@ -59,7 +61,7 @@ const ashCards = ashSet as SwuCard[]
  */
 const REPORTS: Record<string, unknown> = {
   advantageToEnemy, attackBuffPersists, baylanExhaust, cassianBaseAttackerAttacked, debuffOnOwnUnit, deployedLeaderExhaust,
-  exhaustedLeaderDraw, grassrootsHeal, haulcraftPrompt, hondoTopCard, kimogilaArena, maeShieldAmbush, minefieldArenaChoice,
+  exhaustedLeaderDraw, grassrootsHeal, haulcraftPrompt, hondoDeckTopGreedy, hondoTopCard, kimogilaArena, maeShieldAmbush, minefieldArenaChoice,
   nestedDeployShieldTarget, palpatinesReturnTwoPlays, plotSpendsBeforePlayUnit, rampResourceReady,
   sabineNothingToPlay, sabineThenUnit, shieldedSentinelLockout, shieldedSentinelPing, sloaneSelfSentinel, triggerOrderNotOffered,
   triggerProbeOverflow, vaneFriendlyUpgrade, warriorAmbushDecline,
@@ -71,6 +73,7 @@ const REPORTS: Record<string, unknown> = {
  */
 export const REPORT_CARDS: Record<string, SwuCard[]> = {
   vaneFriendlyUpgrade: vaneFriendlyUpgradeCards as SwuCard[],
+  hondoDeckTopGreedy: lawSet as unknown as SwuCard[],
 }
 
 /**

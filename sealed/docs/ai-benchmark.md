@@ -1903,6 +1903,7 @@ discard piles, everything in play and captured cards are open):
 | the other seat's hand and deck | one `__unseen__` a card: the size and nothing else |
 | the other seat's resources | `__unseen__` for each card, with its ready or exhausted state. A resource the mover owns in that row stays, since its ownership is open |
 | the mover's own deck | its cards, sorted. Which cards are left follows from the deck list; their order is hidden from its owner too |
+| a top card one of the mover's choices offers ("play the top card of your deck") | on top of that deck, the mover's or the other seat's. The choice already names it, and without it there the offer has no legal answer |
 | `rngSeed` | 0. The seed advances on every move and seeds the mulligan shuffle, so with a known deck list it leads back to a deck's order |
 | `pendingChoices`, `pendingTriggers`, `heldTriggers` | the mover's own only. What the other seat is being asked or is owed is dropped whole |
 | `triggerTurn`, `paying`, `resolvingSource` | dropped: resolver bookkeeping |
