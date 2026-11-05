@@ -61,6 +61,10 @@ const searching = (controller: PlayerId, revealed: string[]): PendingChoice => (
   { kind: 'search', id: 'search-1', controller, unitId: controller === 'player' ? 'u1' : 'u2', revealed }
 )
 
+const playingTop = (controller: PlayerId, zone: 'deckTop' | 'opponentDeckTop', cardId: string): PendingChoice => (
+  { kind: 'playCardFrom', id: 'top-1', controller, zone, candidates: [{ index: 0, cardId }] }
+)
+
 /** An ability of a card still in its owner's hand ("when you draw this card"), owed but not resolved. */
 const drawnTrigger = (controller: PlayerId, cardId: string): PendingTrigger => (
   { id: `drawn-${cardId}-0`, controller, point: 'whenDrawn', cardId, abilityIndex: 0, layer: 0, ctx: { drawingPlayer: controller } }
@@ -190,6 +194,34 @@ describe.each(SEATS)('the state as %s sees it', seat => {
     it('an ability it is owed itself', () => {
       const owed = { ...full, pendingTriggers: [drawnTrigger(seat, 'TST_U1'), drawnTrigger(other, 'TST_U4')] }
       expect(seatView(owed, seat).pendingTriggers).toEqual([drawnTrigger(seat, 'TST_U1')])
+    })
+  })
+
+  /**
+   * A play from the top of a deck names the card it offers, so the view already says what is on top;
+   * the deck has to agree with it, or the offer points at a card that is not there and has no move.
+   */
+  describe('while a choice of its own offers the top card of a deck', () => {
+    it('keeps that card on top of its own deck, the rest still in a fixed order', () => {
+      const top = full.players[seat].deck[0]
+      const deck = seatView({ ...full, pendingChoices: [playingTop(seat, 'deckTop', top)] }, seat).players[seat].deck
+      expect(deck).toEqual([top, ...full.players[seat].deck.slice(1).sort()])
+    })
+
+    it('shows that card on top of the other deck, and nothing else of it', () => {
+      const top = full.players[other].deck[0]
+      const deck = seatView({ ...full, pendingChoices: [playingTop(seat, 'opponentDeckTop', top)] }, seat).players[other].deck
+      expect(deck).toEqual([top, ...full.players[other].deck.slice(1).map(() => UNSEEN_CARD)])
+    })
+
+    it('learns nothing from the other seat being offered theirs', () => {
+      const offered = { ...full, pendingChoices: [playingTop(other, 'deckTop', full.players[other].deck[0])] }
+      expect(seatView(offered, seat)).toEqual(view)
+    })
+
+    it('is its own view', () => {
+      const offered = seatView({ ...full, pendingChoices: [playingTop(seat, 'deckTop', full.players[seat].deck[0])] }, seat)
+      expect(seatView(offered, seat)).toEqual(offered)
     })
   })
 

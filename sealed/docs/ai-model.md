@@ -228,7 +228,7 @@ seat may read) and never from that state, so:
 | the opponent's hand | its size. The cards are placeholders the engine offers no play for |
 | the opponent's face-down resources | how many, and which are exhausted |
 | the opponent's deck | its size |
-| its own deck | which cards are left, in a fixed order that is not the real one |
+| its own deck | which cards are left, in a fixed order that is not the real one, except a top card one of its choices offers to play, which stays on top |
 | the shuffle seed | zero. The real seed is used once, as the coin for a tie, and for nothing else |
 
 **So the replies the search models are the ones the board shows**: attacks with units in play, leader

@@ -1,5 +1,5 @@
 import { UNSEEN_CARD } from './resolve'
-import type { GameState, HeldTriggers, PlayerId, PlayerState } from './types'
+import type { GameState, HeldTriggers, PendingChoice, PlayerId, PlayerState } from './types'
 
 /**
  * A game state as one seat sees it: the same shape, with what that seat cannot see taken out.
@@ -22,6 +22,7 @@ import type { GameState, HeldTriggers, PlayerId, PlayerState } from './types'
  * | the other seat's hand and deck | one `UNSEEN_CARD` a card: the size and nothing else |
  * | the other seat's resources | `UNSEEN_CARD` for the card, the ready or exhausted state kept. A resource the viewing seat owns is open (CR 1.7.5) and stays |
  * | the seat's own deck | its cards, sorted: which cards are left is known from the deck list, their order is not |
+ * | a top card a choice of the seat's own offers ("play the top card of a deck") | on top of that deck, in either seat's: the choice already names it |
  * | `rngSeed` | 0. It advances on every move and seeds the mulligan shuffle, so with a known deck list it leads back to a deck's order |
  * | `pendingChoices`, `pendingTriggers`, `heldTriggers` | only the seat's own. What the other seat is asked or owed is dropped whole |
  * | `triggerTurn`, `paying`, `resolvingSource` | dropped: the resolver's bookkeeping, which is about work the view no longer holds or is never set at rest |
@@ -70,8 +71,8 @@ export function seatView(state: GameState, seat: PlayerId): GameState {
     ...open,
     rngSeed: 0,
     players: {
-      [seat]: ownSide(state.players[seat]),
-      [other]: otherSide(state.players[other], seat),
+      [seat]: ownSide(state.players[seat], offeredTop(choices, 'deckTop')),
+      [other]: otherSide(state.players[other], seat, offeredTop(choices, 'opponentDeckTop')),
     } as Record<PlayerId, PlayerState>,
     // Left out when empty, so a view does not say that something of the other seat's was taken.
     ...(choices.length > 0 && { pendingChoices: choices }),
@@ -80,17 +81,33 @@ export function seatView(state: GameState, seat: PlayerId): GameState {
   }
 }
 
-/** The viewing seat's own side: all of it, with the deck as its cards and not their order. */
-function ownSide(p: PlayerState): PlayerState {
-  return { ...p, deck: [...p.deck].sort() }
+/**
+ * The card one of the seat's own choices offers off the top of a deck ("play the top card of your
+ * deck"), which the choice names and the view's deck must then hold where the offer points.
+ */
+function offeredTop(choices: PendingChoice[], zone: 'deckTop' | 'opponentDeckTop'): string | undefined {
+  return choices
+    .flatMap(c => ((c.kind === 'playCardFrom' || c.kind === 'attachPlayedCard') && c.zone === zone ? c.candidates ?? [] : []))
+    .find(ref => ref.index === 0)?.cardId
 }
 
-/** The other seat's side: its hidden zones as sizes, and everything open as it is. */
-function otherSide(p: PlayerState, viewer: PlayerId): PlayerState {
+/**
+ * The viewing seat's own side: all of it, with the deck as its cards and not their order, except a
+ * top card one of its choices offers, which stays on top.
+ */
+function ownSide(p: PlayerState, top: string | undefined): PlayerState {
+  const deck = [...p.deck].sort()
+  const at = top === undefined ? -1 : deck.indexOf(top)
+  if (at !== -1) deck.unshift(...deck.splice(at, 1))
+  return { ...p, deck }
+}
+
+/** The other seat's side: its hidden zones as sizes, a top card one of the viewer's choices offers, and everything open as it is. */
+function otherSide(p: PlayerState, viewer: PlayerId, top: string | undefined): PlayerState {
   return {
     ...p,
     hand: p.hand.map(() => UNSEEN_CARD),
-    deck: p.deck.map(() => UNSEEN_CARD),
+    deck: p.deck.map((_, i) => (i === 0 && top !== undefined ? top : UNSEEN_CARD)),
     resources: p.resources.map(r => (r.owner === viewer ? r : { ...r, cardId: UNSEEN_CARD })),
   }
 }

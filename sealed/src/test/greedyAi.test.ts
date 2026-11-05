@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { greedyAi } from '../ai/greedyAi'
+import { greedyAi, beamReplyAi } from '../ai/greedyAi'
 import '../engine/cardDefinitions' // side-effect: registers every implemented card
+import { legalMoves } from '../engine/legalMoves'
 import { state, player, unit, card, CARDS, ready } from './helpers/engineFixtures'
+import { loadReport, replay, REPORT_CARDS } from './helpers/replayReport'
 import type { Action } from '../engine/actions'
 
 /**
@@ -50,5 +52,24 @@ describe('greedyAi', () => {
     const s = state({ players: { player: player({ hand: ['TST_U1'], resources: ready(2) }), opponent: player() } })
     const move = greedyAi(s) as Action
     expect(move.type).toBe('playUnit')
+  })
+})
+
+/**
+ * A LAW sweep game the bench dropped as stuck: the opponent used Hondo Ohnaka's action, "Play the top
+ * card of your deck (paying its cost)", which offers that one card and cannot be declined. The engine
+ * has the move; a bot deciding on what its seat can see must find it too.
+ */
+describe('the top card of the deck, offered to play', () => {
+  const report = loadReport('hondoDeckTopGreedy')
+  const offered = replay(report, REPORT_CARDS.hondoDeckTopGreedy)
+
+  it('is the position the sweep dropped: one legal move, playing the offered card', () => {
+    expect(offered.pendingChoices?.[0]).toMatchObject({ kind: 'playCardFrom', zone: 'deckTop', controller: 'opponent' })
+    expect(legalMoves(offered)).toEqual([{ type: 'acceptChoice', choiceId: offered.pendingChoices?.[0].id, optionIndex: 0 }])
+  })
+
+  it.each([['greedy', greedyAi], ['beam-reply', beamReplyAi]])('%s plays it', (_, ai) => {
+    expect(ai(offered)).toEqual(legalMoves(offered)[0])
   })
 })
