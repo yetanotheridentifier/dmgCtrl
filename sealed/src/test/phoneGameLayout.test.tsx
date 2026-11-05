@@ -169,6 +169,41 @@ describe('phone board pieces', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  it('shows the upgrade cards on a held unit and the cards it holds captive, each as a card', async () => {
+    const cards = {
+      ...CARDS,
+      TST_S: card({ id: 'TST_S', name: 'Big Brute', type: 'unit', arena: 'ground', power: 2, hp: 5 }),
+      TST_UP1: card({ id: 'TST_UP1', name: 'Heavy Plating', type: 'upgrade' }),
+      TST_UP2: card({ id: 'TST_UP2', name: 'Long Rifle', type: 'upgrade' }),
+      TST_P: card({ id: 'TST_P', name: 'Clone Deserter', type: 'unit', arena: 'ground', power: 1, hp: 2 }),
+    }
+    const u = unit('u1', 'TST_S', {
+      upgrades: [{ cardId: 'TST_UP1', owner: 'player' }, { cardId: TOKEN_SHIELD, owner: 'player' }, { cardId: 'TST_UP2', owner: 'opponent' }],
+      captured: [{ cardId: 'TST_P', owner: 'opponent' }],
+    })
+    const s = state({ cards, players: { player: player({ units: [u] }), opponent: player() } })
+    const onClose = vi.fn()
+    render(<CardDetail state={s} cardId="TST_S" unit={u} onClose={onClose} />)
+    const dialog = within(screen.getByRole('dialog', { name: 'Big Brute, full size' }))
+    const attached = within(dialog.getByRole('list', { name: 'On Big Brute' }))
+    const items = attached.getAllByRole('listitem')
+    expect(items.map(i => i.getAttribute('aria-label'))).toEqual(['Upgrade: Heavy Plating', 'Upgrade: Long Rifle', 'Captured: Clone Deserter'])
+    // Each is the card itself, not just its name; a token is not a card and stays a line of text.
+    for (const item of items) expect(within(item).getByTestId('card-face')).toBeInTheDocument()
+    expect(items[2]).toHaveTextContent("Clone Deserter, the opponent's card. It comes back into play for them, exhausted, when Big Brute leaves play.")
+    expect(attached.queryByText('Shield')).toBeNull()
+    // A tap on the cards closes, as anywhere else does.
+    await userEvent.setup().click(items[0])
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('shows no attached cards for a unit with only tokens on it', () => {
+    const u = unit('u1', 'TST_U1', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'player' }] })
+    const s = state({ players: { player: player({ units: [u] }), opponent: player() } })
+    render(<CardDetail state={s} cardId="TST_U1" unit={u} onClose={vi.fn()} />)
+    expect(screen.queryByRole('list')).toBeNull()
+  })
+
   it('shows a card with nothing on it on its own', () => {
     render(<CardDetail state={state()} cardId="TST_U1" onClose={vi.fn()} />)
     expect(screen.getByRole('dialog', { name: /full size/ })).toBeInTheDocument()

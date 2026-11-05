@@ -89,9 +89,9 @@ export function PhoneUnit({ state, unit, interact, size = 'normal', scale = 'pho
   const count = (id: string) => unit.upgrades.filter(u => u.cardId === id).length
   const shields = count(TOKEN_SHIELD)
   const experience = count(TOKEN_EXPERIENCE)
-  const upgrades = unit.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token').length
+  const upgrades = upgradeCards(state, unit).length
   const sentinel = unitHasKeyword(state, unit, 'Sentinel')
-  const name = state.cards[unit.cardId]?.name ?? unit.cardId
+  const name = cardName(state, unit.cardId)
   const captured = unit.captured ?? []
   const [capturedOpen, setCapturedOpen] = useState(false)
   const tags = [
@@ -153,6 +153,17 @@ export function PhoneUnit({ state, unit, interact, size = 'normal', scale = 'pho
   )
 }
 
+const cardName = (state: GameState, cardId: string) => state.cards[cardId]?.name ?? cardId
+
+/** The upgrades on a unit that are cards, not tokens: what its +n badge counts. */
+const upgradeCards = (state: GameState, unit: UnitState) => unit.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token')
+
+/** A captured card, whose it is, and what becomes of it when its guard leaves play. */
+function captiveNote(state: GameState, c: CapturedCard, guard: string): string {
+  const yours = c.owner === 'player'
+  return `${cardName(state, c.cardId)}, ${yours ? 'your' : "the opponent's"} card. It comes back into play for ${yours ? 'you' : 'them'}, exhausted, when ${guard} leaves play.`
+}
+
 /**
  * What a unit is guarding, opened from its CAPT tag: each captured card (tap it to see it full size),
  * whose it is, and that it comes back into play exhausted for its owner when the guard leaves play.
@@ -173,20 +184,14 @@ function CapturedCards({ state, guard, captured, onClose }: {
           <span className="flex-1 text-xs tracking-[0.14em] text-accent">{guard.toUpperCase()} · GUARDING {captured.length}</span>
           <IconButton label="Close" onClick={onClose}><CloseIcon /></IconButton>
         </div>
-        {captured.map((c, i) => {
-          const name = state.cards[c.cardId]?.name ?? c.cardId
-          const yours = c.owner === 'player'
-          return (
-            <div key={`${c.cardId}-${i}`} className="flex items-start gap-2.5">
-              <button type="button" aria-label={`${name}: see the card`} onClick={() => inspect?.({ cardId: c.cardId })} className="flex-none cursor-pointer border-none bg-transparent p-0">
-                <CardFace card={state.cards[c.cardId]} fallbackName={c.cardId} tight widthPx={50} />
-              </button>
-              <div className="text-[13px] leading-[18px] text-ink-dim">
-                {`${name}, ${yours ? 'your' : "the opponent's"} card. It comes back into play for ${yours ? 'you' : 'them'}, exhausted, when ${guard} leaves play.`}
-              </div>
-            </div>
-          )
-        })}
+        {captured.map((c, i) => (
+          <div key={`${c.cardId}-${i}`} className="flex items-start gap-2.5">
+            <button type="button" aria-label={`${cardName(state, c.cardId)}: see the card`} onClick={() => inspect?.({ cardId: c.cardId })} className="flex-none cursor-pointer border-none bg-transparent p-0">
+              <CardFace card={state.cards[c.cardId]} fallbackName={c.cardId} tight widthPx={50} />
+            </button>
+            <div className="text-[13px] leading-[18px] text-ink-dim">{captiveNote(state, c, guard)}</div>
+          </div>
+        ))}
       </div>
     </>
   )
@@ -450,9 +455,10 @@ function upgradeLines(state: GameState, unit: UnitState): string[] {
 }
 
 /**
- * A card held (or its name touched in the log) on a phone, full size over a dimmed board, and beside it what is
+ * A card held (or its name touched in the log), full size over a dimmed board, and beside it what is
  * on it when it is a unit in play: its damage and the HP it has left, whether it is ready and where,
- * and its upgrades and tokens. A tap anywhere closes it.
+ * and its upgrades and tokens. Then the cards on it, each as a card: its upgrade cards and the cards
+ * it holds captive, in a strip that scrolls when they do not fit. A tap anywhere closes it.
  */
 export function CardDetail({ state, cardId, unit, onClose }: {
   state: GameState
@@ -463,16 +469,22 @@ export function CardDetail({ state, cardId, unit, onClose }: {
 }) {
   useEscape(true, onClose)
   const card = state.cards[cardId]
-  const name = card?.name ?? cardId
+  const name = cardName(state, cardId)
   const owner: PlayerId | undefined = unit && (state.players.player.units.some(u => u.instanceId === unit.instanceId) ? 'player' : 'opponent')
   const lines = unit ? upgradeLines(state, unit) : []
+  const attached = unit
+    ? [
+        ...upgradeCards(state, unit).map(u => ({ kind: 'Upgrade', cardId: u.cardId, note: undefined })),
+        ...(unit.captured ?? []).map(c => ({ kind: 'Captured', cardId: c.cardId, note: captiveNote(state, c, name) })),
+      ]
+    : []
   return (
     <div className="fixed inset-0 z-50">
       <button type="button" aria-label="Close the card" onClick={onClose} className="absolute inset-0 cursor-default border-none bg-[rgba(0,5,16,0.72)] p-0" />
-      <div role="dialog" aria-label={`${name}, full size`} className="pointer-events-none relative flex h-full items-center justify-center gap-5">
-        <CardFace card={card} fallbackName={cardId} deployed={unit?.isLeader} tight widthPx={card?.type === 'leader' || card?.type === 'base' ? 230 : 250} />
+      <div role="dialog" aria-label={`${name}, full size`} className="pointer-events-none relative flex h-full items-center justify-center gap-5 px-3">
+        <CardFace card={card} fallbackName={cardId} deployed={unit?.isLeader} tight widthPx={card?.type === 'leader' || card?.type === 'base' ? 230 : 250} className="flex-none" />
         {unit && (
-          <div className="flex w-[220px] flex-col gap-2 text-ink">
+          <div className="flex w-[220px] flex-none flex-col gap-2 text-ink">
             <div className="text-xs tracking-[0.14em] text-accent">ON THE BOARD</div>
             <div className="flex flex-col gap-1.5 text-sm leading-[19px]">
               <span data-testid="detail-damage" className="flex items-center gap-2">
@@ -487,6 +499,18 @@ export function CardDetail({ state, cardId, unit, onClose }: {
             </div>
             <div className="mt-2.5 text-xs leading-[17px] text-ink-faint">Tap anywhere to close.</div>
           </div>
+        )}
+        {attached.length > 0 && (
+          // Takes pointer events so it can scroll; a tap on it still closes, as anywhere else does.
+          <ul aria-label={`On ${name}`} onClick={onClose} className="pointer-events-auto m-0 flex max-h-full min-w-0 list-none items-start gap-3 overflow-auto p-0 py-3">
+            {attached.map((a, i) => (
+              <li key={`${a.cardId}-${i}`} aria-label={`${a.kind}: ${cardName(state, a.cardId)}`} className="flex w-[180px] flex-none flex-col gap-1.5">
+                <span className="text-xs tracking-[0.14em] text-accent">{a.kind.toUpperCase()}</span>
+                <CardFace card={state.cards[a.cardId]} fallbackName={a.cardId} tight widthPx={180} />
+                {a.note && <span className="text-xs leading-4 text-ink-dim">{a.note}</span>}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>
