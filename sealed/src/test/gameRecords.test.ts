@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { db } from '../data/db'
-import { saveGameRecord, listGameRecords, clearGameRecords } from '../data/gameRecords'
-import { state } from './helpers/engineFixtures'
+import { saveGameRecord, listGameRecords, clearGameRecords, matchupRecords } from '../data/gameRecords'
+import { matchupsOf, sideOf } from '../data/matchups'
+import { CARDS, state } from './helpers/engineFixtures'
 
 describe('game records', () => {
   beforeEach(async () => {
@@ -196,6 +197,29 @@ describe('game records', () => {
 
       expect(downloads).toHaveLength(0)
       expect(info).toHaveBeenCalledWith('[sealed] exported 0 game records')
+    })
+  })
+
+  /**
+   * The record by matchup is read from every saved game's starting position (the tally itself is
+   * pinned in matchups.test.ts), so a game saved before it existed counts too.
+   */
+  describe('the record by matchup', () => {
+    const game = (winner: 'player' | 'opponent' | 'draw') =>
+      saveGameRecord({ playerDeckName: 'A', opponentDeckName: 'B', winner, startedAt: 1, endedAt: 10, initialState: state(), moves: [], finalState: state() })
+
+    it('tallies every saved game by the leaders and bases it started with', async () => {
+      await game('player')
+      await game('opponent')
+      await game('player')
+
+      const tally = await matchupRecords()
+      const mine = sideOf(CARDS.TST_L, CARDS.TST_B)
+      expect(matchupsOf(tally, mine).map(m => m.record)).toEqual([{ won: 2, lost: 1, drawn: 0 }])
+    })
+
+    it('is empty with no games saved', async () => {
+      expect((await matchupRecords()).size).toBe(0)
     })
   })
 })

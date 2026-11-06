@@ -274,6 +274,15 @@ All four are optional and none is an indexed key, so the `games` store's schema 
 them. A field is absent on a record written before it was captured, which means unknown, and it
 cannot be backfilled.
 
+**The setup screen reads the records for one thing**: the player's record by matchup
+(`matchupRecords`, tallied by `data/matchups.ts` once as the screen opens). A matchup is a leader on
+a base against a leader on a base, read from each record's `initialState` and the card data it
+carries, so every saved game counts and no deck name or id is involved. Bases are grouped from the
+card data alike on both sides: a common base with no ability groups by aspect, a common base with an
+ability groups with every common base of its HP (the Force bases, the splash bases), and a rare or
+special base stands alone. A leader is matched by name and subtitle. A record with no `humanSeat`
+reads as played from the player seat.
+
 **Replay data travels without the card database.** `withoutCards` (`data/replayData.ts`) is the one
 place that strips it, and the bug report, the bench's failure fixtures and the game export
 (`data/recordExport.ts`) all write the shape it returns: the state's own keys in their own order,

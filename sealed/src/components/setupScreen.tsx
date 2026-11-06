@@ -8,9 +8,10 @@ import { useCardLookup } from '../hooks/useCardLookup'
 import { DESKTOP_QUERY, PORTRAIT_QUERY, useMediaQuery } from '../hooks/useMediaQuery'
 import { BackIcon, DotsIcon } from './icons'
 import { AspectIcons, DeckList, LeaderAndBase } from './setup/deckParts'
-import { CURVE_LABELS, cardCount, costCurve, deckAspects, deckEntries, deckGroups, deckLine, deckSet, typeSummary } from './setup/deckSummary'
+import { CURVE_LABELS, cardCount, costCurve, deckAspects, deckEntries, deckGroups, deckLine, deckSet, recordLine, typeSummary } from './setup/deckSummary'
 import { DeckView } from './setup/deckView'
-import { AspectSheet, CardSupportSheet, DeckSheet, ImportSheet, LeaderSheet, MoreSheet, OpponentSheet, SetSheet } from './setup/setupSheets'
+import { matchupsOf, sideOf, totalOf } from '../data/matchups'
+import { AspectSheet, CardSupportSheet, DeckSheet, ImportSheet, LeaderSheet, MatchupSheet, MoreSheet, OpponentSheet, SetSheet } from './setup/setupSheets'
 import { aspectName, mutedStyle } from './setup/setupStyle'
 import { useCardShown } from './setup/useCardShown'
 
@@ -34,7 +35,7 @@ interface Props {
   notice?: ReactNode
 }
 
-type SheetName = 'more' | 'cardSupport' | 'deck' | 'import' | 'opponent' | 'opponentSet' | 'leader' | 'aspect' | 'playerSet' | 'view' | 'generate'
+type SheetName = 'more' | 'matchups' |'cardSupport' | 'deck' | 'import' | 'opponent' | 'opponentSet' | 'leader' | 'aspect' | 'playerSet' | 'view' | 'generate'
 type Layout = 'portrait' | 'landscape' | 'desktop'
 
 const labelStyle: React.CSSProperties = { fontSize: '0.75rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-accent)' }
@@ -94,6 +95,14 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
 
   const leaderName = s.options?.leaders.find(l => l.id === s.opponentLeader)?.name ?? null
   const opponentDeck = s.decks.find(d => d.id === s.opponentChoice)
+  // The chosen deck's leader and base as one side of a matchup, and what that side has played.
+  const mine = chosen ? sideOf(cards[chosen.leader], cards[chosen.base]) : null
+  const played = matchupsOf(s.matchups, mine)
+  const recordOf = (deck: SavedDeck) => {
+    const theirs = sideOf(cards[deck.leader], cards[deck.base])
+    return recordLine(played.find(m => m.opponent.key === theirs?.key)?.record)
+  }
+  const overall = played.length > 0 ? recordLine(totalOf(played)) : undefined
 
   const topBar = (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
@@ -171,8 +180,9 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
       title = 'Any of my decks'
       lines = ['Picked at random each game']
     } else {
+      const record = recordOf(opponentDeck)
       title = opponentDeck.name
-      lines = [deckLine(opponentDeck, cards)]
+      lines = [deckLine(opponentDeck, cards), ...(record ? [`Your record: ${record}`] : [])]
     }
     return (
       <div data-testid="opponent-card" style={cardStyle}>
@@ -183,6 +193,12 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
         <div style={{ fontSize: '1.25rem' }}>{title}</div>
         <div style={{ fontSize: '0.9rem', color: 'var(--color-text-body)' }}>{lines[0]}</div>
         {lines[1] && <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{lines[1]}</div>}
+        {mine && overall && (
+          <div data-testid="matchup-summary" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <p style={{ ...mutedStyle, flex: 1, minWidth: 0 }}>As {mine.label}: {overall}</p>
+            <Button onClick={() => setStack(['matchups'])}>Matchups</Button>
+          </div>
+        )}
       </div>
     )
   }
@@ -264,6 +280,7 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
         onClose={closeAll}
       />
       <CardSupportSheet open={top === 'cardSupport'} onClose={closeAll} />
+      <MatchupSheet open={top === 'matchups'} mine={mine} matchups={played} onClose={closeAll} />
       <DeckSheet
         open={top === 'deck'}
         decks={s.decks}
@@ -280,6 +297,7 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
         open={top === 'opponent'}
         decks={s.decks}
         cards={cards}
+        recordOf={recordOf}
         opponentChoice={s.opponentChoice}
         onOpponentChoice={s.setOpponentChoice}
         linkSets={s.linkSets}

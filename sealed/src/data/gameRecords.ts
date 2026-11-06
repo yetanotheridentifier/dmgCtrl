@@ -1,4 +1,6 @@
 import { db } from './db'
+import { addGame } from './matchups'
+import type { MatchupTally } from './matchups'
 import { buildGameExport, downloadJson } from './recordExport'
 import type { Action } from '../engine/actions'
 import type { GameState, PlayerId } from '../engine/types'
@@ -69,6 +71,13 @@ export async function saveGameRecord(record: Omit<GameRecord, 'id'>): Promise<Ga
   const saved: GameRecord = { ...record, id: crypto.randomUUID() }
   await db.games.put(saved)
   return saved
+}
+
+/** The player's record by matchup over every saved game (see `data/matchups.ts`), one game at a time. */
+export async function matchupRecords(): Promise<MatchupTally> {
+  const tally: MatchupTally = new Map()
+  await db.games.each(game => addGame(tally, game))
+  return tally
 }
 
 /** Newest first. */

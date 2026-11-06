@@ -5,6 +5,11 @@ import userEvent from '@testing-library/user-event'
 import SetupScreen from '../components/setupScreen'
 import { SET_PROGRESS, sumCounts } from '../data/implementedCards'
 import { listDecks, saveDeck } from '../data/deckStore'
+import { db } from '../data/db'
+import { saveGameRecord } from '../data/gameRecords'
+import { player, state } from './helpers/engineFixtures'
+import { NB_HYPHEN } from '../components/setup/deckSummary'
+import { buildCardDb } from '../engine/cardDb'
 import { syncCatalogue } from '../data/catalogueSync'
 import { importSet, cachedSetCards, cachedSetCount } from '../data/setImport'
 import { DESKTOP_QUERY, PORTRAIT_QUERY } from '../hooks/useMediaQuery'
@@ -676,6 +681,77 @@ describe('SetupScreen', () => {
         await user.click(within(sheet).getByRole('button', { name: 'One of my decks' }))
         await user.click(within(sheet).getByRole('button', { name: 'View Theirs' }))
         expect(dialog('Theirs')).toBeInTheDocument()
+      })
+
+      /**
+       * Saved games as Boba Fett on a Cunning aspect base against Darth Vader on a Vigilance one, read
+       * from each game's starting position. A matchup never played says nothing. JTL, because another
+       * test here stands ASH's cards in for SOR's, and the screen's card lookup lasts the session.
+       */
+      describe('your record by matchup', () => {
+        // Text content matches with its spaces normalised; the record's hyphen is the non-breaking one.
+        const threeTwo = `3${NB_HYPHEN}2, 60%`
+        const JTL = buildCardDb(SETS.JTL)
+        const seat = (leader: string, base: string) => player({ leader: { cardId: leader, deployed: false, epicActionUsed: false, exhausted: false }, base: { cardId: base, damage: 0 } })
+        // Boba Fett on Chopper Base against Vader on City in the Clouds.
+        const start = state({ cards: JTL, players: { player: seat('JTL_009', 'JTL_029'), opponent: seat('JTL_006', 'JTL_019') } })
+        const game = (winner: 'player' | 'opponent') =>
+          saveGameRecord({ playerDeckName: 'Mine', opponentDeckName: 'Theirs', winner, startedAt: 1, endedAt: 10, initialState: start, moves: [], finalState: start })
+
+        beforeEach(async () => {
+          await db.games.clear()
+          for (const w of ['player', 'player', 'opponent', 'player', 'opponent'] as const) await game(w)
+        })
+        afterEach(() => db.games.clear())
+
+        // Vader on Shield Generator Complex: another Vigilance aspect base, so the same matchup.
+        const vaderDeck = () => saveDeck({ name: 'Theirs', leader: 'JTL_006', base: 'JTL_020', cards: SOR_CARDS })
+        const boba = () => saveDeck({ name: 'Mine', leader: 'JTL_009', base: 'JTL_029', cards: SOR_CARDS })
+        const luke = () => saveDeck({ name: 'Luke', leader: 'JTL_012', base: 'JTL_019', cards: SOR_CARDS })
+
+        it('shows it on each opposing deck in the opponent sheet, and nothing for a matchup not played', async () => {
+          const user = userEvent.setup()
+          const mine = boba()
+          const theirs = vaderDeck()
+          const other = luke()
+          renderSetup()
+          await chooseDeck(user, mine.id)
+          const sheet = await openOpponent(user)
+          await user.click(within(sheet).getByRole('button', { name: 'One of my decks' }))
+
+          await waitFor(() => expect(within(sheet).getByTestId(`opponent-option-${theirs.id}`)).toHaveTextContent(threeTwo))
+          expect(within(sheet).getByTestId(`opponent-option-${other.id}`)).not.toHaveTextContent('%')
+        })
+
+        it('shows the chosen opponent\'s on the opponent card, and every matchup on a sheet', async () => {
+          const user = userEvent.setup()
+          const mine = boba()
+          const theirs = vaderDeck()
+          renderSetup()
+          await chooseDeck(user, mine.id)
+          const sheet = await openOpponent(user)
+          await user.click(within(sheet).getByRole('button', { name: 'One of my decks' }))
+          await user.click(within(sheet).getByTestId(`opponent-option-${theirs.id}`))
+          await user.click(within(sheet).getByRole('button', { name: 'Close' }))
+
+          await waitFor(() => expect(opponentCard()).toHaveTextContent(`Your record: ${threeTwo}`))
+          expect(screen.getByTestId('matchup-summary')).toHaveTextContent(`As Boba Fett, Any Methods Necessary · Cunning base: ${threeTwo}`)
+          await user.click(within(opponentCard()).getByRole('button', { name: 'Matchups' }))
+          const rows = within(dialog('Matchups')).getAllByTestId('matchup-row')
+          expect(rows).toHaveLength(1)
+          expect(rows[0]).toHaveTextContent(`Darth Vader, Victor Squadron Leader · Vigilance base${threeTwo}`)
+        })
+
+        it('shows no matchups for a leader and base never played', async () => {
+          const user = userEvent.setup()
+          const other = luke()
+          vaderDeck()
+          renderSetup()
+          await chooseDeck(user, other.id)
+          // Give the records time to load, then look.
+          await new Promise(r => setTimeout(r, 200))
+          expect(screen.queryByTestId('matchup-summary')).not.toBeInTheDocument()
+        })
       })
     })
 

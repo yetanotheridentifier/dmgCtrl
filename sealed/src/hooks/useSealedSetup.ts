@@ -3,6 +3,8 @@ import { useDecks } from './useDecks'
 import type { ImportResult } from './useDecks'
 import { primeCards } from './useCardLookup'
 import type { SavedDeck } from '../data/deckStore'
+import { matchupRecords } from '../data/gameRecords'
+import type { MatchupTally } from '../data/matchups'
 import type { SwuCard } from '../data/cards'
 import { cachedSetCards, cachedSetCount, importSet } from '../data/setImport'
 import { syncCatalogue } from '../data/catalogueSync'
@@ -138,6 +140,8 @@ export interface SealedSetup {
   /** A base aspect, or '' for random: always one the opponent's set offers. */
   opponentAspect: string
   setOpponentAspect: (aspect: string) => void
+  /** The player's record by matchup over every saved game, empty until it is read. */
+  matchups: MatchupTally
 
   play: () => Promise<void>
 }
@@ -167,6 +171,14 @@ export function useSealedSetup(onPlay: (deck: SavedDeck, opponent: SavedDeck) =>
   const opponentChoice = [GENERATED_DECK_ID, ANY_OF_MY_DECKS].includes(setup.opponentChoice) || decks.some(d => d.id === setup.opponentChoice)
     ? setup.opponentChoice
     : GENERATED_DECK_ID
+
+  // Read once as the screen opens: a game is played on another screen, which this one comes back from.
+  const [matchups, setMatchups] = useState<MatchupTally>(() => new Map())
+  useEffect(() => {
+    let live = true
+    void matchupRecords().then(m => { if (live) setMatchups(m) })
+    return () => { live = false }
+  }, [])
 
   const [cacheVersion, setCacheVersion] = useState(0)
   // How each set asked for is getting on, keyed by set code: the line a generator with no pool shows.
@@ -309,6 +321,7 @@ export function useSealedSetup(onPlay: (deck: SavedDeck, opponent: SavedDeck) =>
     setOpponentLeader: id => update({ opponentLeader: id }),
     opponentAspect: aspectChoice,
     setOpponentAspect: aspect => update({ opponentAspect: aspect }),
+    matchups,
 
     play,
   }

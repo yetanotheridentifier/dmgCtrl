@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import jtlSet from './fixtures/jtlSet.json'
 import type { SwuCard } from '../data/cards'
 import { buildCardDb } from '../engine/cardDb'
-import { costCurve, deckAspects, deckEntries, deckGroups, deckSet, typeSummary } from '../components/setup/deckSummary'
+import { costCurve, deckAspects, deckEntries, deckGroups, deckSet, NB_HYPHEN, NB_SPACE, recordLine, typeSummary } from '../components/setup/deckSummary'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
 
 /**
@@ -74,5 +74,24 @@ describe('the deck card summary', () => {
   /** Lake Country has no aspect, so a deck on it shows the leader's alone. */
   it('shows only the leader\'s aspects for a deck on Lake Country', () => {
     expect(deckAspects(deck([], LAKE_COUNTRY), CARDS)).toEqual(LEADER.Aspects)
+  })
+
+  /** The player's record against a deck: wins and losses, draws only when there are any, and the share won. */
+  describe('the record against a deck', () => {
+    /** As written, with the hyphens and the space it is set with so that it never wraps apart. */
+    const unbroken = (s: string) => s.replaceAll('-', NB_HYPHEN).replaceAll(' ', NB_SPACE)
+
+    it('reads as wins-losses and the share of games won', () => {
+      expect(recordLine({ won: 3, lost: 2, drawn: 0 })).toBe(unbroken('3-2, 60%'))
+      expect(recordLine({ won: 0, lost: 1, drawn: 0 })).toBe(unbroken('0-1, 0%'))
+    })
+
+    it('adds draws only when there are some, and counts them as games not won', () => {
+      expect(recordLine({ won: 1, lost: 1, drawn: 1 })).toBe(unbroken('1-1-1, 33%'))
+    })
+
+    it('says nothing for a deck with no games', () => {
+      expect(recordLine(undefined)).toBeUndefined()
+    })
   })
 })

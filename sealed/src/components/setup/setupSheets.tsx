@@ -13,7 +13,8 @@ import type { ImportResult } from '../../hooks/useDecks'
 import { ANY_OF_MY_DECKS, SET_CODES } from '../../hooks/useSealedSetup'
 import { Disclosure } from '../disclosure'
 import { AspectIcons } from './deckParts'
-import { deckAspects, deckLine } from './deckSummary'
+import type { Matchup, Side } from '../../data/matchups'
+import { deckAspects, deckLine, recordLine } from './deckSummary'
 import { aspectIconSrc, aspectName, mutedStyle } from './setupStyle'
 
 /** The sheets the setup screen opens: the deck, importing, the opponent and its choices, and card support. */
@@ -26,11 +27,13 @@ type Cards = Record<string, EngineCard | undefined>
 const KEEP: React.CSSProperties = { flexShrink: 0, display: 'flex', flexDirection: 'column' }
 
 /** A saved deck as a row: tapping it chooses it, and View beside it opens it. */
-function DeckRow({ deck, cards, selected, testId, onChoose, onView }: {
+function DeckRow({ deck, cards, selected, testId, record, onChoose, onView }: {
   deck: SavedDeck
   cards: Cards
   selected: boolean
   testId: string
+  /** The player's record against the deck, after its leader and base. */
+  record?: string
   onChoose: () => void
   onView: () => void
 }) {
@@ -41,7 +44,7 @@ function DeckRow({ deck, cards, selected, testId, onChoose, onView }: {
           testId={testId}
           title={deck.name}
           icon={<AspectIcons aspects={deckAspects(deck, cards)} size={14} />}
-          detail={deckLine(deck, cards)}
+          detail={[deckLine(deck, cards), record].filter(Boolean).join(' · ')}
           selected={selected}
           onClick={onChoose}
         />
@@ -166,10 +169,12 @@ function LabelledSelect({ label, value, onClick, icon }: { label: string; value:
   )
 }
 
-export function OpponentSheet({ open, decks, cards, opponentChoice, onOpponentChoice, linkSets, onLinkSets, opponentSet, poolSummary, leaderName, aspect, onSet, onLeader, onAspect, onView, onClose }: {
+export function OpponentSheet({ open, decks, cards, recordOf, opponentChoice, onOpponentChoice, linkSets, onLinkSets, opponentSet, poolSummary, leaderName, aspect, onSet, onLeader, onAspect, onView, onClose }: {
   open: boolean
   decks: SavedDeck[]
   cards: Cards
+  /** The player's record against a deck, as `recordLine` reads it. */
+  recordOf: (deck: SavedDeck) => string | undefined
   opponentChoice: string
   onOpponentChoice: (choice: string) => void
   linkSets: boolean
@@ -221,7 +226,7 @@ export function OpponentSheet({ open, decks, cards, opponentChoice, onOpponentCh
           />
           {decks.length === 0 && <p style={mutedStyle}>No saved decks yet. Import one from Your deck.</p>}
           {decks.map(deck => (
-            <DeckRow key={deck.id} deck={deck} cards={cards} testId={`opponent-option-${deck.id}`} selected={opponentChoice === deck.id} onChoose={() => onOpponentChoice(deck.id)} onView={() => onView(deck.id)} />
+            <DeckRow key={deck.id} deck={deck} cards={cards} testId={`opponent-option-${deck.id}`} record={recordOf(deck)} selected={opponentChoice === deck.id} onChoose={() => onOpponentChoice(deck.id)} onView={() => onView(deck.id)} />
           ))}
         </>
       )}
@@ -297,6 +302,23 @@ export function MoreSheet({ open, onHelp, onCardSupport, onSettings, onClose }: 
       <Button onClick={onHelp}>Help</Button>
       <Button onClick={onCardSupport}>Card support</Button>
       <Button onClick={onSettings}>Settings</Button>
+    </Sheet>
+  )
+}
+
+/** The player's record as the chosen leader and base against each opposing leader and base played. */
+export function MatchupSheet({ open, mine, matchups, onClose }: { open: boolean; mine: Side | null; matchups: Matchup[]; onClose: () => void }) {
+  return (
+    <Sheet open={open} title="Matchups" onClose={onClose}>
+      {mine && <p style={mutedStyle}>As {mine.label}, against each leader and base you have played. Aspect bases count together by aspect, and Force bases and splash bases each as one; any other base is its own.</p>}
+      <dl style={{ margin: 0 }}>
+        {matchups.map(m => (
+          <div key={m.opponent.key} data-testid="matchup-row" style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '0.9rem', padding: '6px 0' }}>
+            <dt style={{ minWidth: 0 }}>{m.opponent.label}</dt>
+            <dd style={{ margin: 0, flexShrink: 0, color: 'var(--color-text-muted)' }}>{recordLine(m.record)}</dd>
+          </div>
+        ))}
+      </dl>
     </Sheet>
   )
 }
