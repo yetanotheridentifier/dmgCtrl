@@ -17,7 +17,7 @@ import { SettingsProvider } from '../hooks/useSettings'
 import { defaultSettings, STORAGE_KEY as SETTINGS_KEY } from '../data/settingsStore'
 import type { Settings } from '../data/settingsStore'
 import { state, player, unit, card, CARDS, ready } from './helpers/engineFixtures'
-import { TOKEN_SHIELD, TOKEN_EXPERIENCE } from '../engine/tokenUpgrades'
+import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE, TOKEN_WEAKNESS, TOKEN_CARDS } from '../engine/tokenUpgrades'
 import type { TargetIntent } from '../engine/types'
 
 /** The media queries the screen lays itself out by, matched as a test says. */
@@ -101,6 +101,35 @@ describe('phone board pieces', () => {
     // Hidden does nothing for a Sentinel, so the Sentinel badge stands alone, as on the desktop board.
     expect(tile.queryByTestId('unit-badge-hidden')).toBeNull()
     expect(tile.queryByTestId('unit-badge-leader')).toBeNull()
+  })
+
+  it('badges a unit with each kind of token upgrade on it and its count, Weakness included', () => {
+    const tokens = (u: ReturnType<typeof unit>) => {
+      const s = state({ players: { player: player({ units: [u] }), opponent: player() } })
+      const { unmount } = render(<PhoneUnit state={s} unit={u} interact={noInteract} />)
+      const tile = within(screen.getByTestId(`board-unit-${u.instanceId}`))
+      const read = (kind: string) => tile.queryByTestId(`unit-badge-${kind}`)?.textContent ?? null
+      const found = { weakness: read('weakness'), advantage: read('advantage'), experience: read('experience'), shield: read('shield') }
+      unmount()
+      return found
+    }
+    const weak = (n: number) => Array.from({ length: n }, () => ({ cardId: TOKEN_WEAKNESS, owner: 'opponent' as const }))
+    expect(tokens(unit('u1', 'TST_U1', { upgrades: weak(1) }))).toEqual({ weakness: 'Weak 1', advantage: null, experience: null, shield: null })
+    expect(tokens(unit('u1', 'TST_U1', { upgrades: [...weak(2), { cardId: TOKEN_EXPERIENCE, owner: 'player' }] })))
+      .toEqual({ weakness: 'Weak 2', advantage: null, experience: 'Exp 1', shield: null })
+    expect(tokens(unit('u1', 'TST_U1', { upgrades: [{ cardId: TOKEN_ADVANTAGE, owner: 'player' }] })).advantage).toBe('Adv 1')
+  })
+
+  it('has a board badge for every token upgrade there is', () => {
+    const u = unit('u1', 'TST_U1', { upgrades: Object.keys(TOKEN_CARDS).map(cardId => ({ cardId, owner: 'player' as const })) })
+    const s = state({ players: { player: player({ units: [u] }), opponent: player() } })
+    render(<PhoneUnit state={s} unit={u} interact={noInteract} />)
+    const tile = within(screen.getByTestId('board-unit-u1'))
+    for (const token of Object.values(TOKEN_CARDS)) {
+      expect(tile.getByTestId(`unit-badge-${token.name.toLowerCase()}`)).toHaveAccessibleName(`1 ${token.name}`)
+    }
+    // Tokens have their own badges; the +n badge counts the upgrade cards.
+    expect(tile.queryByTestId('unit-badge-upgrades')).toBeNull()
   })
 
   it('badges a Hidden unit', () => {
@@ -188,13 +217,36 @@ describe('phone board pieces', () => {
     const attached = within(dialog.getByRole('list', { name: 'On Big Brute' }))
     const items = attached.getAllByRole('listitem')
     expect(items.map(i => i.getAttribute('aria-label'))).toEqual(['Upgrade: Heavy Plating', 'Upgrade: Long Rifle', 'Captured: Clone Deserter'])
-    // Each is the card itself, not just its name; a token is not a card and stays a line of text.
+    // Each is the card itself, not just its name; a token has no card here, only its row under UPGRADES.
     for (const item of items) expect(within(item).getByTestId('card-face')).toBeInTheDocument()
     expect(items[2]).toHaveTextContent("Clone Deserter, the opponent's card. It comes back into play for them, exhausted, when Big Brute leaves play.")
     expect(attached.queryByText('Shield')).toBeNull()
     // A tap on the cards closes, as anywhere else does.
     await userEvent.setup().click(items[0])
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('lists every upgrade on a held unit, tokens with the cards, each kind with its count', () => {
+    const cards = {
+      ...CARDS,
+      TST_S: card({ id: 'TST_S', name: 'Big Brute', type: 'unit', arena: 'ground', power: 2, hp: 5 }),
+      TST_UP1: card({ id: 'TST_UP1', name: 'Heavy Plating', type: 'upgrade' }),
+    }
+    const u = unit('u1', 'TST_S', {
+      upgrades: [
+        { cardId: TOKEN_WEAKNESS, owner: 'opponent' },
+        { cardId: 'TST_UP1', owner: 'player' },
+        { cardId: TOKEN_WEAKNESS, owner: 'opponent' },
+        { cardId: TOKEN_EXPERIENCE, owner: 'player' },
+      ],
+    })
+    const s = state({ cards, players: { player: player({ units: [u] }), opponent: player() } })
+    render(<CardDetail state={s} cardId="TST_S" unit={u} onClose={vi.fn()} />)
+    const dialog = within(screen.getByRole('dialog', { name: 'Big Brute, full size' }))
+    const rows = dialog.getAllByTestId('detail-upgrade')
+    expect(rows.map(r => r.getAttribute('aria-label'))).toEqual(['2 Weakness', '1 Heavy Plating', '1 Experience'])
+    expect(rows.map(r => r.textContent)).toEqual(['2Weakness', '1Heavy Plating', '1Experience'])
+    expect(dialog.getByText('UPGRADES')).toBeInTheDocument()
   })
 
   it('shows no attached cards for a unit with only tokens on it', () => {
