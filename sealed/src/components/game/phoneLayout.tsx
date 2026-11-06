@@ -290,6 +290,8 @@ function Stat({ value, label, name, onClick, tonal = false }: { value: ReactNode
  * One side's heading and counts: resources ready of total, the opponent's hand, the deck and the
  * discard, with INITIATIVE, FORCE and CRED n beside the heading of the side holding them. The
  * discard count opens the pile; the deck count opens the top card when a card lets you look at it.
+ * The heading is one height with or without a pill, so the counts (and the prompt under the
+ * opponent's) do not move when the initiative or a token changes hands.
  */
 export function PlayerSummary({ state, side, onDiscard, onDeck }: {
   state: GameState
@@ -304,7 +306,7 @@ export function PlayerSummary({ state, side, onDiscard, onDeck }: {
   const credits = friendlyCreditTokens(state, side)
   return (
     <div data-testid={`${side}-summary`} className="flex flex-col gap-1.5">
-      <div className={`flex items-center gap-1.5 text-[10px] tracking-[0.14em] ${mine ? 'text-accent' : OPPONENT_TEXT}`}>
+      <div data-testid="summary-heading" className={`flex h-[18px] items-center gap-1.5 text-[10px] tracking-[0.14em] ${mine ? 'text-accent' : OPPONENT_TEXT}`}>
         {mine ? 'YOU' : 'OPPONENT'}
         {state.initiative === side && <Pill className={`border ${mine ? 'border-accent text-accent' : OPPONENT_BORDER}`}>INITIATIVE</Pill>}
         {hasForceToken(state, side) && <Pill className="bg-token-force text-ink" label={`The Force is with ${mine ? 'you' : 'the opponent'}`}>FORCE</Pill>}
@@ -785,7 +787,7 @@ export function PhoneGameLayout({ state, scale, log, prompt, attacker, actions, 
     <div data-testid="round-phase" className={phone ? 'px-0.5 pt-0.5 text-[15px]' : 'flex-1 self-center pl-1 text-[17px]'}>Round {state.round} · {phase}</div>
   )
   const actionPrompt = (
-    <div data-testid="action-prompt" className={`max-h-full w-full overflow-y-auto rounded-xl border border-accent/40 text-ink-dim ${phone ? 'px-2.5 py-2 text-xs leading-4' : 'px-3 py-2.5 text-sm leading-[19px]'}`}>
+    <div data-testid="action-prompt" className={`min-h-0 overflow-y-auto text-ink-dim ${phone ? 'flex-1 text-xs leading-4' : 'text-sm leading-[19px]'}`}>
       <DescribedParts state={state} parts={prompt ?? idlePrompt(state, attacker, scale)} />
     </div>
   )
@@ -805,14 +807,8 @@ export function PhoneGameLayout({ state, scale, log, prompt, attacker, actions, 
         </div>
         {phone && roundPhase}
         <PlayerSummary state={state} side="opponent" onDiscard={onDiscard} />
-        {phone ? (
-          <div className="flex min-h-0 flex-1 items-center overflow-hidden">{actionPrompt}</div>
-        ) : (
-          <>
-            {actionPrompt}
-            <DockedLog state={state} log={log} />
-          </>
-        )}
+        {actionPrompt}
+        {!phone && <DockedLog state={state} log={log} />}
         <PlayerSummary state={state} side="player" onDiscard={onDiscard} onDeck={onDeck} />
         <div data-testid="phone-actions" className="mt-1 max-h-[45%] overflow-y-auto">{actions}</div>
       </div>

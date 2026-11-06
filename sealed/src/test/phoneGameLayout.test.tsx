@@ -67,6 +67,16 @@ describe('phone board pieces', () => {
     expect(mine.getByText('CRED 2')).toBeInTheDocument()
   })
 
+  it('holds the heading at one height whether or not a pill is beside it', () => {
+    const s = state({ initiative: 'opponent' })
+    render(<><PlayerSummary state={s} side="opponent" onDiscard={vi.fn()} /><PlayerSummary state={s} side="player" onDiscard={vi.fn()} /></>)
+    // A pill is taller than the bare heading: a fixed height keeps the counts, and the prompt
+    // under the opponent's, from moving when the initiative or a token changes hands.
+    for (const side of ['opponent', 'player']) {
+      expect(within(screen.getByTestId(`${side}-summary`)).getByTestId('summary-heading').className).toMatch(/(^| )h-/)
+    }
+  })
+
   it('opens the discard pile from its count', async () => {
     const onDiscard = vi.fn()
     render(<PlayerSummary state={state()} side="opponent" onDiscard={onDiscard} />)
@@ -365,6 +375,14 @@ const OPTS: UseGameOptions = { ...PASSIVE, opponentDelayMs: 0 }
 const renderGame = (ui: ReactElement) => render(<SettingsProvider>{ui}</SettingsProvider>)
 const seedSettings = (patch: Partial<Settings>) => localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), ...patch }))
 
+/** The prompt has no ring and hangs straight under the opponent's counts, so its length cannot move its top. */
+function expectPromptPinned() {
+  const prompt = screen.getByTestId('action-prompt')
+  expect(prompt.className).not.toMatch(/(^| )border( |$)/)
+  expect(prompt.parentElement).toBe(screen.getByTestId('phone-controls'))
+  expect(prompt.previousElementSibling).toBe(screen.getByTestId('opponent-summary'))
+}
+
 async function renderPhone(options: UseGameOptions = OPTS) {
   const onExit = vi.fn()
   const onHelp = vi.fn()
@@ -397,6 +415,11 @@ describe('GameScreen on a phone in landscape', () => {
     // The desktop mats and log column are not drawn.
     expect(screen.queryByTestId('player-mat')).toBeNull()
     expect(screen.queryByTestId('game-log-panel')).toBeNull()
+  })
+
+  it('pins the prompt, unringed, under the opponent\'s counts', async () => {
+    await renderPhone()
+    expectPromptPinned()
   })
 
   it('mulligans and resources one of two from the controls column', async () => {
@@ -594,6 +617,7 @@ describe('GameScreen on a desktop', () => {
     const log = within(controls.getByRole('log', { name: 'Log' }))
     expect(log.getAllByTestId('log-round').map(el => el.textContent)).toContain('Setup')
     expect(log.getAllByTestId('log-row')[0]).toHaveTextContent(/keep/i)
+    expectPromptPinned()
     // The header's bug, cog and ? buttons are gone: they live under More.
     expect(screen.queryByTestId('settings-btn')).toBeNull()
     expect(screen.queryByTestId('bug-report-btn')).toBeNull()
