@@ -1,3 +1,4 @@
+import { winRate } from '../../data/matchups'
 import type { WinLoss } from '../../data/matchups'
 import type { EngineCard } from '../../engine/types'
 import type { ParsedDeck } from '../../utils/parseProtectThePod'
@@ -99,8 +100,7 @@ export function deckLine(deck: ParsedDeck, cards: Record<string, EngineCard | un
 export function recordLine(record: WinLoss | undefined): string | undefined {
   if (!record) return undefined
   const { won, lost, drawn } = record
-  const games = won + lost + drawn
-  return `${[won, lost, ...(drawn > 0 ? [drawn] : [])].join(NB_HYPHEN)},${NB_SPACE}${Math.round((won / games) * 100)}%`
+  return `${[won, lost, ...(drawn > 0 ? [drawn] : [])].join(NB_HYPHEN)},${NB_SPACE}${winRate(record)}`
 }
 
 export const NB_HYPHEN = '‑'

@@ -19,10 +19,19 @@ export interface WinLoss {
   drawn: number
 }
 
-/** One side of a matchup: what it is matched by, and how it reads. */
-export interface Side {
+/** What a side, or a base group, is matched by, and how it reads. */
+export interface Group {
   key: string
   label: string
+}
+
+/**
+ * One side of a matchup, with its leader and base cards to draw it by. A base group's base is the
+ * one played in the first game tallied for it, standing for the group.
+ */
+export interface Side extends Group {
+  leader: EngineCard
+  base: EngineCard
 }
 
 /** The opposing side and the player's record against it. */
@@ -37,7 +46,7 @@ export type MatchupTally = Map<string, Map<string, Matchup>>
 /** What a common base with an ability is called, by its HP. A new kind reads as its HP until named. */
 const COMMON_KINDS: Record<number, string> = { 28: 'Force base', 27: 'Splash base' }
 
-export function baseGroup(base: EngineCard): Side {
+export function baseGroup(base: EngineCard): Group {
   if (base.rarity !== 'Common') return { key: `base:${base.name}`, label: base.name }
   if (!base.text) {
     const aspects = base.aspects.join(' ')
@@ -52,7 +61,7 @@ export function sideOf(leader: EngineCard | undefined, base: EngineCard | undefi
   if (!leader || !base) return null
   const group = baseGroup(base)
   const who = [leader.name, leader.subtitle].filter(Boolean).join(', ')
-  return { key: `${who}|${group.key}`, label: `${who} · ${group.label}` }
+  return { key: `${who}|${group.key}`, label: `${who} · ${group.label}`, leader, base }
 }
 
 /** One seat's side in a game, read from its starting position and the cards that came with it. */
@@ -84,7 +93,11 @@ export function addGame(tally: MatchupTally, { initialState, winner, humanSeat =
   tally.set(mine.key, against)
 }
 
-const games = ({ won, lost, drawn }: WinLoss) => won + lost + drawn
+/** How many games a record is over. */
+export const games = ({ won, lost, drawn }: WinLoss) => won + lost + drawn
+
+/** The share of a record's games won, as a whole percentage. */
+export const winRate = (record: WinLoss) => `${Math.round((record.won / games(record)) * 100)}%`
 
 /** The matchups one side has played, most played first. */
 export function matchupsOf(tally: MatchupTally, mine: Side | null): Matchup[] {

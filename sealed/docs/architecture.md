@@ -285,7 +285,8 @@ carries, so every saved game counts and no deck name or id is involved. Bases ar
 card data alike on both sides: a common base with no ability groups by aspect, a common base with an
 ability groups with every common base of its HP (the Force bases, the splash bases), and a rare or
 special base stands alone. A leader is matched by name and subtitle. A record with no `humanSeat`
-reads as played from the player seat.
+reads as played from the player seat. Each side carries its leader and base cards to be drawn by; a
+base group's is the base of the first game tallied for it, standing for the group.
 
 **Replay data travels without the card database.** `withoutCards` (`data/replayData.ts`) is the one
 place that strips it, and the bug report, the bench's failure fixtures and the game export

@@ -739,7 +739,7 @@ describe('SetupScreen', () => {
           await user.click(within(opponentCard()).getByRole('button', { name: 'Matchups' }))
           const rows = within(dialog('Matchups')).getAllByTestId('matchup-row')
           expect(rows).toHaveLength(1)
-          expect(rows[0]).toHaveTextContent(`Darth Vader, Victor Squadron Leader · Vigilance base${threeTwo}`)
+          expect(within(rows[0]).getAllByRole('cell').slice(2).map(c => c.textContent)).toEqual(['Darth Vader, Victor Squadron Leader · Vigilance base', '5', '60%'])
         })
 
         it('shows no matchups for a leader and base never played', async () => {
