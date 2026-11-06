@@ -12,6 +12,7 @@ import type { ParseDeckError } from '../../utils/parseProtectThePod'
 import type { ImportResult } from '../../hooks/useDecks'
 import { ANY_OF_MY_DECKS, SET_CODES } from '../../hooks/useSealedSetup'
 import { Disclosure } from '../disclosure'
+import { FIELD_CLASS } from '../field'
 import { AspectIcons } from './deckParts'
 import type { Matchup, Side } from '../../data/matchups'
 import { deckAspects, deckLine, recordLine } from './deckSummary'
@@ -130,20 +131,8 @@ export function ImportSheet({ open, onImport, onImported, onClose }: {
         placeholder="Paste ProtectThePod JSON"
         aria-invalid={error !== null}
         aria-describedby={error ? errorId : undefined}
-        style={{
-          height: '104px',
-          flexShrink: 0,
-          boxSizing: 'border-box',
-          resize: 'none',
-          border: `2px solid ${error ? 'var(--color-opponent)' : 'transparent'}`,
-          borderRadius: '12px',
-          background: 'var(--color-surface)',
-          color: 'var(--color-text-body)',
-          padding: '10px 12px',
-          fontFamily: 'var(--font-mono)',
-          fontSize: '0.75rem',
-          lineHeight: 1.4,
-        }}
+        className={`h-[104px] shrink-0 resize-none py-2.5 font-mono ${FIELD_CLASS}`}
+        style={error ? { borderColor: 'var(--color-opponent)' } : undefined}
       />
       {error && (
         <div id={errorId} role="alert" data-testid="deck-import-error" style={{ padding: '10px 12px', borderRadius: '12px', background: 'rgba(var(--color-error-rgb), 0.15)', color: 'var(--color-text-primary)', fontSize: '0.9rem' }}>

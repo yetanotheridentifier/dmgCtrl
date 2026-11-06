@@ -33,6 +33,10 @@ and grown for the desktop (see Layout under UI); the remaining screens' redesign
   directly (`var(--color-text-primary)`, `var(--color-damage)`). Only the colours Sealed alone uses
   (the cunning yellow, the `--color-token-*` pills) are declared as variables here. A test holds
   every `var()` in Sealed to a shared token or one of those.
+- **Every text field takes one class**, `FIELD_CLASS` in `components/field.ts`, whose text is 16px:
+  iOS zooms the page in when a smaller field takes focus, and stays zoomed. A field adds its height
+  and padding but never a text size, and a test holds every input and textarea to that. The page's
+  pinch zoom is left on.
 - **The AI runs off the main thread.** Its search costs about 85 ms a decision on a desktop and
   perhaps 2 to 4x that on a mid-range phone, enough to freeze a phone's UI, so the shipped opponent
   chooses in a Web Worker (see [Game flow at runtime](#game-flow-at-runtime)). Nothing in `src/ai`
