@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import { Button, OptionRow, Stepper } from '@pwa-shared/controls'
 import { payWithCreditRange, payWithPicked, usableCreditTokens } from '../engine/payment'
 import { readyResourceCount } from '../engine/resources'
@@ -1295,22 +1295,17 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // pool is allocated.
     const distribute = targetChoice ? allocation(targetChoice) : undefined
     const repeatable = targetChoice !== undefined && isRepeatable(targetChoice)
-    // The buttons are thumb-sized; conceding is under More, and choosing an attacker gets its own way
-    // back, since tapping the unit again is a small target.
-    const btn = 'min-h-11 px-3 text-sm'
+    // The shared Button, filled and thumb-sized: secondary throughout, the prompt above carrying the
+    // next step, and primary only for Show choice, which brings a waiting choice back. Conceding is
+    // under More, and choosing an attacker gets its own way back, since tapping the unit again is a
+    // small target. Two to a row leaves each button narrow, so they share a tighter padding and
+    // line, which keeps a label such as Take the initiative to two lines.
+    const fit: CSSProperties = { padding: '0 8px', lineHeight: 1.25 }
     const actionColumn = (
       // Two to a row, where the column is short: a pair such as Take initiative and Pass side by side,
       // and anything left over across the width.
       <div className="flex flex-wrap gap-1.5 *:mt-0 *:min-w-0 *:flex-1 *:basis-[40%]">
-        {selectedAttacker && (
-          <button
-            data-testid="cancel-attack-btn"
-            onClick={() => setSelectedAttacker(null)}
-            className={`rounded-xl border-2 border-line/60 ${btn} text-ink-dim hover:text-ink`}
-          >
-            Cancel attack
-          </button>
-        )}
+        {selectedAttacker && <Button testId="cancel-attack-btn" style={fit} onClick={() => setSelectedAttacker(null)}>Cancel attack</Button>}
         {/* A count across the column, the question itself being in the prompt above. */}
         {distribute && (
           <div data-testid="distribute-hud" role="status" className="flex h-[52px] basis-full items-center justify-center gap-2 rounded-xl bg-surface text-[15px] text-ink-dim">
@@ -1318,44 +1313,21 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             {` of ${distribute.total} ${distribute.label === 'Healing' ? 'healed' : 'placed'}`}
           </div>
         )}
-        {declineButton && (
-          <button
-            data-testid="decline-choice-btn"
-            onClick={() => actAndClear(declineButton)}
-            className={`rounded-xl border-2 border-line/60 ${btn} text-ink-dim hover:text-ink`}
-          >
-            {repeatable ? 'Done' : 'Decline'}
-          </button>
-        )}
-        {buttonChoiceHidden && <Button variant="primary" testId="show-choice-btn" onClick={() => setHiddenChoice(null)}>Show choice</Button>}
+        {declineButton && <Button testId="decline-choice-btn" style={fit} onClick={() => actAndClear(declineButton)}>{repeatable ? 'Done' : 'Decline'}</Button>}
+        {buttonChoiceHidden && <Button variant="primary" testId="show-choice-btn" style={fit} onClick={() => setHiddenChoice(null)}>Show choice</Button>}
         {menuActions.map((action, i) => (
-          <button
-            key={i}
-            data-testid={`action-btn-${i}`}
-            onClick={() => actAndClear(action)}
-            className={`rounded-xl border-2 border-accent ${btn} text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10`}
-          >
-            {describeAction(gameState, 'player', action)}
-          </button>
+          <Button key={i} testId={`action-btn-${i}`} style={fit} onClick={() => actAndClear(action)}>{describeAction(gameState, 'player', action)}</Button>
         ))}
         {declineChoice === undefined && menuActions.length === 0 && legal.length === 0 && gameState.winner === null && (
           <span className="text-center text-xs text-ink-faint">Opponent…</span>
         )}
-        {/* Not a game action — it takes back your last one, and the AI's reply with it. Muted
-            and set apart from the action buttons, and absent (not disabled) with nothing to
-            undo, so it never reads as a move you could make.
-            Off unless the player asks for it (#533): rewinding past a mulligan, a draw or a
-            search lets the same decision be taken again with the hidden cards already seen. The
-            mechanism still runs, so turning the setting on mid-game takes effect at once. */}
-        {settings.allowUndo && canUndo && (
-          <button
-            data-testid="undo-btn"
-            onClick={() => { clearSelections(); undo() }}
-            className={`mt-1.5 rounded-xl border-2 border-line/60 ${btn} text-ink-faint hover:text-ink`}
-          >
-            Undo
-          </button>
-        )}
+        {/* Not a game action: it takes back your last one, and the AI's reply with it. Last in
+            the column, and absent (not disabled) with nothing to undo, so it never reads as a
+            move you could make.
+            Off unless the player asks for it: rewinding past a mulligan, a draw or a search lets
+            the same decision be taken again with the hidden cards already seen. The mechanism
+            still runs, so turning the setting on mid-game takes effect at once. */}
+        {settings.allowUndo && canUndo && <Button testId="undo-btn" style={fit} onClick={() => { clearSelections(); undo() }}>Undo</Button>}
       </div>
     )
 

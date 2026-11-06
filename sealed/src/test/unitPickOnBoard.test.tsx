@@ -146,6 +146,8 @@ describe('unit and base picks answered on the board', () => {
 
     noChooseButtons()
     expect(screen.getByTestId('decline-choice-btn')).toHaveTextContent('Decline')
+    // Filled like the rest of the column, never an outline.
+    expect(screen.getByTestId('decline-choice-btn').style.background).toBe('var(--color-tonal)')
     const [enemy] = unitsOn('opponent')
     expect(enemy).toHaveAttribute('data-target', 'true')
     // Returning a unit to hand is cunning: yellow.
