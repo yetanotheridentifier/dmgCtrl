@@ -26,7 +26,7 @@
 @theme {
   --color-yellow: #facc15;        /* "cunning" target highlight (exhaust, capture, return, take control) */
 
-  /* On-card token pills (components/tokens.ts TOKEN_SPEC); damage uses --color-damage. Declared
+  /* Token pills (TOKEN_BADGES in components/game/phoneLayout.tsx); damage uses --color-damage. Declared
      here with the rest of the palette, the block whose colours render in every browser tested. */
   --color-token-advantage: #f5c518;  /* Adv. N: gold */
   --color-token-shield: #2563eb;     /* Shd. N: blue */

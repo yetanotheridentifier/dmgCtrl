@@ -627,8 +627,10 @@ The board is drawn with art-dominant cards, not text rows:
   and dimmed accent "can act". A base takes the same colours through `BaseCard`'s `target`. A unit in play is a
   `PhoneUnit` tile (see Layout below): its effective power and HP in discs at its foot, its damage
   over the art, and a badge for each thing on it, all on the non-rotating wrapper so they stay
-  upright when the card is exhausted. What a unit carries in full (each upgrade and token by name)
-  is in `CardDetail`.
+  upright when the card is exhausted. Token badges come from one table, `TOKEN_BADGES` in
+  `phoneLayout.tsx` (a short label and a `--color-token-*` fill for each of `TOKEN_CARDS`); a test
+  fails if a token upgrade has no badge. What a unit carries in full (each upgrade kind, token or
+  card, by name with its count, the count in the same token colour) is in `CardDetail`.
 - **Roll-over zoom** (`useCardZoom` + `CardZoomPopover`): **Shift+hover** (mouse, so plain
   hovering doesn't obscure play) or **touch-long-press** shows a full-size, upright
   copy floating above the board (absolute, centred on the source; viewport-edge clamping is not yet

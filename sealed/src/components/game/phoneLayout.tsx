@@ -16,7 +16,7 @@ import { BackIcon, CloseIcon, DotsIcon, LogIcon } from '../icons'
 import { unitHasKeyword } from '../../engine/keywords'
 import { effectiveHp, effectivePower } from '../../engine/stats'
 import { friendlyCreditTokens, hasForceToken } from '../../engine/effects'
-import { TOKEN_EXPERIENCE, TOKEN_SHIELD } from '../../engine/tokenUpgrades'
+import { TOKEN_ADVANTAGE, TOKEN_CARDS, TOKEN_EXPERIENCE, TOKEN_SHIELD, TOKEN_WEAKNESS } from '../../engine/tokenUpgrades'
 
 /**
  * The game screen: a column of controls on the left (leave, log and more; the round; each side's
@@ -49,6 +49,20 @@ const OPPONENT_TEXT = 'text-[color:var(--color-opponent)]'
 const OPPONENT_BORDER = `border-[color:var(--color-opponent)] ${OPPONENT_TEXT}`
 
 const BADGE = 'pointer-events-none whitespace-nowrap rounded-md px-[3px] text-[7px] font-bold leading-[11px] shadow-[0_1px_2px_rgba(0,0,0,0.7)]'
+
+/**
+ * Every token upgrade (`TOKEN_CARDS`, whose names they go by), in the order a unit's badges stack:
+ * the short label on its board badge, and its colour there and beside its count in the held view.
+ */
+const TOKEN_BADGES: Record<string, { short: string; style: string }> = {
+  [TOKEN_SHIELD]: { short: 'Shd', style: 'bg-token-shield text-white' },
+  [TOKEN_EXPERIENCE]: { short: 'Exp', style: 'bg-token-experience text-token-ink-dark' },
+  [TOKEN_ADVANTAGE]: { short: 'Adv', style: 'bg-token-advantage text-token-ink-dark' },
+  [TOKEN_WEAKNESS]: { short: 'Weak', style: 'bg-token-weakness text-white' },
+}
+
+/** A count in the held view, in the colour of what it counts. */
+const CHIP = 'min-w-5 rounded-[3px] text-center text-xs font-bold leading-5'
 
 /** A unit's power and HP: a disc in each bottom corner, `size` across. */
 const STAT = 'pointer-events-none absolute bottom-0 rounded-full text-center font-bold text-white'
@@ -86,9 +100,6 @@ export function PhoneUnit({ state, unit, interact, size = 'normal', scale = 'pho
         : interact.actionable
           ? 'accent'
           : undefined
-  const count = (id: string) => unit.upgrades.filter(u => u.cardId === id).length
-  const shields = count(TOKEN_SHIELD)
-  const experience = count(TOKEN_EXPERIENCE)
   const upgrades = upgradeCards(state, unit).length
   const sentinel = unitHasKeyword(state, unit, 'Sentinel')
   const name = cardName(state, unit.cardId)
@@ -98,9 +109,12 @@ export function PhoneUnit({ state, unit, interact, size = 'normal', scale = 'pho
     unit.isLeader && { kind: 'leader', text: 'LEADER', style: 'bg-amber text-black' },
     sentinel && { kind: 'sentinel', text: 'Sentinel', style: 'bg-black/80 text-ink' },
     unit.hidden && !sentinel && { kind: 'hidden', text: 'Hidden', style: 'bg-black/80 text-ink' },
-    shields > 0 && { kind: 'shield', text: `Shd ${shields}`, style: 'bg-token-shield text-white' },
-    experience > 0 && { kind: 'experience', text: `Exp ${experience}`, style: 'bg-token-experience text-token-ink-dark' },
-  ].filter((t): t is { kind: string; text: string; style: string } => Boolean(t))
+    ...Object.entries(TOKEN_BADGES).map(([id, { short, style }]) => {
+      const n = unit.upgrades.filter(u => u.cardId === id).length
+      const name = TOKEN_CARDS[id].name
+      return n > 0 && { kind: name.toLowerCase(), text: `${short} ${n}`, style, label: `${n} ${name}` }
+    }),
+  ].filter((t): t is { kind: string; text: string; style: string; label?: string } => Boolean(t))
   return (
     <>
     {/* Outside the unit, so a tap in it never reaches the unit's own tap or hold. */}
@@ -122,7 +136,7 @@ export function PhoneUnit({ state, unit, interact, size = 'normal', scale = 'pho
       <CardFace card={state.cards[unit.cardId]} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} highlight={highlight} widthPx={card} />
       <div className="pointer-events-none absolute inset-x-0 top-0.5 flex flex-col items-center gap-px">
         {tags.map(t => (
-          <span key={t.kind} data-testid={`unit-badge-${t.kind}`} className={`${BADGE} ${t.style}`}>{t.text}</span>
+          <span key={t.kind} data-testid={`unit-badge-${t.kind}`} aria-label={t.label} className={`${BADGE} ${t.style}`}>{t.text}</span>
         ))}
       </div>
       {captured.length > 0 && (
@@ -442,16 +456,11 @@ function useEscape(open: boolean, onClose: () => void) {
   }, [open, onClose])
 }
 
-const TOKEN_NAMES: Record<string, string> = { [TOKEN_SHIELD]: 'Shield', [TOKEN_EXPERIENCE]: 'Experience' }
-
-/** What is on a unit, one line per kind: its upgrades by name and its tokens, with a count past one. */
-function upgradeLines(state: GameState, unit: UnitState): string[] {
+/** The upgrades on a unit, tokens and cards alike, one per kind in the order first attached, with how many. */
+function upgradeCounts(unit: UnitState): [cardId: string, count: number][] {
   const counts = new Map<string, number>()
-  for (const u of unit.upgrades) {
-    const name = TOKEN_NAMES[u.cardId] ?? state.cards[u.cardId]?.name ?? u.cardId
-    counts.set(name, (counts.get(name) ?? 0) + 1)
-  }
-  return [...counts].map(([name, n]) => (n > 1 ? `${name} ×${n}` : name))
+  for (const u of unit.upgrades) counts.set(u.cardId, (counts.get(u.cardId) ?? 0) + 1)
+  return [...counts]
 }
 
 /**
@@ -471,7 +480,7 @@ export function CardDetail({ state, cardId, unit, onClose }: {
   const card = state.cards[cardId]
   const name = cardName(state, cardId)
   const owner: PlayerId | undefined = unit && (state.players.player.units.some(u => u.instanceId === unit.instanceId) ? 'player' : 'opponent')
-  const lines = unit ? upgradeLines(state, unit) : []
+  const upgrades = unit ? upgradeCounts(unit) : []
   const attached = unit
     ? [
         ...upgradeCards(state, unit).map(u => ({ kind: 'Upgrade', cardId: u.cardId, note: undefined })),
@@ -489,13 +498,20 @@ export function CardDetail({ state, cardId, unit, onClose }: {
             <div className="flex flex-col gap-1.5 text-sm leading-[19px]">
               <span data-testid="detail-damage" className="flex items-center gap-2">
                 {unit.damage > 0
-                  ? <><span className="min-w-5 rounded-[3px] bg-red text-center text-xs font-bold leading-5 text-white">{unit.damage}</span>{' '}damage, {effectiveHp(state, unit) - unit.damage} HP left</>
+                  ? <><span className={`${CHIP} bg-red text-white`}>{unit.damage}</span>{' '}damage, {effectiveHp(state, unit) - unit.damage} HP left</>
                   : `Undamaged, ${effectiveHp(state, unit)} HP`}
               </span>
               <span>{unit.exhausted ? 'Exhausted' : 'Ready'}, in {owner === 'player' ? 'your' : "the opponent's"} {unit.arena} arena</span>
-              {lines.length === 0
-                ? <span className="text-ink-faint">No upgrades or tokens</span>
-                : lines.map(line => <span key={line}>{line}</span>)}
+            </div>
+            <div className="mt-1 text-xs tracking-[0.14em] text-accent">UPGRADES</div>
+            <div className="flex flex-col gap-1.5 text-sm leading-[19px]">
+              {upgrades.length === 0
+                ? <span className="text-ink-faint">None</span>
+                : upgrades.map(([id, n]) => (
+                    <span key={id} data-testid="detail-upgrade" aria-label={`${n} ${cardName(state, id)}`} className="flex items-center gap-2">
+                      <span className={`${CHIP} ${TOKEN_BADGES[id]?.style ?? 'bg-[var(--color-surface-raised)] text-ink'}`}>{n}</span>{cardName(state, id)}
+                    </span>
+                  ))}
             </div>
             <div className="mt-2.5 text-xs leading-[17px] text-ink-faint">Tap anywhere to close.</div>
           </div>
