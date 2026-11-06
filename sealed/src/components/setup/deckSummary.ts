@@ -1,3 +1,4 @@
+import type { WinLoss } from '../../data/matchups'
 import type { EngineCard } from '../../engine/types'
 import type { ParsedDeck } from '../../utils/parseProtectThePod'
 import { cardRefFromId } from '../../utils/parseProtectThePod'
@@ -89,6 +90,21 @@ export function deckLine(deck: ParsedDeck, cards: Record<string, EngineCard | un
   const name = (id: string) => cards[id]?.name ?? id
   return [name(deck.leader), name(deck.base), ...(withSet ? [deckSet(deck) ?? ''] : [])].filter(Boolean).join(' · ')
 }
+
+/**
+ * "3-2, 60%": the player's wins and losses against a deck (and draws, "1-1-1", only when there are
+ * some) and the share of games won. Nothing for a deck never played. Its hyphens and space do not
+ * break, so a line that wraps never splits it.
+ */
+export function recordLine(record: WinLoss | undefined): string | undefined {
+  if (!record) return undefined
+  const { won, lost, drawn } = record
+  const games = won + lost + drawn
+  return `${[won, lost, ...(drawn > 0 ? [drawn] : [])].join(NB_HYPHEN)},${NB_SPACE}${Math.round((won / games) * 100)}%`
+}
+
+export const NB_HYPHEN = '‑'
+export const NB_SPACE = ' '
 
 /** The leader's aspects, then the base's. A base with none (Lake Country) adds nothing. */
 export function deckAspects(deck: ParsedDeck, cards: Record<string, EngineCard | undefined>): string[] {
