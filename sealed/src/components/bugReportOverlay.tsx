@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button, IconButton } from '@pwa-shared/controls'
 import { CloseIcon } from './icons'
-
-/** A text field in a game dialog: the name-a-card prompt's input and the bug report's two fields. */
-export const GAME_FIELD = 'rounded-xl border-2 border-line/60 bg-[var(--color-surface)] px-3 text-base tracking-normal text-ink outline-none focus:border-accent'
+import { FIELD_CLASS } from './field'
 
 /** A field's label: small capitals above it. */
 const LABEL = 'flex flex-col gap-1.5 text-xs uppercase tracking-[0.14em] text-ink-dim'
@@ -41,7 +39,7 @@ export function BugReportOverlay({ onSubmit, onCancel, fallbackReport }: {
 
         <label className={LABEL}>
           Title
-          <input data-testid="bug-report-title" value={title} onChange={e => setTitle(e.target.value)} className={`h-11 ${GAME_FIELD}`} />
+          <input data-testid="bug-report-title" value={title} onChange={e => setTitle(e.target.value)} className={`h-11 ${FIELD_CLASS}`} />
         </label>
         <label className={LABEL}>
           What happened
@@ -49,7 +47,7 @@ export function BugReportOverlay({ onSubmit, onCancel, fallbackReport }: {
             data-testid="bug-report-description"
             value={description}
             onChange={e => setDescription(e.target.value)}
-            className={`h-[110px] resize-none py-2.5 text-sm leading-5 ${GAME_FIELD}`}
+            className={`h-[110px] resize-none py-2.5 ${FIELD_CLASS}`}
           />
         </label>
 
@@ -71,7 +69,7 @@ export function BugReportOverlay({ onSubmit, onCancel, fallbackReport }: {
               readOnly
               value={fallbackReport}
               rows={6}
-              className={`py-2 font-mono text-[10px] ${GAME_FIELD}`}
+              className={`py-2 font-mono ${FIELD_CLASS}`}
             />
           </div>
         )}

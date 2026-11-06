@@ -14,7 +14,8 @@ import type { DescribePart } from '../utils/describeAction'
 import { describeChoiceParts, describeChoiceQuestion, choiceSourceCard, answeredWithButtons, BOARD_TARGET_KINDS, allocation, isRepeatable, paidFor, paidForCard } from '../utils/describeChoice'
 import { upgradeHostIds, upgradeHostName } from '../utils/upgradeHosts'
 import { buildReportMarkdown, issueUrl } from '../utils/bugReport'
-import { BugReportOverlay, GAME_FIELD } from './bugReportOverlay'
+import { BugReportOverlay } from './bugReportOverlay'
+import { FIELD_CLASS } from './field'
 import { GameLoadError, GameLoading, PrintedStatsNotice } from './game/gameEdgeStates'
 import { SettingsSheet } from './settingsSheet'
 import { useSettings } from '../hooks/useSettings'
@@ -374,7 +375,7 @@ export function NameCardOverlay({ state, choice, names, onPick, what = 'card', o
           aria-autocomplete="list"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          className={`h-11 ${GAME_FIELD}`}
+          className={`h-11 ${FIELD_CLASS}`}
         />
       </label>
       <div role="group" aria-label="Matching names" className="flex flex-col gap-1">
