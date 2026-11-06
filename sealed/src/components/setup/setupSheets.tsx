@@ -14,8 +14,10 @@ import { ANY_OF_MY_DECKS, SET_CODES } from '../../hooks/useSealedSetup'
 import { Disclosure } from '../disclosure'
 import { FIELD_CLASS } from '../field'
 import { AspectIcons } from './deckParts'
+import { games, winRate } from '../../data/matchups'
 import type { Matchup, Side } from '../../data/matchups'
-import { deckAspects, deckLine, recordLine } from './deckSummary'
+import CardFace from '../cardFace'
+import { deckAspects, deckLine } from './deckSummary'
 import { aspectIconSrc, aspectName, mutedStyle } from './setupStyle'
 
 /** The sheets the setup screen opens: the deck, importing, the opponent and its choices, and card support. */
@@ -295,19 +297,37 @@ export function MoreSheet({ open, onHelp, onCardSupport, onSettings, onClose }: 
   )
 }
 
-/** The player's record as the chosen leader and base against each opposing leader and base played. */
+/** The leader and base thumbnails' short edge: both are landscape cards, so each is this tall. */
+const THUMB_PX = 36
+const CELL: React.CSSProperties = { padding: '6px 8px 6px 0', borderBottom: '1px solid rgba(var(--color-ui-border-muted-rgb), 0.25)' }
+const NUMBER: React.CSSProperties = { ...CELL, padding: '6px 0 6px 12px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text-muted)' }
+const COLUMNS = ['Leader', 'Base', 'Opponent', 'Games', 'Win rate']
+
+/**
+ * The player's record as the chosen leader and base against each opposing leader and base played, a
+ * row each with the leader and base art. A base group shows the base played in it.
+ */
 export function MatchupSheet({ open, mine, matchups, onClose }: { open: boolean; mine: Side | null; matchups: Matchup[]; onClose: () => void }) {
   return (
     <Sheet open={open} title="Matchups" onClose={onClose}>
-      {mine && <p style={mutedStyle}>As {mine.label}, against each leader and base you have played. Aspect bases count together by aspect, and Force bases and splash bases each as one; any other base is its own.</p>}
-      <dl style={{ margin: 0 }}>
-        {matchups.map(m => (
-          <div key={m.opponent.key} data-testid="matchup-row" style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '0.9rem', padding: '6px 0' }}>
-            <dt style={{ minWidth: 0 }}>{m.opponent.label}</dt>
-            <dd style={{ margin: 0, flexShrink: 0, color: 'var(--color-text-muted)' }}>{recordLine(m.record)}</dd>
-          </div>
-        ))}
-      </dl>
+      {mine && <p style={mutedStyle}>As {mine.label}, against each leader and base you have played. Aspect bases count together by aspect, and Force bases and splash bases each as one, shown by a base played; any other base is its own.</p>}
+      <table style={{ flexShrink: 0, width: '100%', borderSpacing: 0, fontSize: '0.9rem' }}>
+        <thead>
+          <tr>{COLUMNS.map((c, i) => <th key={c} style={{ ...subheadStyle, ...(i > 2 ? NUMBER : CELL), color: 'var(--color-accent)', textAlign: i > 2 ? 'right' : 'left' }}>{c}</th>)}</tr>
+        </thead>
+        <tbody>
+          {matchups.map(({ opponent: o, record }) => (
+            <tr key={o.key} data-testid="matchup-row">
+              {[o.leader, o.base].map(card => (
+                <td key={card.id} style={{ ...CELL, width: 0, lineHeight: 0 }}><CardFace card={card} fallbackName={card.name} widthPx={THUMB_PX} tight /></td>
+              ))}
+              <td style={CELL}>{o.label}</td>
+              <td style={NUMBER}>{games(record)}</td>
+              <td style={NUMBER}>{winRate(record)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </Sheet>
   )
 }
