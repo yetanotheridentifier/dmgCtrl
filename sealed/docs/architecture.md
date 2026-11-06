@@ -747,7 +747,10 @@ The board is drawn with art-dominant cards, not text rows:
   half holds more than eight; 84/60 and 68/48), the centre strip and its cards, and the hand's
   row and card (88/60; 132/90). `PhoneGameLayout` draws the controls column (leave, log, more;
   round and phase; each side's `PlayerSummary` with its INITIATIVE, FORCE and CRED pills; the
-  prompt; the action buttons) beside the board, with the hand under it. On a phone it fits
+  prompt; the action buttons) beside the board, with the hand under it. The prompt is plain text
+  hung straight under the opponent's summary, whose heading holds one height with or without a
+  pill, so neither the prompt's length nor a pill changing hands moves where it starts; it
+  scrolls when it overflows. On a phone it fits
   844×390 without scrolling and the log is `GameLogDrawer`, a left panel opened from Log; on the
   desktop the log is docked in the column under the prompt, filling what the column leaves, and
   there is no Log button. Both group `LogEntry`s by their `round` (0 is setup) with outcomes
