@@ -417,6 +417,21 @@ describe('GameScreen on a phone in landscape', () => {
     expect(screen.queryByTestId('game-log-panel')).toBeNull()
   })
 
+  it('labels each arena at its outer edge with clear text over the starfield, hidden from the reader', async () => {
+    await renderPhone()
+    for (const [name, text, edge] of [['Space arena', 'SPACE', 'left'], ['Ground arena', 'GROUND', 'right']] as const) {
+      const label = within(screen.getByRole('region', { name })).getByText(text)
+      expect(label.closest('[aria-hidden="true"]')).not.toBeNull()
+      expect(label.style.writingMode).toBe('vertical-rl')
+      expect(label.style[edge]).toBe('0px')
+      // No tab behind it: nothing fills or rounds the label, so the stars show through.
+      for (let el: HTMLElement | null = label; el && el.getAttribute('role') !== 'region'; el = el.parentElement) {
+        expect(el.className).not.toMatch(/(^| )bg-/)
+        expect(el.style.background + el.style.backgroundColor + el.style.borderRadius).toBe('')
+      }
+    }
+  })
+
   it('pins the prompt, unringed, under the opponent\'s counts', async () => {
     await renderPhone()
     expectPromptPinned()
