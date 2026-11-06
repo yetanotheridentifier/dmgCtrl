@@ -453,6 +453,29 @@ describe('GameScreen on a phone in landscape', () => {
     expect(screen.getByTestId('game-log-drawer')).toBeInTheDocument()
   })
 
+  it('fills every button in the controls column, none of them an outline', async () => {
+    seedSettings({ allowUndo: true })
+    const { user } = await renderPhone()
+    const filled = () => {
+      const buttons = within(screen.getByTestId('phone-actions')).getAllByRole('button')
+      for (const b of buttons) {
+        expect(b.style.background).toBe('var(--color-tonal)')
+        expect(b.className).not.toMatch(/border/)
+      }
+      return buttons.map(b => b.textContent)
+    }
+    expect(filled()).toEqual(['Mulligan', 'Keep hand'])
+    await user.click(screen.getByRole('button', { name: /keep hand/i }))
+    await user.click(screen.getByTestId('hand-card-0'))
+    await user.click(screen.getByTestId('hand-card-0'))
+    await user.click(screen.getByTestId('hand-card-3'))
+    expect(filled()).toEqual(expect.arrayContaining(['Pass', 'Undo']))
+    await user.click(screen.getByRole('button', { name: /^pass$/i }))
+    await user.click(screen.getByRole('button', { name: /don't resource/i }))
+    await user.click(screen.getByTestId('board-unit-u1'))
+    expect(filled()).toEqual(expect.arrayContaining(['Cancel attack']))
+  })
+
   it('holds a card to see it full size, without playing it', async () => {
     const { user } = await renderPhone()
     await user.click(screen.getByRole('button', { name: /keep hand/i }))
