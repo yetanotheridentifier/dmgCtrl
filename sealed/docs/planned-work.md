@@ -148,9 +148,9 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
 this section says how that is held, and names the one limit left).
 
 **IC27 (Icons) is accepted and triaged: 57 cards and the Experience and Shield tokens.** 40 reprint
-cards already built or vanilla in earlier sets and 3 more are keyword-only, so 43 play today. The 14
-left are `STILL_TO_BUILD` in `oneOffCards4.test.ts`, in three tickets worked in this order: **#1054**
-(eight units and two events on existing primitives), **#1055** (the two leaders, both sides), **#1056**
+cards already built or vanilla in earlier sets and 3 more are keyword-only, and ten of its own units
+and events are built on existing effects, so 53 play today. The 4 left are `STILL_TO_BUILD` in
+`oneOffCards4.test.ts`, in two tickets worked in this order: **#1055** (the two leaders, both sides), **#1056**
 (Admiral Holdo's extra regroup draw and Darth Sidious's base-heal trigger, each a new engine hook). Its cards were triaged by what the
 engine could not yet express rather than by how hard the text looked. The triage is repeatable and
 fetches live, so the next set can be sized on release day. See [ai-benchmark.md](ai-benchmark.md).

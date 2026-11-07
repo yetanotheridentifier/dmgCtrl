@@ -159,8 +159,7 @@ describe('every card in every set is built or plays as printed', () => {
   const STILL_TO_BUILD: Record<string, Partial<Record<'leaders' | 'units' | 'events', string[]>>> = {
     IC27: {
       leaders: ['IC27_001', 'IC27_008'],
-      units: ['IC27_022', 'IC27_024', 'IC27_026', 'IC27_038', 'IC27_071', 'IC27_079', 'IC27_099', 'IC27_103', 'IC27_146', 'IC27_187'],
-      events: ['IC27_166', 'IC27_168'],
+      units: ['IC27_026', 'IC27_038'],
     },
   }
   const stillToBuild = (code: string): string[] => Object.values(STILL_TO_BUILD[code] ?? {}).flat()
