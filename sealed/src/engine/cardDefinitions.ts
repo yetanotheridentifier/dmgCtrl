@@ -15582,3 +15582,40 @@ registerCard('TS26_22', { // The Darksaber, Only the Strongest Shall Rule. Senti
   ...whenPlayed('If there are 4 or more different Keywords among friendly units, ready attached unit.', (s, ctx) =>
     (new Set(s.players[ctx.owner].units.flatMap(u => unitKeywords(s, u).map(k => k.name))).size >= 4 ? readyUnit(s, ctx.sourceInstanceId!) : s)),
 })
+
+// ── IC27's own cards on existing effects ────────────────────────────────────────────────────────
+registerCard('IC27_022', { costModifier: (s, owner) => (defeatedThisPhase(s, owner).length > 0 ? -2 : 0) }) // Moff Gideon
+registerCard('IC27_024', alsoAt(unitThenWp('You may give an Experience token to another friendly unit. It gains Sentinel for this phase.', // Grand Admiral Thrawn
+  pickAll(pickFriendly, pickOther), 'give an Experience token and Sentinel for this phase', 'help', true,
+  (s, ctx) => addLastingEffect(giveToken(s, ctx.targetInstanceId!, TOKEN_EXPERIENCE), { targetInstanceId: ctx.targetInstanceId!, keywords: [KW.sentinel] })), 'onAttack', 'whenDefeated'))
+registerCard('IC27_071', { // Avar Kriss. Raid 1 is printed.
+  conditionalKeywords: (s, u) => {
+    const others = friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId).length
+    return others > 0 ? [KW.raid(others)] : []
+  },
+})
+registerCard('IC27_079', buffWp('Give another friendly unit +2/+2 for this phase.', pickAll(pickFriendly, pickOther), () => ({ power: 2, hp: 2 }), false)) // Qui-Gon Jinn
+registerCard('IC27_099', defeated(targetWp('You may ready an Imperial unit.', 'selectUnitToReady', pickTrait('Imperial'), true))) // Eighth Brother
+registerCard('IC27_103', gains((_s, u) => u.damage > 0, KW.raid(3), KW.saboteur)) // Grand Inquisitor
+registerCard('IC27_146', { abilities: [{ trigger: 'onAttackEnd', description: 'If the defending unit was defeated, you may ready 2 resources.', effect: (s, ctx) => // Boba Fett
+  (ctx.defenderDefeated ? readyResource(readyResource(s, ctx.owner), ctx.owner) : s) }] })
+registerCard('IC27_187', onAttack(whenPlayed('Discard a card from your deck. If it costs 6 or more, this unit gets +4/+0 for this attack.', (s, ctx) => { // Jar Jar Binks
+  const [next, milled] = millTop(s, ctx.owner, 1)
+  return milled.length && (next.cards[milled[0]]?.cost ?? 0) >= 6 ? forThisAttack(next, ctx.sourceInstanceId!, 4) : next
+})))
+
+// Events of several parts: each part is owed until the picks of the one before it are answered.
+registerCard('IC27_166', { // I've Got A Bad Feeling
+  ...whenPlayed("Return a non-leader unit to its owner's hand. Give a Shield token to a friendly unit.", (s, ctx) =>
+    thenAfterChoices(targetChoice(s, ctx, 'selectUnitToReturn', eligibleIds(s, ctx.owner, nonLeader)), resume(ctx, 'shield'))),
+  ifYouDo: (s, ctx) => shieldChoice(s, ctx, s.players[ctx.owner].units.map(u => u.instanceId), false),
+})
+const GRANT_CUNNING_PLOY = 'GRANT_CUNNING_PLOY'
+registerCard(GRANT_CUNNING_PLOY, { sourceCardId: 'IC27_168', ...attackBonus(3) })
+registerCard('IC27_168', { // Cunning Ploy
+  ...whenPlayed("Look at an opponent's hand. You may discard a card from it. If you do, that player draws a card. Exhaust an enemy unit. You may attack with a unit. It gets +3/+0 for this attack.", (s, ctx) =>
+    thenAfterChoices(pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, thenDraw: true }), resume(ctx, 'exhaust'))),
+  ifYouDo: (s, ctx) => (ctx.step === 'exhaust'
+    ? thenAfterChoices(targetChoice(s, ctx, 'mayExhaustUnit', s.players[opponentOf(ctx.owner)].units.map(u => u.instanceId)), resume(ctx, 'attack'))
+    : offerAttack(s, ctx.owner, ctx.sourceInstanceId!, { grantCardId: GRANT_CUNNING_PLOY, optional: true })),
+})

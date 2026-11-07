@@ -1121,6 +1121,9 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SEC_131', name: "Let's Talk" },
   { id: 'SHD_206', name: 'Spare the Target' },
   { id: 'SHD_228', name: 'Bounty Posting' },
+  // IC27's own events on existing effects.
+  { id: 'IC27_166', name: "I've Got A Bad Feeling" },
+  { id: 'IC27_168', name: 'Cunning Ploy' },
 ]
 
 /**
@@ -2476,6 +2479,15 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LOF_033', name: 'Nameless Terror' },
   { id: 'SHD_058', name: 'Val' },
   { id: 'SHD_161', name: 'Stolen Landspeeder' },
+  // IC27's own units on existing effects.
+  { id: 'IC27_022', name: 'Moff Gideon' },
+  { id: 'IC27_024', name: 'Grand Admiral Thrawn' },
+  { id: 'IC27_071', name: 'Avar Kriss' },
+  { id: 'IC27_079', name: 'Qui-Gon Jinn' },
+  { id: 'IC27_099', name: 'Eighth Brother' },
+  { id: 'IC27_103', name: 'Grand Inquisitor' },
+  { id: 'IC27_146', name: 'Boba Fett' },
+  { id: 'IC27_187', name: 'Jar Jar Binks' },
 ]
 
 /**
