@@ -299,8 +299,22 @@ describe('IC27_026 Darth Sidious: Restore 3; when you heal damage from your base
     expect([U(done, 'e')!.damage, U(done, 'f')!.damage, baseDamage(done)]).toEqual([3, 0, 5])
   })
 
-  it('fires for any heal of your base, with the amount actually healed', () => {
+  it('fires for a heal you cause, with the amount actually healed', () => {
     expect(choice(healBase(board(damaged(2), enemies), 'player', 5))).toMatchObject({ kind: 'selectDamageTarget', amount: 2 })
+    expect(choice(healBase(board(damaged(2), enemies), 'player', 5, 'player'))).toMatchObject({ kind: 'selectDamageTarget', amount: 2 })
+  })
+
+  it("does not fire when an opponent's ability heals your base, though the base is healed", () => {
+    const s = healBase(board(damaged(4), enemies), 'player', 3, 'opponent')
+    noChoice(s)
+    expect(ownBase(s)).toBe(1)
+  })
+
+  it("an opponent's Wartime Refugee healing your base does not trigger him", () => {
+    const refugee = getCardDefinition('TS26_43')!.abilities!.find(a => a.trigger === 'onAttack')!
+    const s = refugee.effect(board(damaged(4), enemies), { owner: 'opponent', sourceInstanceId: 'w' } as Parameters<typeof refugee.effect>[1])
+    noChoice(s)
+    expect(ownBase(s)).toBe(3)
   })
 
   it("does not fire when nothing is healed, for the opponent's base, or with no enemy unit", () => {

@@ -788,14 +788,19 @@ export function returnResourceToHand(state: GameState, controller: PlayerId, ind
  * **The only place a base is healed**, Restore included, which is what lets one card shut all of it
  * off (Confederate Tri-Fighter: "bases can't be healed"). Restore used to subtract from the base
  * inline in `attack`, where no such card could have reached it.
+ *
+ * `by` is the player whose ability or Restore causes the heal, `player` unless an opponent's ability
+ * heals this base.
  */
-export function healBase(state: GameState, player: PlayerId, amount: number): GameState {
+export function healBase(state: GameState, player: PlayerId, amount: number, by: PlayerId = player): GameState {
   const p = state.players[player]
   if (p.base.damage === 0 || amount <= 0 || baseHealingSuppressed(state)) return state
   // Recorded and raised here, the one place a base is healed, so every source of healing counts.
   const amountHealed = Math.min(amount, p.base.damage)
   const healed = recordBaseHealed({ ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage - amountHealed } } } }, player)
-  // "When you heal damage from your base" (Darth Sidious), once per heal, with what it removed.
+  // "When you heal damage from your base" (Darth Sidious), once per heal, with what it removed. Only a
+  // heal the base's owner causes counts: the user's reading of "you heal", pending a judge ruling.
+  if (by !== player) return healed
   return fireBatch(healed, collectUnitsTrigger(healed, 'whenBaseHealed', player, { amountHealed }))
 }
 
