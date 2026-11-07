@@ -90,6 +90,16 @@ export function alternativeAspects(card: SwuCard): string[][] {
   })
 }
 
+/**
+ * A card's printed traits. A base's location is its trait ("if you control a Tatooine base"):
+ * Homeworlds prints it as one, earlier sets only as the subtitle, and the source gives those no
+ * traits, so a base without any takes its subtitle in the Homeworlds spelling.
+ */
+export function printedTraits(card: SwuCard): string[] {
+  if (card.Traits?.length) return card.Traits
+  return card.Type === 'Base' && card.Subtitle ? [card.Subtitle.toUpperCase()] : []
+}
+
 /** Normalise a SWUDB card payload into engine static data. */
 export function normaliseCard(card: SwuCard): EngineCard {
   const type = toType(card.Type)
@@ -112,7 +122,7 @@ export function normaliseCard(card: SwuCard): EngineCard {
     power: override ? override.power : toInt(card.Power),
     hp: override ? override.hp : toInt(card.HP),
     aspects: card.Aspects ?? [],
-    traits: card.Traits ?? [],
+    traits: printedTraits(card),
     keywords: toKeywords(card),
     unique: card.Unique ?? false,
     ...(card.FrontArt !== undefined && { frontArt: card.FrontArt }),

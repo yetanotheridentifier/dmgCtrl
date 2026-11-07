@@ -2,6 +2,7 @@ import type { SwuCard } from '../data/cards'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { minimumDeckSize } from '../utils/parseProtectThePod'
 import { seededUnit } from '../engine/rng'
+import { printedTraits } from '../engine/cardDb'
 import { isRareBase, RARE_BASE_CHANCE } from './rules'
 
 /**
@@ -49,7 +50,7 @@ export function colourBases(bases: SwuCard[], seed: number): SwuCard[] {
  * ("if you control a TATOOINE base"). Zero for a base with no traits, which is most of them.
  */
 function traitMentions(base: SwuCard, deck: ParsedDeck, byId: Map<string, SwuCard>): number {
-  const traits = (base.Traits ?? []).map(t => t.toUpperCase())
+  const traits = printedTraits(base).map(t => t.toUpperCase())
   if (traits.length === 0) return 0
   return deck.cards.reduce((n, e) => {
     const card = byId.get(e.id)
