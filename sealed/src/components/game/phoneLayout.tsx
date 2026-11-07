@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Button, IconButton, Sheet } from '@pwa-shared/controls'
-import type { CapturedCard, GameState, PlayerId, UnitState } from '../../engine/types'
+import type { CapturedCard, GameState, PlayerId, ResourceState, UnitState } from '../../engine/types'
 import { CardInspect, useCardZoom } from '../useCardZoom'
 import { outcomeBanner } from '../outcome'
 import type { LogEntry } from '../../hooks/useGame'
@@ -284,15 +284,17 @@ function Stat({ value, label, name, onClick, tonal = false }: { value: ReactNode
 /**
  * One side's heading and counts: resources ready of total, the opponent's hand, the deck and the
  * discard, with INITIATIVE, FORCE and CRED n beside the heading of the side holding them. The
- * discard count opens the pile; the deck count opens the top card when a card lets you look at it.
+ * discard count opens the pile; the deck count opens the top card when a card lets you look at it;
+ * the resources count opens your resources, and only yours, since the opponent's are hidden.
  * The heading is one height with or without a pill, so the counts (and the prompt under the
  * opponent's) do not move when the initiative or a token changes hands.
  */
-export function PlayerSummary({ state, side, onDiscard, onDeck }: {
+export function PlayerSummary({ state, side, onDiscard, onDeck, onResources }: {
   state: GameState
   side: PlayerId
   onDiscard: (side: PlayerId) => void
   onDeck?: () => void
+  onResources?: () => void
 }) {
   const p = state.players[side]
   const mine = side === 'player'
@@ -308,7 +310,7 @@ export function PlayerSummary({ state, side, onDiscard, onDeck }: {
         {credits > 0 && <Pill className="bg-token-credit text-ink" label={`${credits} Credit token${credits === 1 ? '' : 's'}`}>CRED {credits}</Pill>}
       </div>
       <div className="flex gap-1">
-        <Stat value={`${readyCount}/${p.resources.length}`} label="RES" name={`${whose} resources: ${readyCount} ready of ${p.resources.length}`} tonal={mine} />
+        <Stat value={`${readyCount}/${p.resources.length}`} label="RES" name={`${whose} resources: ${readyCount} ready of ${p.resources.length}`} tonal={mine} onClick={mine ? onResources : undefined} />
         {!mine && <Stat value={p.hand.length} label="HAND" name={`${whose} hand: ${p.hand.length} cards`} />}
         <Stat value={p.deck.length} label="DECK" name={`${whose} deck: ${p.deck.length} cards`} onClick={onDeck} />
         <Stat value={p.discard.length} label="DISC" name={`${whose} discard: ${p.discard.length} cards`} onClick={() => onDiscard(side)} />
@@ -431,13 +433,19 @@ export function MoreSheet({ open, onClose, onHelp, onSettings, onReport, onConce
   )
 }
 
-/** A pile of cards as a sheet: a discard pile, or the top of your deck. */
-export function PileSheet({ state, title, cards, onClose }: { state: GameState; title: string; cards: string[] | null; onClose: () => void }) {
+/** A card in a pile: its id, or a resource, which is turned when it is exhausted. */
+export type PileCard = string | Pick<ResourceState, 'cardId' | 'exhausted'>
+
+/** A pile of cards as a sheet: a discard pile, your resources, or the top of your deck. */
+export function PileSheet({ state, title, cards, onClose }: { state: GameState; title: string; cards: PileCard[] | null; onClose: () => void }) {
   return (
     <Sheet open={cards !== null} title={title} onClose={onClose}>
       {cards && cards.length === 0 && <div className="text-ink-faint">Empty</div>}
       <div className="flex flex-wrap gap-2">
-        {(cards ?? []).map((id, i) => <CardFace key={`${id}-${i}`} card={state.cards[id]} fallbackName={id} tight widthPx={80} />)}
+        {(cards ?? []).map((c, i) => {
+          const { cardId, exhausted } = typeof c === 'string' ? { cardId: c, exhausted: false } : c
+          return <CardFace key={`${cardId}-${i}`} card={state.cards[cardId]} fallbackName={cardId} tight widthPx={80} exhausted={exhausted} />
+        })}
       </div>
     </Sheet>
   )
@@ -754,7 +762,7 @@ function idlePrompt(state: GameState, attacker: string | undefined, scale: Board
   return [`Your action. ${tap} a highlighted card to play it, or a ready unit to attack.`]
 }
 
-export function PhoneGameLayout({ state, scale, log, prompt, attacker, actions, hand, centre, playerInteraction, opponentInteraction, onExit, onLog, onMore, onDiscard, onDeck }: {
+export function PhoneGameLayout({ state, scale, log, prompt, attacker, actions, hand, centre, playerInteraction, opponentInteraction, onExit, onLog, onMore, onDiscard, onDeck, onResources }: {
   state: GameState
   scale: BoardScale
   /** The log, docked in the column on the desktop; a phone opens it from Log as a drawer instead. */
@@ -774,6 +782,8 @@ export function PhoneGameLayout({ state, scale, log, prompt, attacker, actions, 
   onMore: () => void
   onDiscard: (side: PlayerId) => void
   onDeck?: () => void
+  /** Opens your own resources; the opponent's are hidden information. */
+  onResources: () => void
 }) {
   const phase = state.phase.charAt(0).toUpperCase() + state.phase.slice(1)
   const S = BOARD_SCALE[scale]
@@ -804,7 +814,7 @@ export function PhoneGameLayout({ state, scale, log, prompt, attacker, actions, 
         <PlayerSummary state={state} side="opponent" onDiscard={onDiscard} />
         {actionPrompt}
         {!phone && <DockedLog state={state} log={log} />}
-        <PlayerSummary state={state} side="player" onDiscard={onDiscard} onDeck={onDeck} />
+        <PlayerSummary state={state} side="player" onDiscard={onDiscard} onDeck={onDeck} onResources={onResources} />
         <div data-testid="phone-actions" className="mt-1 max-h-[45%] overflow-y-auto">{actions}</div>
       </div>
 

@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import GameScreen from '../components/gameScreen'
 import { actionFocus, BOARD_SCALE, handOverlap } from '../components/boardLayout'
 import type { UnitInteraction } from '../components/gameScreen'
-import { PhoneArena, PhoneUnit, PlayerSummary, GameLogDrawer, CardDetail, LeaderMenu } from '../components/game/phoneLayout'
+import { PhoneArena, PhoneUnit, PlayerSummary, GameLogDrawer, CardDetail, LeaderMenu, PileSheet } from '../components/game/phoneLayout'
 import { PHONE_LANDSCAPE_QUERY, PHONE_PORTRAIT_QUERY } from '../hooks/useMediaQuery'
 import { db } from '../data/db'
 import type { SavedDeck } from '../data/deckStore'
@@ -82,6 +82,20 @@ describe('phone board pieces', () => {
     render(<PlayerSummary state={state()} side="opponent" onDiscard={onDiscard} />)
     await userEvent.setup().click(screen.getByTestId('stat-disc'))
     expect(onDiscard).toHaveBeenCalledWith('opponent')
+  })
+
+  it("opens your resources from your count, and never the opponent's", async () => {
+    const onResources = vi.fn()
+    render(<><PlayerSummary state={state()} side="opponent" onDiscard={vi.fn()} /><PlayerSummary state={state()} side="player" onDiscard={vi.fn()} onResources={onResources} /></>)
+    expect(within(screen.getByTestId('opponent-summary')).getByTestId('stat-res')).toBeDisabled()
+    await userEvent.setup().click(within(screen.getByTestId('player-summary')).getByTestId('stat-res'))
+    expect(onResources).toHaveBeenCalled()
+  })
+
+  it('turns the exhausted resources in a pile', () => {
+    render(<PileSheet state={state()} title="Your resources" cards={[{ cardId: 'TST_U1', exhausted: true }, { cardId: 'TST_U1', exhausted: false }]} onClose={vi.fn()} />)
+    const faces = within(screen.getByRole('dialog', { name: 'Your resources' })).getAllByTestId('card-face')
+    expect(faces.map(f => f.dataset.orientation)).toEqual(['landscape', 'portrait'])
   })
 
   it('badges a unit with its damage, tokens, upgrades and keywords', () => {
@@ -349,6 +363,7 @@ const SWU_CARDS: SwuCard[] = [
   { Set: 'TST', Number: '002', Name: 'Test Base', Type: 'Base', HP: '30' },
   { Set: 'TST', Number: '900', Name: 'Big Test Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '40', HP: '30' },
   { Set: 'TST', Number: '901', Name: 'Pricey Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
+  { Set: 'TST', Number: '902', Name: 'Secret Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
 ]
 
 // Deal order (identity shuffle): 901 ×3 then 900; resourcing two leaves 901, 900, 900, 900 in hand.
@@ -360,6 +375,7 @@ const DECK: SavedDeck = {
   cards: [{ id: 'TST_901', count: 3 }, { id: 'TST_900', count: 27 }],
   importedAt: 1,
 }
+const SECRET_DECK: SavedDeck = { ...DECK, id: 'deck-2', cards: [{ id: 'TST_902', count: 30 }] }
 
 const identity = <T,>(arr: T[]) => arr
 const PASSIVE: UseGameOptions = {
@@ -595,6 +611,24 @@ describe('GameScreen on a phone in landscape', () => {
     const { user } = await renderPhone()
     await user.click(within(screen.getByTestId('player-summary')).getByTestId('stat-disc'))
     expect(screen.getByRole('dialog', { name: 'Your discard' })).toHaveTextContent(/empty/i)
+  })
+
+  it("opens your resources as a sheet from the count, and keeps the opponent's hidden", async () => {
+    const onExit = vi.fn()
+    renderGame(<GameScreen deck={DECK} opponentDeck={SECRET_DECK} onExit={onExit} onHelp={vi.fn()} gameOptions={OPTS} />)
+    await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /keep hand/i }))
+    await user.click(screen.getByTestId('hand-card-0'))
+    await user.click(screen.getByTestId('hand-card-0'))
+    expect(screen.getByTestId('round-phase')).toHaveTextContent('Round 1 · Action')
+    expect(within(screen.getByTestId('opponent-summary')).getByTestId('stat-res')).toBeDisabled()
+    await user.click(within(screen.getByTestId('player-summary')).getByTestId('stat-res'))
+    const sheet = screen.getByRole('dialog', { name: 'Your resources' })
+    expect(within(sheet).getAllByTestId('card-face')).toHaveLength(2)
+    expect(sheet).toHaveTextContent('Pricey Unit')
+    // The opponent resourced two Secret Units: hidden information, so nowhere in the page.
+    expect(document.body.innerHTML).not.toMatch(/Secret Unit|TST_902/)
   })
 
   it('holds Help, Settings and Concede under More, with no bug report', async () => {
