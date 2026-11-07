@@ -172,6 +172,11 @@ All three need to know whose copy is being read, which is what `owner` is for: t
 player's board, and the removal is aimed at one player's cards. A read with no owner gets the printed
 traits, which is all that can be said about a card nobody owns.
 
+**A base's location is its trait.** Homeworlds prints it as one (TATOOINE); earlier sets print it only
+as the subtitle and the source data gives those bases no traits. `printedTraits` (`cardDb.ts`) gives a
+base with none its subtitle instead, so "if you control a Tatooine base" counts Jabba's Palace as it
+counts Tusken Camp, and the deck builder's choice of world base reads the same traits.
+
 `unitTraits` adds what an upgrade lends (`grantedTraits`, The Darksaber) and takes away
 (`removedTraits`), a trait this one unit has lost for the phase (`LastingEffect.removeTraits`: Nameless
 Terror's "each enemy unit loses the Force trait for this phase" reaches the units in play as it

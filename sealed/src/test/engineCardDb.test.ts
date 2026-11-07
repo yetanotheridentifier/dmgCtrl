@@ -3,6 +3,7 @@ import { normaliseCard, buildCardDb } from '../engine/cardDb'
 import { cardId } from '../data/cards'
 import type { SwuCard } from '../data/cards'
 import { isFortify } from '../engine/types'
+import { cardHasTrait } from '../engine/keywords'
 import type { GameState } from '../engine/types'
 import { UPGRADE_STAT_OVERRIDES } from '../engine/upgradeStatOverrides'
 import { SET_CODES, poolFor } from '../bench/setPools'
@@ -260,5 +261,33 @@ describe('GameState schema', () => {
     }
 
     expect(JSON.parse(JSON.stringify(state))).toEqual(state)
+  })
+})
+
+/**
+ * A base's location is its trait. Homeworlds prints it as one (TATOOINE); earlier sets print it only
+ * as the subtitle and the source gives them no traits, yet "if you control a Tatooine base" counts
+ * Jabba's Palace as surely as Tusken Camp.
+ */
+describe('base traits', () => {
+  const bases = poolFor(SET_CODES).filter(c => c.Type === 'Base')
+
+  it('every base in every bundled set carries its subtitle as a trait', () => {
+    const missing = bases
+      .filter(c => !normaliseCard(c).traits.some(t => t.toLowerCase() === c.Subtitle?.toLowerCase()))
+      .map(c => `${cardId(c.Set, c.Number)} ${c.Subtitle}`)
+    expect(missing).toEqual([])
+  })
+
+  it('counts the pre-Homeworlds Tatooine bases as Tatooine bases', () => {
+    const db = buildCardDb(bases)
+    const state = { cards: db } as unknown as GameState
+    for (const id of ['SHD_026', 'JTL_030', 'IC27_012', 'ASH_026', 'LAW_020', 'LAW_023', 'HMW_026']) {
+      expect(cardHasTrait(state, id, 'Tatooine'), id).toBe(true)
+    }
+  })
+
+  it('keeps a printed trait as printed', () => {
+    expect(normaliseCard(bases.find(c => c.Set === 'HMW' && c.Number === '026')!).traits).toEqual(['TATOOINE'])
   })
 })
