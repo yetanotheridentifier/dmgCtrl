@@ -238,19 +238,10 @@ export function PhoneArena({ state, side, arena, unitInteraction, scale = 'phone
   )
 }
 
-/** The arena's name, set vertically at its outer edge as bare text over the panels and the stars. */
-function ArenaLabel({ label, edge }: { label: string; edge: 'left' | 'right' }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="absolute top-1/2 w-[15px] -translate-y-1/2 text-center text-[9px] leading-[15px] tracking-[0.25em] text-ink-dim"
-      style={{ [edge]: 0, writingMode: 'vertical-rl', transform: edge === 'left' ? 'rotate(180deg)' : undefined }}
-    >
-      {label}
-    </span>
-  )
-}
-
+/**
+ * An arena: the opponent's half over yours, and its name across the gap between them, as bare text
+ * with nothing behind it but the page's starfield.
+ */
 function Arena({ state, arena, playerInteraction, opponentInteraction, scale }: {
   state: GameState
   arena: 'ground' | 'space'
@@ -258,11 +249,14 @@ function Arena({ state, arena, playerInteraction, opponentInteraction, scale }: 
   opponentInteraction: (unit: UnitState) => UnitInteraction
   scale: BoardScale
 }) {
+  const gap = BOARD_SCALE[scale].arenaGap
   return (
-    <div role="region" aria-label={arena === 'space' ? 'Space arena' : 'Ground arena'} className="relative flex min-w-0 flex-col" style={{ gap: BOARD_SCALE[scale].arenaGap }}>
+    <div role="region" aria-label={arena === 'space' ? 'Space arena' : 'Ground arena'} className="flex min-w-0 flex-col">
       <PhoneArena state={state} side="opponent" arena={arena} unitInteraction={opponentInteraction} scale={scale} />
+      <span aria-hidden="true" className="flex-none text-center text-[9px] tracking-[0.25em] text-ink-dim" style={{ height: gap, lineHeight: `${gap}px` }}>
+        {arena.toUpperCase()}
+      </span>
       <PhoneArena state={state} side="player" arena={arena} unitInteraction={playerInteraction} scale={scale} />
-      <ArenaLabel label={arena === 'space' ? 'SPACE' : 'GROUND'} edge={arena === 'space' ? 'left' : 'right'} />
     </div>
   )
 }
@@ -788,7 +782,7 @@ export function PhoneGameLayout({ state, scale, log, prompt, attacker, actions, 
     <div data-testid="round-phase" className={phone ? 'px-0.5 pt-0.5 text-[15px]' : 'flex-1 self-center pl-1 text-[17px]'}>Round {state.round} · {phase}</div>
   )
   const actionPrompt = (
-    <div data-testid="action-prompt" className={`min-h-0 overflow-y-auto text-ink-dim ${phone ? 'flex-1 text-xs leading-4' : 'text-sm leading-[19px]'}`}>
+    <div data-testid="action-prompt" className={`min-h-0 overflow-y-auto text-ink-dim ${phone ? 'flex-1 text-xs leading-4' : 'text-sm leading-[19px]'}`} style={{ paddingLeft: S.promptInset, paddingRight: S.promptInset }}>
       <DescribedParts state={state} parts={prompt ?? idlePrompt(state, attacker, scale)} />
     </div>
   )

@@ -729,7 +729,8 @@ The board is drawn with art-dominant cards, not text rows:
   strip reads down opponent leader, opponent base, your base, your leader, so the bases meet at the
   **battlefront** and the leaders are outermost. The opponent's half of each arena grows up from
   the gap and yours down from it, so both front rows meet in the middle, and
-  `boardLayout.orderUnits` keeps Sentinels at the front. Each base shows either the **damage it has taken** counting up to the card's HP (the
+  `boardLayout.orderUnits` keeps Sentinels at the front. The gap (`arenaGap`) holds the arena's
+  name, SPACE or GROUND, as bare text with only the page's starfield behind it. Each base shows either the **damage it has taken** counting up to the card's HP (the
   default) or the **health remaining** counting down, per the `baseHealthDisplay` setting,
   as a large number overlaid on the card (PWA game-screen style: light weight, accent glow,
   ~50% of card height). The HP is read from the card (dynamic, never a hardcoded 30) and the
@@ -755,7 +756,8 @@ The board is drawn with art-dominant cards, not text rows:
   prompt; the action buttons) beside the board, with the hand under it. The prompt is plain text
   hung straight under the opponent's summary, whose heading holds one height with or without a
   pill, so neither the prompt's length nor a pill changing hands moves where it starts; it
-  scrolls when it overflows. On a phone it fits
+  scrolls when it overflows. Its text is inset at both sides (`promptInset`, 12px and 24px), so
+  it runs no wider than the opponent's counts above it read. On a phone it fits
   844×390 without scrolling and the log is `GameLogDrawer`, a left panel opened from Log; on the
   desktop the log is docked in the column under the prompt, filling what the column leaves, and
   there is no Log button. Both group `LogEntry`s by their `round` (0 is setup) with outcomes

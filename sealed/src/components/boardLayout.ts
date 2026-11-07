@@ -42,7 +42,9 @@ export function orderUnits(state: GameState, units: UnitState[], anchor: 'top' |
  * - `unit`: a unit's square slot and its card's short edge, four to a row, and five once crowded;
  *   `unitStat` the diameter of its power and HP.
  * - `centre`: the centre strip's width, and `centreCard` the short edge of a leader or base in it.
- * - `arenaGap`: the gap between the two sides' halves of an arena.
+ * - `arenaGap`: the gap between the two sides' halves of an arena, where the arena's name runs.
+ * - `promptInset`: the prompt's padding at each side, so its text runs no wider than the opponent's
+ *   counts above it read.
  * - `handCard`, `handRow`, `handWidth`: a hand card's short edge, the hand row's height, and the
  *   width the row may fill before a long hand fans.
  */
@@ -50,13 +52,13 @@ export const BOARD_SCALE = {
   phone: {
     pad: 8, gap: 10, column: 196,
     unit: { normal: { slot: 56, card: 40 }, crowded: { slot: 45, card: 32 } }, unitStat: 14,
-    centre: 84, centreCard: 50, arenaGap: 18,
+    centre: 84, centreCard: 50, arenaGap: 18, promptInset: 12,
     handCard: 60, handRow: 88, handWidth: 600,
   },
   desktop: {
     pad: 16, gap: 16, column: 300,
     unit: { normal: { slot: 84, card: 60 }, crowded: { slot: 68, card: 48 } }, unitStat: 20,
-    centre: 125, centreCard: 84, arenaGap: 22,
+    centre: 125, centreCard: 84, arenaGap: 22, promptInset: 24,
     handCard: 90, handRow: 132, handWidth: 900,
   },
 } as const
