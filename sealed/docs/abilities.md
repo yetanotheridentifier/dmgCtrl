@@ -160,7 +160,7 @@ ability: the unit is hidden as it arrives.
 
 ### Trigger points
 
-`whenPlayed`, `onAttack`, `whenUnitAttacks`, `onAttackEnd`, `onDefense`, `whenHealed`, `whenDefeated`, `whenReadies`,
+`whenPlayed`, `onAttack`, `whenUnitAttacks`, `onAttackEnd`, `onDefense`, `whenHealed`, `whenBaseHealed`, `whenDefeated`, `whenReadies`,
 `whenReadyStep`, `whenEnemyUnitReadies`, `whenDrawn`, `whenDiscard`, `whenDiscarded`, `whenReveal`, `whenUnitLeavesPlay`, `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayUnit`, `whenCreateUnit`, `whenFriendlyEntersPlay`,
 `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenThisUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
@@ -210,6 +210,10 @@ surviving units (Luthen Rael).
 `whenHealed` ("when 1 or more damage is healed from this unit", Silver Angel) fires on the healed unit
 from `healUnit`, which is the one place a unit is healed, with what the heal actually removed in
 `ctx.amountHealed` (Baze Malbus deals that much). A heal that removes nothing raises nothing.
+`whenBaseHealed` ("when you heal damage from your base", Darth Sidious) is the same for a base: raised
+by `healBase`, the one place a base is healed, on the base owner's units, once per heal, with what it
+removed in `ctx.amountHealed`. Restore is an On Attack that heals through `healBase`, so a Restore
+unit's own heal raises it inside the On Attack batch, and its ability resolves before combat damage.
 
 `whenReadyStep` ("when you ready cards during the regroup phase", Millennium Falcon) is the player's
 ready step, raised on every unit they control whether or not it was exhausted, in the same batch as
@@ -497,6 +501,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `preventUnitDamage` | stops some of an instance of damage, with nothing to decide |
 | `suppressesBaseHealing` | bases can't be healed while this card is in play |
 | `readiesInRegroup` | whether this unit readies at regroup; absent means it does |
+| `extraRegroupDraw` | its controller draws this many more at regroup (Admiral Holdo); copies add up, and a search's simulated regroup draws them too |
 | `survivesNoHp` | the unit isn't defeated by having no remaining HP while this holds; the state-based sweep defeats it once it stops |
 | `cannotReady` | the unit readies neither at regroup nor by an ability (Frozen in Carbonite) |
 | `ifYouDo` | the rest of an ability after a choice partway through it (see [choices.md](choices.md)) |

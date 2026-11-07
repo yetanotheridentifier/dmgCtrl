@@ -3,6 +3,7 @@ import { resolve } from '../engine/resolve'
 import { effectiveCost, legalMoves } from '../engine/legalMoves'
 import { unitHasKeyword } from '../engine/keywords'
 import { defeatUnit } from '../engine/combat'
+import { healBase } from '../engine/effects'
 import { effectiveHp, effectivePower } from '../engine/stats'
 import { normaliseCard } from '../engine/cardDb'
 import { poolFor } from '../bench/setPools'
@@ -22,7 +23,7 @@ const real = (id: string): EngineCard => {
   if (!row) throw new Error(`${id} is not in the IC27 fixture`)
   return { ...normaliseCard(row), id }
 }
-const BUILT = ['IC27_022', 'IC27_024', 'IC27_071', 'IC27_079', 'IC27_099', 'IC27_103', 'IC27_146', 'IC27_187', 'IC27_166', 'IC27_168']
+const BUILT = ['IC27_022', 'IC27_024', 'IC27_026', 'IC27_038', 'IC27_071', 'IC27_079', 'IC27_099', 'IC27_103', 'IC27_146', 'IC27_187', 'IC27_166', 'IC27_168']
 const LEADERS = ['IC27_001', 'IC27_008']
 const src = (id: string, over: Partial<EngineCard> = {}) => card({ id, type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 3, ...over })
 const F: Record<string, EngineCard> = {
@@ -278,5 +279,57 @@ describe('IC27_008 Princess Leia: draw a card, then put a card from your hand on
 
   it('back: On Attack', () => {
     placed(attackBase(back('IC27_008', { hand: ['TOUGH'], deck: ['PLAIN', 'IMP'] }), 'L'))
+  })
+})
+
+// ── The two cards that each needed an engine hook ───────────────────────────────────────────────────
+
+describe('IC27_026 Darth Sidious: Restore 3; when you heal damage from your base, deal that much damage to an enemy unit', () => {
+  const damaged = (damage: number): Side => ({ base: { ...player().base, damage }, units: [unit('sid', 'IC27_026')] })
+  const enemies = { units: [unit('e', 'TOUGH'), unit('f', 'TOUGH')] }
+
+  it('his own Restore heals first, then the trigger deals that much to an enemy unit, both before combat damage', () => {
+    const s = attackBase(board(damaged(5), enemies), 'sid')
+    // Restore has healed; the trigger waits on its target; combat damage has not been dealt.
+    expect(ownBase(s)).toBe(2)
+    expect(choice(s)).toMatchObject({ kind: 'selectDamageTarget', amount: 3, unitTargets: ['e', 'f'], baseTargets: [] })
+    expect(declinable(s)).toBe(false)
+    expect(baseDamage(s)).toBe(0)
+    const done = accept(s, { targetInstanceId: 'e' })
+    expect([U(done, 'e')!.damage, U(done, 'f')!.damage, baseDamage(done)]).toEqual([3, 0, 5])
+  })
+
+  it('fires for any heal of your base, with the amount actually healed', () => {
+    expect(choice(healBase(board(damaged(2), enemies), 'player', 5))).toMatchObject({ kind: 'selectDamageTarget', amount: 2 })
+  })
+
+  it("does not fire when nothing is healed, for the opponent's base, or with no enemy unit", () => {
+    noChoice(healBase(board(damaged(0), enemies), 'player', 3))
+    noChoice(healBase(board(damaged(2), { ...enemies, base: { ...player().base, damage: 4 } }), 'opponent', 3))
+    const alone = healBase(board(damaged(4)), 'player', 3)
+    noChoice(alone)
+    expect(ownBase(alone)).toBe(1)
+  })
+})
+
+describe('IC27_038 Admiral Holdo: draw 1 more card during the regroup phase', () => {
+  const deck = ['PLAIN', 'PLAIN', 'PLAIN', 'PLAIN']
+  const toRegroup = (mine: Side, theirs: Side = {}, over: Partial<GameState> = {}) =>
+    resolve(board({ deck, ...mine }, { deck, ...theirs }, { consecutivePasses: 1, ...over }), { type: 'pass' })
+  const handSizes = (s: GameState) => [s.players.player.hand.length, s.players.opponent.hand.length]
+
+  it('her controller draws 3 at regroup, the other player 2', () => {
+    expect(handSizes(toRegroup({ units: [unit('h', 'IC27_038')] }))).toEqual([3, 2])
+    expect(handSizes(toRegroup({}, { units: [unit('h', 'IC27_038')] }))).toEqual([2, 3])
+  })
+
+  it('a deck one card short of the larger draw costs 3 base damage', () => {
+    const s = toRegroup({ units: [unit('h', 'IC27_038')], deck: ['PLAIN', 'PLAIN'] })
+    expect([s.players.player.hand.length, ownBase(s)]).toEqual([2, 3])
+  })
+
+  it("the search's simulated regroup draws the extra card too", () => {
+    const s = toRegroup({ units: [unit('h', 'IC27_038')] }, {}, { simulatedRegroup: true })
+    expect(handSizes(s)).toEqual([3, 2])
   })
 })

@@ -1285,7 +1285,7 @@ export interface TriggerContext {
    * registration compares this against `ctx.owner` ("a friendly unit attacks" or "an enemy unit attacks").
    */
   attackingPlayer?: PlayerId
-  /** `whenHealed`: how much damage the heal actually removed from the unit. */
+  /** `whenHealed`, `whenBaseHealed`: how much damage the heal actually removed from the unit or base. */
   amountHealed?: number
   /** `whenDrawCards`: how many cards that one draw event drew. Fires once per event, not per card. */
   cardsDrawn?: number

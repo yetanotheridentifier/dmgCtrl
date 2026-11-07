@@ -27,6 +27,9 @@ export type TriggerPoint =
   // "When 1 or more damage is healed from this unit" (Silver Angel): fires on the healed unit from
   // `healUnit`, the one place a unit is healed, with what was removed in `ctx.amountHealed`.
   | 'whenHealed'
+  // "When you heal damage from your base" (Darth Sidious): fires on the base owner's units from
+  // `healBase`, the one place a base is healed, with what was removed in `ctx.amountHealed`.
+  | 'whenBaseHealed'
   // "When a friendly unit's attack ends": fires for every unit the attacker's
   // controller has (and their undeployed leader), not just the attacker — distinct from
   // `onAttackEnd` ("when THIS unit's attack ends", the attacker only).
@@ -426,6 +429,8 @@ export interface CardDefinition {
   preventUnitDamage?: (state: GameState, self: UnitState, target: UnitState, amount: number, ctx: DamagePreventionContext) => number
   /** "Bases can't be healed" (Confederate Tri-Fighter) — both players' bases, as the card reads. */
   suppressesBaseHealing?: (state: GameState, source: UnitState) => boolean
+  /** "Draw N more cards during the regroup phase" (Admiral Holdo), for this unit's controller. Copies add up. */
+  extraRegroupDraw?: number
   /** Whether this unit readies in the regroup phase; absent means it does (Rampart needs 4 power). */
   readiesInRegroup?: (state: GameState, unit: UnitState) => boolean
   /** "This unit isn't defeated by having no remaining HP" while this holds (Chirrut Îmwe, during the action phase). */

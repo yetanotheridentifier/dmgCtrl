@@ -2477,6 +2477,8 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // IC27's own units on existing effects.
   { id: 'IC27_022', name: 'Moff Gideon' },
   { id: 'IC27_024', name: 'Grand Admiral Thrawn' },
+  { id: 'IC27_026', name: 'Darth Sidious' },
+  { id: 'IC27_038', name: 'Admiral Holdo' },
   { id: 'IC27_071', name: 'Avar Kriss' },
   { id: 'IC27_079', name: 'Qui-Gon Jinn' },
   { id: 'IC27_099', name: 'Eighth Brother' },

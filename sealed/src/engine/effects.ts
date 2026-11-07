@@ -792,8 +792,11 @@ export function returnResourceToHand(state: GameState, controller: PlayerId, ind
 export function healBase(state: GameState, player: PlayerId, amount: number): GameState {
   const p = state.players[player]
   if (p.base.damage === 0 || amount <= 0 || baseHealingSuppressed(state)) return state
-  // Recorded here, the one place a base is healed, so every source of healing counts.
-  return recordBaseHealed({ ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: Math.max(0, p.base.damage - amount) } } } }, player)
+  // Recorded and raised here, the one place a base is healed, so every source of healing counts.
+  const amountHealed = Math.min(amount, p.base.damage)
+  const healed = recordBaseHealed({ ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage - amountHealed } } } }, player)
+  // "When you heal damage from your base" (Darth Sidious), once per heal, with what it removed.
+  return fireBatch(healed, collectUnitsTrigger(healed, 'whenBaseHealed', player, { amountHealed }))
 }
 
 /**

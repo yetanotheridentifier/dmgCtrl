@@ -10816,6 +10816,11 @@ registerCard('JTL_062', { abilities: [{ trigger: 'whenHealed', description: 'Whe
   damageChoice(s, ctx, 1, allUnits(s).filter(u => u.arena === 'space'), [], true) }] })
 registerCard('LAW_047', { abilities: [{ trigger: 'whenHealed', description: 'When 1 or more damage is healed from this unit: You may deal that much damage to a unit.', effect: (s, ctx) => // Baze Malbus
   ((ctx.amountHealed ?? 0) > 0 ? damageChoice(s, ctx, ctx.amountHealed!, allUnits(s), [], true) : s) }] })
+// "When you heal damage from your base": `whenBaseHealed`, raised by `healBase`. His own Restore is
+// an On Attack, so it heals and this resolves inside the On Attack batch, before combat damage.
+registerCard('IC27_026', { abilities: [{ trigger: 'whenBaseHealed', description: 'When you heal damage from your base: Deal that much damage to an enemy unit.', effect: (s, ctx) => // Darth Sidious
+  ((ctx.amountHealed ?? 0) > 0 ? damageChoice(s, ctx, ctx.amountHealed!, enemyUnitsOf(s, ctx.owner)) : s) }] })
+registerCard('IC27_038', { extraRegroupDraw: 1 }) // Admiral Holdo: "Draw 1 more card during the regroup phase."
 
 // ── "When attached unit readies" ───────────────────────────────────────────────────────────────
 // The host's `whenReadies` gathers its upgrades' abilities, so this is The Conflict Within at 2.

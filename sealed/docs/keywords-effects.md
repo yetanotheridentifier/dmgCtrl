@@ -714,7 +714,9 @@ subtract from the base inline in `attack`, where no such card could ever have re
 friendly unit that was healed this phase" (Barriss Offee) counts every source of healing and nothing
 else: healing an undamaged unit heals nothing and is not recorded. `healBase` does the same for bases in
 `phaseEvents.basesHealed` ("if a base was healed this phase", Dooku's Solar Sailer): a base with no
-damage, or one that can't be healed this phase, is not recorded.
+damage, or one that can't be healed this phase, is not recorded. Each heal that removes damage raises
+`whenBaseHealed` on the base owner's units with the amount removed, and `healUnit` raises
+`whenHealed` the same way (see [abilities.md](abilities.md)).
 
 Two more phase records are written at the one place each event happens. `dealDamageToBase` adds what a
 base was actually dealt to `phaseEvents.baseDamageTaken` ("if you've dealt 3 or more damage to an enemy

@@ -3637,8 +3637,9 @@ export const UNSEEN_CARD = '__unseen__'
 /** See `GameState.simulatedRegroup` for what this models and why. */
 function simulatedRegroupFor(state: GameState, id: PlayerId): GameState {
   const p = state.players[id]
-  const missed = Math.max(0, REGROUP_DRAW - p.deck.length)
-  const taken = REGROUP_DRAW - missed
+  const count = regroupDrawCount(state, id)
+  const missed = Math.max(0, count - p.deck.length)
+  const taken = count - missed
   return updatePlayer(state, id, {
     deck: p.deck.slice(taken),
     // Drawn face down: the SIZE is public and the draw is deterministic, so modelling it is honest,
@@ -3649,13 +3650,20 @@ function simulatedRegroupFor(state: GameState, id: PlayerId): GameState {
   })
 }
 
+/** How many cards `id` draws at regroup: 2, plus "draw 1 more" from each unit they control (Admiral Holdo). */
+function regroupDrawCount(state: GameState, id: PlayerId): number {
+  return state.players[id].units.reduce((n, u) =>
+    n + abilityCardIds(state, u).reduce((m, cardId) => m + (getCardDefinition(cardId)?.extraRegroupDraw ?? 0), 0), REGROUP_DRAW)
+}
+
 function drawForRegroup(state: GameState, id: PlayerId): GameState {
   if (state.simulatedRegroup === true) return simulatedRegroupFor(state, id)
   // Draw through the shared primitive rather than building the hand inline, so "when you draw 1
   // or more cards" fires — Axe Woves' text calls the regroup draw out explicitly. `drawCards`
   // takes what it can and no-ops on an empty deck, so the shortfall is counted here.
-  const missed = Math.max(0, REGROUP_DRAW - state.players[id].deck.length)
-  const next = drawCards(state, id, REGROUP_DRAW)
+  const count = regroupDrawCount(state, id)
+  const missed = Math.max(0, count - state.players[id].deck.length)
+  const next = drawCards(state, id, count)
   if (missed === 0) return next
   const p = next.players[id]
   return updatePlayer(next, id, { base: { ...p.base, damage: p.base.damage + missed * EMPTY_DECK_DAMAGE } })
