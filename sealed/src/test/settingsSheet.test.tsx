@@ -19,13 +19,13 @@ function withMedia(matching: string[]) {
   })
 }
 
-function setup({ onClose = vi.fn(), onHelp = vi.fn(), onAppSettings = vi.fn() } = {}) {
+function setup({ onClose = vi.fn(), onHelp = vi.fn() } = {}) {
   render(
     <SettingsProvider>
-      <SettingsSheet open onClose={onClose} onHelp={onHelp} onAppSettings={onAppSettings} />
+      <SettingsSheet open onClose={onClose} onHelp={onHelp} />
     </SettingsProvider>,
   )
-  return { onClose, onHelp, onAppSettings, user: userEvent.setup() }
+  return { onClose, onHelp, user: userEvent.setup() }
 }
 
 const store = (patch: object) => localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...defaultSettings(), ...patch }))
@@ -166,10 +166,10 @@ describe('SettingsSheet', () => {
     })
   })
 
-  it('opens the app settings from its foot', async () => {
-    const { user, onAppSettings } = setup()
-    await user.click(sheet().getByRole('button', { name: 'App settings' }))
-    expect(onAppSettings).toHaveBeenCalledOnce()
+  // The PWA at the site root is a separate app with no way back into Sealed.
+  it('offers no way out to the dmgCtrl app', () => {
+    setup()
+    expect(sheet().queryByRole('button', { name: 'App settings' })).toBeNull()
   })
 
   it('closes on Close and on Escape', async () => {

@@ -1,4 +1,4 @@
-import { Button, ControlRow, SegmentedControl, Sheet, Stepper, Switch } from '@pwa-shared/controls'
+import { ControlRow, SegmentedControl, Sheet, Stepper, Switch } from '@pwa-shared/controls'
 import { useSettings } from '../hooks/useSettings'
 import { useMediaQuery, PHONE_LANDSCAPE_QUERY, PHONE_PORTRAIT_QUERY } from '../hooks/useMediaQuery'
 import { OPPONENT_DELAYS_MS } from '../data/settingsStore'
@@ -15,21 +15,16 @@ const BASE_HEALTH: { value: BaseHealthDisplay; label: string }[] = [
   { value: 'remaining', label: 'Health left' },
 ]
 
-// The PWA's Settings page. The PWA is a separate app at the site root, which opens its Settings at
-// this address (src/App.tsx there).
-const openAppSettings = () => window.location.assign('/?settings')
-
 /**
  * Sealed's own settings, in a sheet over setup or the game: opening it never routes away, which
  * would unmount `GameScreen` and the game with it, so a change applies straight away. It reads the
  * settings context directly, since a settings form has no caller-held state to be handed.
  */
-export function SettingsSheet({ open, onClose, onHelp, onAppSettings = openAppSettings }: {
+export function SettingsSheet({ open, onClose, onHelp }: {
   open: boolean
   onClose: () => void
   /** Open Help on one section of the guide, by its heading. Help opens over this sheet. */
   onHelp: (section: string) => void
-  onAppSettings?: () => void
 }) {
   const { settings, update } = useSettings()
   // The bug report is desktop only, so its switch is too.
@@ -76,7 +71,6 @@ export function SettingsSheet({ open, onClose, onHelp, onAppSettings = openAppSe
           onChange={showBugReport => update({ showBugReport })}
         />
       )}
-      <Button onClick={onAppSettings} style={{ marginTop: 'auto' }}>App settings</Button>
     </Sheet>
   )
 }

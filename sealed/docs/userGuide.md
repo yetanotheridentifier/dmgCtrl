@@ -4,7 +4,7 @@
 
 dmgCtrl Sealed lets you play Star Wars: Unlimited **Sealed** games against an AI opponent, using a deck built from your own sealed pool.
 
-The setup screen has two cards, **Your deck** and **Opponent**, and **Go to game**, which starts the game once you have chosen a deck. **Back** (the arrow at the top left) returns to dmgCtrl's game select. **More** (**⋯**) at the top right holds **Help**, **Card support** and **Settings**.
+The setup screen has two cards, **Your deck** and **Opponent**, and **Go to game**, which starts the game once you have chosen a deck. **More** (**⋯**) at the top right holds **Help**, **Card support** and **Settings**.
 
 On a first visit, with no saved decks, the **Your deck** card offers **Generate a deck** and **Import deck JSON**. Once you have saved decks, **Change deck** opens the deck sheet: each of your saved decks, with its leader's and base's aspect icons, its leader, base and set. Tap a deck to choose it, which closes the sheet; **View** beside it opens the deck first. The sheet also has **Generate a deck** and **Import deck JSON**.
 
