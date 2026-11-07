@@ -27,7 +27,7 @@ import type { Action } from '../engine/actions'
  * Printed stats, traits and keywords come from the shipped set fixtures, post-correction.
  */
 
-const SHIPPED = ['HMW_001', 'JTL_047', 'JTL_053', 'LOF_105', 'TS26_3']
+const SHIPPED = ['HMW_001', 'JTL_047', 'JTL_053', 'LOF_105', 'TS26_3', 'SEC_171', 'LAW_050']
 
 const real = (id: string): EngineCard => {
   const [set, number] = id.split('_')
@@ -151,6 +151,74 @@ describe('Asajj Ventress (HMW_001): Raid and Restore trade places for one attack
     const done = attack(used, 'a')
     expect(done.players.opponent.base.damage).toBe(2)
     expect(done.players.player.base.damage).toBe(4)
+  })
+
+  // Punishing One: "gains Raid 1 for each damaged enemy unit. On Attack: You may deal 1 damage to a
+  // unit." One enemy starts damaged; the On Attack damages the other, before combat damage.
+  const punishingBoard = () => front({ units: [unit('p', 'SEC_171')] }, { units: [unit('d', 'GRD', { damage: 1 }), unit('e', 'GRD')] })
+
+  it("Punishing One's On Attack resolves before combat damage on a normal attack", () => {
+    const raised = attack(punishingBoard(), 'p')
+    expect(raised.players.opponent.base.damage, 'no combat damage before the On Attack').toBe(0)
+    const done = accept(raised, { targetInstanceId: 'e' })
+    expect(done.players.opponent.base.damage).toBe(3 + 2) // two damaged enemies: Raid 2
+  })
+
+  // Restore is "when this unit attacks", so it triggers with the On Attack and its controller orders
+  // the two. Resolved after the On Attack, it reads the Restore the On Attack left behind.
+  const viaAsajj = () => {
+    const raised = attack(resolve(punishingBoard(), { type: 'useLeaderAbility', index: 0 }), 'p')
+    expect(raised.players.opponent.base.damage, 'no combat damage before the On Attack').toBe(0)
+    expect(raised.players.player.base.damage, 'Restore waits its turn in the batch').toBe(6)
+    const order = choice(raised)
+    expect(order.kind).toBe('chooseNextTrigger')
+    return { raised, order: order as Extract<PendingChoice, { kind: 'chooseNextTrigger' }> }
+  }
+
+  it('under her action, Restore resolved after the On Attack heals what the On Attack made it', () => {
+    const { raised, order } = viaAsajj()
+    const first = accept(raised, { optionIndex: order.candidates.findIndex(c => c.cardId === 'SEC_171') })
+    const done = accept(first, { targetInstanceId: 'e' })
+    expect(done.players.opponent.base.damage).toBe(3) // the Raid is Restore
+    expect(done.players.player.base.damage).toBe(4) // Restore 2: two damaged enemies by then
+  })
+
+  it('under her action, Restore resolved first heals what it is as the attack begins', () => {
+    const { raised, order } = viaAsajj()
+    const first = accept(raised, { optionIndex: order.candidates.findIndex(c => c.cardId !== 'SEC_171') })
+    expect(first.players.player.base.damage).toBe(5) // Restore 1
+    const done = accept(first, { targetInstanceId: 'e' })
+    expect(done.players.opponent.base.damage).toBe(3)
+    expect(done.players.player.base.damage).toBe(5)
+  })
+
+  // Honnah: Raid 2 and Restore 2. "Replace any Raid with Restore, or vice versa" is one direction,
+  // and with both on the attacker the player chooses which.
+  const honnah = () => resolve(front({ units: [unit('h', 'LAW_050')] }), { type: 'useLeaderAbility', index: 0 })
+  const swapChoice = (s: GameState) => {
+    const raised = attack(s, 'h')
+    expect(choice(raised)).toMatchObject({ kind: 'chooseMode', labels: ['Replace Raid with Restore', 'Replace Restore with Raid'] })
+    expect(raised.players.player.base.damage, 'nothing heals before the choice').toBe(6)
+    return raised
+  }
+
+  it('an attacker with only one of the two is not asked', () => {
+    const s = front({ units: [unit('a', 'RAID2')] })
+    const used = resolve(s, { type: 'useLeaderAbility', index: 0 })
+    expect(attack(used, 'a').pendingChoices ?? []).toEqual([])
+  })
+
+  it('an attacker with both Raid and Restore lets the player make it Restore 4', () => {
+    const raised = swapChoice(honnah())
+    const done = accept(raised, { optionIndex: 0 })
+    expect(done.players.opponent.base.damage).toBe(3) // no Raid left
+    expect(done.players.player.base.damage).toBe(2) // 6 - (2 + 2) restored
+  })
+
+  it('or make it Raid 4', () => {
+    const done = accept(swapChoice(honnah()), { optionIndex: 1 })
+    expect(done.players.opponent.base.damage).toBe(3 + 4)
+    expect(done.players.player.base.damage).toBe(6)
   })
 
   it('her own Restore 2 becomes Raid 2 when she is the one attacking under her back action', () => {

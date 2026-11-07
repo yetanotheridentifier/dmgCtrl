@@ -125,6 +125,11 @@ attaching the Shield as the unit arrives would settle the order before anyone co
 A deploying leader brings the same three to its own arrival batch (`collectDeployKeywords`), where
 they are ordered with its When Deployed.
 
+**Restore is an On Attack ability the same way** (`KEYWORD_RESTORE`): "when this unit attacks, heal N"
+triggers with the unit's On Attack abilities and is ordered with them. It reads N as it resolves, so an
+On Attack resolved first can change what it heals (Punishing One's Raid, read as Restore under Asajj
+Ventress, grows with the enemy it damages). It also `yieldsOrder`.
+
 **Shielded leads the batch.** Collection order is the order abilities resolve in wherever nobody is
 asked, and the answer a bot gives when it cannot separate the options, so the Shield arrives first
 unless its controller says otherwise. It also declares `yieldsOrder` on its `AbilityDef`: the ability
@@ -474,7 +479,8 @@ Card-type-agnostic, all on `CardDefinition`:
 | `insteadOfDefeat` | the hosts a unit may attach to instead of being defeated, its controller choosing (L3-37); see `keywords-effects.md` "Piloting" |
 | `conditionalKeywords` | extra keywords, folded into `unitKeywords` |
 | `suppressedKeywords` | keywords removed while a condition holds |
-| `swappedKeywords` | pairs of keyword names traded for one another, renamed over the finished list (Asajj Ventress); see `keywords-effects.md` |
+| `swappedKeywords` | keyword names replaced by others, one direction per pair, renamed over the finished list (Asajj Ventress); see `keywords-effects.md` |
+| `whenLent` | on a rider lent to an attacker: a question put as the attack is declared, answered before its batch resolves (Asajj Ventress with a Raid and Restore attacker) |
 | `statModifier` | power/HP deltas, folded into `effectivePower`/`effectiveHp` |
 | `aura` | power/HP/keywords granted to **other** units |
 | `damageMultiplier` | scales each incoming damage instance |

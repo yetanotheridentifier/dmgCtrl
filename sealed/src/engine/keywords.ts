@@ -66,16 +66,12 @@ export function unitKeywords(state: GameState, unit: UnitState, ctx?: StatModCon
 
 /**
  * Keyword names a card currently exchanges on its unit, as a lookup from each name to the one it is
- * read as (Asajj Ventress trades Raid for Restore and Restore for Raid, for one attack). Each pair
- * registers in both directions, which is what "or vice versa" asks for.
+ * read as (Asajj Ventress trades Raid for Restore and Restore for Raid, for one attack).
  */
 function keywordSwapsOf(state: GameState, unit: UnitState): Map<string, string> {
   const swaps = new Map<string, string>()
   for (const cardId of abilityCardIds(state, unit)) {
-    for (const [from, to] of getCardDefinition(cardId)?.swappedKeywords?.(state, unit) ?? []) {
-      swaps.set(from, to)
-      swaps.set(to, from)
-    }
+    for (const [from, to] of getCardDefinition(cardId)?.swappedKeywords?.(state, unit) ?? []) swaps.set(from, to)
   }
   return swaps
 }

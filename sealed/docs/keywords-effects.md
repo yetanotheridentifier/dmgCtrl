@@ -136,9 +136,14 @@ CardDefinition.swappedKeywords?: (state, unit) => [from, to][]
 ```
 
 "For this attack, replace any Raid it has or gains with Restore, or vice versa" (Asajj Ventress).
-Each pair is registered in both directions and applied as a **rename over the unit's finished keyword
+Each pair is one direction, `from` read as `to`, applied as a **rename over the unit's finished keyword
 list**, after every grant and every removal: each instance keeps its numeral and answers to the other
 name, so a Raid 2 reads as Restore 2 wherever Restore is read.
+
+"Or vice versa" is one direction or the other, not both at once. Asajj's rider lists both pairs, which
+is the same thing on a unit with only one of the two. An attacker with both asks its controller which
+as the attack is declared (`whenLent`, a `chooseMode` answered before the attack's batch resolves), and
+the answer swaps the rider for a one-way one: Honnah's Raid 2 and Restore 2 become Restore 4 or Raid 4.
 
 Running last is what makes "has **or gains**" true. The alternative, granting the counterpart and
 suppressing the original, has to read the old numeral before hiding it, and suppression is by name
