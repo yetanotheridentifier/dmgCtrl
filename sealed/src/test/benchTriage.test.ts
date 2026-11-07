@@ -506,6 +506,15 @@ describe('cross-set reprints', () => {
     expect(r.buckets.ability).toBe(2)
   })
 
+  it('does not pair two cards of one name whose stats differ, since one id would play both as one', () => {
+    // Superlaser Technician: SOR_083 is 2/1, SHD_085 is 2/3, with the same text.
+    const r = triage([
+      card({ ...reprinted, Set: 'SOR', Number: '10', Power: '2', HP: '1' }),
+      card({ ...reprinted, Set: 'SHD', Number: '55', Power: '2', HP: '3' }),
+    ])
+    expect(r.reprints).toEqual([])
+  })
+
   it('ignores a card printed once', () => {
     expect(triage([card({ ...reprinted, Set: 'SOR', Number: '10' })]).reprints).toEqual([])
   })

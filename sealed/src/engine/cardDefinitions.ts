@@ -2489,7 +2489,6 @@ registerCard('SHD_230', attackWithRider('Attack with a space unit. It gains Sabo
 const GRANT_OUTFLANK = 'GRANT_OUTFLANK'
 registerCard(GRANT_OUTFLANK, { abilities: [thenAttack('Then, attack with a second unit.')] })
 registerCard('TWI_123', attackWithRider('Attack with 2 units (one at a time).', GRANT_OUTFLANK)) // Outflank
-registerCard('SHD_128', attackWithRider('Attack with 2 units (one at a time).', GRANT_OUTFLANK)) // Outflank
 
 const GRANT_ATTACK_RUN = 'GRANT_ATTACK_RUN'
 registerCard(GRANT_ATTACK_RUN, { sourceCardId: 'JTL_261', abilities: [thenAttack('Then, attack with a second space unit.', { attacker: { arena: 'space' } })] })
@@ -4323,7 +4322,6 @@ registerCard('SOR_123', searchDrawWp('Search the top 5 cards of your deck for a 
 const prepareForTakeoff = searchDrawWp('Search the top 8 cards of your deck for up to 2 Vehicle units, reveal them, and draw them.', 8,
   (c, s, ctx) => printedUnit(c) && heldTrait(s, ctx.owner, c, 'Vehicle'), 2)
 registerCard('JTL_128', prepareForTakeoff) // Prepare for Takeoff
-registerCard('SOR_125', prepareForTakeoff) // Prepare For Takeoff (the same card, printed with a capital F)
 registerCard('SHD_093', searchDrawWp('Search the top 5 cards of your deck for up to 3 units, reveal them, and draw them.', 5, printedUnit, 3)) // Remnant Reserves
 registerCard('SHD_253', searchDrawWp('Search the top 8 cards of your deck for up to 2 Mandalorian and/or upgrade cards, reveal them, and draw them.', 8, // This Is The Way
   (c, s, ctx) => c?.type === 'upgrade' || heldTrait(s, ctx.owner, c, 'Mandalorian'), 2))
@@ -4922,7 +4920,6 @@ const resourceFromDiscard = (s: GameState, pile: PlayerId, controller: PlayerId,
 const resourceThisEvent = (s: GameState, ctx: { owner: PlayerId; cardId: string }): GameState => resourceFromDiscard(s, ctx.owner, ctx.owner, ctx.cardId)
 const resupply = whenPlayed('Put this event into play as a resource.', (s, ctx) => resourceThisEvent(s, ctx))
 registerCard('TWI_127', resupply) // Resupply
-registerCard('SOR_126', resupply) // Resupply
 registerCard('LAW_171', whenPlayed('Resource this event and the top card of your deck.', (s, ctx) => // Stockpile
   resourceTopOfDeck(resourceThisEvent(s, ctx), ctx.owner)))
 
@@ -7100,7 +7097,6 @@ const takeCaptive = captureGuardianTargetWp(
   false,
 )
 registerCard('SHD_131', takeCaptive) // Take Captive
-registerCard('TWI_128', takeCaptive) // Take Captive (reprint)
 registerCard('TS26_61', {
   costModifier: (s, p) => -s.players[p].units.length,
   ...captureGuardianTargetWp(
@@ -7471,7 +7467,7 @@ const resourceDefeated = (ready: boolean) => (s: GameState, ctx: { owner: Player
 const superlaserTechnician = defeated(mayPayWp('You may put this unit into play as a resource and ready it.', 0, 'put this unit into play as a resource and ready it', resourceDefeated(true)))
 registerCard('LAW_159', defeated(mayPayWp("You may resource this unit from its owner's discard pile.", 0, "resource this unit from its owner's discard pile", resourceDefeated(false)))) // Expendable Mercenary
 registerCard('SHD_085', superlaserTechnician) // Superlaser Technician
-registerCard('SOR_083', superlaserTechnician) // Superlaser Technician (a different card with the same text: 2/1 rather than 2/3)
+registerCard('SOR_083', superlaserTechnician) // Superlaser Technician (a different card with the same text: 2/1 rather than 2/3, so not a line in data/reprints.ts)
 
 // C: the next unit played, and a constant ability alongside
 registerCard('SEC_261', defeated(whenPlayed('The next Official unit you play this phase costs 1 less.', (s, ctx) => // Inspiring Senator
@@ -7739,7 +7735,6 @@ registerCard('LOF_055', { // Dume
 })
 const tagge = expUpTo('Give an Experience token to each of up to 3 Trooper units.', 3, 'give an Experience token to a Trooper unit (up to 3)', pickTrait('Trooper'))
 registerCard('SHD_081', tagge) // General Tagge
-registerCard('SOR_080', tagge) // General Tagge, the SOR printing: same text, a separate card id
 registerCard('LOF_099', expUpTo('You may give an Experience token to each of up to 3 Force units.', 3, 'give an Experience token to a Force unit (up to 3)', pickTrait('Force'))) // Paladin Training Corvette
 registerCard('SEC_124', expUpTo('Give an Experience token to each of up to 3 Official units.', 3, 'give an Experience token to an Official unit (up to 3)', pickTrait('Official'))) // Budget Scheming
 registerCard('LOF_241', expUpTo('Give an Experience token to each of up to 3 friendly units with Hidden.', 3, 'give an Experience token to a friendly unit with Hidden (up to 3)', // In the Shadows
@@ -7999,7 +7994,6 @@ const quadjumper = onAttack(mayPayWp("You may reveal the top card of your deck. 
     return top !== undefined && !printedUnit(s.cards[top]) ? expChoice(s, ctx, pickedIds(s, ctx, pickOther), 1, false, `${ctx.sourceInstanceId}-exp`) : s
   }))
 registerCard('LAW_115', quadjumper) // Rickety Quadjumper
-registerCard('SHD_057', quadjumper) // Rickety Quadjumper, the SHD printing: same text, a separate card id
 registerCard('LAW_152', onAttack(expWp('You may give an Experience token to another non-leader unit that shares a Trait with a friendly leader.', // C-3P0
   pickAll(pickOther, nonLeader, (s, u, ctx) => {
     const leaderTraits = leaderTraitsOf(s, ctx.owner).map(t => t.toLowerCase())
@@ -9300,7 +9294,6 @@ registerCard('HMW_176', gains(withBase('Endor'), HIDDEN, KW.saboteur)) // Villag
 registerCard('HMW_256', { statModifier: (s, u) => (resourcesOf(s, u) >= 6 ? { power: 2 } : {}) }) // Jedi Interceptor
 registerCard('HMW_257', gains(another(printedCostOf(c => c <= 3)), KW.ambush)) // Ewok Archers
 registerCard('HMW_259', gains((_s, u) => !u.exhausted, KW.sentinel)) // Pack Guardian
-registerCard('HMW_096', gains(anyHost, KW.restore(2))) // Devotion
 registerCard('HMW_190', gains(anyHost, KW.raid(2))) // Enraged
 registerCard('HMW_191', gains(isTrait('Creature'), KW.grit)) // Hunter's Instinct
 registerCard('HMW_235', { attachRestriction: (s, t) => nonVehicle(s, t) && effectivePower(s, t) <= 3 }) // Gaderffii Stick

@@ -47,7 +47,7 @@ const F = {
   JTL_228: ev('JTL_228'), JTL_123: ev('JTL_123'), JTL_174: ev('JTL_174'), JTL_193: ev('JTL_193'),
   JTL_231: ev('JTL_231'), JTL_177: ev('JTL_177', 2), JTL_124: ev('JTL_124'), JTL_156: ev('JTL_156'),
   TWI_139: ev('TWI_139'), TWI_172: ev('TWI_172', 2), TWI_123: ev('TWI_123'), SHD_179: ev('SHD_179'),
-  SHD_145: ev('SHD_145', 2), SHD_128: ev('SHD_128'), SHD_230: ev('SHD_230'), SOR_150: ev('SOR_150'),
+  SHD_145: ev('SHD_145', 2), SHD_230: ev('SHD_230'), SOR_150: ev('SOR_150'),
   SOR_103: ev('SOR_103'), TS26_59: ev('TS26_59', 3), TS26_31: ev('TS26_31'),
   SOR_215: card({ id: 'SOR_215', type: 'upgrade', cost: 1, power: 1, hp: 1 }),
 }
@@ -179,8 +179,8 @@ describe('attack events that change the defender', () => {
 // ── Several attacks one at a time ───────────────────────────────────────────────────────────────
 
 describe('attack events with several attacks', () => {
-  it.each(['TWI_123', 'SHD_128'])('Outflank (%s) attacks with two units, one at a time', id => {
-    const played = play(board(id, [unit('a', 'GRD'), unit('b', 'GRD')], []))
+  it('Outflank attacks with two units, one at a time', () => {
+    const played = play(board('TWI_123',[unit('a', 'GRD'), unit('b', 'GRD')], []))
     const first = hitBase(played, 'a')
     expect(attackers(first)).toEqual(['b'])
     const done = hitBase(first, 'b')

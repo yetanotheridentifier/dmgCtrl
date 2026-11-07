@@ -22,7 +22,20 @@ const setOf = (id: string) => id.split('_')[0]
 describe('the cross-set reprint table', () => {
   it('gives every canonical id, and every printing, as a real card of that name in its set', () => {
     for (const { name, canonical, printings } of REPRINTS) {
-      for (const id of [canonical, ...printings]) expect(BY_ID.get(id)?.Name, id).toBe(name)
+      // Case-insensitive: SOR prints "Prepare For Takeoff" where JTL prints "Prepare for Takeoff".
+      for (const id of [canonical, ...printings]) expect(BY_ID.get(id)?.Name?.toLowerCase(), id).toBe(name.toLowerCase())
+    }
+  })
+
+  it('pairs only printings with the canonical stats, since every printing plays as the canonical card', () => {
+    // A field one listing leaves blank is not a difference: SOR's listing gives no stats for upgrades.
+    for (const { canonical, printings } of REPRINTS) {
+      for (const id of printings) {
+        for (const field of ['Cost', 'Power', 'HP'] as const) {
+          const [a, b] = [BY_ID.get(canonical)?.[field], BY_ID.get(id)?.[field]]
+          if (a != null && b != null) expect(b, `${id} ${field}`).toBe(a)
+        }
+      }
     }
   })
 
@@ -55,6 +68,23 @@ describe('reprintCanonicalId', () => {
   it('resolves the printings behind #551', () => {
     expect(reprintCanonicalId('SEC_258')).toBe('ASH_258') // Grassroots Resistance
     expect(reprintCanonicalId('SOR_112')).toBe('ASH_122') // Consortium StarViper
+  })
+
+  it.each([
+    ['HMW_096', 'SOR_070'], // Devotion
+    ['SOR_080', 'SHD_081'], // General Tagge
+    ['SHD_128', 'TWI_123'], // Outflank
+    ['SOR_125', 'JTL_128'], // Prepare For Takeoff
+    ['SOR_126', 'TWI_127'], // Resupply
+    ['SHD_057', 'LAW_115'], // Rickety Quadjumper
+    ['TWI_128', 'SHD_131'], // Take Captive
+  ])('collapses %s onto %s', (printing, canonical) => {
+    expect(reprintCanonicalId(printing)).toBe(canonical)
+  })
+
+  it('leaves Superlaser Technician uncollapsed: SOR_083 is 2/1 and SHD_085 is 2/3, so they are two cards', () => {
+    expect(reprintCanonicalId('SOR_083')).toBeUndefined()
+    expect(reprintCanonicalId('SHD_085')).toBeUndefined()
   })
 
   it('returns undefined for a canonical id, so a caller falls back to it unchanged', () => {

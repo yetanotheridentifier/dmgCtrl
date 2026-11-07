@@ -23,7 +23,6 @@ const F: Record<string, EngineCard> = {
   SEC_212: card({ id: 'SEC_212', name: 'Libertine', type: 'unit', arena: 'space', cost: 4, power: 3, hp: 7 }),
   SHD_232: card({ id: 'SHD_232', name: 'Relentless Pursuit', type: 'event', cost: 3 }),
   SHD_131: card({ id: 'SHD_131', name: 'Take Captive', type: 'event', cost: 3 }),
-  TWI_128: card({ id: 'TWI_128', name: 'Take Captive', type: 'event', cost: 3 }),
   TS26_61: card({ id: 'TS26_61', name: 'Encircle', type: 'event', cost: 5 }),
   TWI_227: card({ id: 'TWI_227', name: 'Prisoner of War', type: 'event', cost: 4 }),
   SEC_193: card({ id: 'SEC_193', name: 'Grand Admiral Thrawn', subtitle: 'Grand Schemer', type: 'unit', arena: 'ground', cost: 7, power: 8, hp: 7 }),
@@ -129,7 +128,7 @@ describe('SHD_232 Relentless Pursuit — choose a friendly guardian; it captures
   })
 })
 
-describe('SHD_131 Take Captive (+ reprint TWI_128) — a friendly unit captures an enemy non-leader unit in the same arena', () => {
+describe('SHD_131 Take Captive: a friendly unit captures an enemy non-leader unit in the same arena', () => {
   it('filters the target by the CHOSEN guardian\'s own arena', () => {
     const s = board({ hand: ['SHD_131'], units: [unit('gf', 'GRD3', { arena: 'ground' }), unit('sf', 'SPC3', { arena: 'space' })] },
       { units: [unit('ge', 'GRD3B', { arena: 'ground' }), unit('se', 'SPC3', { arena: 'space' })] })
@@ -140,14 +139,6 @@ describe('SHD_131 Take Captive (+ reprint TWI_128) — a friendly unit captures 
     const done = accept(guardianChosen, { targetInstanceId: 'ge' })
     expect(U(done, 'ge')).toBeUndefined()
     expect(U(done, 'gf')?.captured).toEqual([{ cardId: 'GRD3B', owner: 'opponent' }])
-  })
-
-  it('TWI_128 registers the identical shape', () => {
-    const s = board({ hand: ['TWI_128'], units: [unit('gf', 'GRD3')] }, { units: [unit('ge', 'GRD3B')] })
-    const played = resolve(s, { type: 'playEvent', handIndex: 0 })
-    const guardianChosen = accept(played, { targetInstanceId: 'gf' })
-    const done = accept(guardianChosen, { targetInstanceId: 'ge' })
-    expect(U(done, 'ge')).toBeUndefined()
   })
 })
 

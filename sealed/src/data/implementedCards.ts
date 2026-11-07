@@ -536,7 +536,6 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'HMW_264', name: 'Heroic Bravery' },
   { id: 'HMW_265', name: "Twi'lek Kalikori" },
   // HMW constant abilities: A
-  { id: 'HMW_096', name: 'Devotion' },
   { id: 'HMW_190', name: 'Enraged' },
   { id: 'HMW_191', name: "Hunter's Instinct" },
   { id: 'HMW_235', name: 'Gaderffii Stick' },
@@ -765,7 +764,6 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SEC_229', name: 'Catch Unawares' },
   { id: 'SHD_230', name: 'Swoop Down' },
   { id: 'TWI_123', name: 'Outflank' },
-  { id: 'SHD_128', name: 'Outflank' },
   { id: 'JTL_261', name: 'Attack Run' },
   { id: 'SHD_145', name: 'Headhunting' },
   { id: 'JTL_124', name: 'Tandem Assault' },
@@ -787,7 +785,6 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SEC_072', name: 'Scour the Archives' },
   { id: 'SOR_123', name: 'Recruit' },
   { id: 'JTL_128', name: 'Prepare for Takeoff' },
-  { id: 'SOR_125', name: 'Prepare For Takeoff' },
   { id: 'SHD_093', name: 'Remnant Reserves' },
   { id: 'SHD_253', name: 'This Is The Way' },
   // Hands: looking, discarding, drawing, and "choose a player"
@@ -883,7 +880,6 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SOR_235', name: 'Galactic Ambition' },
   { id: 'TWI_225', name: 'Now There Are Two of Them' },
   { id: 'TWI_127', name: 'Resupply' },
-  { id: 'SOR_126', name: 'Resupply' },
   { id: 'LAW_171', name: 'Stockpile' },
   // Decks, draws and discard piles
   { id: 'SEC_232', name: "Kreia's Whispers" },
@@ -1038,7 +1034,6 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   // Capture, wave 2 (#707): a chosen guardian AND/OR a chosen target, and rescue/discard actions.
   { id: 'SHD_232', name: 'Relentless Pursuit' },
   { id: 'SHD_131', name: 'Take Captive' },
-  { id: 'TWI_128', name: 'Take Captive' },
   { id: 'TS26_61', name: 'Encircle' },
   { id: 'TWI_227', name: 'Prisoner of War' },
   { id: 'SHD_106', name: 'Rule with Respect' },
@@ -1797,7 +1792,6 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SOR_037', name: 'Academy Defense Walker' },
   { id: 'LOF_055', name: 'Dume' },
   { id: 'SHD_081', name: 'General Tagge' },
-  { id: 'SOR_080', name: 'General Tagge' },
   { id: 'LOF_099', name: 'Paladin Training Corvette' },
   // Experience tokens: D, the number of tokens is decided as the ability resolves
   { id: 'LOF_255', name: 'Curious Flock' },
@@ -1815,7 +1809,6 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LAW_039', name: 'Latts Razzi' },
   { id: 'LAW_073', name: 'Patient Hunter' },
   { id: 'LAW_115', name: 'Rickety Quadjumper' },
-  { id: 'SHD_057', name: 'Rickety Quadjumper' },
   { id: 'LAW_152', name: 'C-3P0' },
   { id: 'LOF_046', name: 'Ezra Bridger' },
   { id: 'LOF_065', name: 'Watto' },
