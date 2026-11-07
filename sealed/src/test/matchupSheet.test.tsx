@@ -22,32 +22,40 @@ function renderSheet(matchups: Matchup[]) {
 }
 
 describe('the Matchups sheet', () => {
-  it('heads the columns leader, base, opponent, games and win rate, in that order', () => {
+  it('heads the columns opponent, games and win rate, in that order', () => {
     const sheet = renderSheet([against('SOR_005', 'SOR_021', 3, 2)])
-    expect(sheet.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Leader', 'Base', 'Opponent', 'Games', 'Win rate'])
+    expect(sheet.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Opponent', 'Games', 'Win rate'])
   })
 
-  it('gives each matchup a row of leader art, base art, name, games and win rate', () => {
+  it('gives each matchup a row of the leader and base art over the name, the games over the record, and the win rate', () => {
     const sheet = renderSheet([against('SOR_005', 'SOR_021', 3, 1, 1), against('SOR_005', 'SOR_019', 0, 2)])
     const rows = sheet.getAllByTestId('matchup-row')
     expect(rows).toHaveLength(2)
-    const [leader, base, name, games, rate] = within(rows[0]).getAllByRole('cell')
-    expect(within(leader).getByTestId('card-face')).toBeInTheDocument()
-    expect(within(leader).getByRole('img', { name: CARDS['SOR_005'].name })).toBeInTheDocument()
-    expect(within(base).getByRole('img', { name: CARDS['SOR_021'].name })).toBeInTheDocument()
-    expect(name).toHaveTextContent(`${CARDS['SOR_005'].name}, ${CARDS['SOR_005'].subtitle} · Vigilance base`)
-    expect(games).toHaveTextContent(/^5$/)
+    const [opponent, games, rate] = within(rows[0]).getAllByRole('cell')
+    expect(within(opponent).getAllByTestId('card-face')).toHaveLength(2)
+    expect(within(opponent).getByRole('img', { name: CARDS['SOR_005'].name })).toBeInTheDocument()
+    expect(within(opponent).getByRole('img', { name: CARDS['SOR_021'].name })).toBeInTheDocument()
+    expect(within(opponent).getByTestId('matchup-subtitle')).toHaveTextContent(`${CARDS['SOR_005'].name}, ${CARDS['SOR_005'].subtitle} · Vigilance base`)
+    expect(games.firstChild).toHaveTextContent(/^5$/)
+    expect(within(games).getByTestId('matchup-subtitle')).toHaveTextContent(/^3 - 1 - 1$/)
     expect(rate).toHaveTextContent(/^60%$/)
     const second = within(rows[1]).getAllByRole('cell')
-    expect(within(second[1]).getByRole('img', { name: CARDS['SOR_019'].name })).toBeInTheDocument()
-    expect(second[3]).toHaveTextContent(/^2$/)
-    expect(second[4]).toHaveTextContent(/^0%$/)
+    expect(within(second[0]).getByRole('img', { name: CARDS['SOR_019'].name })).toBeInTheDocument()
+    expect(second[1]).toHaveTextContent(/^20 - 2 - 0$/)
+    expect(second[2]).toHaveTextContent(/^0%$/)
   })
 
   it('shows a grouped base by the base played in it, and names the group', () => {
     const sheet = renderSheet([against('SOR_005', 'SOR_020', 1, 0)])
-    const [, base, name] = within(sheet.getByTestId('matchup-row')).getAllByRole('cell')
-    expect(within(base).getByRole('img', { name: CARDS['SOR_020'].name })).toBeInTheDocument()
-    expect(name).toHaveTextContent(/Vigilance base$/)
+    const [opponent] = within(sheet.getByTestId('matchup-row')).getAllByRole('cell')
+    expect(within(opponent).getByRole('img', { name: CARDS['SOR_020'].name })).toBeInTheDocument()
+    expect(within(opponent).getByTestId('matchup-subtitle')).toHaveTextContent(/Vigilance base$/)
+  })
+
+  it('sets alternate rows on the band token, with no rule between rows', () => {
+    const sheet = renderSheet([against('SOR_005', 'SOR_021', 1, 0), against('SOR_005', 'SOR_019', 1, 0), against('SOR_005', 'SOR_020', 1, 0)])
+    const rows = sheet.getAllByTestId('matchup-row')
+    expect(rows.map(r => r.style.background)).toEqual(['var(--color-band)', '', 'var(--color-band)'])
+    for (const cell of sheet.getAllByRole('cell')) expect(cell.style.borderBottom).toBe('')
   })
 })

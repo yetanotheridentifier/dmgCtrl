@@ -723,7 +723,7 @@ describe('SetupScreen', () => {
           expect(within(sheet).getByTestId(`opponent-option-${other.id}`)).not.toHaveTextContent('%')
         })
 
-        it('shows the chosen opponent\'s on the opponent card, and every matchup on a sheet', async () => {
+        it('shows the chosen opponent\'s on the opponent card, with no Matchups button there', async () => {
           const user = userEvent.setup()
           const mine = boba()
           const theirs = vaderDeck()
@@ -736,10 +736,36 @@ describe('SetupScreen', () => {
 
           await waitFor(() => expect(opponentCard()).toHaveTextContent(`Your record: ${threeTwo}`))
           expect(screen.getByTestId('matchup-summary')).toHaveTextContent(`As Boba Fett, Any Methods Necessary · Cunning base: ${threeTwo}`)
-          await user.click(within(opponentCard()).getByRole('button', { name: 'Matchups' }))
+          expect(screen.queryByRole('button', { name: 'Matchups' })).not.toBeInTheDocument()
+        })
+
+        it('opens every matchup of a viewed deck from its view, and closes back to the view', async () => {
+          const user = userEvent.setup()
+          const mine = boba()
+          vaderDeck()
+          renderSetup()
+          await chooseDeck(user, mine.id)
+          await user.click(within(deckCard()).getByRole('button', { name: 'View' }))
+          await user.click(await within(dialog('Mine')).findByRole('button', { name: 'Matchups' }))
           const rows = within(dialog('Matchups')).getAllByTestId('matchup-row')
           expect(rows).toHaveLength(1)
-          expect(within(rows[0]).getAllByRole('cell').slice(2).map(c => c.textContent)).toEqual(['Darth Vader, Victor Squadron Leader · Vigilance base', '5', '60%'])
+          expect(within(rows[0]).getAllByTestId('matchup-subtitle').map(c => c.textContent)).toEqual(['Darth Vader, Victor Squadron Leader · Vigilance base', '3 - 2 - 0'])
+          expect(within(rows[0]).getAllByRole('cell').at(-1)).toHaveTextContent(/^60%$/)
+
+          await user.keyboard('{Escape}')
+          expect(screen.queryByRole('dialog', { name: 'Matchups' })).not.toBeInTheDocument()
+          expect(dialog('Mine')).toBeInTheDocument()
+        })
+
+        it('offers no Matchups in the view of a deck whose leader and base have not played', async () => {
+          const user = userEvent.setup()
+          const other = luke()
+          vaderDeck()
+          renderSetup()
+          await chooseDeck(user, other.id)
+          await user.click(within(deckCard()).getByRole('button', { name: 'View' }))
+          await new Promise(r => setTimeout(r, 200))
+          expect(within(dialog('Luke')).queryByRole('button', { name: 'Matchups' })).not.toBeInTheDocument()
         })
 
         it('shows no matchups for a leader and base never played', async () => {
