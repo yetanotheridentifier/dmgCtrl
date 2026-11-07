@@ -7485,10 +7485,8 @@ const resourceDefeated = (ready: boolean) => (s: GameState, ctx: { owner: Player
   const pile = [ctx.owner, opponentOf(ctx.owner)].find(p => s.players[p].discard.includes(ctx.cardId))
   return pile ? resourceFromDiscard(s, pile, ctx.owner, ctx.cardId, ready) : s
 }
-const superlaserTechnician = defeated(mayPayWp('You may put this unit into play as a resource and ready it.', 0, 'put this unit into play as a resource and ready it', resourceDefeated(true)))
 registerCard('LAW_159', defeated(mayPayWp("You may resource this unit from its owner's discard pile.", 0, "resource this unit from its owner's discard pile", resourceDefeated(false)))) // Expendable Mercenary
-registerCard('SHD_085', superlaserTechnician) // Superlaser Technician
-registerCard('SOR_083', superlaserTechnician) // Superlaser Technician (a different card with the same text: 2/1 rather than 2/3, so not a line in data/reprints.ts)
+registerCard('SOR_083', defeated(mayPayWp('You may put this unit into play as a resource and ready it.', 0, 'put this unit into play as a resource and ready it', resourceDefeated(true)))) // Superlaser Technician
 
 // C: the next unit played, and a constant ability alongside
 registerCard('SEC_261', defeated(whenPlayed('The next Official unit you play this phase costs 1 less.', (s, ctx) => // Inspiring Senator

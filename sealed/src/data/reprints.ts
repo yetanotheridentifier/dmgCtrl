@@ -62,7 +62,7 @@ export const REPRINTS: Reprint[] = [
   { name: 'Resupply', canonical: 'TWI_127', printings: ['SOR_126'] },
   { name: 'Rickety Quadjumper', canonical: 'LAW_115', printings: ['SHD_057'] },
   { name: 'Take Captive', canonical: 'SHD_131', printings: ['TWI_128'] },
-  // Not Superlaser Technician: SOR_083 is 2/1 and SHD_085 is 2/3, so they are two cards.
+  { name: 'Superlaser Technician', canonical: 'SOR_083', printings: ['SHD_085'] },
   // IC27 reprints cards from every earlier set.
   { name: 'Onyx Squadron Brute', canonical: 'JTL_033', printings: ['IC27_015'] },
   { name: 'Rune Haako', canonical: 'TWI_031', printings: ['IC27_016'] },
