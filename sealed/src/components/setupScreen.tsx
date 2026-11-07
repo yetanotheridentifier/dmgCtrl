@@ -6,7 +6,7 @@ import { GENERATED_DECK_ID, NO_ASPECT } from '../deckgen/randomDeck'
 import { useSealedSetup, ANY_OF_MY_DECKS } from '../hooks/useSealedSetup'
 import { useCardLookup } from '../hooks/useCardLookup'
 import { DESKTOP_QUERY, PORTRAIT_QUERY, useMediaQuery } from '../hooks/useMediaQuery'
-import { BackIcon, DotsIcon } from './icons'
+import { DotsIcon } from './icons'
 import { AspectIcons, DeckList, LeaderAndBase } from './setup/deckParts'
 import { CURVE_LABELS, cardCount, costCurve, deckAspects, deckEntries, deckGroups, deckLine, deckSet, recordLine, typeSummary } from './setup/deckSummary'
 import { DeckView } from './setup/deckView'
@@ -24,8 +24,6 @@ interface Props {
   onPlay: (deck: SavedDeck, opponent: SavedDeck) => void
   onHelp: () => void
   onSettings: () => void
-  /** Back to game select: the dmgCtrl app at the site root. */
-  onBack: () => void
   /** Beside More in the header: what the caller wants there (the share-games pill). */
   headerExtra?: ReactNode
   /**
@@ -60,7 +58,7 @@ function CostCurve({ curve, grow }: { curve: number[]; grow: boolean }) {
   )
 }
 
-export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, headerExtra, notice }: Props) {
+export default function SetupScreen({ onPlay, onHelp, onSettings, headerExtra, notice }: Props) {
   const s = useSealedSetup(onPlay)
   const portrait = useMediaQuery(PORTRAIT_QUERY)
   const desktop = useMediaQuery(DESKTOP_QUERY)
@@ -109,7 +107,6 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
 
   const topBar = (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
-      <IconButton label="Back to game select" onClick={onBack}><BackIcon /></IconButton>
       <SetupHeaderMark />
       <h1 style={{ flex: 1, margin: 0, fontSize: '1.4rem', fontWeight: 300, letterSpacing: '0.12em', color: 'var(--color-text-primary)' }}>Sealed</h1>
       {headerExtra}

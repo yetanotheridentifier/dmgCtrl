@@ -43,7 +43,7 @@ describe('a first visit with the card API unreachable', () => {
   it('builds a generated deck and a generated opponent, and starts the game', async () => {
     const user = userEvent.setup()
     const onPlay = vi.fn()
-    render(<SetupScreen onPlay={onPlay} onHelp={vi.fn()} onSettings={vi.fn()} onBack={vi.fn()} />)
+    render(<SetupScreen onPlay={onPlay} onHelp={vi.fn()} onSettings={vi.fn()} />)
 
     // The set both generators start on is here without an import, so there is no failed fetch to report.
     await user.click(screen.getByRole('button', { name: 'Generate a deck' }))

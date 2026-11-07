@@ -66,8 +66,6 @@ function AppShell() {
         <SetupScreen
           onHelp={() => openHelp()}
           onSettings={() => setSettingsOpen(true)}
-          // Game select is the dmgCtrl app at the site root, a separate app from this one.
-          onBack={() => window.location.assign('/')}
           // Setup only, since the game screen has its own header. Absent until the notice in the
           // page is answered.
           headerExtra={<ShareGamesPill onOpenSettings={() => setSettingsOpen(true)} />}

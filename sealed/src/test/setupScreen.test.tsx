@@ -72,9 +72,8 @@ function renderSetup() {
   const onPlay = vi.fn()
   const onHelp = vi.fn()
   const onSettings = vi.fn()
-  const onBack = vi.fn()
-  const view = render(<SetupScreen onPlay={onPlay} onHelp={onHelp} onSettings={onSettings} onBack={onBack} />)
-  return { onPlay, onHelp, onSettings, onBack, view }
+  const view = render(<SetupScreen onPlay={onPlay} onHelp={onHelp} onSettings={onSettings} />)
+  return { onPlay, onHelp, onSettings, view }
 }
 
 const dialog = (name: string) => screen.getByRole('dialog', { name })
@@ -116,11 +115,10 @@ describe('SetupScreen', () => {
   afterEach(() => withMedia([]))
 
   describe('the header', () => {
-    it('goes back to game select', async () => {
-      const user = userEvent.setup()
-      const { onBack } = renderSetup()
-      await user.click(screen.getByRole('button', { name: 'Back to game select' }))
-      expect(onBack).toHaveBeenCalledOnce()
+    // The PWA at the site root is a separate app with no way back into Sealed.
+    it('offers no way out to the dmgCtrl app', () => {
+      renderSetup()
+      expect(screen.queryByRole('button', { name: /back/i })).toBeNull()
     })
 
     it('is titled Sealed', () => {
@@ -376,7 +374,7 @@ describe('SetupScreen', () => {
       withCache(SETS)
       const user = userEvent.setup()
       const onPlay = vi.fn()
-      render(<SetupScreen onPlay={onPlay} onHelp={vi.fn()} onSettings={vi.fn()} onBack={vi.fn()} />)
+      render(<SetupScreen onPlay={onPlay} onHelp={vi.fn()} onSettings={vi.fn()} />)
       await user.click(within(deckCard()).getByRole('button', { name: 'Generate a deck' }))
       await within(dialog('Generated deck')).findByTestId('deck-list')
       await user.click(within(dialog('Generated deck')).getByRole('button', { name: 'Use this deck' }))
@@ -939,7 +937,7 @@ describe('SetupScreen', () => {
     // squeezing them on a phone: both cards in one block that never shrinks, so the page scrolls.
     it.each([['portrait', [PORTRAIT_QUERY]], ['landscape', []]])('keeps the cards at full height under a notice in %s', (layout, media) => {
       withMedia(media)
-      render(<SetupScreen onPlay={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} onBack={vi.fn()} notice={<aside>Share your games?</aside>} />)
+      render(<SetupScreen onPlay={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} notice={<aside>Share your games?</aside>} />)
       expect(screen.getByTestId('setup-screen')).toHaveAttribute('data-layout', layout)
       const cards = screen.getByTestId('setup-cards')
       expect(cards).toContainElement(screen.getByTestId('deck-card'))

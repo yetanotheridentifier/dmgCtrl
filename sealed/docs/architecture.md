@@ -535,9 +535,9 @@ screen (rendered by `App`) and from More in the game (rendered by `GameScreen`).
 routing away unmounts `GameScreen` and the game with it, since the game lives entirely in
 `useGame`'s state and refs. It reads the context directly rather than taking props, because a
 settings form has no caller-held state to be given. Its callbacks besides closing are
-`onHelp(section)`, which the "What's sent" link uses to open Help on a single section of the guide,
-and `onAppSettings`, which by default leaves for the PWA's Settings page at `/?settings` (the PWA
-opens every game's settings there, with Back to game select). The Report a bug switch shows only
+`onHelp(section)`, which the "What's sent" link uses to open Help on a single section of the guide.
+Nothing in Sealed leads to the PWA at the site root: it is a separate app with no way back into
+Sealed, so a player who left would be stranded. The Report a bug switch shows only
 where neither phone query matches, since the report itself is desktop only.
 
 The icons for the shared `IconButton` live together in `components/icons.tsx`, the back, more and
@@ -606,8 +606,6 @@ choice opens a `Sheet`, and the only text box is the import sheet's.
   one block that fills the height and never shrinks below them, so a notice under Go scrolls the
   page. The portrait query is the one the shared `Sheet` reads, so a sheet and its screen
   agree on the orientation.
-- **Back** goes to the site root, which is the dmgCtrl PWA's game select: a different app, so an
-  installed Sealed may open it outside its own window.
 - **No aspect** is the generator's `NO_ASPECT` base aspect: `generationOptions` lists it last, and
   only for a pool printing a base without an aspect, and `buildDeckForLeader` builds on such a base
   when it is named.
