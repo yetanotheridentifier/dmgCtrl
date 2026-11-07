@@ -32,7 +32,7 @@ import type { InspectTarget } from './useCardZoom'
 import { CardRef } from './cardRef'
 import { CardZoomPopover } from './cardZoom'
 import { useMediaQuery, PHONE_LANDSCAPE_QUERY, PHONE_PORTRAIT_QUERY } from '../hooks/useMediaQuery'
-import { CardDetail, GameLogDrawer, LeaderMenu, MoreSheet, PhoneGameLayout, PhoneGameOver, PhonePrompt, PileSheet, TurnSideways } from './game/phoneLayout'
+import { CardDetail, GameLogDrawer, LeaderMenu, MoreSheet, PhoneGameLayout, PhoneGameOver, PhonePrompt, PileSheet, TurnSideways, type PileCard } from './game/phoneLayout'
 import type { LeaderMenuItem, PromptButton } from './game/phoneLayout'
 
 interface Props {
@@ -825,7 +825,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   const upright = useMediaQuery(PHONE_PORTRAIT_QUERY)
   const [logOpen, setLogOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
-  const [pile, setPile] = useState<{ title: string; cards: string[] } | null>(null)
+  const [pile, setPile] = useState<{ title: string; cards: PileCard[] } | null>(null)
   // A held card, or a name touched in the log, opens full size until closed.
   const [inspecting, setInspecting] = useState<InspectTarget | null>(null)
   // Your leader's actions open as a menu from the leader.
@@ -1636,6 +1636,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         onMore={() => setMoreOpen(true)}
         onDiscard={side => setPile({ title: side === 'player' ? 'Your discard' : "Opponent's discard", cards: state.players[side].discard })}
         onDeck={mayLookAtDeckTop(state, 'player') ? () => setPile({ title: 'Top of your deck', cards: state.players.player.deck.slice(0, 1) }) : undefined}
+        onResources={() => setPile({ title: 'Your resources', cards: state.players.player.resources })}
       />
       </>
     )
