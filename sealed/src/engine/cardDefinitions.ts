@@ -5914,7 +5914,7 @@ registerCard('SOR_067', onAttack(whenPlayed('If you control a leader unit, you m
 registerCard('LOF_068', onAttack(searchDrawWp('Search the top 5 cards of your deck for an Item upgrade, reveal it, and draw it.', 5, // Luthen Rael
   (c, s, ctx) => c?.type === 'upgrade' && heldTrait(s, ctx.owner, c, 'Item'))))
 registerCard('JTL_168', onAttack(mayDefeatUpgradeWp('You may defeat an upgrade.'))) // Insurgent Saboteurs
-registerCard('TS26_43', onAttack(whenPlayed("An opponent heals 1 damage from their base.", (s, ctx) => healBase(s, opponentOf(ctx.owner), 1)))) // Wartime Refugee
+registerCard('TS26_43', onAttack(whenPlayed("An opponent heals 1 damage from their base.", (s, ctx) => healBase(s, opponentOf(ctx.owner), 1, ctx.owner)))) // Wartime Refugee
 
 // A: General Grievous. Up to 4 enemy units are simply all of them; past 4 the picks build up in the step.
 const GRIEVOUS_TEXT = 'If this unit has 4 or more Lightsaber upgrades attached to him, defeat 4 enemy units.'
@@ -7845,7 +7845,7 @@ registerCard('TS26_51', { // Lom Pyke
   // does" is 2 tokens or none. A cost of 0 makes `mayPayThen` the plain yes/no the card asks for.
   ...whenPlayed('In player order, each opponent may heal 5 damage from their base. For each player that does, give 2 Experience tokens to a unit.',
     (s, ctx) => pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: opponentOf(ctx.owner), cost: 0, text: 'heal 5 damage from your base', then: resume(ctx) })),
-  ifYouDo: (s, ctx) => expChoice(healBase(s, opponentOf(ctx.owner), 5), ctx, allUnits(s).map(u => u.instanceId), 2),
+  ifYouDo: (s, ctx) => expChoice(healBase(s, opponentOf(ctx.owner), 5, ctx.owner), ctx, allUnits(s).map(u => u.instanceId), 2),
 })
 
 // E: a token alongside something else — an exhaust, a defeat, a play from hand, an attack, damage.
@@ -8645,7 +8645,7 @@ registerCard('SEC_014', mergeLeaderSides( // Sly Moore
 registerCard('TS26_1', mergeLeaderSides( // Count Dooku
   // Two players, so "choose 2 players" is both of them.
   leaderFront('Choose 2 players. They each heal 1 damage from their base and create a Battle Droid token.', {
-    effect: s => BOTH_BASES.reduce((acc, p) => create(healBase(acc, p, 1), p, TOKEN_BATTLE_DROID), s),
+    effect: (s, ctx) => BOTH_BASES.reduce((acc, p) => create(healBase(acc, p, 1, ctx.owner), p, TOKEN_BATTLE_DROID), s),
   }),
   attacks('Create 2 Battle Droid tokens.', (s, ctx) => create(s, ctx.owner, TOKEN_BATTLE_DROID, 2)),
 ))
@@ -10816,7 +10816,8 @@ registerCard('JTL_062', { abilities: [{ trigger: 'whenHealed', description: 'Whe
   damageChoice(s, ctx, 1, allUnits(s).filter(u => u.arena === 'space'), [], true) }] })
 registerCard('LAW_047', { abilities: [{ trigger: 'whenHealed', description: 'When 1 or more damage is healed from this unit: You may deal that much damage to a unit.', effect: (s, ctx) => // Baze Malbus
   ((ctx.amountHealed ?? 0) > 0 ? damageChoice(s, ctx, ctx.amountHealed!, allUnits(s), [], true) : s) }] })
-// "When you heal damage from your base": `whenBaseHealed`, raised by `healBase`. His own Restore is
+// "When you heal damage from your base": `whenBaseHealed`, raised by `healBase` only for a heal his
+// controller causes, not an opponent's ability (the user's reading, pending a judge ruling). His own Restore is
 // an On Attack, so it heals and this resolves inside the On Attack batch, before combat damage.
 registerCard('IC27_026', { abilities: [{ trigger: 'whenBaseHealed', description: 'When you heal damage from your base: Deal that much damage to an enemy unit.', effect: (s, ctx) => // Darth Sidious
   ((ctx.amountHealed ?? 0) > 0 ? damageChoice(s, ctx, ctx.amountHealed!, enemyUnitsOf(s, ctx.owner)) : s) }] })

@@ -212,7 +212,10 @@ from `healUnit`, which is the one place a unit is healed, with what the heal act
 `ctx.amountHealed` (Baze Malbus deals that much). A heal that removes nothing raises nothing.
 `whenBaseHealed` ("when you heal damage from your base", Darth Sidious) is the same for a base: raised
 by `healBase`, the one place a base is healed, on the base owner's units, once per heal, with what it
-removed in `ctx.amountHealed`. Restore is an On Attack that heals through `healBase`, so a Restore
+removed in `ctx.amountHealed`. `healBase` takes who caused the heal (`by`, the base's owner unless
+passed), and only a heal the owner causes raises it: an opponent's ability healing your base (Wartime
+Refugee, Lom Pyke, Count Dooku, a heal choice the opponent controls) is not "you heal". That reading
+is pending a judge ruling. Restore is an On Attack that heals through `healBase`, so a Restore
 unit's own heal raises it inside the On Attack batch, and its ability resolves before combat damage.
 
 `whenReadyStep` ("when you ready cards during the regroup phase", Millennium Falcon) is the player's

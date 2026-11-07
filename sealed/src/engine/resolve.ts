@@ -1612,7 +1612,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'damageAnyBases': {
       // Rancor Keeper: 1 damage to a chosen base, then re-offer the bases not yet hit.
       if (baseTarget) {
-        next = choice.heal ? healBase(next, baseTarget, choice.amount) : dealDamageToBase(next, baseTarget, choice.amount, choice.source)
+        next = choice.heal ? healBase(next, baseTarget, choice.amount, choice.controller) : dealDamageToBase(next, baseTarget, choice.amount, choice.source)
         next = checkWin(next)
         if (next.winner !== null) return next
         const remaining = choice.remaining.filter(b => b !== baseTarget)
@@ -1890,7 +1890,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     }
     case 'selectHealTarget':
       // Luke deployed: heal the chosen unit or your base.
-      if (baseTarget) next = healBase(next, baseTarget, choice.amount)
+      if (baseTarget) next = healBase(next, baseTarget, choice.amount, choice.controller)
       else if (targetInstanceId) {
         next = healUnit(next, targetInstanceId, choice.amount)
         // "…and give a Shield token to it" (Perserverance) — the same unit, one effect.
@@ -2013,7 +2013,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         healedNow = before - (findUnit(next, targetInstanceId)?.unit.damage ?? 0)
       } else if (baseTarget && choice.baseTargets.includes(baseTarget)) {
         const before = next.players[baseTarget].base.damage
-        next = healBase(next, baseTarget, 1)
+        next = healBase(next, baseTarget, 1, choice.controller)
         healedNow = before - next.players[baseTarget].base.damage
       }
       const healed = choice.healed + healedNow
