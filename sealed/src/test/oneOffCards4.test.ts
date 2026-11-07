@@ -156,11 +156,7 @@ describe('every card in every set is built or plays as printed', () => {
   const credited = new Set([...built, ...REPRINTS.filter(r => built.has(r.canonical)).flatMap(r => r.printings)])
   // The cards of a new set still to be built, by card type. A card leaves this list in the change that
   // builds it, and the tests below fail until it does, so the list can only shrink.
-  const STILL_TO_BUILD: Record<string, Partial<Record<'leaders' | 'units' | 'events', string[]>>> = {
-    IC27: {
-      units: ['IC27_026', 'IC27_038'],
-    },
-  }
+  const STILL_TO_BUILD: Record<string, Partial<Record<'leaders' | 'units' | 'events', string[]>>> = {}
   const stillToBuild = (code: string): string[] => Object.values(STILL_TO_BUILD[code] ?? {}).flat()
 
   it.each(SET_PROGRESS.map(s => s.code))('%s has no card the triage holds back that the manifest does not list', code => {

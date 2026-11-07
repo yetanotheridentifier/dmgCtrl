@@ -147,13 +147,12 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
 **Finished for the eleven sets before IC27**: every card is built or plays as printed (the end of
 this section says how that is held, and names the one limit left).
 
-**IC27 (Icons) is accepted and triaged: 57 cards and the Experience and Shield tokens.** 40 reprint
-cards already built or vanilla in earlier sets and 3 more are keyword-only, and ten of its own units
-and events and both of its leaders are built on existing effects, so 55 play today. The 2 left are
-`STILL_TO_BUILD` in `oneOffCards4.test.ts`, in **#1056** (Admiral Holdo's extra regroup draw and Darth
-Sidious's base-heal trigger, each a new engine hook). Its cards were triaged by what the
-engine could not yet express rather than by how hard the text looked. The triage is repeatable and
-fetches live, so the next set can be sized on release day. See [ai-benchmark.md](ai-benchmark.md).
+**IC27 (Icons) is complete for the 57 cards and two tokens served today**: 40 reprint cards already
+built or vanilla in earlier sets, 3 keyword-only, and its own twelve units and events and both leaders
+built, so its `STILL_TO_BUILD` is empty. IC27 is still being released and will grow to about 200
+cards; when it does, it needs a fresh assessment by the triage, as the first one was sized, before
+its new cards are batched. The triage is repeatable and fetches live, so the next set can be sized on
+release day. See [ai-benchmark.md](ai-benchmark.md).
 
 The shape below is kept as the map of which ticket built which mechanic.
 
