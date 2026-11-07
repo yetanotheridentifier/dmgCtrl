@@ -1147,8 +1147,8 @@ id and abilities register per id, so both printings are work. IBH is the within-
 single cards at up to three collector numbers, so its 104 printed slots are 51 real cards.
 
 Cross-set reprints are reported separately, because one implementation covers every id it appears
-under. Across the nine unimplemented sets that is 29 cards with ability text, covering 30 extra card
-ids for no extra work. Reprints skew vanilla, since they exist mostly to balance sealed pools, and a
+under. Across the twelve sets that is 56 cards with ability text, covering 58 extra card ids for no
+extra work. Reprints skew vanilla, since they exist mostly to balance sealed pools, and a
 printing's rarity can differ without affecting any of this: the engine does not read rarity.
 
 What makes the coverage real is `data/reprints.ts`, which collapses the other printings onto the

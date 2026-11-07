@@ -1,4 +1,4 @@
-import type { SwuCard } from '../data/cards'
+import { isToken, type SwuCard } from '../data/cards'
 import { normalPrintings, printingKey } from '../data/normalPrintings'
 import { reprintCanonicalId } from '../data/reprints'
 import { CARD_DATA_CORRECTIONS } from '../engine/cardDataCorrections'
@@ -265,7 +265,7 @@ function bump(map: Map<string, number>, key: string): void {
 }
 
 export function triage(pool: SwuCard[]): TriageReport {
-  const cards = normalPrintings(pool).filter(c => c.Type !== 'Token')
+  const cards = normalPrintings(pool).filter(c => !isToken(c))
   const buckets: Record<TriageBucket, number> = { vanilla: 0, 'existing-keyword': 0, 'new-keyword-only': 0, ability: 0 }
   const triaged: TriagedCard[] = []
   const sets = new Set<string>()

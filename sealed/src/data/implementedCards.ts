@@ -2553,6 +2553,7 @@ const SET_TOTALS: { code: string; group: SetGroup; total: Omit<TypeCounts, 'toke
   { code: 'SHD', group: 'retired', total: { leaders: 18, bases: 8, units: 160, upgrades: 30, events: 46 } },
   // SOR's listing files Snapshot Reflexes as an event. It is printed as an upgrade, and counted as one.
   { code: 'SOR', group: 'retired', total: { leaders: 18, bases: 12, units: 148, upgrades: 15, events: 59 } },
+  { code: 'IC27', group: 'out-of-cycle', total: { leaders: 2, bases: 4, units: 42, upgrades: 3, events: 6 } },
   { code: 'TS26', group: 'out-of-cycle', total: { leaders: 8, bases: 4, units: 41, upgrades: 8, events: 23 } },
   { code: 'IBH', group: 'out-of-cycle', total: { leaders: 2, bases: 2, units: 35, upgrades: 0, events: 12 } },
 ]
@@ -2563,12 +2564,13 @@ const SET_TOTALS: { code: string; group: SetGroup; total: Omit<TypeCounts, 'toke
  * exist, with no token units, and some rows are findable by search but not by direct fetch). The set
  * fixtures carry no token rows either. The publisher's card list (`admin.starwarsunlimited.com`) has
  * every token, and is where the token units' stats in `engine/tokenUnits.ts` were read. Of the
- * out-of-cycle products only Twin Suns prints its own (a Battle Droid and a Clone Trooper). HMW's are
- * the tokens its cards create or give (Shield, Weakness, Beast): no HMW card refers to Experience.
+ * out-of-cycle products Twin Suns prints a Battle Droid and a Clone Trooper, and IC27 an Experience and
+ * a Shield. HMW's are the tokens its cards create or give (Shield, Weakness, Beast): no HMW card refers
+ * to Experience.
  *
  * A set is credited with a token once the engine creates it: when its name matches a built token card
- * (`TOKEN_CARDS`, `TOKEN_UNIT_CARDS`). So a token mechanic that lands counts for every set that prints
- * it, with no count to update here.
+ * (`TOKEN_CARDS`, `TOKEN_UNIT_CARDS`) or one of the `COUNTED_TOKENS`. So a token mechanic that lands
+ * counts for every set that prints it, with no count to update here.
  */
 export const PRINTED_TOKENS: Record<string, string[]> = {
   HMW: ['Shield', 'Weakness', 'Beast'],
@@ -2580,12 +2582,16 @@ export const PRINTED_TOKENS: Record<string, string[]> = {
   TWI: ['Experience', 'Shield', 'Clone Trooper', 'Battle Droid'],
   SHD: ['Experience', 'Shield'],
   SOR: ['Experience', 'Shield'],
+  IC27: ['Experience', 'Shield'],
   TS26: ['Battle Droid', 'Clone Trooper'],
   IBH: [],
 }
 
+/** The tokens the engine keeps as a count on the player rather than as a card (`creditTokens`, `forceToken`). */
+export const COUNTED_TOKENS = ['Credit', 'Force']
+
 /** The names of the tokens the engine creates. */
-const BUILT_TOKEN_NAMES = new Set([...Object.values(TOKEN_CARDS), ...Object.values(TOKEN_UNIT_CARDS)].map(c => c.name))
+const BUILT_TOKEN_NAMES = new Set([...Object.values(TOKEN_CARDS), ...Object.values(TOKEN_UNIT_CARDS)].map(c => c.name).concat(COUNTED_TOKENS))
 
 /**
  * Cards that already play correctly with no engine work: vanilla ones, and keyword-only ones whose
@@ -2612,6 +2618,7 @@ export const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
   TWI: { bases: 8, units: 29 },
   SHD: { bases: 8, units: 28, upgrades: 1 },
   SOR: { bases: 8, units: 29, upgrades: 2 },
+  IC27: { bases: 4, units: 13, upgrades: 2 },
   TS26: { units: 5, upgrades: 1 },
   IBH: { bases: 2, units: 19 },
 }

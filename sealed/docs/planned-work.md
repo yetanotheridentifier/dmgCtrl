@@ -144,8 +144,14 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
 
 ## The card programme (second stream)
 
-**Finished for the eleven sets printed so far**: every card is built or plays as printed (the end of
-this section says how that is held, and names the one limit left). Its cards were triaged by what the
+**Finished for the eleven sets before IC27**: every card is built or plays as printed (the end of
+this section says how that is held, and names the one limit left).
+
+**IC27 (Icons) is accepted and triaged: 57 cards and the Experience and Shield tokens.** 40 reprint
+cards already built or vanilla in earlier sets and 3 more are keyword-only, so 43 play today. The 14
+left are `STILL_TO_BUILD` in `oneOffCards4.test.ts`, in three tickets worked in this order: **#1054**
+(eight units and two events on existing primitives), **#1055** (the two leaders, both sides), **#1056**
+(Admiral Holdo's extra regroup draw and Darth Sidious's base-heal trigger, each a new engine hook). Its cards were triaged by what the
 engine could not yet express rather than by how hard the text looked. The triage is repeatable and
 fetches live, so the next set can be sized on release day. See [ai-benchmark.md](ai-benchmark.md).
 
@@ -380,10 +386,10 @@ effects (5, all shipped), #685 cards that need only writing (22, all shipped) an
 #683. Jar Jar Binks, The First Legion, Zam Wesell and Maul's front shipped off #686; the rest of that
 ticket's one-offs moved to #701, which built them all. Asajj Ventress shipped with #476.
 
-**The card programme is finished** (#793): every card in all eleven sets is built or plays as
-printed, and the setup panel counts each set complete, type by type. Two tests hold that per set
-(`oneOffCards4.test.ts`): the triage holds back no card the manifest does not list, and the count done
-equals the count printed. A new set is sized with the triage on release day and starts from there.
+**The card programme is finished** (#793) for the eleven sets before IC27: every card is built or
+plays as printed, and the setup panel counts each set complete, type by type. Two tests hold that per
+set (`oneOffCards4.test.ts`): the triage holds back no card the manifest does not list beyond the
+set's `STILL_TO_BUILD`, and the count done plus that list equals the count printed. A new set is sized with the triage on release day and starts from there.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted to the ticket that owns its
 blocker and the batch ships without it. The classification is regex triage over ability prose: it catches new nouns but not
@@ -400,10 +406,11 @@ Three findings that contradict the assumptions the programme started from:
   cards between them. That door is built: see `playCardFrom` in `choices.md`.
 - **Bounty is gated behind capture**, not resources.
 
-The 292 vanilla and keyword-only cards need no ticket: `PLAYABLE_AS_PRINTED` in
-`data/implementedCards.ts` credits them, and a test holds it to the triage of each set's fixture. 29 cards with ability text are printed in more than one set, covering 30
+The 311 vanilla and keyword-only cards need no ticket: `PLAYABLE_AS_PRINTED` in
+`data/implementedCards.ts` credits them, and a test holds it to the triage of each set's fixture. 56 cards with ability text are printed in more than one set, covering 58
 extra ids for no extra work: each needs one line in `data/reprints.ts` naming its other printings, and
-`--triage` marks the ones that do not have it yet.
+`--triage` marks the ones that do not have it yet. Eight are still registered twice instead
+(**#1057**).
 
 ## Player-facing UI (third stream)
 

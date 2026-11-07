@@ -24,7 +24,7 @@ const ASH = ashSet as unknown as SwuCard[]
 describe('set codes', () => {
   it('lists every set the setup panel counts, in its order', () => {
     expect(SET_CODES).toEqual(SET_PROGRESS.map(s => s.code))
-    expect(SET_CODES).toHaveLength(11)
+    expect(SET_CODES).toHaveLength(12)
     expect(SET_CODES[0]).toBe('HMW')
   })
 
@@ -64,7 +64,8 @@ describe('sealed sets', () => {
     }
   })
 
-  it('keeps the nine booster sets and leaves out TS26 and IBH', () => {
+  it('keeps the nine booster sets and leaves out TS26, IBH and IC27', () => {
+    expect(SET_CODES).toContain('IC27')
     expect(SEALED_MIN_CARDS).toBe(200)
     expect(SEALED_SET_CODES).toEqual(['HMW', 'ASH', 'LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR'])
   })
@@ -119,6 +120,9 @@ describe('toFixture', () => {
       apiRow(),
       apiRow({ Number: '300', VariantType: 'Hyperspace' }),
       apiRow({ Number: 'T01', Name: 'Shield', Subtitle: undefined, Type: 'Token' }),
+      // IC27's listing files its tokens by what they are, not as plain `Token`.
+      apiRow({ Number: 'T02', Name: 'Experience', Subtitle: undefined, Type: 'Token Upgrade' }),
+      apiRow({ Number: 'T03', Name: 'Clone Trooper', Subtitle: undefined, Type: 'Token Unit' }),
     ]
     expect(toFixture(rows).map(c => c.Number)).toEqual(['010'])
   })

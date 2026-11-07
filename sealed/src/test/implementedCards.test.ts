@@ -3,7 +3,7 @@ import { registeredCardIds, getCardDefinition } from '../engine/abilities'
 import '../engine/cardDefinitions' // side-effect: registers every implemented card
 import {
   IMPLEMENTED, IMPLEMENTED_LEADERS, IMPLEMENTED_BASES, IMPLEMENTED_UPGRADES, IMPLEMENTED_UNITS, IMPLEMENTED_EVENTS, PLAYABLE_AS_PRINTED,
-  SET_PROGRESS, sumCounts, TOTAL_PROGRESS, UNIT_GROUPS, CARD_TYPES, implementedCounts, setOf, PRINTED_TOKENS,
+  SET_PROGRESS, sumCounts, TOTAL_PROGRESS, UNIT_GROUPS, CARD_TYPES, implementedCounts, setOf, PRINTED_TOKENS, COUNTED_TOKENS,
 } from '../data/implementedCards'
 import { TOKEN_CARDS } from '../engine/tokenUpgrades'
 import { TOKEN_UNIT_CARDS } from '../engine/tokenUnits'
@@ -139,9 +139,16 @@ describe('implementation progress', () => {
     const codesIn = (group: string) => SET_PROGRESS.filter(s => s.group === group).map(s => s.code)
     expect(codesIn('rotation')).toEqual(['HMW', 'ASH', 'LAW', 'SEC', 'LOF', 'JTL'])
     expect(codesIn('retired')).toEqual(['TWI', 'SHD', 'SOR'])
-    expect(codesIn('out-of-cycle')).toEqual(['TS26', 'IBH'])
+    expect(codesIn('out-of-cycle')).toEqual(['IC27', 'TS26', 'IBH'])
     // The blocks are contiguous and in that order, so the panel can render them by filtering.
-    expect(SET_PROGRESS.map(s => s.group)).toEqual([...Array(6).fill('rotation'), ...Array(3).fill('retired'), 'out-of-cycle', 'out-of-cycle'])
+    expect(SET_PROGRESS.map(s => s.group)).toEqual([...Array(6).fill('rotation'), ...Array(3).fill('retired'), ...Array(3).fill('out-of-cycle')])
+  })
+
+  it('counts IC27 as printed, and credits its reprints of built cards to it', () => {
+    // 59 cards, two of them the Experience and Shield tokens. Most of the rest reprint cards already
+    // built in other sets (`data/reprints.ts`); the 14 left are its own.
+    expect(bySet.IC27.total).toEqual({ leaders: 2, bases: 4, units: 42, upgrades: 3, events: 6, tokens: 2 })
+    expect(bySet.IC27.done).toEqual({ leaders: 0, bases: 4, units: 32, upgrades: 3, events: 4, tokens: 2 })
   })
 
   it('counts IBH by distinct cards, not collector numbers, and only Twin Suns of the extra sets prints tokens', () => {
@@ -176,21 +183,22 @@ describe('implementation progress', () => {
 
   it('counts the tokens each set prints', () => {
     const totals = Object.fromEntries(SET_PROGRESS.map(s => [s.code, s.total.tokens]))
-    expect(totals).toEqual({ HMW: 3, ASH: 4, LAW: 3, SEC: 3, LOF: 3, JTL: 4, TWI: 4, SHD: 2, SOR: 2, TS26: 2, IBH: 0 })
+    expect(totals).toEqual({ HMW: 3, ASH: 4, LAW: 3, SEC: 3, LOF: 3, JTL: 4, TWI: 4, SHD: 2, SOR: 2, IC27: 2, TS26: 2, IBH: 0 })
     for (const set of SET_PROGRESS) expect(set.total.tokens, set.code).toBe(PRINTED_TOKENS[set.code].length)
   })
 
   it('credits every set with each token it prints that the engine creates, not just ASH', () => {
     // Every set in the cycle up to ASH prints Shield and Experience, which the engine creates, and so
-    // are all the token units, and so is Weakness. The tokens it does not create yet (Force, Credit) stay
-    // uncredited. HMW prints Shield but no Experience.
+    // are all the token units, and so is Weakness. Credit (LAW) and the Force (LOF) are kept as a count
+    // per player rather than as cards, and are credited all the same. HMW prints Shield but no Experience.
     const done = Object.fromEntries(SET_PROGRESS.map(s => [s.code, s.done.tokens]))
-    expect(done).toEqual({ HMW: 3, ASH: 4, LAW: 2, SEC: 3, LOF: 2, JTL: 4, TWI: 4, SHD: 2, SOR: 2, TS26: 2, IBH: 0 })
+    expect(done).toEqual({ HMW: 3, ASH: 4, LAW: 3, SEC: 3, LOF: 3, JTL: 4, TWI: 4, SHD: 2, SOR: 2, IC27: 2, TS26: 2, IBH: 0 })
   })
 
   it('matches every token the engine creates to a token some set prints, so a renamed token cannot drop out of the count', () => {
     const printed = new Set(Object.values(PRINTED_TOKENS).flat())
     for (const card of [...Object.values(TOKEN_CARDS), ...Object.values(TOKEN_UNIT_CARDS)]) expect(printed, card.name).toContain(card.name)
+    for (const name of COUNTED_TOKENS) expect(printed, name).toContain(name)
   })
 
   it('credits every set with the cards that play as printed, and never more than it prints', () => {
