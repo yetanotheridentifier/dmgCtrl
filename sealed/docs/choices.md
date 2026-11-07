@@ -275,8 +275,9 @@ Luke while he was still inert would decide that for the player.
 
 Where nothing in the batch can act, order cannot matter: none of them can change what the others see.
 
-**An ability that `yieldsOrder` is not offered where its place in the order cannot be seen.** Only
-Shielded declares it. Shielded is a triggered ability its controller orders (CR 7.6.13b), and on a
+**An ability that `yieldsOrder` is not offered where its place in the order cannot be seen.** Shielded
+and Restore declare it; Restore is asked only where an On Attack resolved first would change what it
+heals. Shielded is a triggered ability its controller orders (CR 7.6.13b), and on a
 unit with Ambush the order is the whole decision: attack first and the unit takes the hit and keeps
 the Shield, Shield first and the Shield soaks it. But most Shielded units that have something else to
 resolve reach the same board either way, and a question on each of them would decide nothing.
@@ -366,7 +367,7 @@ which is more than a single stamped source could say.
 **Prompt volume is a known cost.** Three of one player's units dying together asks two questions even
 when all three abilities do the same thing. Suppressing the prompt where order cannot matter is not
 attempted in general: "cannot matter" is hard to establish, and getting it wrong silently removes a
-real decision. Shielded is the one exception (`yieldsOrder`, above), and it is measured on the board
+real decision. Shielded and Restore are the exceptions (`yieldsOrder`, above), and it is measured on the board
 rather than assumed.
 
 ### A decided game has no pending choices
@@ -390,7 +391,7 @@ over.
 
 ### Suspending combat
 
-An attack that raises a choice mid-flight splits into `beginAttack` (exhaust, Restore, `onDefense`,
+An attack that raises a choice mid-flight splits into `beginAttack` (exhaust, the On Attack batch with Restore in it, `onDefense`,
 suspend into `GameState.pendingAttack` if a choice is raised) and `completeAttack` (the damage step,
 recomputed on the post-choice board per CR 6.3.4). It re-finds attacker and defender, so a ping that
 defeats either fizzles gracefully, and clears Support-granted keywords last so they survive the

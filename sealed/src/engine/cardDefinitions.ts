@@ -2184,6 +2184,27 @@ registerCard(KEYWORD_SHIELDED, {
   }],
 })
 
+/**
+ * Restore N (CR 7.5): "When this unit attacks, heal N damage from your base." A triggered ability of
+ * the same event as the unit's On Attack abilities, so it joins their batch and its controller orders
+ * them. N is read as it resolves, so an On Attack resolved first can change it (Punishing One's Raid
+ * under Asajj Ventress). It `yieldsOrder` like Shielded: most On Attacks cannot change what it heals.
+ * Through `healBase`, the one place a base is healed, so "bases can't be healed" stops it too.
+ */
+export const KEYWORD_RESTORE = 'KEYWORD_RESTORE'
+registerCard(KEYWORD_RESTORE, {
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'Restore: heal damage from your base.',
+    yieldsOrder: true,
+    effect: (s, ctx) => {
+      const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+      const n = self ? unitKeywordValue(s, self, 'Restore') : 0
+      return n > 0 ? healBase(s, ctx.owner, n) : s
+    },
+  }],
+})
+
 // ── The last three events ─────────────────────────────────────────────────────────────────────
 
 /** The ability Treacherous Minefield hands to every unit in the chosen arena for the phase. */
@@ -11768,9 +11789,34 @@ registerCard('LOF_206', { actionAbilities: [{ // Babu Frik
  * `swappedKeywords` rename over the finished list rather than a grant plus a suppression, so a Raid
  * the unit only *gains* (an upgrade, an aura) is swapped alongside its printed one, and the numeral
  * travels with it.
+ *
+ * "Replace Raid with Restore, or vice versa" is one direction or the other. An attacker with both
+ * asks which as the attack is declared, and the answer lends it the one-way rider instead; with one or
+ * neither, the rider swaps whichever it has or gains.
  */
 const GRANT_ASAJJ_VENTRESS = 'GRANT_ASAJJ_VENTRESS'
-registerCard(GRANT_ASAJJ_VENTRESS, { sourceCardId: 'HMW_001', swappedKeywords: () => [['Raid', 'Restore']] })
+const ASAJJ_ONE_WAY = { Raid: 'GRANT_ASAJJ_RAID_TO_RESTORE', Restore: 'GRANT_ASAJJ_RESTORE_TO_RAID' }
+registerCard(ASAJJ_ONE_WAY.Raid, { sourceCardId: 'HMW_001', swappedKeywords: () => [['Raid', 'Restore']] })
+registerCard(ASAJJ_ONE_WAY.Restore, { sourceCardId: 'HMW_001', swappedKeywords: () => [['Restore', 'Raid']] })
+registerCard(GRANT_ASAJJ_VENTRESS, {
+  sourceCardId: 'HMW_001',
+  swappedKeywords: () => [['Raid', 'Restore'], ['Restore', 'Raid']],
+  whenLent: (s, attackerId, owner) => {
+    const u = findUnit(s, attackerId)?.unit
+    return u && unitHasKeyword(s, u, 'Raid') && unitHasKeyword(s, u, 'Restore')
+      ? pushChoice(s, {
+        kind: 'chooseMode', id: `${attackerId}-asajj`, controller: owner, modes: ['Raid', 'Restore'],
+        labels: ['Replace Raid with Restore', 'Replace Restore with Raid'],
+        then: { cardId: GRANT_ASAJJ_VENTRESS, owner, sourceInstanceId: attackerId },
+      })
+      : s
+  },
+  ifYouDo: (s, ctx) => updatePlayer(s, ctx.owner, {
+    units: s.players[ctx.owner].units.map(u => (u.instanceId === ctx.sourceInstanceId
+      ? { ...u, grantedAbilityCardIds: [ASAJJ_ONE_WAY[ctx.step as keyof typeof ASAJJ_ONE_WAY]] }
+      : u)),
+  }),
+})
 const ASAJJ_ATTACK = 'Attack with a unit. For this attack, replace any Raid it has or gains with Restore, or vice versa.'
 const asajjOffer: AttackOffer = { grantCardId: GRANT_ASAJJ_VENTRESS }
 registerCard('HMW_001', mergeLeaderSides( // Asajj Ventress

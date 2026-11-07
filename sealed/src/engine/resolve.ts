@@ -9,7 +9,7 @@ import { legalMoves, canTakePilot, effectiveCost, exploitTerms, exploitCost, exp
 import { abilityBlank, abilityCardIds, playedEventBlanked,cardAbilitiesBlanked, leaderAbilitiesBlanked, collectAbilityUsed, collectArrivalTriggers, collectCardTriggers, collectPlayerTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions,baseEpicAction, baseActionKey, baseSourceId, usableBaseActions, stampChoiceSource, runAttributed, resumeAbility, runBountyCollection, whileResolving, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatForCost, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer, isDoomed, damageRecipient } from './combat'
 import { drainTriggers, enqueueTriggers, holdTriggers, pickNextTrigger, releaseTriggers, setProbeStepper } from './triggerQueue'
-import { KEYWORD_AMBUSH, KEYWORD_SHIELDED, KEYWORD_SUPPORT } from './cardDefinitions'
+import { KEYWORD_AMBUSH, KEYWORD_RESTORE, KEYWORD_SHIELDED, KEYWORD_SUPPORT } from './cardDefinitions'
 import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, friendlyUnitsEnterReady, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, discardCards, discardTaken, revealedFromHand, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, returnControlledResources, unitCannotReady, defeatBaseUpgrade, upgradeAt, defeatResources, appendCaptured, captureUnit, friendlyCreditTokens, defeatCreditTokens, moveCardFromDiscardToDeckBottom, forceUse } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
@@ -234,6 +234,8 @@ function dispatchAction(state: GameState, action: Action): GameState {
           ? state.players[state.activePlayer].units.find(u => u.instanceId === choice.unitId)?.cardId
           : choice?.kind === 'mayAttack' || choice?.kind === 'mayAttackAnyUnit' ? choice.grantCardId : undefined
         let before = grantCardId ? grantAbilityCard(state, action.attackerId, grantCardId) : state
+        // A rider's own question (Asajj Ventress: which way to swap) is answered before the batch resolves.
+        if (grantCardId) before = getCardDefinition(grantCardId)?.whenLent?.(before, action.attackerId, before.activePlayer) ?? before
         // Thrawn front: the chosen attacker gains Restore N for this attack.
         if (choice?.kind === 'mayAttackAnyUnit' && choice.restore > 0) {
           before = updatePlayer(before, before.activePlayer, {
@@ -3222,7 +3224,7 @@ function fireForAllUnits(state: GameState, point: TriggerPoint): GameState {
 }
 
 /**
- * Begin an attack: exhaust the attacker and apply Restore, then either finish
+ * Begin an attack: exhaust the attacker and fire its On Attack batch (Restore included), then either finish
  * inline or — if the defender has an "On Defense" ability that raises a choice —
  * suspend the combat before damage and hand control to the defender. Combat damage
  * itself is dealt by `completeAttack` (immediately, or on resume after the choice).
@@ -3249,20 +3251,16 @@ function attack(state: GameState, attackerId: string, target: AttackTarget, viaA
   // declared, so a card reading it during its own combat has to leave itself out.
   next = recordUnitAttacked(next, attackerId)
 
-  // Restore N: heals the attacking player's base when the unit attacks (CR 7.5). Through `healBase`,
-  // which is the single place a base is healed, so a card that stops base healing stops this too.
-  const restore = unitKeywordValue(next, attacker, 'Restore')
-  if (restore > 0) next = healBase(next, playerId, restore)
-
   // "On Attack" abilities fire before combat damage; a raised choice suspends
   // the attack with the attacker keeping control, resuming at the On Defense stage.
   const before = next
   const attackerNow = next.players[playerId].units.find(u => u.instanceId === attackerId)!
-  // "When a friendly / an enemy unit attacks" is the same event, so it joins the same batch, heard
-  // on both sides with the attacker's side first.
+  // Restore and "when a friendly / an enemy unit attacks" are the same event, so they join the same
+  // batch, heard on both sides with the attacker's side first.
   const heard = { attackTarget: target, attackerInstanceId: attackerId, attackingPlayer: playerId }
   next = fireBatch(next, [
     ...collectUnitTriggers(next, 'onAttack', attackerNow, playerId, { attackTarget: target }),
+    ...(unitKeywordValue(next, attackerNow, 'Restore') > 0 ? collectCardTriggers('onAttack', KEYWORD_RESTORE, playerId, attackerId) : []),
     ...[playerId, opponentOf(playerId)].flatMap(p =>
       [...collectPlayerTriggers(next, 'whenUnitAttacks', p, heard), ...collectUnitsTrigger(next, 'whenUnitAttacks', p, heard)]),
   ])

@@ -321,14 +321,20 @@ export interface CardDefinition {
    */
   suppressedKeywords?: (state: GameState, unit: UnitState) => string[]
   /**
-   * Pairs of keyword names this card trades for one another on its unit — Asajj Ventress replaces
-   * "any Raid it has or gains with Restore, or vice versa" for one attack. Each pair swaps in BOTH
-   * directions, and the swap is a **rename of the unit's finished keyword list**, applied after every
-   * grant and removal: each instance keeps its numeral and answers to the other name, whichever
-   * source it came from. Distinct from `suppressedKeywords` plus `conditionalKeywords`, which would
-   * have to read the old value before hiding it and then dodge its own removal.
+   * Keyword names this card replaces on its unit, each `from` read as `to`: Asajj Ventress replaces
+   * "any Raid it has or gains with Restore, or vice versa" for one attack. Each pair is one
+   * direction, so "or vice versa" lists both. The swap is a **rename of the unit's finished keyword
+   * list**, applied after every grant and removal: each instance keeps its numeral and answers to the
+   * other name, whichever source it came from. Distinct from `suppressedKeywords` plus
+   * `conditionalKeywords`, which would have to read the old value before hiding it and then dodge its
+   * own removal.
    */
   swappedKeywords?: (state: GameState, unit: UnitState) => [from: string, to: string][]
+  /**
+   * For a `GRANT_*` rider lent to an attacker: a question it puts as the attack is declared, before
+   * anything triggers. Whatever it raises is answered before the attack's own abilities resolve.
+   */
+  whenLent?: (state: GameState, attackerId: string, owner: PlayerId) => GameState
   /**
    * Conditional power/HP delta this card contributes to its unit (the unit's own
    * card, or an upgrade modifying its host). Folded into `effectivePower`/`effectiveHp`;
