@@ -158,7 +158,6 @@ describe('every card in every set is built or plays as printed', () => {
   // builds it, and the tests below fail until it does, so the list can only shrink.
   const STILL_TO_BUILD: Record<string, Partial<Record<'leaders' | 'units' | 'events', string[]>>> = {
     IC27: {
-      leaders: ['IC27_001', 'IC27_008'],
       units: ['IC27_026', 'IC27_038'],
     },
   }
