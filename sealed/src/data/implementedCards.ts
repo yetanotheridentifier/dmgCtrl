@@ -1752,7 +1752,6 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SOR_145', name: 'K-2SO' },
   { id: 'LOF_200', name: 'Qui-Gon Jinn' },
   { id: 'TS26_39', name: 'Captain Vaughn' },
-  { id: 'SHD_085', name: 'Superlaser Technician' },
   { id: 'SOR_083', name: 'Superlaser Technician' },
   { id: 'SEC_261', name: 'Inspiring Senator' },
   { id: 'LOF_180', name: 'Deceptive Shade' },

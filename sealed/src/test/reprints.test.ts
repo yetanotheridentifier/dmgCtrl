@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { REPRINTS, reprintCanonicalId } from '../data/reprints'
 import { poolFor, SET_CODES } from '../bench/setPools'
+import { buildCardDb } from '../engine/cardDb'
+import { CARD_DATA_CORRECTIONS } from '../engine/cardDataCorrections'
 
 /**
  * Cross-set reprints (#551). A card printed in two sets carries two collector numbers, and every
@@ -29,10 +31,13 @@ describe('the cross-set reprint table', () => {
 
   it('pairs only printings with the canonical stats, since every printing plays as the canonical card', () => {
     // A field one listing leaves blank is not a difference: SOR's listing gives no stats for upgrades.
+    // A stat `CARD_DATA_CORRECTIONS` fixes is read as corrected, as the engine plays it.
+    const CORRECTED = { Cost: 'cost', Power: 'power', HP: 'hp' } as const
+    const stat = (id: string, field: keyof typeof CORRECTED) => CARD_DATA_CORRECTIONS[id]?.[CORRECTED[field]]?.toString() ?? BY_ID.get(id)?.[field]
     for (const { canonical, printings } of REPRINTS) {
       for (const id of printings) {
         for (const field of ['Cost', 'Power', 'HP'] as const) {
-          const [a, b] = [BY_ID.get(canonical)?.[field], BY_ID.get(id)?.[field]]
+          const [a, b] = [stat(canonical, field), stat(id, field)]
           if (a != null && b != null) expect(b, `${id} ${field}`).toBe(a)
         }
       }
@@ -82,9 +87,9 @@ describe('reprintCanonicalId', () => {
     expect(reprintCanonicalId(printing)).toBe(canonical)
   })
 
-  it('leaves Superlaser Technician uncollapsed: SOR_083 is 2/1 and SHD_085 is 2/3, so they are two cards', () => {
-    expect(reprintCanonicalId('SOR_083')).toBeUndefined()
-    expect(reprintCanonicalId('SHD_085')).toBeUndefined()
+  it('plays SHD_085 Superlaser Technician at its printed 2/1 (the source lists 2/3) and collapses it onto SOR_083', () => {
+    expect(buildCardDb(poolFor(['SHD'])).SHD_085).toMatchObject({ power: 2, hp: 1 })
+    expect(reprintCanonicalId('SHD_085')).toBe('SOR_083')
   })
 
   it('returns undefined for a canonical id, so a caller falls back to it unchanged', () => {

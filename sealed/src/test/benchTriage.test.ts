@@ -507,12 +507,19 @@ describe('cross-set reprints', () => {
   })
 
   it('does not pair two cards of one name whose stats differ, since one id would play both as one', () => {
-    // Superlaser Technician: SOR_083 is 2/1, SHD_085 is 2/3, with the same text.
     const r = triage([
       card({ ...reprinted, Set: 'SOR', Number: '10', Power: '2', HP: '1' }),
       card({ ...reprinted, Set: 'SHD', Number: '55', Power: '2', HP: '3' }),
     ])
     expect(r.reprints).toEqual([])
+  })
+
+  it('pairs on stats as corrected, since the engine plays the correction: SHD_085 is listed 2/3 and printed 2/1', () => {
+    const r = triage([
+      card({ ...reprinted, Set: 'SOR', Number: '083', Power: '2', HP: '1' }),
+      card({ ...reprinted, Set: 'SHD', Number: '085', Power: '2', HP: '3' }),
+    ])
+    expect(r.reprints).toHaveLength(1)
   })
 
   it('ignores a card printed once', () => {

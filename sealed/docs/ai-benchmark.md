@@ -1147,11 +1147,11 @@ id and abilities register per id, so both printings are work. IBH is the within-
 single cards at up to three collector numbers, so its 104 printed slots are 51 real cards.
 
 Cross-set reprints are reported separately, because one implementation covers every id it appears
-under. Across the twelve sets that is 55 cards with ability text, covering 57 extra card ids for no
-extra work. Reprints skew vanilla, since they exist mostly to balance sealed pools, and a
-printing's rarity can differ without affecting any of this: the engine does not read rarity. A
-unit's stats it does read, so a unit is paired on Power and HP as well as its name: Superlaser
-Technician is 2/1 in SOR and 2/3 in SHD, and is two cards.
+under. Across the twelve sets that is 56 cards with ability text. Reprints skew vanilla, since they
+exist mostly to balance sealed pools, and a printing's rarity can differ without affecting any of
+this: the engine does not read rarity. A unit's stats it does read, so a unit is paired on Power and
+HP as well as its name, read as `CARD_DATA_CORRECTIONS` corrects them: the source lists SHD's
+Superlaser Technician at 2/3, the card prints 2/1, and it pairs with SOR's.
 
 What makes the coverage real is `data/reprints.ts`, which collapses the other printings onto the
 implemented id during hydration, and in the coverage sweep's decks. Each entry is marked `registered` once it does, so the report doubles

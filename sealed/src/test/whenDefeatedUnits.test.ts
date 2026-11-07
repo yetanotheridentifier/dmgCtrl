@@ -29,7 +29,7 @@ const SHIPPED = [
   'SOR_226', 'SEC_221', 'SOR_060', 'LOF_064', 'JTL_060', 'TWI_104', 'JTL_040', 'JTL_220', 'TWI_148', 'IBH_82', 'SOR_163',
   'LOF_057', 'SHD_157', 'LOF_213', 'JTL_071',
   // B: two steps, or a choice of modes
-  'SEC_136', 'SEC_207', 'SOR_204', 'SOR_045', 'SOR_145', 'LOF_200', 'TS26_39', 'SHD_085', 'SOR_083',
+  'SEC_136', 'SEC_207', 'SOR_204', 'SOR_045', 'SOR_145', 'LOF_200', 'TS26_39', 'SOR_083',
   // C: the next unit played, and a constant ability alongside
   'SEC_261', 'LOF_180', 'JTL_104',
 ]
@@ -356,7 +356,8 @@ describe('When Defeated units, B: two steps, or a choice of modes', () => {
     expect(choice(skip(s))).toMatchObject({ kind: 'selectHandCardThen', handIndices: [0] })
   })
 
-  it.each(['SHD_085', 'SOR_083'])('Superlaser Technician (%s) may put itself into play as a resource, ready', id => {
+  it('Superlaser Technician may put itself into play as a resource, ready', () => {
+    const id = 'SOR_083'
     const s = kill(board({ units: [unit('wd', id)], resources: ready(2) }))
     expect(s.players.player.discard).toEqual([id])
     expect(choice(s)).toMatchObject({ kind: 'mayPayThen', controller: 'player', cost: 0 })

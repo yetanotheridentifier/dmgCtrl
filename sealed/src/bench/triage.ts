@@ -363,15 +363,16 @@ export function triage(pool: SwuCard[]): TriageReport {
    * pools and skew vanilla, so most never reach here, but the ones that do are free work: the
    * ability is registered once per id against the same behaviour. Rarity can differ between
    * printings without affecting that, since rarity is not something the engine reads. A unit's stats
-   * are read, and every printing plays as the canonical one, so a unit reprinted at other stats
-   * (Superlaser Technician is 2/1 in SOR and 2/3 in SHD) is a separate card. Only units are keyed on
-   * stats: some listings leave an upgrade's blank.
+   * are read, and every printing plays as the canonical one, so a unit reprinted at other stats is a
+   * separate card. Stats are read as `CARD_DATA_CORRECTIONS` corrects them, since that is how the
+   * engine plays them. Only units are keyed on stats: some listings leave an upgrade's blank.
    */
   const byIdentity = new Map<string, TriagedCard[]>()
   for (const c of triaged) {
     const source = cards.find(x => `${x.Set}_${x.Number}` === c.id)
     if (!source) continue
-    const key = source.Type === 'Unit' ? `${printingKey(source)}|${source.Power}|${source.HP}` : printingKey(source)
+    const fix = CARD_DATA_CORRECTIONS[c.id]
+    const key = source.Type === 'Unit' ? `${printingKey(source)}|${fix?.power ?? source.Power}|${fix?.hp ?? source.HP}` : printingKey(source)
     const group = byIdentity.get(key)
     if (group) group.push(c)
     else byIdentity.set(key, [c])

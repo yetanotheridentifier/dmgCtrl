@@ -15,6 +15,7 @@ import type { EngineCard } from './types'
  */
 export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   ASH_081: { arena: 'space' }, // Nebulon-C Frigate — a Space capital ship; the source ships Ground
+  SHD_085: { hp: 1 }, // Superlaser Technician: printed 2/1, as its SOR printing; the source ships 3 HP
 
   // A printed keyword the source omits.
   SHD_005: { keywords: [{ name: 'Raid', value: 1 }] }, // Hondo Ohnaka (leader): printed on his back, absent from the source
