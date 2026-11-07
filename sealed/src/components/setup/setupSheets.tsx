@@ -299,13 +299,18 @@ export function MoreSheet({ open, onHelp, onCardSupport, onSettings, onClose }: 
 
 /** The leader and base thumbnails' short edge: both are landscape cards, so each is this tall. */
 const THUMB_PX = 36
-const CELL: React.CSSProperties = { padding: '6px 8px 6px 0', borderBottom: '1px solid rgba(var(--color-ui-border-muted-rgb), 0.25)' }
-const NUMBER: React.CSSProperties = { ...CELL, padding: '6px 0 6px 12px', textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text-muted)' }
-const COLUMNS = ['Leader', 'Base', 'Opponent', 'Games', 'Win rate']
+const CELL: React.CSSProperties = { padding: '8px' }
+const NUMBER: React.CSSProperties = { ...CELL, textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text-muted)' }
+const COLUMNS = ['Opponent', 'Games', 'Win rate']
+
+/** A cell's second line, under its art or its count. */
+const Subtitle = ({ children }: { children: React.ReactNode }) =>
+  <div data-testid="matchup-subtitle" style={{ ...mutedStyle, marginTop: '4px' }}>{children}</div>
 
 /**
  * The player's record as the chosen leader and base against each opposing leader and base played, a
- * row each with the leader and base art. A base group shows the base played in it.
+ * row each with the leader and base art over the opponent's name, and the games over the wins, losses
+ * and draws. A base group shows the base played in it. Alternate rows sit on the band.
  */
 export function MatchupSheet({ open, mine, matchups, onClose }: { open: boolean; mine: Side | null; matchups: Matchup[]; onClose: () => void }) {
   return (
@@ -313,16 +318,21 @@ export function MatchupSheet({ open, mine, matchups, onClose }: { open: boolean;
       {mine && <p style={mutedStyle}>As {mine.label}, against each leader and base you have played. Aspect bases count together by aspect, and Force bases and splash bases each as one, shown by a base played; any other base is its own.</p>}
       <table style={{ flexShrink: 0, width: '100%', borderSpacing: 0, fontSize: '0.9rem' }}>
         <thead>
-          <tr>{COLUMNS.map((c, i) => <th key={c} style={{ ...subheadStyle, ...(i > 2 ? NUMBER : CELL), color: 'var(--color-accent)', textAlign: i > 2 ? 'right' : 'left' }}>{c}</th>)}</tr>
+          <tr>{COLUMNS.map((c, i) => <th key={c} style={{ ...subheadStyle, ...(i > 0 ? NUMBER : CELL), color: 'var(--color-accent)', textAlign: i > 0 ? 'right' : 'left' }}>{c}</th>)}</tr>
         </thead>
         <tbody>
-          {matchups.map(({ opponent: o, record }) => (
-            <tr key={o.key} data-testid="matchup-row">
-              {[o.leader, o.base].map(card => (
-                <td key={card.id} style={{ ...CELL, width: 0, lineHeight: 0 }}><CardFace card={card} fallbackName={card.name} widthPx={THUMB_PX} tight /></td>
-              ))}
-              <td style={CELL}>{o.label}</td>
-              <td style={NUMBER}>{games(record)}</td>
+          {matchups.map(({ opponent: o, record }, i) => (
+            <tr key={o.key} data-testid="matchup-row" style={i % 2 === 0 ? { background: 'var(--color-band)' } : undefined}>
+              <td style={CELL}>
+                <div style={{ display: 'flex', gap: '8px', lineHeight: 0 }}>
+                  {[o.leader, o.base].map(card => <CardFace key={card.id} card={card} fallbackName={card.name} widthPx={THUMB_PX} tight />)}
+                </div>
+                <Subtitle>{o.label}</Subtitle>
+              </td>
+              <td style={NUMBER}>
+                <div>{games(record)}</div>
+                <Subtitle>{record.won} - {record.lost} - {record.drawn}</Subtitle>
+              </td>
               <td style={NUMBER}>{winRate(record)}</td>
             </tr>
           ))}

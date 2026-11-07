@@ -35,6 +35,8 @@
   --color-tonal-text: #e6f6fe;
   --color-sheet: #10172a;
   --color-backdrop: rgba(0, 5, 16, 0.72);
+  /* Alternate rows of a table sit on this band, in place of rules between them. */
+  --color-band: rgba(var(--color-accent-rgb), 0.07);
   /* The top edge below the status bar. iOS fades the top of the installed app about
      20pt past the inset in portrait, and no setting turns that off, so content clears it by half
      the inset again. Scaled off the inset, it is 0 wherever the inset is 0 (landscape, Android,

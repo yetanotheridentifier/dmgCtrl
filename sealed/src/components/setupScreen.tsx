@@ -103,6 +103,9 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
     return recordLine(played.find(m => m.opponent.key === theirs?.key)?.record)
   }
   const overall = played.length > 0 ? recordLine(totalOf(played)) : undefined
+  // The viewed deck's leader and base, and what that side has played: its Matchups.
+  const viewedSide = viewed ? sideOf(cards[viewed.leader], cards[viewed.base]) : null
+  const viewedPlayed = matchupsOf(s.matchups, viewedSide)
 
   const topBar = (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
@@ -194,10 +197,7 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
         <div style={{ fontSize: '0.9rem', color: 'var(--color-text-body)' }}>{lines[0]}</div>
         {lines[1] && <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{lines[1]}</div>}
         {mine && overall && (
-          <div data-testid="matchup-summary" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <p style={{ ...mutedStyle, flex: 1, minWidth: 0 }}>As {mine.label}: {overall}</p>
-            <Button onClick={() => setStack(['matchups'])}>Matchups</Button>
-          </div>
+          <p data-testid="matchup-summary" style={{ ...mutedStyle, marginTop: 'auto' }}>As {mine.label}: {overall}</p>
         )}
       </div>
     )
@@ -280,7 +280,7 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
         onClose={closeAll}
       />
       <CardSupportSheet open={top === 'cardSupport'} onClose={closeAll} />
-      <MatchupSheet open={top === 'matchups'} mine={mine} matchups={played} onClose={closeAll} />
+      <MatchupSheet open={top === 'matchups'} mine={viewedSide} matchups={viewedPlayed} onClose={back} />
       <DeckSheet
         open={top === 'deck'}
         decks={s.decks}
@@ -325,8 +325,10 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, onBack, header
           cards={cards}
           portrait={portrait}
           onBack={back}
+          covered={top !== 'view'}
           actions={(
             <>
+              {viewedPlayed.length > 0 && <Button onClick={() => open('matchups')}>Matchups</Button>}
               <Button onClick={() => { s.removeDeck(viewed.id); setStack(st => (st.length > 1 ? st.slice(0, -1) : ['deck'])) }}>Delete</Button>
               <Button variant="primary" onClick={() => { s.chooseDeck(viewed.id); closeAll() }} style={{ minWidth: '176px' }}>Use this deck</Button>
             </>

@@ -10,10 +10,11 @@ import { useCardShown } from './useCardShown'
 /**
  * A deck seen whole before it is chosen: the leader and base, then the card list. It covers the screen,
  * over the sheet it was opened from, and Back returns to that sheet. `actions` are the header's buttons
- * (Delete and Use this deck for a saved deck; the set, Generate again and Use this deck for a generated
- * one), and `deck` is absent while there is none to show, with `status` saying why.
+ * (Matchups, Delete and Use this deck for a saved deck; the set, Generate again and Use this deck for a
+ * generated one), and `deck` is absent while there is none to show, with `status` saying why. While a
+ * sheet is `covered` over the view, Escape closes that sheet and not the view.
  */
-export function DeckView({ title, subtitle, deck, cards, actions, status, portrait, onBack }: {
+export function DeckView({ title, subtitle, deck, cards, actions, status, portrait, covered = false, onBack }: {
   title: string
   subtitle: string
   deck: ParsedDeck | null
@@ -21,15 +22,17 @@ export function DeckView({ title, subtitle, deck, cards, actions, status, portra
   actions: ReactNode
   status?: ReactNode
   portrait: boolean
+  covered?: boolean
   onBack: () => void
 }) {
   const { show, shown } = useCardShown()
 
   useEffect(() => {
+    if (covered) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onBack() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onBack])
+  }, [covered, onBack])
 
   return (
     <div
