@@ -4959,6 +4959,18 @@ const handToDeck = (s: GameState, owner: PlayerId, handIndex: number | undefined
   const hand = p.hand.filter((_, i) => i !== handIndex)
   return updatePlayer(s, owner, { hand, deck: where === 'top' ? [cardId, ...p.deck] : [...p.deck, cardId] })
 }
+/** "Draw a card, then put a card from your hand on the top or bottom of your deck"; `stackStep` answers it. */
+const drawThenStack = (s: GameState, ctx: Resumable): GameState =>
+  handCardThen(drawCards(s, ctx.owner, 1), ctx, 'put a card from your hand on the top or bottom of your deck', 'card')
+/** The `ifYouDo` steps `drawThenStack` raises: top or bottom for the chosen card, then the move. Undefined for any other step. */
+const stackStep = (s: GameState, ctx: IfYouDoContext): GameState | undefined => {
+  if (ctx.step === 'card') {
+    return pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'put it on the top of your deck (otherwise the bottom)', then: resume(ctx, `top:${ctx.handIndex}`), declineStep: `bottom:${ctx.handIndex}` })
+  }
+  if (!ctx.step?.startsWith('top:') && !ctx.step?.startsWith('bottom:')) return undefined
+  const [where, index] = ctx.step.split(':')
+  return handToDeck(s, ctx.owner, Number(index), where as 'top' | 'bottom')
+}
 registerCard('SEC_232', { // Kreia's Whispers
   ...whenPlayed('Draw 3 cards, then put a card from your hand on the top of your deck and another card from your hand on the bottom of your deck.', (s, ctx) =>
     handCardThen(drawCards(s, ctx.owner, 3), ctx, 'put a card from your hand on top of your deck', 'top')),
@@ -6686,20 +6698,15 @@ const aUnitLeftPlay: When = s => BOTH_BASES.some(p => leftPlayThisPhase(s, p).le
 registerCard('TWI_004', { // Yoda
   ...leaderFront('If a unit left play this phase, draw a card, then put a card from your hand on the top or bottom of your deck.', {
     usable: aUnitLeftPlay,
-    effect: (s, ctx) => handCardThen(drawCards(s, ctx.owner, 1), ctx, 'put a card from your hand on the top or bottom of your deck', 'card'),
+    effect: drawThenStack,
   }),
   ...whenDeployed('You may discard a card from your deck. If you do, defeat an enemy non-leader unit that costs the same as or less than the discarded card.', (s, ctx) =>
     (s.players[ctx.owner].deck.length
       ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'discard the top card of your deck to defeat an enemy non-leader unit that costs as much or less', then: resume(ctx, 'mill') })
       : s)),
   ifYouDo: (s, ctx) => {
-    if (ctx.step === 'card') {
-      return pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'put it on the top of your deck (otherwise the bottom)', then: resume(ctx, `top:${ctx.handIndex}`), declineStep: `bottom:${ctx.handIndex}` })
-    }
-    if (ctx.step?.startsWith('top:') || ctx.step?.startsWith('bottom:')) {
-      const [where, index] = ctx.step.split(':')
-      return handToDeck(s, ctx.owner, Number(index), where as 'top' | 'bottom')
-    }
+    const stacked = stackStep(s, ctx)
+    if (stacked) return stacked
     const [next, milled] = millTop(s, ctx.owner, 1)
     const cost = next.cards[milled[0]]?.cost ?? 0
     return targetChoice(next, ctx, 'selectUnitToDefeat', pickedIds(next, ctx, pickAll(pickEnemy, nonLeader, (st, u) => printedCost(st, u) <= cost)))
@@ -15655,4 +15662,19 @@ registerCard('IC27_168', { // Cunning Ploy
   ifYouDo: (s, ctx) => (ctx.step === 'exhaust'
     ? thenAfterChoices(targetChoice(s, ctx, 'mayExhaustUnit', s.players[opponentOf(ctx.owner)].units.map(u => u.instanceId)), resume(ctx, 'attack'))
     : offerAttack(s, ctx.owner, ctx.sourceInstanceId!, { grantCardId: GRANT_CUNNING_PLOY, optional: true })),
+})
+registerCard('IC27_001', { // Darth Vader
+  ...leaderFront('[C=1, Exhaust, defeat a friendly unit]: Draw a card and heal 2 damage from your base.', {
+    cost: 1,
+    usable: anyUnitPasses(pickFriendly),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'defeat a friendly unit to draw a card and heal 2 damage from your base', 'harm', false),
+  }),
+  ...attacks('You may defeat another friendly unit. If you do, draw a card and heal 2 damage from your base.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickOther)), 'defeat another friendly unit to draw a card and heal 2 damage from your base', 'harm', true)),
+  ifYouDo: (s, ctx) => healBase(drawCards(defeatUnits(s, [ctx.targetInstanceId!]), ctx.owner, 1), ctx.owner, 2),
+})
+registerCard('IC27_008', { // Princess Leia
+  ...leaderFront('Draw a card, then put a card from your hand on the top or bottom of your deck.', { cost: 1, effect: drawThenStack }),
+  ...attacks('Draw a card, then put a card from your hand on the top or bottom of your deck.', drawThenStack),
+  ifYouDo: (s, ctx) => stackStep(s, ctx) ?? s,
 })

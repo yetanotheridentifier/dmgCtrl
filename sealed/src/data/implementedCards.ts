@@ -369,6 +369,9 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'LAW_007', name: 'Boba Fett', front: true, back: true },
   { id: 'LAW_017', name: 'Han Solo', front: true, back: true },
   { id: 'SEC_016', name: 'Padmé Amidala', front: true, back: true },
+  // IC27's own leaders.
+  { id: 'IC27_001', name: 'Darth Vader', front: true, back: true },
+  { id: 'IC27_008', name: 'Princess Leia', front: true, back: true },
 ]
 
 /**

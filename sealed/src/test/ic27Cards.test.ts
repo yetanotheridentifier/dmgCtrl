@@ -7,7 +7,7 @@ import { effectiveHp, effectivePower } from '../engine/stats'
 import { normaliseCard } from '../engine/cardDb'
 import { poolFor } from '../bench/setPools'
 import { getCardDefinition } from '../engine/abilities'
-import { IMPLEMENTED_EVENTS, IMPLEMENTED_UNITS } from '../data/implementedCards'
+import { IMPLEMENTED_EVENTS, IMPLEMENTED_LEADERS, IMPLEMENTED_UNITS } from '../data/implementedCards'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_EXPERIENCE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
@@ -23,10 +23,11 @@ const real = (id: string): EngineCard => {
   return { ...normaliseCard(row), id }
 }
 const BUILT = ['IC27_022', 'IC27_024', 'IC27_071', 'IC27_079', 'IC27_099', 'IC27_103', 'IC27_146', 'IC27_187', 'IC27_166', 'IC27_168']
+const LEADERS = ['IC27_001', 'IC27_008']
 const src = (id: string, over: Partial<EngineCard> = {}) => card({ id, type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 3, ...over })
 const F: Record<string, EngineCard> = {
   ...CARDS,
-  ...Object.fromEntries(BUILT.map(id => [id, real(id)])),
+  ...Object.fromEntries([...BUILT, ...LEADERS].map(id => [id, real(id)])),
   PLAIN: src('PLAIN'),
   TOUGH: src('TOUGH', { power: 1, hp: 9 }),
   IMP: src('IMP', { traits: ['IMPERIAL'] }),
@@ -202,5 +203,80 @@ describe("IC27_168 Cunning Ploy: look at an opponent's hand and may discard from
     expect(p.players.opponent.hand).toEqual(['PLAIN', 'TOUGH'])
     expect(unitOffers(p)).toEqual(['e'])
     expect(choice(accept(p, { targetInstanceId: 'e' })).kind).toBe('mayAttackAnyUnit')
+  })
+})
+
+// ── Leaders, both sides ─────────────────────────────────────────────────────────────────────────────
+const front = (id: string, mine: Side = {}, theirs: Side = {}) =>
+  board({ leader: { cardId: id, deployed: false, epicActionUsed: false, exhausted: false }, ...mine }, theirs)
+const back = (id: string, mine: Side = {}, theirs: Side = {}) =>
+  board({ leader: { cardId: id, deployed: true, epicActionUsed: true, exhausted: false }, ...mine, units: [unit('L', id, { isLeader: true }), ...(mine.units ?? [])] }, theirs)
+const usable = (s: GameState) => legalMoves(s).some(m => m.type === 'useLeaderAbility')
+const use = (s: GameState) => {
+  expect(usable(s), 'the leader action is offered').toBe(true)
+  return resolve(s, { type: 'useLeaderAbility', index: 0 })
+}
+const handOffers = (s: GameState) => legalMoves(s).flatMap(m => (m.type === 'acceptChoice' && m.handIndex !== undefined ? [m.handIndex] : [])).sort()
+const ownBase = (s: GameState) => s.players.player.base.damage
+
+describe('IC27 leaders: registered on both sides and listed as built', () => {
+  it.each(LEADERS)('%s', id => {
+    expect(getCardDefinition(id)?.leaderAbilities, id).toBeTruthy()
+    expect(IMPLEMENTED_LEADERS.find(l => l.id === id)).toMatchObject({ front: true, back: true })
+  })
+})
+
+describe('IC27_001 Darth Vader: defeat a friendly unit to draw a card and heal 2 from your base; attacking, he may defeat another to do it again', () => {
+  it('front: is not offered without a friendly unit to defeat', () => {
+    expect(usable(front('IC27_001'))).toBe(false)
+  })
+
+  it('front: pays 1, defeats a friendly unit of your choice, draws a card and heals 2 from your base', () => {
+    const s = use(front('IC27_001', { units: [unit('f', 'PLAIN'), unit('g', 'TOUGH')], deck: ['IMP'], base: { ...player().base, damage: 3 } }, { units: [unit('e', 'PLAIN')] }))
+    expect(unitOffers(s)).toEqual(['f', 'g'])
+    expect(declinable(s)).toBe(false)
+    const done = accept(s, { targetInstanceId: 'f' })
+    expect(U(done, 'f')).toBeUndefined()
+    expect(done.players.player.hand).toEqual(['IMP'])
+    expect(ownBase(done)).toBe(1)
+    expect(readyResources(done)).toBe(19)
+    expect(done.players.player.leader.exhausted).toBe(true)
+  })
+
+  it('back: On Attack, may defeat another friendly unit to draw and heal 2; declined, nothing happens', () => {
+    const s = attackBase(back('IC27_001', { units: [unit('f', 'PLAIN')], deck: ['IMP'], base: { ...player().base, damage: 3 } }), 'L')
+    expect(unitOffers(s)).toEqual(['f'])
+    expect(declinable(s)).toBe(true)
+    const done = accept(s, { targetInstanceId: 'f' })
+    expect(U(done, 'f')).toBeUndefined()
+    expect([done.players.player.hand, ownBase(done)]).toEqual([['IMP'], 1])
+    const declined = skip(s)
+    expect(U(declined, 'f')).toBeDefined()
+    expect([declined.players.player.hand, ownBase(declined)]).toEqual([[], 3])
+  })
+})
+
+describe('IC27_008 Princess Leia: draw a card, then put a card from your hand on the top or bottom of your deck, as her action and On Attack', () => {
+  /** Draws, then offers every hand card and both ends of the deck. */
+  const placed = (s: GameState) => {
+    expect(s.players.player.hand).toEqual(['TOUGH', 'PLAIN'])
+    expect(handOffers(s)).toEqual([0, 1])
+    const picked = accept(s, { handIndex: 0 })
+    expect(choice(picked).kind).toBe('mayPayThen')
+    expect(declinable(picked)).toBe(true)
+    expect(legalMoves(picked).some(m => m.type === 'acceptChoice')).toBe(true)
+    expect(accept(picked).players.player).toMatchObject({ hand: ['PLAIN'], deck: ['TOUGH', 'IMP'] })
+    expect(skip(picked).players.player).toMatchObject({ hand: ['PLAIN'], deck: ['IMP', 'TOUGH'] })
+  }
+
+  it('front: pays 1 and exhausts', () => {
+    const s = use(front('IC27_008', { hand: ['TOUGH'], deck: ['PLAIN', 'IMP'] }))
+    expect(readyResources(s)).toBe(19)
+    expect(s.players.player.leader.exhausted).toBe(true)
+    placed(s)
+  })
+
+  it('back: On Attack', () => {
+    placed(attackBase(back('IC27_008', { hand: ['TOUGH'], deck: ['PLAIN', 'IMP'] }), 'L'))
   })
 })

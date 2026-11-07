@@ -146,9 +146,9 @@ describe('implementation progress', () => {
 
   it('counts IC27 as printed, and credits its reprints of built cards to it', () => {
     // 59 cards, two of them the Experience and Shield tokens. Most of the rest reprint cards already
-    // built in other sets (`data/reprints.ts`); the 4 left are its own.
+    // built in other sets (`data/reprints.ts`); the 2 left are its own.
     expect(bySet.IC27.total).toEqual({ leaders: 2, bases: 4, units: 42, upgrades: 3, events: 6, tokens: 2 })
-    expect(bySet.IC27.done).toEqual({ leaders: 0, bases: 4, units: 40, upgrades: 3, events: 6, tokens: 2 })
+    expect(bySet.IC27.done).toEqual({ leaders: 2, bases: 4, units: 40, upgrades: 3, events: 6, tokens: 2 })
   })
 
   it('counts IBH by distinct cards, not collector numbers, and only Twin Suns of the extra sets prints tokens', () => {
