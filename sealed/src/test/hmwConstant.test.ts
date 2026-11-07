@@ -28,7 +28,7 @@ const SHIPPED = [
   // A: a keyword or a stat on the unit itself, or on the unit an upgrade is attached to
   'HMW_073', 'HMW_074', 'HMW_083', 'HMW_084', 'HMW_090', 'HMW_107', 'HMW_117', 'HMW_118', 'HMW_129', 'HMW_131',
   'HMW_133', 'HMW_137', 'HMW_138', 'HMW_142', 'HMW_164', 'HMW_176', 'HMW_256', 'HMW_257', 'HMW_259',
-  'HMW_096', 'HMW_190', 'HMW_191', 'HMW_235',
+  'HMW_190', 'HMW_191', 'HMW_235',
   // B: auras on other units, combat and damage
   'HMW_039', 'HMW_088', 'HMW_141', 'HMW_162', 'HMW_212', 'HMW_233', 'HMW_251',
   // C: costs and entering play
@@ -128,7 +128,6 @@ describe('HMW constant abilities: registration', () => {
     expect(printed('HMW_131')).toEqual(['Raid 1'])
     expect(printed('HMW_259')).toEqual([])
     expect(printed('HMW_212')).toEqual([])
-    expect(printed('HMW_096')).toEqual([])
   })
 })
 
@@ -263,11 +262,6 @@ describe('HMW constant abilities, A: a keyword or a stat on the unit', () => {
   it('Pack Guardian (HMW_259) gains Sentinel while ready', () => {
     expect(has(board({ units: [unit('p', 'HMW_259')] }), 'p', 'Sentinel')).toBe(true)
     expect(has(board({ units: [unit('p', 'HMW_259', { exhausted: true })] }), 'p', 'Sentinel')).toBe(false)
-  })
-
-  it('Devotion (HMW_096) gives the attached unit Restore 2', () => {
-    const s = board({ units: [unit('a', 'GRD', { upgrades: [upg('HMW_096')] })] })
-    expect(kwValue(s, 'a', 'Restore')).toBe(2)
   })
 
   it('Enraged (HMW_190) gives the attached unit Raid 2', () => {

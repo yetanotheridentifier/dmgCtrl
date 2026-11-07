@@ -407,10 +407,9 @@ Three findings that contradict the assumptions the programme started from:
 - **Bounty is gated behind capture**, not resources.
 
 The 311 vanilla and keyword-only cards need no ticket: `PLAYABLE_AS_PRINTED` in
-`data/implementedCards.ts` credits them, and a test holds it to the triage of each set's fixture. 56 cards with ability text are printed in more than one set, covering 58
+`data/implementedCards.ts` credits them, and a test holds it to the triage of each set's fixture. 55 cards with ability text are printed in more than one set, covering 57
 extra ids for no extra work: each needs one line in `data/reprints.ts` naming its other printings, and
-`--triage` marks the ones that do not have it yet. Eight are still registered twice instead
-(**#1057**).
+`--triage` marks the ones that do not have it yet.
 
 ## Player-facing UI (third stream)
 

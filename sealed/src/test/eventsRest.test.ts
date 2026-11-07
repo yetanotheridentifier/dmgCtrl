@@ -42,7 +42,7 @@ const F = {
   FILL: card({ id: 'FILL', type: 'event', cost: 0 }),
 
   LAW_166: ev('LAW_166'), SEC_072: ev('SEC_072'), SOR_123: ev('SOR_123'), JTL_128: ev('JTL_128', 2),
-  SOR_125: ev('SOR_125', 2), SHD_093: ev('SHD_093', 4), SHD_253: ev('SHD_253', 2),
+  SHD_093: ev('SHD_093', 4), SHD_253: ev('SHD_253', 2),
 
   SOR_200: ev('SOR_200', 2), LOF_226: ev('LOF_226', 2), JTL_207: ev('JTL_207'), TWI_223: ev('TWI_223'),
   LAW_217: ev('LAW_217', 3), SEC_233: ev('SEC_233', 3), LAW_204: ev('LAW_204'), SHD_244: ev('SHD_244', 3),
@@ -78,7 +78,7 @@ const F = {
   C1: card({ id: 'C1', arena: 'ground', cost: 1, power: 1, hp: 3 }),
   UW: card({ id: 'UW', arena: 'ground', cost: 2, power: 2, hp: 3, traits: ['UNDERWORLD'] }),
   LOF_076: ev('LOF_076'), SEC_257: ev('SEC_257', 2), SOR_235: ev('SOR_235', 7), TWI_225: ev('TWI_225', 3),
-  TWI_127: ev('TWI_127', 3), SOR_126: ev('SOR_126', 3), LAW_171: ev('LAW_171', 6),
+  TWI_127: ev('TWI_127', 3), LAW_171: ev('LAW_171', 6),
   HERO2: card({ id: 'HERO2', arena: 'ground', cost: 2, power: 2, hp: 3, aspects: ['Heroism', 'Heroism'] }),
   HERO1: card({ id: 'HERO1', arena: 'ground', cost: 2, power: 2, hp: 3, aspects: ['Heroism', 'Command'] }),
   H_UNIT5: card({ id: 'H_UNIT5', arena: 'ground', cost: 5, power: 2, hp: 3, aspects: ['Heroism'] }),
@@ -164,7 +164,6 @@ describe('events that search the deck and draw', () => {
     ['SEC_072', 'Scour the Archives: top 8 for an upgrade', 8, ['UPG', 'VEH_UPG']],
     ['SOR_123', 'Recruit: top 5 for a unit', 5, ['U_VIG', 'U_CMD', 'VEH1']],
     ['JTL_128', 'Prepare for Takeoff: top 8 for up to 2 Vehicle units', 8, ['VEH1', 'VEH2']],
-    ['SOR_125', 'Prepare For Takeoff: top 8 for up to 2 Vehicle units', 8, ['VEH1', 'VEH2']],
     ['SHD_093', 'Remnant Reserves: top 5 for up to 3 units', 5, ['U_VIG', 'U_CMD', 'VEH1']],
     ['SHD_253', 'This Is The Way: top 8 for up to 2 Mandalorian and/or upgrade cards', 8, ['UPG', 'MANDO', 'VEH_UPG']],
   ])('%s %s', (id, _label, depth, eligible) => {
@@ -1055,7 +1054,7 @@ describe('events that play a unit from hand', () => {
 })
 
 describe('events that become resources', () => {
-  it.each(['TWI_127', 'SOR_126'])('Resupply (%s) puts itself into play as a resource', id => {
+  it.each(['TWI_127'])('Resupply (%s) puts itself into play as a resource', id => {
     const s = play(board(id, { resources: ready(3) }))
     expect(s.players.player.discard).toEqual([])
     expect(s.players.player.resources).toHaveLength(4)

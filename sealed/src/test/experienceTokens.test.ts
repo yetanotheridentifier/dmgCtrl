@@ -33,7 +33,7 @@ const SHIPPED = [
   'SHD_040', 'LAW_249', 'LAW_059', 'SEC_095', 'SHD_082', 'SHD_258', 'SOR_231', 'SOR_241', 'LAW_142', 'SOR_108',
   'LOF_095', 'SEC_027', 'SOR_049', 'LAW_067', 'TS26_54',
   // C: a token on each of several units
-  'SEC_252', 'SOR_037', 'LOF_055', 'SHD_081', 'SOR_080', 'LOF_099', 'SEC_124', 'LOF_241', 'SOR_245', 'TS26_60',
+  'SEC_252', 'SOR_037', 'LOF_055', 'SHD_081', 'LOF_099', 'SEC_124', 'LOF_241', 'SOR_245', 'TS26_60',
   // D: the number of tokens is decided as the ability resolves
   'SEC_040', 'LOF_255', 'SOR_035', 'SEC_260', 'SHD_039', 'TS26_51',
   // E: a token alongside something else
@@ -45,7 +45,7 @@ const SHIPPED = [
   // SHD_075 Covert Strength: shipped with Smuggle (#469), which its alternate cost needed.
   'SHD_075',
   // F: attacks, reactions and activated Actions
-  'JTL_200', 'JTL_250', 'LAW_039', 'LAW_073', 'LAW_115', 'SHD_057', 'LAW_152', 'LOF_046', 'LOF_065', 'LOF_258',
+  'JTL_200', 'JTL_250', 'LAW_039', 'LAW_073', 'LAW_115', 'LAW_152', 'LOF_046', 'LOF_065', 'LOF_258',
   'SEC_051', 'SHD_045', 'SHD_141', 'SOR_036', 'SOR_094',
   // G: leaders and a base
   'LOF_006', 'SHD_004', 'SOR_007', 'LAW_010', 'SOR_008', 'TS26_9',
@@ -452,7 +452,7 @@ describe('Experience tokens, C: a token on each of several units', () => {
     expect([exp(done, 'g'), exp(done, 'veh'), exp(done, 'dume'), exp(done, 'e')]).toEqual([1, 0, 0, 0])
   })
 
-  it.each(['SHD_081', 'SOR_080'])('General Tagge (%s) gives a token to each of up to 3 Trooper units, one pick at a time', id => {
+  it.each(['SHD_081'])('General Tagge (%s) gives a token to each of up to 3 Trooper units, one pick at a time', id => {
     const s = play(board({ units: [unit('t1', 'TROOPER'), unit('t2', 'TROOPER'), unit('g', 'GRD')] }, { units: [unit('et', 'TROOPER')] }), id)
     expect(choice(s)).toMatchObject({ kind: 'selectUnitThen', optional: true })
     expect(unitOffers(s)).toEqual(['et', 't1', 't2'])
@@ -777,7 +777,7 @@ describe('Experience tokens, F: attacks, reactions and activated Actions', () =>
     expect(U(done, 'g')!.exhausted).toBe(true)
   })
 
-  it.each(['LAW_115', 'SHD_057'])('Rickety Quadjumper (%s) may reveal the top card and pays out only on a non-unit', id => {
+  it.each(['LAW_115'])('Rickety Quadjumper (%s) may reveal the top card and pays out only on a non-unit', id => {
     const nonUnit = accept(attack(board({ units: [unit('a', id), unit('f', 'GRD')], deck: ['EV', 'GRD'] }), 'a'))
     expect(unitOffers(nonUnit)).toEqual(['f'])
     // The card stays on top of the deck.

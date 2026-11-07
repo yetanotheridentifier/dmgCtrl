@@ -38,7 +38,6 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   SEC_104: { keywords: [] }, // Figure of Unity: its host gives each OTHER friendly unit Overwhelm, Raid 1 and Restore 1
   HMW_112: { keywords: [{ name: 'Fortify' }] }, // Military Academy: its base gives friendly units Overwhelm
   HMW_126: { keywords: [{ name: 'Fortify' }] }, // Verdant Fortress: its base gives friendly units Raid 1
-  HMW_096: { keywords: [] }, // Devotion: Restore 2
   HMW_190: { keywords: [] }, // Enraged: Raid 2
   HMW_191: { keywords: [] }, // Hunter's Instinct: Grit on a Creature
   SEC_071: { keywords: [] }, // Disciples' Devotion: Sentinel while attached unit is exhausted
