@@ -375,12 +375,38 @@ const OPTS: UseGameOptions = { ...PASSIVE, opponentDelayMs: 0 }
 const renderGame = (ui: ReactElement) => render(<SettingsProvider>{ui}</SettingsProvider>)
 const seedSettings = (patch: Partial<Settings>) => localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), ...patch }))
 
-/** The prompt has no ring and hangs straight under the opponent's counts, so its length cannot move its top. */
-function expectPromptPinned() {
+/**
+ * The prompt has no ring and hangs straight under the opponent's counts, so its length cannot move its
+ * top. Its text is inset at both sides (`promptInset`), so it runs no wider than those counts read.
+ */
+function expectPromptPinned(scale: 'phone' | 'desktop') {
   const prompt = screen.getByTestId('action-prompt')
   expect(prompt.className).not.toMatch(/(^| )border( |$)/)
   expect(prompt.parentElement).toBe(screen.getByTestId('phone-controls'))
   expect(prompt.previousElementSibling).toBe(screen.getByTestId('opponent-summary'))
+  const inset = BOARD_SCALE[scale].promptInset
+  expect(inset).toBeGreaterThan(0)
+  expect(prompt.style.paddingLeft).toBe(`${inset}px`)
+  expect(prompt.style.paddingRight).toBe(`${inset}px`)
+}
+
+/**
+ * Each arena is named across the gap between the opponent's half and yours, in clear text: nothing is
+ * drawn behind it but the page's own starfield, so it carries no band of another colour.
+ */
+function expectArenaLabels(scale: 'phone' | 'desktop') {
+  for (const [name, text, arena] of [['Space arena', 'SPACE', 'space'], ['Ground arena', 'GROUND', 'ground']] as const) {
+    const label = within(screen.getByRole('region', { name })).getByText(text)
+    expect(label.getAttribute('aria-hidden')).toBe('true')
+    expect(label.style.writingMode).toBe('')
+    expect(label.previousElementSibling).toBe(screen.getByTestId(`opponent-${arena}-units`))
+    expect(label.nextElementSibling).toBe(screen.getByTestId(`player-${arena}-units`))
+    expect(label.style.height).toBe(`${BOARD_SCALE[scale].arenaGap}px`)
+    for (let el: HTMLElement | null = label; el && el.getAttribute('role') !== 'region'; el = el.parentElement) {
+      expect(el.className).not.toMatch(/(^| )bg-/)
+      expect(el.style.background + el.style.backgroundColor + el.style.borderRadius).toBe('')
+    }
+  }
 }
 
 async function renderPhone(options: UseGameOptions = OPTS) {
@@ -417,24 +443,14 @@ describe('GameScreen on a phone in landscape', () => {
     expect(screen.queryByTestId('game-log-panel')).toBeNull()
   })
 
-  it('labels each arena at its outer edge with clear text over the starfield, hidden from the reader', async () => {
+  it('labels each arena across the gap between the halves, in clear text over the page, hidden from the reader', async () => {
     await renderPhone()
-    for (const [name, text, edge] of [['Space arena', 'SPACE', 'left'], ['Ground arena', 'GROUND', 'right']] as const) {
-      const label = within(screen.getByRole('region', { name })).getByText(text)
-      expect(label.closest('[aria-hidden="true"]')).not.toBeNull()
-      expect(label.style.writingMode).toBe('vertical-rl')
-      expect(label.style[edge]).toBe('0px')
-      // No tab behind it: nothing fills or rounds the label, so the stars show through.
-      for (let el: HTMLElement | null = label; el && el.getAttribute('role') !== 'region'; el = el.parentElement) {
-        expect(el.className).not.toMatch(/(^| )bg-/)
-        expect(el.style.background + el.style.backgroundColor + el.style.borderRadius).toBe('')
-      }
-    }
+    expectArenaLabels('phone')
   })
 
-  it('pins the prompt, unringed, under the opponent\'s counts', async () => {
+  it('pins the prompt, unringed and inset, under the opponent\'s counts', async () => {
     await renderPhone()
-    expectPromptPinned()
+    expectPromptPinned('phone')
   })
 
   it('mulligans and resources one of two from the controls column', async () => {
@@ -632,7 +648,8 @@ describe('GameScreen on a desktop', () => {
     const log = within(controls.getByRole('log', { name: 'Log' }))
     expect(log.getAllByTestId('log-round').map(el => el.textContent)).toContain('Setup')
     expect(log.getAllByTestId('log-row')[0]).toHaveTextContent(/keep/i)
-    expectPromptPinned()
+    expectPromptPinned('desktop')
+    expectArenaLabels('desktop')
     // The header's bug, cog and ? buttons are gone: they live under More.
     expect(screen.queryByTestId('settings-btn')).toBeNull()
     expect(screen.queryByTestId('bug-report-btn')).toBeNull()
