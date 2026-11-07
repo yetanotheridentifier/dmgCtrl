@@ -23,6 +23,7 @@ const SNAPSHOTS: Record<string, () => Promise<{ default: unknown }>> = {
   TWI: () => import('../test/fixtures/twiSet.json'),
   SHD: () => import('../test/fixtures/shdSet.json'),
   SOR: () => import('../test/fixtures/sorSet.json'),
+  IC27: () => import('../test/fixtures/ic27Set.json'),
   TS26: () => import('../test/fixtures/ts26Set.json'),
   IBH: () => import('../test/fixtures/ibhSet.json'),
 }

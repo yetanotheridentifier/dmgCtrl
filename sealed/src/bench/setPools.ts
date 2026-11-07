@@ -9,8 +9,9 @@ import shdSet from '../test/fixtures/shdSet.json'
 import sorSet from '../test/fixtures/sorSet.json'
 import ts26Set from '../test/fixtures/ts26Set.json'
 import ibhSet from '../test/fixtures/ibhSet.json'
+import ic27Set from '../test/fixtures/ic27Set.json'
 import { withArt } from '../data/bundledSets'
-import { cardId, fromSearchRow, type SwuCard } from '../data/cards'
+import { cardId, fromSearchRow, isToken, type SwuCard } from '../data/cards'
 import { SET_PROGRESS } from '../data/implementedCards'
 import { normalPrintings } from '../data/normalPrintings'
 
@@ -36,6 +37,7 @@ const FIXTURES: Record<string, SwuCard[]> = {
   TWI: twiSet as unknown as SwuCard[],
   SHD: shdSet as unknown as SwuCard[],
   SOR: sorSet as unknown as SwuCard[],
+  IC27: ic27Set as unknown as SwuCard[],
   TS26: ts26Set as unknown as SwuCard[],
   IBH: ibhSet as unknown as SwuCard[],
 }
@@ -125,7 +127,7 @@ export function toFixture(rows: readonly object[]): SwuCard[] {
 
 /** The listing rows a fixture keeps, with every field the listing gave them. */
 function fixtureRows(rows: readonly object[]): SwuCard[] {
-  return normalPrintings(rows.map(fromSearchRow)).filter(card => card.Type !== 'Token')
+  return normalPrintings(rows.map(fromSearchRow)).filter(card => !isToken(card))
 }
 
 /**

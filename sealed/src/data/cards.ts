@@ -87,6 +87,11 @@ export function fromSearchRow(row: object): SwuCard {
   return out as unknown as SwuCard
 }
 
+/** Whether a listing row is a token. Most sets file one as `Token`; IC27 says which kind (`Token Upgrade`). */
+export function isToken(card: SwuCard): boolean {
+  return card.Type.startsWith('Token')
+}
+
 function mapSwuApiCard(card: SwuApiCard): SwuCard {
   const [set, number] = card.collector_number.split('_')
   return {
