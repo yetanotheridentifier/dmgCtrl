@@ -50,15 +50,13 @@ describe('Sealed analytics', () => {
       expect(events[0].data).toMatchObject({ game: 'sealed', ...START })
     })
 
-    it('sends a game end, leaving out who conceded when nobody did', async () => {
-      await onGameEnded({ result: 'win', round: 4, durationSeconds: 600, undo_count: 2 })
+    // The end carries the decks too: nothing links a game's two events, so a result by leader or set
+    // can only be read from the end event alone.
+    it('sends a game end with its decks and how it ended', async () => {
+      await onGameEnded({ ...START, result: 'win', round: 4, durationSeconds: 600, undo_count: 2, conceded_by: 'none' })
       const { events } = sent()
       expect(events[0].name).toBe('game_ended')
-      expect(events[0].data).toMatchObject({ game: 'sealed', result: 'win', round: 4, durationSeconds: 600, undo_count: 2 })
-      expect(events[0].data).not.toHaveProperty('conceded_by')
-
-      await onGameEnded({ result: 'loss', round: 3, durationSeconds: 300, undo_count: 0, conceded_by: 'player' })
-      expect(sent().events[0].data).toMatchObject({ result: 'loss', conceded_by: 'player' })
+      expect(events[0].data).toMatchObject({ game: 'sealed', ...START, result: 'win', round: 4, durationSeconds: 600, undo_count: 2, conceded_by: 'none' })
     })
 
     // Sealed is served from /sealed/ on the PWA's origin, so the two apps share localStorage.
