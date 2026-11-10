@@ -28,7 +28,7 @@
       }
     ],
     "cursorSync": "Crosshair",
-    "description": "dmgCtrl SWU analytics \u2014 sessions, games, bases, features, competitive play",
+    "description": "dmgCtrl SWU analytics: sessions, games, bases, features, competitive play",
     "editable": true,
     "elements": {
       "panel-1": {
@@ -371,8 +371,8 @@
         "kind": "Panel",
         "spec": {
           "id": 4,
-          "title": "Sessions by city",
-          "description": "SWU sessions per city, plotted by approximate location (Cloudflare edge PoP coordinates)",
+          "title": "Sessions by country",
+          "description": "Sessions that started an SWU game, by the country Cloudflare reports for the request. Darker means more sessions. Countries too small for the world map (for example Malta or Singapore) are counted but not drawn. Development traffic has no country, so this panel is empty for development.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -393,7 +393,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT country, city,\n  AVG(latitude) AS latitude,\n  AVG(longitude) AS longitude,\n  COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND (game IS NULL OR game = 'swu')\n  AND $__timeFilter(time)\nGROUP BY country, city"
+                        "rawSql": "SELECT country, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND (game IS NULL OR game = 'swu')\n  AND country IS NOT NULL\n  AND country <> 'unknown'\n  AND $__timeFilter(time)\nGROUP BY country\nORDER BY sessions DESC"
                       }
                     },
                     "refId": "A",
@@ -407,84 +407,19 @@
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "geomap",
-            "version": "13.1.0-25668120414",
+            "group": "volkovlabs-echarts-panel",
             "spec": {
               "options": {
-                "controls": {
-                  "mouseWheelZoom": true,
-                  "showAttribution": false,
-                  "showDebug": false,
-                  "showMeasure": false,
-                  "showScale": false,
-                  "showZoom": true
+                "renderer": "canvas",
+                "map": "json",
+                "editorMode": "code",
+                "editor": {
+                  "format": "auto"
                 },
-                "layers": [
-                  {
-                    "config": {
-                      "showLegend": true,
-                      "style": {
-                        "color": {
-                          "fixed": "#5794F2"
-                        },
-                        "fillOpacity": 0.9,
-                        "size": {
-                          "field": "sessions",
-                          "fixed": 8,
-                          "max": 40,
-                          "min": 8
-                        }
-                      }
-                    },
-                    "location": {
-                      "latitude": "latitude",
-                      "longitude": "longitude",
-                      "mode": "coords"
-                    },
-                    "name": "Cities",
-                    "type": "markers"
-                  }
-                ],
-                "tooltip": {
-                  "mode": "details"
-                },
-                "view": {
-                  "allLayers": true,
-                  "dashboardVariable": false,
-                  "id": "fit",
-                  "lat": 0,
-                  "lon": 0,
-                  "noRepeat": false,
-                  "padding": 5,
-                  "zoom": 1
-                }
+                "getOption": "const s = context.panel.data.series[0];\nconst fields = s?.fields ?? [];\nconst codes = fields.find((f) => f.name === 'country')?.values ?? [];\nconst counted = fields.find((f) => f.name !== 'country');\nconst unit = counted?.name ?? 'count';\nconst counts = counted?.values ?? [];\n\n// The world map names countries in English. Intl supplies most of those names from the\n// two-letter code Cloudflare reports; these are the ones where the map's name differs.\nconst ALIASES = {\n  BA: 'Bosnia and Herzegovina',\n  BS: 'The Bahamas',\n  CD: 'Democratic Republic of the Congo',\n  CG: 'Republic of the Congo',\n  CI: 'Ivory Coast',\n  CZ: 'Czech Republic',\n  GW: 'Guinea Bissau',\n  MK: 'Macedonia',\n  MM: 'Myanmar',\n  RS: 'Republic of Serbia',\n  SZ: 'Swaziland',\n  TL: 'East Timor',\n  TR: 'Turkey',\n  TT: 'Trinidad and Tobago',\n  TZ: 'United Republic of Tanzania',\n  US: 'United States of America',\n};\nconst regions = new Intl.DisplayNames(['en'], { type: 'region' });\nconst nameOf = (code) => {\n  if (ALIASES[code]) return ALIASES[code];\n  try {\n    return regions.of(code);\n  } catch {\n    return code;\n  }\n};\n\nconst data = codes.map((code, i) => ({ name: nameOf(code), value: counts[i] }));\nconst max = Math.max(1, ...data.map((d) => d.value));\nconst theme = context.grafana.theme;\n\nreturn {\n  backgroundColor: 'transparent',\n  tooltip: {\n    trigger: 'item',\n    formatter: (p) => `${p.name}: ${Number.isFinite(p.value) ? p.value : 0} ${unit}`,\n  },\n  visualMap: {\n    min: 0,\n    max,\n    left: 'left',\n    bottom: 0,\n    calculable: true,\n    text: [`More ${unit}`, 'Fewer'],\n    inRange: { color: ['#c6dbef', '#08306b'] },\n    textStyle: { color: theme.colors.text.secondary },\n  },\n  series: [\n    {\n      name: unit,\n      type: 'map',\n      map: 'world',\n      // Top and bottom set the map's height to the panel's; ECharts keeps the aspect ratio.\n      top: 8,\n      bottom: 8,\n      roam: true,\n      scaleLimit: { min: 1, max: 12 },\n      itemStyle: {\n        areaColor: theme.colors.background.secondary,\n        borderColor: theme.colors.border.medium,\n      },\n      emphasis: { label: { show: false }, itemStyle: { areaColor: '#f2cc0c' } },\n      select: { disabled: true },\n      data,\n    },\n  ],\n};\n"
               },
               "fieldConfig": {
-                "defaults": {
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "value": 0,
-                        "color": "green"
-                      },
-                      {
-                        "value": 80,
-                        "color": "red"
-                      }
-                    ]
-                  },
-                  "color": {
-                    "mode": "continuous-blues"
-                  },
-                  "custom": {
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    }
-                  }
-                },
+                "defaults": {},
                 "overrides": []
               }
             }
@@ -2537,259 +2472,195 @@
             }
           }
         }
+      },
+      "panel-23": {
+        "kind": "Panel",
+        "spec": {
+          "id": 23,
+          "title": "Rounds per game",
+          "description": "How far SWU games run: for each round, how many games reached it. Counted from the round advance, so round 1 is not shown, and a round advanced, undone and advanced again counts twice.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT 'Round ' || CAST(round AS VARCHAR) AS \"Round\", COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'round_incremented'\n  AND round IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY round\nORDER BY round"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "rowsToFields",
+                  "spec": {
+                    "options": {
+                      "nameField": "Round",
+                      "valueField": "games"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "bargauge",
+            "spec": {
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "vertical",
+                "namePlacement": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "text"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "min": 0,
+                  "color": {
+                    "mode": "continuous-YlBl"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-24": {
+        "kind": "Panel",
+        "spec": {
+          "id": 24,
+          "title": "Favourite bases",
+          "description": "Bases favourited minus unfavourited in the time range, top 15. Favourites live on the device, so this counts changes, not the favourites players hold now.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT \"baseKey\" AS \"Base\", SUM(CASE WHEN event = 'favourite_added' THEN 1 ELSE -1 END) AS favourites\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event IN ('favourite_added', 'favourite_removed')\n  AND $__timeFilter(time)\nGROUP BY \"baseKey\"\nHAVING SUM(CASE WHEN event = 'favourite_added' THEN 1 ELSE -1 END) > 0\nORDER BY favourites DESC\nLIMIT 15"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "rowsToFields",
+                  "spec": {
+                    "options": {
+                      "nameField": "Base",
+                      "valueField": "favourites"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "bargauge",
+            "spec": {
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "namePlacement": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "text"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "min": 0,
+                  "color": {
+                    "mode": "continuous-YlBl"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
       }
     },
     "layout": {
       "kind": "GridLayout",
       "spec": {
         "items": [
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 0,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-1"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 12,
-              "y": 0,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-2"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 8,
-              "width": 24,
-              "height": 10,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-4"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 18,
-              "width": 16,
-              "height": 10,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-5"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 16,
-              "y": 18,
-              "width": 8,
-              "height": 10,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-6"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 28,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-9"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 8,
-              "y": 28,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-19"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 16,
-              "y": 28,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-10"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 36,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-11"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 8,
-              "y": 36,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-17"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 16,
-              "y": 36,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-18"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 44,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-12"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 12,
-              "y": 44,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-13"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 52,
-              "width": 24,
-              "height": 10,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-14"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 62,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-15"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 12,
-              "y": 62,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-16"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 70,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-20"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 8,
-              "y": 70,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-21"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 16,
-              "y": 70,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-22"
-              }
-            }
-          }
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 0, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-1" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 12, "y": 0, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-2" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 8, "width": 12, "height": 12, "element": { "kind": "ElementReference", "name": "panel-4" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 12, "y": 8, "width": 12, "height": 12, "element": { "kind": "ElementReference", "name": "panel-5" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 20, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-6" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 8, "y": 20, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-23" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 16, "y": 20, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-24" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 28, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-9" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 8, "y": 28, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-19" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 16, "y": 28, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-10" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 36, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-11" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 8, "y": 36, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-17" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 16, "y": 36, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-18" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 44, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-12" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 12, "y": 44, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-13" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 52, "width": 24, "height": 10, "element": { "kind": "ElementReference", "name": "panel-14" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 62, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-15" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 12, "y": 62, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-16" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 70, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-20" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 8, "y": 70, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-21" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 16, "y": 70, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-22" } } }
         ]
       }
     },

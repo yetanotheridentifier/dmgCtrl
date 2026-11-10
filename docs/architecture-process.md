@@ -353,44 +353,46 @@ Public (externally shared) dashboards do not substitute variables, so `$env` rea
 WHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END
 ```
 
-A bare `env = '$env'` works on the private dashboard and returns nothing on the public one. `src/test/grafanaDashboards.test.ts` fails on any query in `grafana/` that uses `$env` without the fallback.
+A bare `env = '$env'` works on the private dashboard and returns nothing on the public one. `src/test/grafanaDashboards.test.ts` fails on any query in `grafana/` that uses `$env` without the fallback, and on any query comparing `event` against a name that `src/services/analytics.ts` no longer sends.
 
 | File | Purpose | Public link |
 |---|---|---|
-| `grafana/dmgctrl-dashboard.json` | Core app analytics — cross-game metrics, game selection, settings | [dmgCtrl Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/022803ee5cd043dcaf0a19ce2f8e1d4a) |
-| `grafana/dmgctrl-swu-dashboard.json` | SWU-specific analytics — sessions, bases, competitive play, settings | [dmgCtrl SWU Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/02e71e370db24d1bbf6519ab9074405f) |
+| `grafana/dmgctrl-dashboard.json` | Core app analytics: cross-game metrics, game selection, settings | [dmgCtrl Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/022803ee5cd043dcaf0a19ce2f8e1d4a) |
+| `grafana/dmgctrl-swu-dashboard.json` | SWU-specific analytics: sessions, bases, competitive play, settings | [dmgCtrl SWU Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/02e71e370db24d1bbf6519ab9074405f) |
 | `grafana/dmgctrl-xwing-dashboard.json` | X-Wing analytics: sessions, countries, results, duration, timer, squad points | [dmgCtrl X-Wing Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/57328004542545778d63605a37f9f44b) |
 
-The files are in the Grafana v2 resource format (`apiVersion: dashboard.grafana.app/v2`), and `metadata.name` is the dashboard UID. A file can be created or replaced on the stack through the dashboards API (`/apis/dashboard.grafana.app/v2/namespaces/stacks-1634354/dashboards`) as well as by importing it in the UI. The X-Wing dashboard needs the **Business Charts** panel plugin (`volkovlabs-echarts-panel`) installed on the stack for its country map.
+The files are in the Grafana v2 resource format (`apiVersion: dashboard.grafana.app/v2`), and `metadata.name` is the dashboard UID. A file can be created or replaced on the stack through the dashboards API (`/apis/dashboard.grafana.app/v2/namespaces/stacks-1634354/dashboards`) as well as by importing it in the UI. Every dashboard needs the **Business Charts** panel plugin (`volkovlabs-echarts-panel`) installed on the stack for its country map (see [Country maps](#country-maps)).
 
 **Core dashboard panels (`dmgctrl-dashboard.json`):**
+
+SWU and X-Wing both send `game_started`, told apart by its `game` field. SWU events written before that field existed have no `game`, so the core panels count `game IS NULL OR game = 'swu'` as SWU.
 
 | Panel | Type | What it shows |
 |---|---|---|
 | Sessions over time | Time series | Distinct `sessionId` values per day |
-| Games over time | Time series | Game sessions per day, split by game — SWU (`game_started`) / X-Wing (`xwing_game_started` historical + `game_started` with `game='xwing'` going forward) |
-| Sessions by city | Geomap (markers) | Sessions per city, plotted by Cloudflare edge PoP coordinates |
-| Game selection | Donut | Total game sessions split by game (same event-name approach as above) |
-| Games per session | Bar gauge | How many game sessions players start per session |
+| Games over time | Time series | `game_started` per day, split into SWU and X-Wing by `game` |
+| Sessions by country | Business Charts (world map) | Each country shaded by distinct sessions there, from any event |
+| Game selection | Donut | `game_started` split into SWU and X-Wing by `game` |
+| Games per session | Bar gauge | How many games (of either kind) players start per session |
 | App installs over time | Time series | `app_installed` events per day, split by platform |
 | Installs by platform | Donut | Cumulative installs split by `ios` / `android` / `other` |
-| General feature use | Bar gauge | % of game sessions using cross-game features (undo used, multi-session) |
+| General feature use | Bar gauge | % of sessions that started a game, and % that returned to the app (`app_resumed`) |
 | Settings changes | Bar gauge | Change count for general settings (`enableActionLog`, `enableInitiativeBar`) |
 | Errors per session | Bar gauge | % of sessions that encountered cross-game errors (wake lock, image load) |
 
-**Note on game discrimination:** The `game` field on `game_started`/`game_ended` events is only present in events written after the #246 deployment. Until historical X-Wing data is migrated, the "games over time" and "game selection" panels use event names as the discriminator: `game_started` = SWU, `xwing_game_started` = X-Wing (historical). New X-Wing events also fire `game_started` (with `game: 'xwing'`), so they are currently counted in the SWU bucket until a future SQL update adds a `game` field filter once the column is established in InfluxDB.
-
 **SWU dashboard panels (`dmgctrl-swu-dashboard.json`):**
 
-All SWU panels filter to SWU game events using `AND (game IS NULL OR game = 'swu')` — this captures all historical events (where the `game` column was not yet written, so it is `NULL`) and new tagged events, while excluding X-Wing. The dashboard title is "dmgCtrl SWU Analytics".
+All SWU panels on `game_started` and `game_ended` filter with `AND (game IS NULL OR game = 'swu')`: this captures events written before the `game` column existed (where it is `NULL`) and new tagged events, while excluding X-Wing. The other events these panels read (undo, force, epic action, round, favourite, match and tournament events) are sent only from SWU screens. The dashboard title is "dmgCtrl SWU Analytics".
 
 | Panel | Type | What it shows |
 |---|---|---|
 | Sessions over time | Time series | Distinct `sessionId` values per day |
 | Games over time | Time series | SWU game sessions started per day |
-| Sessions by city | Geomap (markers) | Where SWU games are started, plotted by Cloudflare edge PoP coordinates |
+| Sessions by country | Business Charts (world map) | Each country shaded by distinct sessions that started an SWU game there |
 | Base popularity | Bar gauge | Most-played bases (by `baseKey`), coloured by aspect |
 | Games per session | Bar gauge | How many SWU game sessions players start per session |
+| Rounds per game | Bar gauge | `round_incremented` by `round`: how many games reached each round from round 2. A round advanced, undone and advanced again counts twice |
+| Favourite bases | Bar gauge | Top 15 bases by `favourite_added` minus `favourite_removed` in the time range. Favourites live on the device, so this counts changes, not the favourites players hold |
 | Feature adoption | Bar gauge | % of SWU game sessions that used each feature (undo, multi-session) |
 | SWU settings changes | Bar gauge | Change count for SWU-specific settings (`useHyperspace`, `enableEpicActions`, `forceTokenDisplay`, `enableCompetitiveMode`) |
 | Errors per session | Bar gauge | % of SWU sessions that encountered errors (wake lock, image load) |
@@ -445,7 +447,11 @@ What the X-Wing events can and cannot show:
 - **Lists live only on the device**, so "Lists saved per faction" counts saves in the time range, not the lists players hold, and saving an edited list counts again.
 - **`result` is stored as the string `'null'`** when a game ends without one, not as a SQL `NULL`; the Results panel maps everything other than `win` / `loss` / `draw` to "no result".
 
-**Games by country** is a Business Charts panel because the built-in Geomap cannot shade a country from query data: its GeoJSON layer styles shapes only by properties in the file. The panel's script turns the two-letter `country` code into the English country name the plugin's world map uses, with `Intl.DisplayNames` and a short alias table for the names that differ (for example `US` is "United States of America"). Countries too small for that map, such as Malta or Singapore, are counted but not drawn, and development traffic has no country.
+#### Country maps
+
+Each dashboard has one country map (core and SWU "Sessions by country", X-Wing "Games by country"). They are Business Charts panels because the built-in Geomap cannot shade a country from query data: its GeoJSON layer styles shapes only by properties in the file.
+
+All three run the same script, and `src/test/grafanaDashboards.test.ts` fails if any copy differs, so a fix to it is made in all three files. Only the query changes between them. The query returns a `country` column and one count column. The script names the count in the tooltip and legend after that column (`games`, `sessions`), and turns the two-letter `country` code into the English country name the plugin's world map uses, with `Intl.DisplayNames` and a short alias table for the names that differ (for example `US` is "United States of America"). Countries too small for that map, such as Malta or Singapore, are counted but not drawn, and development traffic has no country.
 
 ### `base_aspects` InfluxDB measurement
 
@@ -465,7 +471,7 @@ LEFT JOIN (
 
 Aspect colour is embedded directly in the SQL result (a `CASE` expression returning a hex string) and injected into each field's `fieldConfig` via the Grafana `rowsToFields` transformation's `color` mapping handler. This bypasses Grafana's field-override matcher, which does not reliably see post-transformation fields.
 
-All panels respect the Grafana time range picker and use the `$env` variable to filter by environment. `country`, `city`, `latitude`, and `longitude` are populated by the Cloudflare Worker from `request.cf` and are absent or `'unknown'` for events received outside the production edge network (e.g. local dev). Coordinates reflect the Cloudflare edge PoP location, not the user's device — they are approximate but accurate enough for city-level mapping.
+All panels respect the Grafana time range picker and use the `$env` variable to filter by environment. `country`, `city`, `latitude`, and `longitude` are populated by the Cloudflare Worker from `request.cf` and are absent or `'unknown'` for events received outside the production edge network (e.g. local dev). The dashboards map by `country`. The city and coordinates are those of the Cloudflare edge PoP that served the request, not the user's device, so no panel plots them.
 
 ---
 

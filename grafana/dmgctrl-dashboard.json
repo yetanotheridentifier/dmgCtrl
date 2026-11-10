@@ -28,7 +28,7 @@
       }
     ],
     "cursorSync": "Crosshair",
-    "description": "dmgCtrl core analytics \u2014 sessions, game selection, installs, general features, settings",
+    "description": "dmgCtrl core analytics: sessions, game selection, installs, general features, settings",
     "editable": true,
     "elements": {
       "panel-1": {
@@ -274,7 +274,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day,\n  COUNT(CASE WHEN event = 'game_started' THEN 1 END) AS \"SWU\",\n  COUNT(CASE WHEN event = 'xwing_game_started' THEN 1 END) AS \"X-Wing\"\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND (event = 'game_started' OR event = 'xwing_game_started')\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day,\n  COUNT(CASE WHEN game IS NULL OR game = 'swu' THEN 1 END) AS \"SWU\",\n  COUNT(CASE WHEN game = 'xwing' THEN 1 END) AS \"X-Wing\"\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
                       }
                     },
                     "refId": "A",
@@ -402,8 +402,8 @@
         "kind": "Panel",
         "spec": {
           "id": 4,
-          "title": "Sessions by city",
-          "description": "Sessions per city plotted by approximate location (Cloudflare edge PoP coordinates)",
+          "title": "Sessions by country",
+          "description": "Sessions, by the country Cloudflare reports for the request. Darker means more sessions. Countries too small for the world map (for example Malta or Singapore) are counted but not drawn. Development traffic has no country, so this panel is empty for development.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -424,7 +424,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT country, city, AVG(latitude) AS latitude, AVG(longitude) AS longitude, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND city != 'unknown'\n  AND latitude IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY country, city\nORDER BY sessions DESC\nLIMIT 100"
+                        "rawSql": "SELECT country, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND country IS NOT NULL\n  AND country <> 'unknown'\n  AND $__timeFilter(time)\nGROUP BY country\nORDER BY sessions DESC"
                       }
                     },
                     "refId": "A",
@@ -438,84 +438,19 @@
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "geomap",
-            "version": "13.1.0-25668120414",
+            "group": "volkovlabs-echarts-panel",
             "spec": {
               "options": {
-                "controls": {
-                  "mouseWheelZoom": true,
-                  "showAttribution": false,
-                  "showDebug": false,
-                  "showMeasure": false,
-                  "showScale": false,
-                  "showZoom": true
+                "renderer": "canvas",
+                "map": "json",
+                "editorMode": "code",
+                "editor": {
+                  "format": "auto"
                 },
-                "layers": [
-                  {
-                    "config": {
-                      "showLegend": true,
-                      "style": {
-                        "color": {
-                          "fixed": "#5794F2"
-                        },
-                        "fillOpacity": 0.9,
-                        "size": {
-                          "field": "sessions",
-                          "fixed": 8,
-                          "max": 40,
-                          "min": 8
-                        }
-                      }
-                    },
-                    "location": {
-                      "latitude": "latitude",
-                      "longitude": "longitude",
-                      "mode": "coords"
-                    },
-                    "name": "Cities",
-                    "type": "markers"
-                  }
-                ],
-                "tooltip": {
-                  "mode": "details"
-                },
-                "view": {
-                  "allLayers": true,
-                  "dashboardVariable": false,
-                  "id": "fit",
-                  "lat": 0,
-                  "lon": 0,
-                  "noRepeat": false,
-                  "padding": 5,
-                  "zoom": 1
-                }
+                "getOption": "const s = context.panel.data.series[0];\nconst fields = s?.fields ?? [];\nconst codes = fields.find((f) => f.name === 'country')?.values ?? [];\nconst counted = fields.find((f) => f.name !== 'country');\nconst unit = counted?.name ?? 'count';\nconst counts = counted?.values ?? [];\n\n// The world map names countries in English. Intl supplies most of those names from the\n// two-letter code Cloudflare reports; these are the ones where the map's name differs.\nconst ALIASES = {\n  BA: 'Bosnia and Herzegovina',\n  BS: 'The Bahamas',\n  CD: 'Democratic Republic of the Congo',\n  CG: 'Republic of the Congo',\n  CI: 'Ivory Coast',\n  CZ: 'Czech Republic',\n  GW: 'Guinea Bissau',\n  MK: 'Macedonia',\n  MM: 'Myanmar',\n  RS: 'Republic of Serbia',\n  SZ: 'Swaziland',\n  TL: 'East Timor',\n  TR: 'Turkey',\n  TT: 'Trinidad and Tobago',\n  TZ: 'United Republic of Tanzania',\n  US: 'United States of America',\n};\nconst regions = new Intl.DisplayNames(['en'], { type: 'region' });\nconst nameOf = (code) => {\n  if (ALIASES[code]) return ALIASES[code];\n  try {\n    return regions.of(code);\n  } catch {\n    return code;\n  }\n};\n\nconst data = codes.map((code, i) => ({ name: nameOf(code), value: counts[i] }));\nconst max = Math.max(1, ...data.map((d) => d.value));\nconst theme = context.grafana.theme;\n\nreturn {\n  backgroundColor: 'transparent',\n  tooltip: {\n    trigger: 'item',\n    formatter: (p) => `${p.name}: ${Number.isFinite(p.value) ? p.value : 0} ${unit}`,\n  },\n  visualMap: {\n    min: 0,\n    max,\n    left: 'left',\n    bottom: 0,\n    calculable: true,\n    text: [`More ${unit}`, 'Fewer'],\n    inRange: { color: ['#c6dbef', '#08306b'] },\n    textStyle: { color: theme.colors.text.secondary },\n  },\n  series: [\n    {\n      name: unit,\n      type: 'map',\n      map: 'world',\n      // Top and bottom set the map's height to the panel's; ECharts keeps the aspect ratio.\n      top: 8,\n      bottom: 8,\n      roam: true,\n      scaleLimit: { min: 1, max: 12 },\n      itemStyle: {\n        areaColor: theme.colors.background.secondary,\n        borderColor: theme.colors.border.medium,\n      },\n      emphasis: { label: { show: false }, itemStyle: { areaColor: '#f2cc0c' } },\n      select: { disabled: true },\n      data,\n    },\n  ],\n};\n"
               },
               "fieldConfig": {
-                "defaults": {
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "value": 0,
-                        "color": "green"
-                      },
-                      {
-                        "value": 80,
-                        "color": "red"
-                      }
-                    ]
-                  },
-                  "color": {
-                    "mode": "continuous-blues"
-                  },
-                  "custom": {
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    }
-                  }
-                },
+                "defaults": {},
                 "overrides": []
               }
             }
@@ -548,7 +483,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT CAST(game_count AS VARCHAR) AS \"Games\", COUNT(*) AS sessions\nFROM (\n  SELECT COUNT(*) AS game_count\n  FROM events\n  WHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n    AND (event = 'game_started' OR event = 'xwing_game_started')\n    AND $__timeFilter(time)\n  GROUP BY \"sessionId\"\n) sub\nGROUP BY game_count\nORDER BY game_count"
+                        "rawSql": "SELECT CAST(game_count AS VARCHAR) AS \"Games\", COUNT(*) AS sessions\nFROM (\n  SELECT COUNT(*) AS game_count\n  FROM events\n  WHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n    AND event = 'game_started'\n    AND $__timeFilter(time)\n  GROUP BY \"sessionId\"\n) sub\nGROUP BY game_count\nORDER BY game_count"
                       }
                     },
                     "refId": "A",
@@ -950,7 +885,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event IN ('game_started', 'xwing_game_started') THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 1) AS \"Started a game\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'undo_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event IN ('game_started', 'xwing_game_started') THEN \"sessionId\" END), 0), 1) AS \"Undo used\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'app_resumed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 1) AS \"Returned to app\"\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END AND $__timeFilter(time)"
+                        "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'game_started' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 1) AS \"Started a game\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'app_resumed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 1) AS \"Returned to app\"\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END AND $__timeFilter(time)"
                       }
                     },
                     "refId": "A",
@@ -1045,7 +980,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT 'SWU' AS game, COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND $__timeFilter(time)\nUNION ALL\nSELECT 'X-Wing' AS game, COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'xwing_game_started'\n  AND $__timeFilter(time)\nORDER BY games DESC"
+                        "rawSql": "SELECT CASE WHEN game = 'xwing' THEN 'X-Wing' ELSE 'SWU' END AS game, COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND $__timeFilter(time)\nGROUP BY 1\nORDER BY games DESC"
                       }
                     },
                     "refId": "A",
@@ -1256,136 +1191,16 @@
       "kind": "GridLayout",
       "spec": {
         "items": [
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 0,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-1"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 12,
-              "y": 0,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-2"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 8,
-              "width": 24,
-              "height": 10,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-4"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 18,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-17"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 12,
-              "y": 18,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-6"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 26,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-7"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 12,
-              "y": 26,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-8"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 34,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-9"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 8,
-              "y": 34,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-18"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 16,
-              "y": 34,
-              "width": 8,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-10"
-              }
-            }
-          }
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 0, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-1" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 12, "y": 0, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-2" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 8, "width": 12, "height": 12, "element": { "kind": "ElementReference", "name": "panel-4" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 12, "y": 8, "width": 12, "height": 12, "element": { "kind": "ElementReference", "name": "panel-17" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 20, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-6" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 8, "y": 20, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-7" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 16, "y": 20, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-8" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 28, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-9" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 8, "y": 28, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-18" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 16, "y": 28, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-10" } } }
         ]
       }
     },
