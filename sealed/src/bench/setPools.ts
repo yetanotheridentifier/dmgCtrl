@@ -44,11 +44,12 @@ const FIXTURES: Record<string, SwuCard[]> = {
 
 /**
  * The fewest cards a set needs to be swept as sealed. A sealed deck is built from a pool opened from
- * one set, and a smaller product (TS26 at 84 cards, IBH at 51) is not designed for sealed play: the
- * generator cannot fill a 30-card deck from it, and IBH built one of 3 cards. A count rather than a
- * list, so a small product released later is left out without anyone adding it.
+ * one set, and a small product (TS26 at 84 cards, IBH at 51) cannot supply one: the generator cannot
+ * fill a 30-card deck from it, and IBH built one of 3 cards. A count rather than a list, so a small
+ * product released later is left out without anyone adding it, and a large one not designed for
+ * sealed (IC27, about 192 cards once fully released) is swept anyway.
  */
-export const SEALED_MIN_CARDS = 200
+export const SEALED_MIN_CARDS = 150
 
 /** The sets a sealed sweep can draw on, in canonical order. */
 export const SEALED_SET_CODES: readonly string[] = SET_CODES.filter(code => (FIXTURES[code]?.length ?? 0) >= SEALED_MIN_CARDS)
