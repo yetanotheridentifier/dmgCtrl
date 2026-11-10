@@ -348,6 +348,9 @@ Dashboards are defined as JSON under `grafana/` and can be imported directly int
 |---|---|---|
 | `grafana/dmgctrl-dashboard.json` | Core app analytics — cross-game metrics, game selection, settings | [dmgCtrl Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/022803ee5cd043dcaf0a19ce2f8e1d4a) |
 | `grafana/dmgctrl-swu-dashboard.json` | SWU-specific analytics — sessions, bases, competitive play, settings | [dmgCtrl SWU Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/02e71e370db24d1bbf6519ab9074405f) |
+| `grafana/dmgctrl-xwing-dashboard.json` | X-Wing analytics: sessions, countries, results, duration, timer, squad points | [dmgCtrl X-Wing Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/57328004542545778d63605a37f9f44b) |
+
+The files are in the Grafana v2 resource format (`apiVersion: dashboard.grafana.app/v2`), and `metadata.name` is the dashboard UID. A file can be created or replaced on the stack through the dashboards API (`/apis/dashboard.grafana.app/v2/namespaces/stacks-1634354/dashboards`) as well as by importing it in the UI. The X-Wing dashboard needs the **Business Charts** panel plugin (`volkovlabs-echarts-panel`) installed on the stack for its country map.
 
 **Core dashboard panels (`dmgctrl-dashboard.json`):**
 
@@ -402,6 +405,33 @@ Consistent colour palettes are applied across related panels using Grafana `byNa
 - Bar gauge panels use `displayMode: gradient` and `color.mode: continuous-YlBl` as the standard styling; aspect panels use `color.mode: fixed, fixedColor: #9e9e9e` as the default with named overrides per aspect
 
 Feature use is measured via usage events (sessions containing at least one relevant event) rather than settings state — this reflects actual use rather than whether the feature was merely enabled.
+
+**X-Wing dashboard panels (`dmgctrl-xwing-dashboard.json`):**
+
+All X-Wing panels filter with `AND game = 'xwing'` on `game_started` and `game_ended`. The dashboard title is "dmgCtrl X-Wing Analytics".
+
+| Panel | Type | What it shows |
+|---|---|---|
+| Sessions over time | Time series | Distinct `sessionId` values per day with an X-Wing `game_started` |
+| Games over time | Time series | X-Wing games started per day |
+| Games by country | Business Charts (world map) | Each country shaded by X-Wing games started there; darker means more |
+| Games per session | Bar gauge | How many X-Wing games players start per session |
+| Games ended in the app | Stat | `game_ended` as a share of `game_started` |
+| Avg game duration | Stat | Mean `elapsed_seconds` in minutes, for games over 60 seconds |
+| Results | Donut | `result` as won / lost / drawn / no result, using the results palette above; no result is `#9e9e9e` |
+| Timer | Donut | Whether `timer_expired` was set: finished in time = `semi-dark-blue`, timer expired = `#9e9e9e` |
+| Squad points deficit | Bar gauge | Games by the player's `player_deficit`, taken from `game_started` |
+| Final round | Bar gauge | Games by `final_round` |
+| Score margin | Bar gauge | `player_score - opponent_score` in bands (lost by 50+ through won by 50+), for games with a result |
+
+What the X-Wing events can and cannot show:
+
+- **Only games left through the game screen send `game_ended`.** Closing the app mid-game sends nothing, so results, duration, timer, final round and score margin cover only the share shown in "Games ended in the app".
+- **Tournament games are not distinguished.** A tournament round uses the same game screen and sends the same events as a casual game, so tournament games are counted with the rest and there is no tournament panel.
+- **No scenario, match type, settings or list events are sent for X-Wing**, so the dashboard has no panels for them.
+- **`result` is stored as the string `'null'`** when a game ends without one, not as a SQL `NULL`; the Results panel maps everything other than `win` / `loss` / `draw` to "no result".
+
+**Games by country** is a Business Charts panel because the built-in Geomap cannot shade a country from query data: its GeoJSON layer styles shapes only by properties in the file. The panel's script turns the two-letter `country` code into the English country name the plugin's world map uses, with `Intl.DisplayNames` and a short alias table for the names that differ (for example `US` is "United States of America"). Countries too small for that map, such as Malta or Singapore, are counted but not drawn, and development traffic has no country.
 
 ### `base_aspects` InfluxDB measurement
 
