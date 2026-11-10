@@ -9,6 +9,7 @@ import { defaultSettings, loadSettings, STORAGE_KEY as SETTINGS_KEY } from '../d
 import type { Settings } from '../data/settingsStore'
 import type { SwuCard } from '../data/cards'
 import { retryPendingCollection } from '../data/collectionSend'
+import { onAppStarted } from '../data/analytics'
 import { SHARING_HELP_SECTION } from '../utils/helpSections'
 
 /**
@@ -26,6 +27,13 @@ vi.mock('../data/setImport', () => ({
 vi.mock('../data/collectionSend', () => ({
   retryPendingCollection: vi.fn().mockResolvedValue(undefined),
   sendForCollection: vi.fn().mockResolvedValue(undefined),
+}))
+
+// The usage events have their own tests (`analytics.test.ts`). Here they are spies.
+vi.mock('../data/analytics', () => ({
+  onAppStarted: vi.fn().mockResolvedValue(undefined),
+  onGameStarted: vi.fn().mockResolvedValue(undefined),
+  onGameEnded: vi.fn().mockResolvedValue(undefined),
 }))
 
 const SWU_CARDS: SwuCard[] = [
@@ -106,6 +114,13 @@ describe('App shell', () => {
     const { rerender } = render(<App />)
     rerender(<App />)
     expect(retryPendingCollection).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports that the app opened, once', () => {
+    vi.mocked(onAppStarted).mockClear()
+    const { rerender } = render(<App />)
+    rerender(<App />)
+    expect(onAppStarted).toHaveBeenCalledTimes(1)
   })
 
   it('leaves the game from the back button, returning to setup', async () => {

@@ -231,4 +231,14 @@ describe('ShareGamesNotice', () => {
     expect(help).toContain('What is not sent: your name, your deck names, or anything else that identifies you.')
     expect(help).toContain('This data export is disabled unless you turn it on')
   })
+
+  /** The usage events go for everyone, so the same section says so, and says they are not the export. */
+  it('says, in the same section, which usage statistics are sent for everyone', () => {
+    const section = parseGuide(userGuideHtml).sections.find(s => s.title === SHARING_HELP_SECTION)!
+    const help = text(section.html)
+
+    expect(help).toContain('Usage statistics. Separately, and for everyone')
+    expect(help).toContain('It carries no cards, no decisions, no deck names and nothing that identifies you.')
+    expect(help).toContain('they are not affected by the setting above')
+  })
 })

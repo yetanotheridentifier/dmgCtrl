@@ -858,8 +858,20 @@ streams those images through with CORS and a long cache lifetime; the client-sid
 `artUrl()` helper (`data/thumbnails.ts`) rewrites cdn.swu-db.com URLs onto it and
 leaves CORS-friendly hosts (cdn.starwarsunlimited.com) untouched.
 
+**Usage events** go to the same Worker's analytics route (`POST /analytics/batch`), for every
+player, as the PWA's do: `app_started`, `game_started` and `game_ended`, each tagged `game: 'sealed'`
+and carrying `env`, a per-load `sessionId` and `version` (the build's `RELEASE`). A game start names
+each side's set, leader, base, base aspect and whether the deck was generated or saved, and whether
+it is a rematch; a game end gives the player's result, the round, the length in seconds, the undo
+count and who conceded, if anyone did. They carry no cards, decisions or deck names. The Worker adds
+the country and city of the Cloudflare edge that served the request and writes each event to
+InfluxDB, where the Grafana dashboards read it. The sender (`data/analytics.ts`) is a copy of the
+PWA's, with its own `localStorage` queue (`sealed_analytics_queue`, since the two apps share an
+origin), and under test it sends nothing unless a test sets `VITE_ANALYTICS_URL`, because the Worker
+writes whatever reaches it. The Help section on sharing describes these events.
+
 **The same Worker collects games** at `POST /records` (`proxy/records.js`), the one request the app
-makes that carries anything about play, and only for a player who opted in. The players' notice says
+makes that carries a game's cards and decisions, and only for a player who opted in. The players' notice says
 nothing identifies them, that their IP address is not linked to games, and that a sent game cannot
 be found and deleted later. The endpoint is built to make each of those true:
 

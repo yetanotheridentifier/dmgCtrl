@@ -13,6 +13,11 @@ const dashboards = import.meta.glob<Record<string, unknown>>('../../grafana/*.js
 const analyticsSource = Object.values(import.meta.glob<string>('../services/analytics.ts', { eager: true, query: '?raw', import: 'default' }))[0]
 const sentEvents = new Set([...analyticsSource.matchAll(/sendEvent\('([a-z_]+)'/g)].map(m => m[1]))
 
+// Every `game` the two apps tag their events with. The core dashboard splits games by it, and a value
+// it does not name falls into another game's figures without any error.
+const senders = import.meta.glob<string>(['../services/analytics.ts', '../../sealed/src/data/analytics.ts'], { eager: true, query: '?raw', import: 'default' })
+const sentGames = new Set(Object.values(senders).flatMap(source => [...source.matchAll(/\bgame: '([a-z]+)'/g)].map(m => m[1])))
+
 // The event names a query compares the event column against: `event = 'x'` and `event IN ('x', 'y')`.
 function queriedEvents(sql: string): string[] {
   const names = [...sql.matchAll(/\bevent\s*=\s*'([a-z_]+)'/g)].map(m => m[1])
@@ -43,6 +48,16 @@ function countryMapScripts(node: unknown): string[] {
 describe('Grafana dashboards', () => {
   it('finds the dashboards', () => {
     expect(Object.keys(dashboards).length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('names every game the apps send in each core panel that splits games', () => {
+    const core = Object.entries(dashboards).find(([file]) => file.endsWith('/dmgctrl-dashboard.json'))![1]
+    const splits = rawSqls(core).filter(sql => /\bgame = '/.test(sql))
+    expect([...sentGames].sort()).toEqual(['sealed', 'swu', 'xwing'])
+    expect(splits.length).toBeGreaterThanOrEqual(2)
+    for (const sql of splits) {
+      expect([...sentGames].filter(game => !sql.includes(`game = '${game}'`))).toEqual([])
+    }
   })
 
   it('shades countries with the same map script on every dashboard', () => {

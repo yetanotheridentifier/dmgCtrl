@@ -17,10 +17,15 @@ import { OPPONENT_AI } from '../config'
 import { COMMIT_ID, RELEASE } from '../buildIdentity'
 import { replay } from './helpers/replayReport'
 import { sendForCollection } from '../data/collectionSend'
+import { onGameEnded, onGameStarted } from '../data/analytics'
+import { GENERATED_DECK_ID } from '../deckgen/randomDeck'
 
 // The sender decides for itself whether a game goes anywhere (`collectionSend.test.ts`). Here it is
 // a spy, so these tests see what the hook hands it and never reach the network.
 vi.mock('../data/collectionSend', () => ({ sendForCollection: vi.fn().mockResolvedValue(undefined) }))
+// The usage events likewise: a spy, so these tests see what each game reports (`analytics.test.ts`
+// covers the sending).
+vi.mock('../data/analytics', () => ({ onGameStarted: vi.fn().mockResolvedValue(undefined), onGameEnded: vi.fn().mockResolvedValue(undefined) }))
 
 // Seeded SWUDB-shaped cards. TST_900 is a 0-cost 30-power unit so a game can
 // be won in two rounds, keeping tests fast and deterministic.
@@ -49,6 +54,19 @@ const passiveAi = (s: GameState) => {
 }
 
 const OPTS = { shuffle: identity, ai: passiveAi, firstPlayer: 'player' as const }
+
+/** The shortest win: a 30-power unit straight at the base in round 1. */
+async function winFromTheStart(result: { current: ReturnType<typeof useGame> }) {
+  act(() => result.current.act({ type: 'keepHand' }))
+  act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+  act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+  act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
+  act(() => result.current.act({ type: 'pass' }))
+  act(() => result.current.act({ type: 'skipResource' }))
+  const unitId = result.current.gameState!.players.player.units[0].instanceId
+  act(() => result.current.act({ type: 'attack', attackerId: unitId, target: { kind: 'base' } }))
+  expect(result.current.gameState!.winner).toBe('player')
+}
 
 async function seedCards() {
   for (const card of SWU_CARDS) {
@@ -407,17 +425,6 @@ describe('useGame', () => {
    * because none of it can be recovered from the moves afterwards.
    */
   describe('provenance on the saved record', () => {
-    async function winFromTheStart(result: { current: ReturnType<typeof useGame> }) {
-      act(() => result.current.act({ type: 'keepHand' }))
-      act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
-      act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
-      act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
-      act(() => result.current.act({ type: 'pass' }))
-      act(() => result.current.act({ type: 'skipResource' }))
-      const unitId = result.current.gameState!.players.player.units[0].instanceId
-      act(() => result.current.act({ type: 'attack', attackerId: unitId, target: { kind: 'base' } }))
-      expect(result.current.gameState!.winner).toBe('player')
-    }
 
     /** The start is when the board was dealt, not when the record was written. */
     it('records when the game started and when it ended as two different moments', async () => {
@@ -640,6 +647,67 @@ describe('useGame', () => {
       expect(result.current.gameState!.players.player.units).toHaveLength(0)
       expect(result.current.gameState!.round).toBe(1)
       expect(result.current.log).toEqual([])
+    })
+  })
+
+  /** The anonymous usage events: one start per board dealt, one end per game won, lost or drawn. */
+  describe('usage events', () => {
+    beforeEach(() => {
+      vi.mocked(onGameStarted).mockClear()
+      vi.mocked(onGameEnded).mockClear()
+    })
+
+    it('reports the start once the board is dealt: sets, deck kinds, leaders, bases and aspects', async () => {
+      // One object for every render: a new deck each render would deal a new game each render.
+      const generated = { ...DECK, id: GENERATED_DECK_ID }
+      const { result } = renderHook(() => useGame(DECK, generated, OPTS))
+      await waitFor(() => expect(result.current.status).toBe('playing'))
+      expect(onGameStarted).toHaveBeenCalledTimes(1)
+      expect(onGameStarted).toHaveBeenCalledWith({
+        player_set: 'TST', opponent_set: 'TST',
+        player_deck: 'saved', opponent_deck: 'generated',
+        rematch: false,
+        player_leader: 'TST_001', opponent_leader: 'TST_001',
+        player_base: 'TST_002', opponent_base: 'TST_002',
+        player_aspect: 'none', opponent_aspect: 'none',
+      })
+    })
+
+    it('marks a rematch as one', async () => {
+      const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+      await waitFor(() => expect(result.current.status).toBe('playing'))
+      const first = result.current.gameState
+      act(() => result.current.rematch())
+      await waitFor(() => expect(result.current.gameState).not.toBe(first))
+      await waitFor(() => expect(onGameStarted).toHaveBeenCalledTimes(2))
+      expect(vi.mocked(onGameStarted).mock.calls.map(([start]) => start.rematch)).toEqual([false, true])
+    })
+
+    it('reports the end once: result, round, length and undos', async () => {
+      let now = 1_000
+      vi.spyOn(Date, 'now').mockImplementation(() => now)
+      try {
+        const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+        await waitFor(() => expect(result.current.status).toBe('playing'))
+        act(() => result.current.act({ type: 'keepHand' }))
+        act(() => result.current.undo())
+        now = 91_000
+        await winFromTheStart(result)
+
+        await waitFor(() => expect(onGameEnded).toHaveBeenCalledTimes(1))
+        expect(onGameEnded).toHaveBeenCalledWith({ result: 'win', round: result.current.gameState!.round, durationSeconds: 90, undo_count: 1 })
+        expect(onGameStarted).toHaveBeenCalledTimes(1)
+      } finally {
+        vi.restoreAllMocks()
+      }
+    })
+
+    it('says who conceded', async () => {
+      const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+      await waitFor(() => expect(result.current.status).toBe('playing'))
+      act(() => result.current.act({ type: 'concede' }))
+      await waitFor(() => expect(onGameEnded).toHaveBeenCalledTimes(1))
+      expect(vi.mocked(onGameEnded).mock.calls[0][0]).toMatchObject({ result: 'loss', conceded_by: 'player' })
     })
   })
 })

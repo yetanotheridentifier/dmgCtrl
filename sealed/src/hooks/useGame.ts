@@ -21,6 +21,9 @@ import { logEntries } from '../utils/boardDiff'
 import { saveGameRecord } from '../data/gameRecords'
 import { consentStamp } from '../data/collection'
 import { sendForCollection } from '../data/collectionSend'
+import { onGameEnded, onGameStarted } from '../data/analytics'
+import type { SealedGameStart } from '../data/analytics'
+import { GENERATED_DECK_ID } from '../deckgen/randomDeck'
 import { logger } from '../data/log'
 
 export type GameStatus = 'loading' | 'error' | 'playing'
@@ -195,6 +198,34 @@ export function cancelPoint(history: readonly { by: PlayerId; state: GameState }
   if (root < 0) return undefined
   if (revealing(current) || history.slice(root + 1).some(s => revealing(s.state))) return undefined
   return sameHidden(history[root].state, current, history.length - root) ? root : undefined
+}
+
+/**
+ * What the usage event says about a game's two decks, from the decks as given and the cards as
+ * loaded. A deck's set is its leader's; a base's aspect is its first, or `none`.
+ */
+function gameStart(playerDeck: SavedDeck, opponentDeck: SavedDeck, rematch: boolean, cards: SwuCard[], servedAs: Map<string, string>): SealedGameStart {
+  const aspectOf = (base: string) => {
+    const id = servedAs.get(base) ?? base
+    return cards.find(c => cardId(c.Set, c.Number) === id)?.Aspects?.[0] ?? 'none'
+  }
+  const side = (deck: SavedDeck) => ({
+    set: cardRefFromId(deck.leader)?.set ?? 'unknown',
+    deck: deck.id === GENERATED_DECK_ID ? 'generated' as const : 'saved' as const,
+    leader: deck.leader,
+    base: deck.base,
+    aspect: aspectOf(deck.base),
+  })
+  const player = side(playerDeck)
+  const opponent = side(opponentDeck)
+  return {
+    player_set: player.set, opponent_set: opponent.set,
+    player_deck: player.deck, opponent_deck: opponent.deck,
+    rematch,
+    player_leader: player.leader, opponent_leader: opponent.leader,
+    player_base: player.base, opponent_base: opponent.base,
+    player_aspect: player.aspect, opponent_aspect: opponent.aspect,
+  }
 }
 
 export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options: UseGameOptions = {}): GameValue {
@@ -418,6 +449,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
         })
         initialStateRef.current = state
         startedAtRef.current = Date.now()
+        void onGameStarted(gameStart(playerDeck, opponentDeck, generation > 0, cards, servedAs))
 
         // If the AI won the initiative roll it moves first: before the human sees the board when it
         // is instant, and onto the opening board when it is paced.
@@ -453,12 +485,20 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
     recordSavedRef.current = true
     const initial = initialStateRef.current
     if (!initial) return
+    const endedAt = Date.now()
+    void onGameEnded({
+      result: gameState.winner === 'draw' ? 'draw' : gameState.winner === HUMAN ? 'win' : 'loss',
+      round: gameState.round,
+      durationSeconds: Math.round((endedAt - startedAtRef.current) / 1000),
+      undo_count: undoCountRef.current,
+      ...(gameState.concededBy ? { conceded_by: gameState.concededBy } : {}),
+    })
     void saveGameRecord({
       playerDeckName: playerDeck.name,
       opponentDeckName: opponentDeck.name,
       winner: gameState.winner,
       startedAt: startedAtRef.current,
-      endedAt: Date.now(),
+      endedAt,
       initialState: initial,
       moves: movesRef.current,
       finalState: gameState,

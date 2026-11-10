@@ -8,6 +8,7 @@ import { SettingsProvider, useSettings } from './hooks/useSettings'
 import { useUpdateOnDeckScreen } from './hooks/useUpdateOnDeckScreen'
 import type { SavedDeck } from './data/deckStore'
 import { retryPendingCollection } from './data/collectionSend'
+import { onAppStarted } from './data/analytics'
 import { RELEASE } from './buildIdentity'
 import { isDev } from './env'
 
@@ -22,6 +23,7 @@ export default function App() {
   // as the app opens. Nothing waits on it and it is silent whatever happens.
   useEffect(() => {
     void retryPendingCollection()
+    void onAppStarted()
   }, [])
 
   return (

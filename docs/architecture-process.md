@@ -379,14 +379,14 @@ The files are in the Grafana v2 resource format (`apiVersion: dashboard.grafana.
 
 **Core dashboard panels (`dmgctrl-dashboard.json`):**
 
-SWU and X-Wing both send `game_started`, told apart by its `game` field. SWU events written before that field existed have no `game`, so the core panels count `game IS NULL OR game = 'swu'` as SWU.
+SWU, X-Wing and Sealed all send `game_started`, told apart by its `game` field (`swu`, `xwing`, `sealed`). SWU events written before that field existed have no `game`, so the core panels count `game IS NULL OR game = 'swu'` as SWU. Sealed's events come from its own sender, described in [sealed/docs/architecture.md](../sealed/docs/architecture.md). `src/test/grafanaDashboards.test.ts` reads the `game` values both senders use and fails if a core panel that splits games leaves one out, since an unnamed game would otherwise be counted under another.
 
 | Panel | Type | What it shows |
 |---|---|---|
 | Sessions over time | Time series | Distinct `sessionId` values per day |
-| Games over time | Time series | `game_started` per day, split into SWU and X-Wing by `game` |
+| Games over time | Time series | `game_started` per day, split into SWU, X-Wing and Sealed by `game`; colours: SWU = `semi-dark-blue`, X-Wing = `semi-dark-red`, Sealed = `semi-dark-purple` |
 | Sessions by country | Business Charts (world map) | Each country shaded by distinct sessions there, from any event |
-| Game selection | Donut | `game_started` split into SWU and X-Wing by `game` |
+| Game selection | Donut | `game_started` split into SWU, X-Wing and Sealed by `game` (same colours); any other `game` shows under its own value |
 | Games per session | Bar gauge | How many games (of either kind) players start per session |
 | App installs over time | Time series | `app_installed` events per day, split by platform |
 | Installs by platform | Donut | Cumulative installs split by `ios` / `android` / `other` |
