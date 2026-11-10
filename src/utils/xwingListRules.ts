@@ -16,6 +16,12 @@ const character = (id: string) => xwaPilots[id].name.split(' (')[0]
 
 export const pilotName = (id: string) => xwaPilots[id]?.name ?? id
 
+// A list's faction from its pilots: the first one the card table knows. A list holds one faction,
+// so one pilot settles it; no pilots, or none the table knows, means no faction.
+export function listFaction(pilots: XwingPilot[]): string | undefined {
+  return pilots.map(p => xwaPilots[p.name]?.faction).find(f => f !== undefined)
+}
+
 // How many of this pilot one list may hold: 1 for a unique, else its per-squad limit if it has one.
 export function pilotLimit(id: string): number | undefined {
   const pilot = xwaPilots[id]

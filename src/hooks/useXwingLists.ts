@@ -1,6 +1,7 @@
 import { createContext, createElement, useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { XwingPilot } from '../utils/parseXwsText'
+import { onXwingListSaved } from '../services/analytics'
 
 const STORAGE_KEY = 'xwing_favourites'
 
@@ -43,6 +44,7 @@ function useXwingListsState() {
     const next = existing ? lists.map(l => (l === existing ? entry : l)) : [...lists, entry]
     save(next)
     setLists(next)
+    void onXwingListSaved(faction)
     return entry.id
   }
 

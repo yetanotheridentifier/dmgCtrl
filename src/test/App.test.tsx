@@ -51,6 +51,7 @@ vi.mock('../services/analytics', () => ({
   onImageLoadFailed: vi.fn(),
   onXwingGameStarted: vi.fn().mockResolvedValue(undefined),
   onXwingGameEnded: vi.fn().mockResolvedValue(undefined),
+  onXwingListSaved: vi.fn().mockResolvedValue(undefined),
 }))
 
 const mockBases = vi.hoisted(() => [

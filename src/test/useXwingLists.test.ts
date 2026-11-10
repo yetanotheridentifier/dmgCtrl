@@ -3,6 +3,9 @@ import { renderHook, act } from '@testing-library/react'
 import { useXwingLists, XwingListsProvider } from '../hooks/useXwingLists'
 import type { XwingList } from '../hooks/useXwingLists'
 
+const mockOnXwingListSaved = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+vi.mock('../services/analytics', () => ({ onXwingListSaved: mockOnXwingListSaved }))
+
 const STORAGE_KEY = 'xwing_favourites'
 
 const PILOTS_A = [
@@ -67,6 +70,21 @@ describe('useXwingLists', () => {
   })
 
   // --- saveList ---
+
+  it("saveList reports the save with the list's faction", () => {
+    mockOnXwingListSaved.mockClear()
+    const { result } = renderHook(() => useXwingLists(), { wrapper: XwingListsProvider })
+    act(() => { result.current.saveList('Scum Squad', PILOTS_A, 'scumandvillainy') })
+    expect(mockOnXwingListSaved).toHaveBeenCalledOnce()
+    expect(mockOnXwingListSaved).toHaveBeenCalledWith('scumandvillainy')
+  })
+
+  it('saveList reports a list saved without a faction', () => {
+    mockOnXwingListSaved.mockClear()
+    const { result } = renderHook(() => useXwingLists(), { wrapper: XwingListsProvider })
+    act(() => { result.current.saveList('Scum Squad', PILOTS_A) })
+    expect(mockOnXwingListSaved).toHaveBeenCalledWith(undefined)
+  })
 
   it('saveList adds an entry to the list', () => {
     const { result } = renderHook(() => useXwingLists(), { wrapper: XwingListsProvider })

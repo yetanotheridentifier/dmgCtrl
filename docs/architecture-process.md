@@ -226,9 +226,12 @@ Twenty-seven public functions enqueue events and trigger a flush. All are fire-a
 | `onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, format, playMode)` | `tournament_round_completed` | `roundNumber`, `result` (`'won'` \| `'lost'` \| `'drawn'`), `playerScore`, `opponentScore`, `format`, `playMode` |
 | `onTournamentDropped(roundsCompleted, format, playMode)` | `tournament_dropped` | `roundsCompleted`, `format`, `playMode` |
 | `onTournamentEnded(totalRounds, won, lost, drawn, points, format, playMode)` | `tournament_ended` | `totalRounds`, `won`, `lost`, `drawn`, `points`, `format`, `playMode` |
-| `onXwingGameStarted(playerDeficit, opponentDeficit)` | `game_started` | `game` (`'xwing'`), `player_deficit`, `opponent_deficit` |
-| `onXwingGameEnded(payload)` | `game_ended` | `game` (`'xwing'`), `final_round`, `player_score`, `opponent_score`, `player_deficit`, `opponent_deficit`, `result`, `elapsed_seconds`, `timer_expired` |
+| `onXwingGameStarted(playerDeficit, opponentDeficit, playerFaction?, opponentFaction?)` | `game_started` | `game` (`'xwing'`), `player_deficit`, `opponent_deficit`, `player_faction`, `opponent_faction` |
+| `onXwingGameEnded(payload)` | `game_ended` | `game` (`'xwing'`), `final_round`, `player_score`, `opponent_score`, `player_deficit`, `opponent_deficit`, `result`, `elapsed_seconds`, `timer_expired`, `player_faction`, `opponent_faction` |
 | `onXwingRoundAdvanced(fromRound, toRound)` | `xwing_round_advanced` | `from_round`, `to_round` |
+| `onXwingListSaved(faction)` | `xwing_list_saved` | `faction` |
+
+X-Wing factions are XWS faction ids (`rebelalliance`, `galacticempire` and so on). A side's faction is taken from its list's pilots (`listFaction` in `src/utils/xwingListRules.ts`): the first pilot the card table knows. A side playing without a list, or with only pilots the table does not know, has no faction, and the field is left out. `xwing_list_saved` fires from `saveList`, which both the list builder and Import XWS go through, and leaves `faction` out for a list saved without one.
 
 `onAppInstall` fires on the first launch of the app in standalone mode (i.e. launched from the home screen icon). It checks `window.matchMedia('(display-mode: standalone)').matches` (Android/Chrome) or `window.navigator.standalone === true` (iOS Safari), and only fires if a `pwa_install_tracked` flag is not yet set in localStorage. Once fired it sets the flag, so subsequent launches do not re-fire it. This approach is used instead of the `appinstalled` browser event because Safari does not support that event. Platform is detected as `'ios'` when `navigator.standalone === true` (exclusive to iOS Safari), `'android'` when the user agent contains `'Android'`, and `'other'` otherwise.
 
@@ -416,7 +419,7 @@ Feature use is measured via usage events (sessions containing at least one relev
 
 **X-Wing dashboard panels (`dmgctrl-xwing-dashboard.json`):**
 
-All X-Wing panels filter with `AND game = 'xwing'` on `game_started` and `game_ended`. The dashboard title is "dmgCtrl X-Wing Analytics".
+The X-Wing game panels filter with `AND game = 'xwing'` on `game_started` and `game_ended`; "Lists saved per faction" reads `xwing_list_saved`, which only X-Wing sends. The dashboard title is "dmgCtrl X-Wing Analytics".
 
 | Panel | Type | What it shows |
 |---|---|---|
@@ -431,12 +434,15 @@ All X-Wing panels filter with `AND game = 'xwing'` on `game_started` and `game_e
 | Squad points deficit | Bar gauge | Games by the player's `player_deficit`, taken from `game_started` |
 | Final round | Bar gauge | Games by `final_round` |
 | Score margin | Bar gauge | `player_score - opponent_score` in bands (lost by 50+ through won by 50+), for games with a result |
+| Lists saved per faction | Bar gauge | `xwing_list_saved` events by `faction`; a list saved without one shows as "no faction" |
+| Win rate per faction | Bar gauge | Share of sides won per faction over games with a result, counting both sides (the opponent's faction takes the reversed result); draws count as not won; the label carries the number of sides |
 
 What the X-Wing events can and cannot show:
 
 - **Only games left through the game screen send `game_ended`.** Closing the app mid-game sends nothing, so results, duration, timer, final round and score margin cover only the share shown in "Games ended in the app".
 - **Tournament games are not distinguished.** A tournament round uses the same game screen and sends the same events as a casual game, so tournament games are counted with the rest and there is no tournament panel.
-- **No scenario, match type, settings or list events are sent for X-Wing**, so the dashboard has no panels for them.
+- **No scenario, match type or settings events are sent for X-Wing**, so the dashboard has no panels for them.
+- **Lists live only on the device**, so "Lists saved per faction" counts saves in the time range, not the lists players hold, and saving an edited list counts again.
 - **`result` is stored as the string `'null'`** when a game ends without one, not as a SQL `NULL`; the Results panel maps everything other than `win` / `loss` / `draw` to "no result".
 
 **Games by country** is a Business Charts panel because the built-in Geomap cannot shade a country from query data: its GeoJSON layer styles shapes only by properties in the file. The panel's script turns the two-letter `country` code into the English country name the plugin's world map uses, with `Intl.DisplayNames` and a short alias table for the names that differ (for example `US` is "United States of America"). Countries too small for that map, such as Malta or Singapore, are counted but not drawn, and development traffic has no country.

@@ -14,6 +14,7 @@ import type { XwingPilot } from '../utils/parseXwsText'
 import type { XwingRoundResult } from '../hooks/useXwingTournament'
 import { type ShipEntry, initShips, halfPoints, remainingPoints } from '../utils/shipRoster'
 import { displayPilots } from '../utils/displayPilots'
+import { listFaction } from '../utils/xwingListRules'
 
 interface XwingGameSnapshot {
   playerScore: number
@@ -209,7 +210,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
     setGameStarted(true)
     gameStartedRef.current = true
     timer.start()
-    void onXwingGameStarted(playerDeficit, opponentDeficit)
+    void onXwingGameStarted(playerDeficit, opponentDeficit, listFaction(playerPilots), listFaction(opponentPilots))
   }
 
   const playerNames = displayPilots(playerPilots).map(p => p.displayName)
@@ -302,6 +303,8 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onTimerExp
       result: game.result,
       elapsed_seconds,
       timer_expired: timer.isExpired,
+      player_faction: listFaction(playerPilots),
+      opponent_faction: listFaction(opponentPilots),
     })
   }
 

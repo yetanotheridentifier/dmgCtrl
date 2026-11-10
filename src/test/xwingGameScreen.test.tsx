@@ -289,14 +289,27 @@ describe('XwingGameScreen analytics', () => {
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('start-game-btn'))
     expect(mockOnXwingGameStarted).toHaveBeenCalledOnce()
-    expect(mockOnXwingGameStarted).toHaveBeenCalledWith(0, 0)
+    expect(mockOnXwingGameStarted).toHaveBeenCalledWith(0, 0, undefined, undefined)
   })
 
   it('fires onXwingGameStarted with correct deficit values', async () => {
     const user = userEvent.setup()
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerDeficit={2} opponentDeficit={1} />)
     await user.click(screen.getByTestId('start-game-btn'))
-    expect(mockOnXwingGameStarted).toHaveBeenCalledWith(2, 1)
+    expect(mockOnXwingGameStarted).toHaveBeenCalledWith(2, 1, undefined, undefined)
+  })
+
+  it("sends each side's faction, taken from its list's pilots, on start and end", async () => {
+    const user = userEvent.setup()
+    const rebels = [{ name: 'jekporkins', ship: 't65xwing', points: 10 }]
+    const empire = [{ name: 'darthvader', ship: 'tieadvancedx1', points: 21 }]
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerPilots={rebels} opponentPilots={empire} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(mockOnXwingGameStarted).toHaveBeenCalledWith(0, 0, 'rebelalliance', 'galacticempire')
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    expect(mockOnXwingGameEnded).toHaveBeenCalledWith(
+      expect.objectContaining({ player_faction: 'rebelalliance', opponent_faction: 'galacticempire' }),
+    )
   })
 
   it('fires onXwingGameEnded when back is pressed after game starts', async () => {
