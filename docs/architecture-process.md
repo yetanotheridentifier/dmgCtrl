@@ -472,7 +472,7 @@ Every panel filters with `AND game = 'sealed'`. Sealed sends its events from its
 | Sessions over time | Time series | Distinct `sessionId` values per day with any Sealed event |
 | Games over time | Time series | Sealed `game_started` per day, rematches included |
 | Sessions by country | Business Charts (world map) | Each country shaded by Sealed sessions there |
-| Win rate by leader | Bar gauge | The player's win rate against the bot by `player_leader` (a card id), top 20; draws count as not won; the label carries the number of games |
+| Win rate by leader | Bar gauge | The player's win rate against the bot by `player_leader_name` (`Card Name (SET)`), top 20; draws count as not won; the label carries the number of games after a dot. Games from builds that sent only the id fall back to `player_leader` |
 | Results against the bot | Donut | `result` as won / lost / drawn, using the results palette above |
 | How games end | Donut | `conceded_by`: played out = `semi-dark-blue`, bot conceded = `semi-dark-green` (an offer to concede the player accepted), player conceded = `semi-dark-red` |
 | Games finished | Stat | `game_ended` as a share of `game_started`: leaving for a new setup or closing the app sends no end |

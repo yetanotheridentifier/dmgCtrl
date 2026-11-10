@@ -668,6 +668,8 @@ describe('useGame', () => {
         player_deck: 'saved', opponent_deck: 'generated',
         rematch: false,
         player_leader: 'TST_001', opponent_leader: 'TST_001',
+        // What a person reads: the card's name and its set, beside the exact id.
+        player_leader_name: 'Test Leader (TST)', opponent_leader_name: 'Test Leader (TST)',
         player_base: 'TST_002', opponent_base: 'TST_002',
         player_aspect: 'none', opponent_aspect: 'none',
       })

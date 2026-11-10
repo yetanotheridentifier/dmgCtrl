@@ -202,20 +202,25 @@ export function cancelPoint(history: readonly { by: PlayerId; state: GameState }
 
 /**
  * What the usage event says about a game's two decks, from the decks as given and the cards as
- * loaded. A deck's set is its leader's; a base's aspect is its first, or `none`.
+ * loaded. A deck's set is its leader's; a base's aspect is its first, or `none`; a leader's name is
+ * `Card Name (SET)`, or its id if the card is somehow not among those loaded.
  */
 function gameStart(playerDeck: SavedDeck, opponentDeck: SavedDeck, rematch: boolean, cards: SwuCard[], servedAs: Map<string, string>): SealedGameStart {
-  const aspectOf = (base: string) => {
-    const id = servedAs.get(base) ?? base
-    return cards.find(c => cardId(c.Set, c.Number) === id)?.Aspects?.[0] ?? 'none'
+  const cardFor = (deckId: string) => {
+    const id = servedAs.get(deckId) ?? deckId
+    return cards.find(c => cardId(c.Set, c.Number) === id)
   }
-  const side = (deck: SavedDeck) => ({
-    set: cardRefFromId(deck.leader)?.set ?? 'unknown',
-    deck: deck.id === GENERATED_DECK_ID ? 'generated' as const : 'saved' as const,
-    leader: deck.leader,
-    base: deck.base,
-    aspect: aspectOf(deck.base),
-  })
+  const side = (deck: SavedDeck) => {
+    const leader = cardFor(deck.leader)
+    return {
+      set: cardRefFromId(deck.leader)?.set ?? 'unknown',
+      deck: deck.id === GENERATED_DECK_ID ? 'generated' as const : 'saved' as const,
+      leader: deck.leader,
+      leaderName: leader ? `${leader.Name} (${leader.Set})` : deck.leader,
+      base: deck.base,
+      aspect: cardFor(deck.base)?.Aspects?.[0] ?? 'none',
+    }
+  }
   const player = side(playerDeck)
   const opponent = side(opponentDeck)
   return {
@@ -223,6 +228,7 @@ function gameStart(playerDeck: SavedDeck, opponentDeck: SavedDeck, rematch: bool
     player_deck: player.deck, opponent_deck: opponent.deck,
     rematch,
     player_leader: player.leader, opponent_leader: opponent.leader,
+    player_leader_name: player.leaderName, opponent_leader_name: opponent.leaderName,
     player_base: player.base, opponent_base: opponent.base,
     player_aspect: player.aspect, opponent_aspect: opponent.aspect,
   }

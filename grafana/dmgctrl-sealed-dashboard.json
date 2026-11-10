@@ -301,7 +301,7 @@
         "spec": {
           "id": 4,
           "title": "Win rate by leader",
-          "description": "The player's win rate against the bot, by the leader the player's deck used, over games that ended. Draws count as not won. The number in brackets is how many games.",
+          "description": "The player's win rate against the bot, by the leader the player's deck used (Card Name (SET)), over games that ended. Draws count as not won. The number after the dot is how many games. Games from builds before the name was sent show the leader's card id.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -322,7 +322,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT player_leader || ' (' || CAST(COUNT(*) AS VARCHAR) || ')' AS \"Leader\",\n  100.0 * SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) / COUNT(*) AS win_rate\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND game = 'sealed'\n  AND event = 'game_ended'\n  AND player_leader IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY player_leader\nORDER BY win_rate DESC, COUNT(*) DESC\nLIMIT 20"
+                        "rawSql": "SELECT COALESCE(player_leader_name, player_leader) || ' · ' || CAST(COUNT(*) AS VARCHAR) AS \"Leader\",\n  100.0 * SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) / COUNT(*) AS win_rate\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND game = 'sealed'\n  AND event = 'game_ended'\n  AND player_leader IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY COALESCE(player_leader_name, player_leader)\nORDER BY win_rate DESC, COUNT(*) DESC\nLIMIT 20"
                       }
                     },
                     "refId": "A",

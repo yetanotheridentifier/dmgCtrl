@@ -861,8 +861,8 @@ leaves CORS-friendly hosts (cdn.starwarsunlimited.com) untouched.
 **Usage events** go to the same Worker's analytics route (`POST /analytics/batch`), for every
 player, as the PWA's do: `app_started`, `game_started` and `game_ended`, each tagged `game: 'sealed'`
 and carrying `env`, a per-load `sessionId` and `version` (the build's `RELEASE`). A game start names
-each side's set, leader, base, base aspect and whether the deck was generated or saved, and whether
-it is a rematch; a game end repeats all of that (nothing else links a game's two events, so a
+each side's set, leader (its card id, and its name as `Card Name (SET)` for the dashboards), base,
+base aspect and whether the deck was generated or saved, and whether it is a rematch; a game end repeats all of that (nothing else links a game's two events, so a
 result by leader or set is read from the end alone) and adds the player's result, the round, the
 length in seconds, the undo count and `conceded_by` (`player`, `opponent` or `none`, so the field
 exists from the first game rather than the first concession). They carry no cards, decisions or deck names. The Worker adds
