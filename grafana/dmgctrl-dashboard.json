@@ -1185,6 +1185,87 @@
             }
           }
         }
+      },
+      "panel-19": {
+        "kind": "Panel",
+        "spec": {
+          "id": 19,
+          "title": "Sessions by version",
+          "description": "Distinct sessions per build release, newest first: the deploy run number in production, dev-<commit> in development. Every event carries the release of the build that sent it, so a session still on a cached build shows under its old release. 0.0.0 is a build from before the release was recorded.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT version AS \"Version\", COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND version IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY version\nORDER BY MAX(time) DESC\nLIMIT 12"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "rowsToFields",
+                  "spec": {
+                    "options": {
+                      "nameField": "Version",
+                      "valueField": "sessions"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "bargauge",
+            "spec": {
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "namePlacement": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "text"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "min": 0,
+                  "color": {
+                    "mode": "continuous-YlBl"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
       }
     },
     "layout": {
@@ -1200,7 +1281,8 @@
           { "kind": "GridLayoutItem", "spec": { "x": 16, "y": 20, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-8" } } },
           { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 28, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-9" } } },
           { "kind": "GridLayoutItem", "spec": { "x": 8, "y": 28, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-18" } } },
-          { "kind": "GridLayoutItem", "spec": { "x": 16, "y": 28, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-10" } } }
+          { "kind": "GridLayoutItem", "spec": { "x": 16, "y": 28, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-10" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 36, "width": 24, "height": 8, "element": { "kind": "ElementReference", "name": "panel-19" } } }
         ]
       }
     },

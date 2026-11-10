@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import HelpScreen from '../components/helpScreen'
 import { makeMatchMediaMock } from './setup'
+import { RELEASE } from '../buildIdentity'
 
 type Source = Parameters<typeof HelpScreen>[0]['source']
 
@@ -141,6 +142,14 @@ describe('HelpScreen', () => {
     const nav = screen.getByRole('navigation', { name: 'Sections' })
     expect(nav).toHaveStyle({ display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` })
     expect(nav.style.overflowX).toBe('')
+  })
+
+  it.each<Source>(['game', 'xwing', 'gameSelect'])('opened from %s, the foot of the content shows the build release, so a player can quote it', source => {
+    render(<HelpScreen onBack={vi.fn()} source={source} />)
+    const content = screen.getByTestId('help-content')
+    const tag = within(content).getByTestId('build-tag')
+    expect(tag).toHaveTextContent(RELEASE)
+    expect(content.lastElementChild).toBe(tag)
   })
 
   it('Back calls onBack', async () => {
