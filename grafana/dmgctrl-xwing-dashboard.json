@@ -1029,6 +1029,171 @@
             }
           }
         }
+      },
+      "panel-12": {
+        "kind": "Panel",
+        "spec": {
+          "id": 12,
+          "title": "Lists saved per faction",
+          "description": "X-Wing lists saved (built or imported) in the time range, by faction. Lists live only on the device, so this counts saves, not the lists players currently hold; saving an edited list counts again.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT CASE faction\n    WHEN 'rebelalliance' THEN 'Rebel Alliance'\n    WHEN 'galacticempire' THEN 'Galactic Empire'\n    WHEN 'scumandvillainy' THEN 'Scum and Villainy'\n    WHEN 'resistance' THEN 'Resistance'\n    WHEN 'firstorder' THEN 'First Order'\n    WHEN 'galacticrepublic' THEN 'Galactic Republic'\n    WHEN 'separatistalliance' THEN 'Separatist Alliance'\n    ELSE COALESCE(faction, 'no faction')\n  END AS \"Faction\",\n  COUNT(*) AS lists\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'xwing_list_saved'\n  AND $__timeFilter(time)\nGROUP BY 1\nORDER BY lists DESC"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "rowsToFields",
+                  "spec": {
+                    "options": {
+                      "nameField": "Faction",
+                      "valueField": "lists"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "bargauge",
+            "spec": {
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "namePlacement": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "text"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "min": 0,
+                  "color": {
+                    "mode": "continuous-YlBl"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-13": {
+        "kind": "Panel",
+        "spec": {
+          "id": 13,
+          "title": "Win rate per faction",
+          "description": "Share of games each faction won, counting both sides of every X-Wing game that ended in the app with a result: the player's faction takes the player's result and the opponent's faction the reverse. Draws count as not won. The number in brackets is how many sides played that faction; a mirror match counts one win and one loss.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT CASE faction\n    WHEN 'rebelalliance' THEN 'Rebel Alliance'\n    WHEN 'galacticempire' THEN 'Galactic Empire'\n    WHEN 'scumandvillainy' THEN 'Scum and Villainy'\n    WHEN 'resistance' THEN 'Resistance'\n    WHEN 'firstorder' THEN 'First Order'\n    WHEN 'galacticrepublic' THEN 'Galactic Republic'\n    WHEN 'separatistalliance' THEN 'Separatist Alliance'\n    ELSE faction\n  END || ' (' || CAST(COUNT(*) AS VARCHAR) || ')' AS \"Faction\",\n  100.0 * SUM(won) / COUNT(*) AS win_rate\nFROM (\n  SELECT player_faction AS faction, CASE WHEN result = 'win' THEN 1 ELSE 0 END AS won\n  FROM events\n  WHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n    AND event = 'game_ended'\n    AND game = 'xwing'\n    AND result IN ('win', 'loss', 'draw')\n    AND player_faction IS NOT NULL\n    AND $__timeFilter(time)\n  UNION ALL\n  SELECT opponent_faction AS faction, CASE WHEN result = 'loss' THEN 1 ELSE 0 END AS won\n  FROM events\n  WHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n    AND event = 'game_ended'\n    AND game = 'xwing'\n    AND result IN ('win', 'loss', 'draw')\n    AND opponent_faction IS NOT NULL\n    AND $__timeFilter(time)\n) sides\nGROUP BY faction\nORDER BY win_rate DESC"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "rowsToFields",
+                  "spec": {
+                    "options": {
+                      "nameField": "Faction",
+                      "valueField": "win_rate"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "bargauge",
+            "spec": {
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "namePlacement": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "text"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percent",
+                  "decimals": 0,
+                  "min": 0,
+                  "max": 100,
+                  "color": {
+                    "mode": "continuous-YlBl"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
       }
     },
     "layout": {
@@ -1045,7 +1210,9 @@
           { "kind": "GridLayoutItem", "spec": { "x": 8, "y": 28, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-8" } } },
           { "kind": "GridLayoutItem", "spec": { "x": 16, "y": 28, "width": 8, "height": 8, "element": { "kind": "ElementReference", "name": "panel-11" } } },
           { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 36, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-9" } } },
-          { "kind": "GridLayoutItem", "spec": { "x": 12, "y": 36, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-10" } } }
+          { "kind": "GridLayoutItem", "spec": { "x": 12, "y": 36, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-10" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 0, "y": 44, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-12" } } },
+          { "kind": "GridLayoutItem", "spec": { "x": 12, "y": 44, "width": 12, "height": 8, "element": { "kind": "ElementReference", "name": "panel-13" } } }
         ]
       }
     }

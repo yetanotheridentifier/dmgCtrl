@@ -171,10 +171,24 @@ export interface XwingGameEndedPayload {
   result: 'win' | 'loss' | 'draw' | null
   elapsed_seconds: number
   timer_expired: boolean
+  // XWS faction ids; absent for a side playing without a list.
+  player_faction?: string
+  opponent_faction?: string
 }
 
-export function onXwingGameStarted(playerDeficit: number, opponentDeficit: number): Promise<void> {
-  return sendEvent('game_started', { game: 'xwing', player_deficit: playerDeficit, opponent_deficit: opponentDeficit })
+export function onXwingGameStarted(playerDeficit: number, opponentDeficit: number, playerFaction?: string, opponentFaction?: string): Promise<void> {
+  return sendEvent('game_started', {
+    game: 'xwing',
+    player_deficit: playerDeficit,
+    opponent_deficit: opponentDeficit,
+    ...(playerFaction ? { player_faction: playerFaction } : {}),
+    ...(opponentFaction ? { opponent_faction: opponentFaction } : {}),
+  })
+}
+
+// Lists live only on the device, so a save is the one moment the dashboard can count a list.
+export function onXwingListSaved(faction: string | undefined): Promise<void> {
+  return sendEvent('xwing_list_saved', faction ? { faction } : {})
 }
 
 export function onXwingGameEnded(payload: XwingGameEndedPayload): Promise<void> {

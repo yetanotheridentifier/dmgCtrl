@@ -8,7 +8,7 @@ import {
   onSettingChanged, onDeckImportSuccess, onDeckImportFailure,
   onImageLoadFailed, onBasesLoadFailed, onBasesLoadStale, onWakeLockFailed,
   onTournamentStarted, onTournamentRoundCompleted, onTournamentDropped, onTournamentEnded,
-  onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced,
+  onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced, onXwingListSaved,
 } from '../services/analytics'
 import { version as APP_VERSION } from '../../package.json'
 
@@ -849,6 +849,17 @@ describe('onXwingGameStarted', () => {
     expect(getLastBody().data.opponent_deficit).toBe(5)
   })
 
+  it('includes each side\'s faction in payload', async () => {
+    await onXwingGameStarted(0, 0, 'rebelalliance', 'galacticempire')
+    expect(getLastBody().data.player_faction).toBe('rebelalliance')
+    expect(getLastBody().data.opponent_faction).toBe('galacticempire')
+  })
+
+  it('leaves a faction out for a side with no list', async () => {
+    await onXwingGameStarted(0, 0, 'rebelalliance', undefined)
+    expect(getLastBody().data).not.toHaveProperty('opponent_faction')
+  })
+
   it('does not include user-identifiable fields', async () => {
     await onXwingGameStarted(0, 0)
     const keys = Object.keys(getLastBody().data ?? {})
@@ -915,12 +926,39 @@ describe('onXwingGameEnded', () => {
     expect(getLastBody().data.timer_expired).toBe(false)
   })
 
+  it('includes each side\'s faction in payload', async () => {
+    await onXwingGameEnded({ ...payload, player_faction: 'scumandvillainy', opponent_faction: 'firstorder' })
+    expect(getLastBody().data.player_faction).toBe('scumandvillainy')
+    expect(getLastBody().data.opponent_faction).toBe('firstorder')
+  })
+
   it('does not include user-identifiable fields', async () => {
     await onXwingGameEnded(payload)
     const keys = Object.keys(getLastBody().data ?? {})
     for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
       expect(keys).not.toContain(piiKey)
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// onXwingListSaved
+// ---------------------------------------------------------------------------
+
+describe('onXwingListSaved', () => {
+  it('sends event name xwing_list_saved', async () => {
+    await onXwingListSaved('rebelalliance')
+    expect(getLastBody().name).toBe('xwing_list_saved')
+  })
+
+  it("includes the list's faction in payload", async () => {
+    await onXwingListSaved('separatistalliance')
+    expect(getLastBody().data.faction).toBe('separatistalliance')
+  })
+
+  it('leaves the faction out for a list without one', async () => {
+    await onXwingListSaved(undefined)
+    expect(getLastBody().data).not.toHaveProperty('faction')
   })
 })
 

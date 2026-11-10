@@ -4,6 +4,7 @@ import {
   atCurrentCost,
   defaultListName,
   factionShips,
+  listFaction,
   listProblems,
   pilotProblems,
   saveStatus,
@@ -155,5 +156,21 @@ describe('xwingListRules', () => {
   it('names a new list after its faction with the lowest unused number', () => {
     expect(defaultListName('galacticempire', [])).toBe('Galactic Empire list 1')
     expect(defaultListName('galacticempire', ['Galactic Empire list 1', 'Galactic Empire list 3', 'Other'])).toBe('Galactic Empire list 2')
+  })
+
+  // --- A list's faction, from its pilots ---
+
+  it("takes a list's faction from its pilots", () => {
+    expect(listFaction([p('jekporkins')])).toBe('rebelalliance')
+    expect(listFaction([p('darthvader'), p('majorvynder')])).toBe('galacticempire')
+  })
+
+  it('skips pilots the card table does not know', () => {
+    expect(listFaction([{ name: 'nosuchpilot', ship: 'nosuchship', points: 5 }, p('asajjventress')])).toBe('scumandvillainy')
+  })
+
+  it('has no faction with no pilots, or only unknown ones', () => {
+    expect(listFaction([])).toBeUndefined()
+    expect(listFaction([{ name: 'nosuchpilot', ship: 'nosuchship', points: 5 }])).toBeUndefined()
   })
 })
