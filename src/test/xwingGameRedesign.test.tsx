@@ -176,6 +176,19 @@ describe('centre panel, phase tracker off', () => {
     expect(screen.getByTestId('round-btn')).toHaveTextContent('Round 3 of 12')
   })
 
+  it('hides the First choice while the round is scored, so mission points and the next round fit without scrolling', async () => {
+    const { user } = await start({ scenario: 'Assault at the Satellite Array' })
+    await user.click(within(screen.getByRole('group', { name: 'First' })).getByRole('button', { name: 'Opp' }))
+    await user.click(screen.getByTestId('round-btn'))
+    await user.click(screen.getByRole('button', { name: /Start round 2/ }))
+    await user.click(screen.getByTestId('round-btn'))
+    expect(screen.getByTestId('player-scenario-4')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'First' })).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('opponent-score-tile')).getByText('FIRST')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Start round 3/ }))
+    expect(screen.getByRole('group', { name: 'First' })).toBeInTheDocument()
+  })
+
   it('opening the scoring is logged, so Undo takes back a mistaken tap', async () => {
     const { user } = await start()
     await user.click(screen.getByTestId('round-btn'))

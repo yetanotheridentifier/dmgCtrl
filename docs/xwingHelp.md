@@ -118,7 +118,7 @@ The phase button names the phase and what tapping it does next.
 
 With the phase tracker off, the centre panel holds:
 
-- **First**: **You** or **Opp**, under the scores, which you can change at any time
+- **First**: **You** or **Opp**, under the scores, which you can change at any time except while the round is being scored (**FIRST** under a score still shows it)
 - the round button ("Round 3 of 12", "Tap to score the round"): one tap opens the round's mission points, and **Start round 4** scores them and starts the next round
 
 Opening the scoring is logged, so **Undo** takes back a mistaken tap.
