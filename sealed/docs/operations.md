@@ -191,6 +191,10 @@ measurement happens exactly there.
 monotonic and cannot collide. A local build shows `dev-` so it can never be mistaken for a release.
 The bug report carries both.
 
+The PWA has a copy of the generator (`scripts/buildIdentity.mjs` at the repo root), kept the same
+shape, so a change here is made there too. Both apps are built in the same deploy run and carry the
+same `RELEASE`.
+
 The file is generated rather than tracked for a specific reason. It used to be a hand-maintained
 counter bumped by `npm run check`, so two branches incremented it independently and **the same tag
 was issued to different code**, with no merge involved. An untracked file cannot do that, and cannot

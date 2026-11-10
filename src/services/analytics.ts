@@ -1,4 +1,4 @@
-import { version as APP_VERSION } from '../../package.json'
+import { RELEASE } from '../buildIdentity'
 
 const SESSION_ID = Math.random().toString(36).slice(2, 10)
 const SESSION_START_TIME = Date.now()
@@ -50,14 +50,16 @@ export async function flush(): Promise<void> {
 
 window.addEventListener('online', () => { void flush() })
 
+// Every event names the build that sent it: a cached build keeps sending game events long after
+// app_started, and the release is the only way to tell it from an updated one.
 async function sendEvent(event: string, data: Record<string, unknown>): Promise<void> {
   const env = import.meta.env.MODE
-  enqueue(event, { ...data, env, sessionId: SESSION_ID })
+  enqueue(event, { ...data, env, sessionId: SESSION_ID, version: RELEASE })
   await flush()
 }
 
 export function onAppStart(): Promise<void> {
-  return sendEvent('app_started', { version: APP_VERSION })
+  return sendEvent('app_started', {})
 }
 
 export function onGameStart(baseKey: string, baseSet: string, hyperspace: boolean, playMode: string): Promise<void> {

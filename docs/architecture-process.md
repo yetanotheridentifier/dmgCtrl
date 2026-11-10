@@ -63,6 +63,19 @@ Sealed's simulation tests are not in that `test` job. They play real games to re
 
 Production is hosted on **GitHub Pages** under the custom domain `dmgctrl.app` (set by `public/CNAME`), with Cloudflare handling the domain's DNS. The site is served from the root, so the build uses base `/`. The PWA is at `/` and sealed at `/sealed/`; the `build` job assembles both into one `dist/`.
 
+### Build identity
+
+Each app has a generated, gitignored `src/buildIdentity.ts` with two constants, written by its own `scripts/buildIdentity.mjs`. The PWA's script is a copy of Sealed's (the two packages share no build code), so a change to one is made in both.
+
+| | Local | CI | Audience |
+| --- | --- | --- | --- |
+| `COMMIT_ID` | `3f2a1c7`, or `3f2a1c7-dirty` | `github.sha`, short | machine |
+| `RELEASE` | `dev-3f2a1c7` | `github.run_number` | human |
+
+Both apps are built in the same deploy run, so a deploy gives them the same `RELEASE`. A local build carries `dev-` so it can never be mistaken for a release. The PWA sends `RELEASE` as `version` on every analytics event and shows it at the foot of the Help screen; Sealed shows it on its Help page and puts both constants on its bug reports (see [sealed/docs/operations.md](../sealed/docs/operations.md)).
+
+The PWA's `dev`, `build`, `build:github`, `test:pwa` and `test:watch` scripts each run the generator first themselves rather than through an npm `pre` hook, because installs run with `ignore-scripts` (locally and in CI), which also skips `pre` and `post` hooks.
+
 ### Pull request previews
 
 Every pull request from this repository gets its own preview at `https://pr-<number>.dmgctrl.workers.dev`, so a branch can be tried on a phone before it reaches production. Each preview is a Cloudflare Worker of its own, named `pr-<number>`. The `preview` job deploys the exact `dist/` that `build` produced to it with `wrangler deploy --name pr-<number>`, then posts the URL as a comment on the pull request, edited in place on each later push (`scripts/pr-preview-comment.sh`).
@@ -200,7 +213,7 @@ Twenty-seven public functions enqueue events and trigger a flush. All are fire-a
 
 | Function | Event name | Payload fields |
 |---|---|---|
-| `onAppStart()` | `app_started` | `version` (from package.json) |
+| `onAppStart()` | `app_started` | none beyond the auto fields |
 | `onGameStart(baseKey, baseSet, hyperspace, playMode)` | `game_started` | `game` (`'swu'`), `baseKey`, `baseSet`, `hyperspace`, `playMode` (`'casual'` \| `'bo1'` \| `'bo3'`) |
 | `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds, playMode, format?)` | `game_ended` | `game` (`'swu'`), `baseKey`, `baseSet`, `hyperspace`, `durationSeconds`, `playMode`, and `format` (the tournament's) for a tournament game only; a casual game sends no `format` |
 | `onMatchCompleted(playMode, matchResult, playerScore, opponentScore)` | `match_completed` | `playMode`, `matchResult` (`'won'` \| `'lost'` \| `'drawn'`), `playerScore`, `opponentScore` |
@@ -247,6 +260,7 @@ Every event automatically includes fields from two sources:
 |---|---|---|
 | `env` | `import.meta.env.MODE` | `'development'` in dev, `'production'` in builds. Filter with `WHERE env = 'production'` to exclude dev traffic. |
 | `sessionId` | 8-char alphanumeric string, e.g. `'a3f8kx2q'` | Generated once at module load (`Math.random().toString(36).slice(2, 10)`). Same across all events in a page session; resets on reload. Ephemeral — not stored in localStorage, no PII. Enables per-session grouping and session duration queries. |
+| `version` | `RELEASE` from `src/buildIdentity.ts`, e.g. `'412'` | The deploy run number in production, `dev-<commit>` locally (see [Build identity](#build-identity)). On every event, so events from a device still running a cached build name that build. Events written before the release was recorded carry `'0.0.0'` on `app_started` only. |
 
 **Appended by the worker (from `request.cf`):**
 
@@ -379,6 +393,7 @@ SWU and X-Wing both send `game_started`, told apart by its `game` field. SWU eve
 | General feature use | Bar gauge | % of sessions that started a game, and % that returned to the app (`app_resumed`) |
 | Settings changes | Bar gauge | Change count for general settings (`enableActionLog`, `enableInitiativeBar`) |
 | Errors per session | Bar gauge | % of sessions that encountered cross-game errors (wake lock, image load) |
+| Sessions by version | Bar gauge | Distinct sessions per `version`, newest release first (top 12): how quickly devices move off a cached build. `0.0.0` is a build from before the release was recorded |
 
 **SWU dashboard panels (`dmgctrl-swu-dashboard.json`):**
 

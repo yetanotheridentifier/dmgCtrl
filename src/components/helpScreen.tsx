@@ -6,6 +6,7 @@ import AppScreenLayout from './layout/appScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon } from './icons'
 import { IconButton, OptionRow } from './shared/controls'
+import { RELEASE } from '../buildIdentity'
 
 // One page per game plus a short app page. Each `##` in a page's markdown is a section, listed in
 // the section links; help opens at the section for the screen it was opened from.
@@ -156,6 +157,11 @@ function HelpScreen({ onBack, source = 'setup' }: Props) {
                 dangerouslySetInnerHTML={{ __html: s.html }}
               />
             ))}
+            {/* The build release, so a player can say which build they are on (Sealed's Help page
+                carries its own the same way). */}
+            <p data-testid="build-tag" style={{ margin: '12px 0 0', fontSize: '10px', color: 'var(--color-text-disabled)' }}>
+              {RELEASE}
+            </p>
           </div>
         </div>
       </div>

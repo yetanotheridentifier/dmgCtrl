@@ -10,7 +10,7 @@ import {
   onTournamentStarted, onTournamentRoundCompleted, onTournamentDropped, onTournamentEnded,
   onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced, onXwingListSaved,
 } from '../services/analytics'
-import { version as APP_VERSION } from '../../package.json'
+import { RELEASE } from '../buildIdentity'
 
 const TEST_URL = 'https://test.example/analytics'
 const BATCH_URL = `${TEST_URL}/batch`
@@ -167,9 +167,17 @@ describe('onAppStart', () => {
     expect(getLastBody().name).toBe('app_started')
   })
 
-  it('includes app version in payload', async () => {
+  it('carries the build release, so the data can tell one build from another', async () => {
     await onAppStart()
-    expect(getLastBody().data.version).toBe(APP_VERSION)
+    expect(getLastBody().data.version).toBe(RELEASE)
+  })
+
+  // A cached build keeps sending game events long after app_started, so each event names its build.
+  it('sends the build release on every event, not only app_started', async () => {
+    await onXwingRoundAdvanced(1, 2)
+    expect(getLastBody().data.version).toBe(RELEASE)
+    await onGameStart('SOR-020', 'SOR', false, 'casual')
+    expect(getLastBody().data.version).toBe(RELEASE)
   })
 
   it('includes env field in payload', async () => {

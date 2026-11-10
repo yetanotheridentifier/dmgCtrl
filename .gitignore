@@ -49,3 +49,4 @@ CLAUDE.md
 # Generated build identity (#480): untracked so it can never conflict between branches,
 # and so a build tag can never be issued to two different commits.
 sealed/src/buildIdentity.ts
+/src/buildIdentity.ts
