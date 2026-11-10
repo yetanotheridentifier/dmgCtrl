@@ -8,7 +8,8 @@ const TEST_URL = 'https://test.example/analytics'
 
 const START: SealedGameStart = {
   player_set: 'SOR', opponent_set: 'SOR', player_deck: 'generated', opponent_deck: 'saved', rematch: false,
-  player_leader: 'SOR_010', opponent_leader: 'SOR_005', player_base: 'SOR_020', opponent_base: 'SOR_021',
+  player_leader: 'SOR_010', opponent_leader: 'SOR_005',
+  player_leader_name: 'Darth Vader (SOR)', opponent_leader_name: 'Luke Skywalker (SOR)', player_base: 'SOR_020', opponent_base: 'SOR_021',
   player_aspect: 'Vigilance', opponent_aspect: 'none',
 }
 

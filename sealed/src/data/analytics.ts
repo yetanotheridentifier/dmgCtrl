@@ -79,6 +79,9 @@ export interface SealedGameStart {
   rematch: boolean
   player_leader: string
   opponent_leader: string
+  /** The leader as a person reads it, `Card Name (SET)`: what the dashboard labels by. */
+  player_leader_name: string
+  opponent_leader_name: string
   player_base: string
   opponent_base: string
   /** The base's aspect, or `none`. */
