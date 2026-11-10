@@ -891,7 +891,7 @@
         "spec": {
           "id": 10,
           "title": "Set popularity",
-          "description": "Games by the set of the player's deck.",
+          "description": "Games by the set of the player's deck, named as Set Name (CODE). A set the query does not name shows as its bare code.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -912,7 +912,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT player_set AS \"Set\", COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND game = 'sealed'\n  AND event = 'game_started'\n  AND $__timeFilter(time)\nGROUP BY player_set\nORDER BY games DESC"
+                        "rawSql": "SELECT CASE player_set\n    WHEN 'SOR' THEN 'Spark of Rebellion (SOR)'\n    WHEN 'SHD' THEN 'Shadows of the Galaxy (SHD)'\n    WHEN 'TWI' THEN 'Twilight of the Republic (TWI)'\n    WHEN 'JTL' THEN 'Jump to Lightspeed (JTL)'\n    WHEN 'LOF' THEN 'Legends of the Force (LOF)'\n    WHEN 'SEC' THEN 'Secrets of Power (SEC)'\n    WHEN 'LAW' THEN 'A Lawless Time (LAW)'\n    WHEN 'ASH' THEN 'Ashes of the Empire (ASH)'\n    WHEN 'HMW' THEN 'Homeworlds (HMW)'\n    WHEN 'IBH' THEN 'Intro Battle: Hoth (IBH)'\n    WHEN 'TS26' THEN 'Twin Suns 2026 (TS26)'\n    WHEN 'IC27' THEN 'Icons 2027 (IC27)'\n    ELSE player_set\n  END AS \"Set\", COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND game = 'sealed'\n  AND event = 'game_started'\n  AND $__timeFilter(time)\nGROUP BY player_set\nORDER BY games DESC"
                       }
                     },
                     "refId": "A",

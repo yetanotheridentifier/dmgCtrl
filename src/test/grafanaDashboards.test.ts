@@ -18,6 +18,11 @@ const sentEvents = new Set([...analyticsSource.matchAll(/sendEvent\('([a-z_]+)'/
 const senders = import.meta.glob<string>(['../services/analytics.ts', '../../sealed/src/data/analytics.ts'], { eager: true, query: '?raw', import: 'default' })
 const sentGames = new Set(Object.values(senders).flatMap(source => [...source.matchAll(/\bgame: '([a-z]+)'/g)].map(m => m[1])))
 
+// Every set Sealed knows, from its own table of sets. The Sealed dashboard names sets in its query, so
+// a set added to Sealed shows as a bare code until the dashboard is given its name.
+const sealedSetsSource = Object.values(import.meta.glob<string>('../../sealed/src/data/implementedCards.ts', { eager: true, query: '?raw', import: 'default' }))[0]
+const sealedSetCodes = [...sealedSetsSource.matchAll(/\{ code: '([A-Z0-9]+)', group: /g)].map(m => m[1])
+
 // The event names a query compares the event column against: `event = 'x'` and `event IN ('x', 'y')`.
 function queriedEvents(sql: string): string[] {
   const names = [...sql.matchAll(/\bevent\s*=\s*'([a-z_]+)'/g)].map(m => m[1])
@@ -58,6 +63,14 @@ describe('Grafana dashboards', () => {
     for (const sql of splits) {
       expect([...sentGames].filter(game => !sql.includes(`game = '${game}'`))).toEqual([])
     }
+  })
+
+  it('names every set Sealed knows in the Sealed dashboard\'s set panel', () => {
+    const sealed = Object.entries(dashboards).find(([file]) => file.endsWith('/dmgctrl-sealed-dashboard.json'))![1] as { spec: { elements: Record<string, { spec: { title: string } }> } }
+    const panel = Object.values(sealed.spec.elements).find(e => e.spec.title === 'Set popularity')
+    const [sql] = rawSqls(panel)
+    expect(sealedSetCodes.length).toBeGreaterThanOrEqual(12)
+    expect(sealedSetCodes.filter(code => !new RegExp(`WHEN '${code}' THEN '[^']+ \\(${code}\\)'`).test(sql))).toEqual([])
   })
 
   it('shades countries with the same map script on every dashboard', () => {

@@ -479,7 +479,7 @@ Every panel filters with `AND game = 'sealed'`. Sealed sends its events from its
 | Avg game duration | Stat | Mean `durationSeconds` in minutes, for games over 60 seconds |
 | Rounds per game | Bar gauge | Games by the `round` they ended in |
 | Opponent deck | Donut | `opponent_deck`: generated = `semi-dark-blue`, saved = `#9e9e9e`; "Any of my decks" counts as saved |
-| Set popularity | Bar gauge | Games by `player_set` |
+| Set popularity | Bar gauge | Games by `player_set`, named `Set Name (CODE)` in the query (names from the card API's `/sets`); a code it does not name shows bare. `src/test/grafanaDashboards.test.ts` fails if a set in Sealed's `SET_TOTALS` (`sealed/src/data/implementedCards.ts`) is missing, so adding a set to Sealed means naming it here |
 | Sessions by version | Bar gauge | Distinct sessions per Sealed `version`, newest release first (top 12) |
 
 #### Country maps
