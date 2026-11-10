@@ -57,7 +57,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = '$env'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
                       }
                     },
                     "refId": "A",
@@ -176,7 +176,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'wake_lock_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Wake lock failed\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'image_load_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Image load failed\"\nFROM events\nWHERE env = '$env'\n  AND $__timeFilter(time)"
+                        "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'wake_lock_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Wake lock failed\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'image_load_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Image load failed\"\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND $__timeFilter(time)"
                       }
                     },
                     "refId": "A",
@@ -274,7 +274,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day,\n  COUNT(CASE WHEN event = 'game_started' THEN 1 END) AS \"SWU\",\n  COUNT(CASE WHEN event = 'xwing_game_started' THEN 1 END) AS \"X-Wing\"\nFROM events\nWHERE env = '$env'\n  AND (event = 'game_started' OR event = 'xwing_game_started')\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day,\n  COUNT(CASE WHEN event = 'game_started' THEN 1 END) AS \"SWU\",\n  COUNT(CASE WHEN event = 'xwing_game_started' THEN 1 END) AS \"X-Wing\"\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND (event = 'game_started' OR event = 'xwing_game_started')\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
                       }
                     },
                     "refId": "A",
@@ -424,7 +424,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT country, city, AVG(latitude) AS latitude, AVG(longitude) AS longitude, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = '$env'\n  AND city != 'unknown'\n  AND latitude IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY country, city\nORDER BY sessions DESC\nLIMIT 100"
+                        "rawSql": "SELECT country, city, AVG(latitude) AS latitude, AVG(longitude) AS longitude, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND city != 'unknown'\n  AND latitude IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY country, city\nORDER BY sessions DESC\nLIMIT 100"
                       }
                     },
                     "refId": "A",
@@ -548,7 +548,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT CAST(game_count AS VARCHAR) AS \"Games\", COUNT(*) AS sessions\nFROM (\n  SELECT COUNT(*) AS game_count\n  FROM events\n  WHERE env = '$env'\n    AND (event = 'game_started' OR event = 'xwing_game_started')\n    AND $__timeFilter(time)\n  GROUP BY \"sessionId\"\n) sub\nGROUP BY game_count\nORDER BY game_count"
+                        "rawSql": "SELECT CAST(game_count AS VARCHAR) AS \"Games\", COUNT(*) AS sessions\nFROM (\n  SELECT COUNT(*) AS game_count\n  FROM events\n  WHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n    AND (event = 'game_started' OR event = 'xwing_game_started')\n    AND $__timeFilter(time)\n  GROUP BY \"sessionId\"\n) sub\nGROUP BY game_count\nORDER BY game_count"
                       }
                     },
                     "refId": "A",
@@ -657,7 +657,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day,\n  COUNT(CASE WHEN platform = 'ios' THEN 1 END) AS \"iOS\",\n  COUNT(CASE WHEN platform = 'android' THEN 1 END) AS \"Android\"\nFROM events\nWHERE env = '$env'\n  AND event = 'app_installed'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day,\n  COUNT(CASE WHEN platform = 'ios' THEN 1 END) AS \"iOS\",\n  COUNT(CASE WHEN platform = 'android' THEN 1 END) AS \"Android\"\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'app_installed'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
                       }
                     },
                     "refId": "A",
@@ -807,7 +807,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT platform, COUNT(*) AS installs\nFROM events\nWHERE env = '$env'\n  AND event = 'app_installed'\n  AND $__timeFilter(time)\nGROUP BY platform\nORDER BY installs DESC"
+                        "rawSql": "SELECT platform, COUNT(*) AS installs\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'app_installed'\n  AND $__timeFilter(time)\nGROUP BY platform\nORDER BY installs DESC"
                       }
                     },
                     "refId": "A",
@@ -950,7 +950,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event IN ('game_started', 'xwing_game_started') THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 1) AS \"Started a game\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'undo_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event IN ('game_started', 'xwing_game_started') THEN \"sessionId\" END), 0), 1) AS \"Undo used\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'app_resumed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 1) AS \"Returned to app\"\nFROM events\nWHERE env = '$env' AND $__timeFilter(time)"
+                        "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event IN ('game_started', 'xwing_game_started') THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 1) AS \"Started a game\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'undo_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event IN ('game_started', 'xwing_game_started') THEN \"sessionId\" END), 0), 1) AS \"Undo used\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'app_resumed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 1) AS \"Returned to app\"\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END AND $__timeFilter(time)"
                       }
                     },
                     "refId": "A",
@@ -1045,7 +1045,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT 'SWU' AS game, COUNT(*) AS games\nFROM events\nWHERE env = '$env'\n  AND event = 'game_started'\n  AND $__timeFilter(time)\nUNION ALL\nSELECT 'X-Wing' AS game, COUNT(*) AS games\nFROM events\nWHERE env = '$env'\n  AND event = 'xwing_game_started'\n  AND $__timeFilter(time)\nORDER BY games DESC"
+                        "rawSql": "SELECT 'SWU' AS game, COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND $__timeFilter(time)\nUNION ALL\nSELECT 'X-Wing' AS game, COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'xwing_game_started'\n  AND $__timeFilter(time)\nORDER BY games DESC"
                       }
                     },
                     "refId": "A",
@@ -1173,7 +1173,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT setting, COUNT(*) AS changes\nFROM events\nWHERE env = '$env'\n  AND event = 'setting_changed'\n  AND setting IN ('enableActionLog', 'enableInitiativeBar')\n  AND $__timeFilter(time)\nGROUP BY setting\nORDER BY changes DESC"
+                        "rawSql": "SELECT setting, COUNT(*) AS changes\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'setting_changed'\n  AND setting IN ('enableActionLog', 'enableInitiativeBar')\n  AND $__timeFilter(time)\nGROUP BY setting\nORDER BY changes DESC"
                       }
                     },
                     "refId": "A",
