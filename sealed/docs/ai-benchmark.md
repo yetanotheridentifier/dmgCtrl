@@ -980,11 +980,11 @@ Sets are resolved into one canonical order (the setup panel's), so a run depends
 named rather than on how they were typed: the order decides which decks play first, and so which
 games open on which seat.
 
-**Sets under 200 cards are not swept.** They are not designed for sealed play, and the generator
-cannot fill a 30-card deck from one: IBH's 51 cards built a coverage deck of 3 cards, and its games
-ended almost at once. `all` leaves them out and naming one is refused with its card count. The rule
-is a count rather than a list, so a small product released later is left out without anyone adding
-it. `coverageDecks.test.ts` asserts every sealed set builds only rule-satisfying decks.
+**Sets under 150 cards are not swept.** The generator cannot fill a 30-card deck from one: IBH's 51
+cards built a coverage deck of 3 cards, and its games ended almost at once. `all` leaves them out and
+naming one is refused with its card count. The rule is a count rather than a list, so a small product
+released later is left out without anyone adding it, and a large product not designed for sealed
+(IC27, about 192 cards once fully released) is swept once its fixture passes the count. `coverageDecks.test.ts` asserts every sealed set builds only rule-satisfying decks.
 
 Over the nine sealed sets, `--set all --games 5 --seed 42,43,44` is **214 decks and 3,210 games with
 none dropped, playing 2,094 of the 2,098 decked cards** (161 of 162 leaders deployed) in about 25

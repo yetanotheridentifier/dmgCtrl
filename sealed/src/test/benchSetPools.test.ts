@@ -53,9 +53,10 @@ describe('set codes', () => {
 
 /**
  * Sets too small for sealed. A sealed deck is built from a pool opened from one set, and a product with
- * fewer than 200 cards is not designed for that: IBH's 51 cards built a coverage deck of 3. The rule is
+ * fewer than 150 cards is too small for that: IBH's 51 cards built a coverage deck of 3. The rule is
  * a card count rather than a list, so a small product released later is left out without anyone
- * remembering to add it.
+ * remembering to add it, and a large one that was not designed for sealed (IC27, about 192 cards once
+ * fully released) still qualifies.
  */
 describe('sealed sets', () => {
   it('leaves out every set below the minimum, and only those', () => {
@@ -64,9 +65,15 @@ describe('sealed sets', () => {
     }
   })
 
-  it('keeps the nine booster sets and leaves out TS26, IBH and IC27', () => {
+  it('sets the minimum at 150, between the largest small product and a full Icons release', () => {
+    expect(SEALED_MIN_CARDS).toBe(150)
+    expect(poolFor(['TS26']).length).toBeLessThan(SEALED_MIN_CARDS)
+    expect(192).toBeGreaterThanOrEqual(SEALED_MIN_CARDS)
+  })
+
+  it('keeps the nine booster sets and leaves out TS26, IBH and IC27 while its fixture is short', () => {
     expect(SET_CODES).toContain('IC27')
-    expect(SEALED_MIN_CARDS).toBe(200)
+    expect(poolFor(['IC27']).length).toBeLessThan(SEALED_MIN_CARDS)
     expect(SEALED_SET_CODES).toEqual(['HMW', 'ASH', 'LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR'])
   })
 
