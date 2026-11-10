@@ -111,7 +111,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = '$env'\n  AND event = 'game_started'\n  AND game = 'xwing'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND game = 'xwing'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
                       }
                     },
                     "refId": "A",
@@ -187,7 +187,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(*) AS games\nFROM events\nWHERE env = '$env'\n  AND event = 'game_started'\n  AND game = 'xwing'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND game = 'xwing'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
                       }
                     },
                     "refId": "A",
@@ -263,7 +263,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT country, COUNT(*) AS games\nFROM events\nWHERE env = '$env'\n  AND event = 'game_started'\n  AND game = 'xwing'\n  AND country IS NOT NULL\n  AND country <> 'unknown'\n  AND $__timeFilter(time)\nGROUP BY country\nORDER BY games DESC"
+                        "rawSql": "SELECT country, COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND game = 'xwing'\n  AND country IS NOT NULL\n  AND country <> 'unknown'\n  AND $__timeFilter(time)\nGROUP BY country\nORDER BY games DESC"
                       }
                     },
                     "refId": "A",
@@ -322,7 +322,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT CAST(game_count AS VARCHAR) AS \"Games\", COUNT(*) AS sessions\nFROM (\n  SELECT COUNT(*) AS game_count\n  FROM events\n  WHERE env = '$env'\n    AND event = 'game_started'\n    AND game = 'xwing'\n    AND $__timeFilter(time)\n  GROUP BY \"sessionId\"\n) sub\nGROUP BY game_count\nORDER BY game_count"
+                        "rawSql": "SELECT CAST(game_count AS VARCHAR) AS \"Games\", COUNT(*) AS sessions\nFROM (\n  SELECT COUNT(*) AS game_count\n  FROM events\n  WHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n    AND event = 'game_started'\n    AND game = 'xwing'\n    AND $__timeFilter(time)\n  GROUP BY \"sessionId\"\n) sub\nGROUP BY game_count\nORDER BY game_count"
                       }
                     },
                     "refId": "A",
@@ -403,7 +403,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT CAST(SUM(CASE WHEN event = 'game_ended' THEN 1 ELSE 0 END) AS DOUBLE)\n  / NULLIF(SUM(CASE WHEN event = 'game_started' THEN 1 ELSE 0 END), 0) AS completion\nFROM events\nWHERE env = '$env'\n  AND game = 'xwing'\n  AND event IN ('game_started', 'game_ended')\n  AND $__timeFilter(time)"
+                        "rawSql": "SELECT CAST(SUM(CASE WHEN event = 'game_ended' THEN 1 ELSE 0 END) AS DOUBLE)\n  / NULLIF(SUM(CASE WHEN event = 'game_started' THEN 1 ELSE 0 END), 0) AS completion\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND game = 'xwing'\n  AND event IN ('game_started', 'game_ended')\n  AND $__timeFilter(time)"
                       }
                     },
                     "refId": "A",
@@ -473,7 +473,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT CASE result\n    WHEN 'win' THEN 'won'\n    WHEN 'loss' THEN 'lost'\n    WHEN 'draw' THEN 'drawn'\n    ELSE 'no result'\n  END AS outcome,\n  COUNT(*) AS games\nFROM events\nWHERE env = '$env'\n  AND event = 'game_ended'\n  AND game = 'xwing'\n  AND $__timeFilter(time)\nGROUP BY 1\nORDER BY games DESC"
+                        "rawSql": "SELECT CASE result\n    WHEN 'win' THEN 'won'\n    WHEN 'loss' THEN 'lost'\n    WHEN 'draw' THEN 'drawn'\n    ELSE 'no result'\n  END AS outcome,\n  COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_ended'\n  AND game = 'xwing'\n  AND $__timeFilter(time)\nGROUP BY 1\nORDER BY games DESC"
                       }
                     },
                     "refId": "A",
@@ -623,7 +623,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT AVG(elapsed_seconds) / 60.0 AS avg_minutes\nFROM events\nWHERE env = '$env'\n  AND event = 'game_ended'\n  AND game = 'xwing'\n  AND elapsed_seconds > 60\n  AND $__timeFilter(time)"
+                        "rawSql": "SELECT AVG(elapsed_seconds) / 60.0 AS avg_minutes\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_ended'\n  AND game = 'xwing'\n  AND elapsed_seconds > 60\n  AND $__timeFilter(time)"
                       }
                     },
                     "refId": "A",
@@ -693,7 +693,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT CASE WHEN timer_expired THEN 'timer expired' ELSE 'finished in time' END AS outcome,\n  COUNT(*) AS games\nFROM events\nWHERE env = '$env'\n  AND event = 'game_ended'\n  AND game = 'xwing'\n  AND $__timeFilter(time)\nGROUP BY 1\nORDER BY games DESC"
+                        "rawSql": "SELECT CASE WHEN timer_expired THEN 'timer expired' ELSE 'finished in time' END AS outcome,\n  COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_ended'\n  AND game = 'xwing'\n  AND $__timeFilter(time)\nGROUP BY 1\nORDER BY games DESC"
                       }
                     },
                     "refId": "A",
@@ -813,7 +813,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT CAST(final_round AS VARCHAR) AS \"Round\", COUNT(*) AS games\nFROM events\nWHERE env = '$env'\n  AND event = 'game_ended'\n  AND game = 'xwing'\n  AND final_round IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY final_round\nORDER BY final_round"
+                        "rawSql": "SELECT CAST(final_round AS VARCHAR) AS \"Round\", COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_ended'\n  AND game = 'xwing'\n  AND final_round IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY final_round\nORDER BY final_round"
                       }
                     },
                     "refId": "A",
@@ -894,7 +894,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT band AS \"Margin\", COUNT(*) AS games\nFROM (\n  SELECT player_score - opponent_score AS margin,\n    CASE\n      WHEN player_score - opponent_score <= -50 THEN 'lost by 50+'\n      WHEN player_score - opponent_score <= -20 THEN 'lost by 20 to 49'\n      WHEN player_score - opponent_score < 0 THEN 'lost by 1 to 19'\n      WHEN player_score - opponent_score = 0 THEN 'level'\n      WHEN player_score - opponent_score < 20 THEN 'won by 1 to 19'\n      WHEN player_score - opponent_score < 50 THEN 'won by 20 to 49'\n      ELSE 'won by 50+'\n    END AS band\n  FROM events\n  WHERE env = '$env'\n    AND event = 'game_ended'\n    AND game = 'xwing'\n    AND result IN ('win', 'loss', 'draw')\n    AND $__timeFilter(time)\n) sub\nGROUP BY band\nORDER BY MIN(margin)"
+                        "rawSql": "SELECT band AS \"Margin\", COUNT(*) AS games\nFROM (\n  SELECT player_score - opponent_score AS margin,\n    CASE\n      WHEN player_score - opponent_score <= -50 THEN 'lost by 50+'\n      WHEN player_score - opponent_score <= -20 THEN 'lost by 20 to 49'\n      WHEN player_score - opponent_score < 0 THEN 'lost by 1 to 19'\n      WHEN player_score - opponent_score = 0 THEN 'level'\n      WHEN player_score - opponent_score < 20 THEN 'won by 1 to 19'\n      WHEN player_score - opponent_score < 50 THEN 'won by 20 to 49'\n      ELSE 'won by 50+'\n    END AS band\n  FROM events\n  WHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n    AND event = 'game_ended'\n    AND game = 'xwing'\n    AND result IN ('win', 'loss', 'draw')\n    AND $__timeFilter(time)\n) sub\nGROUP BY band\nORDER BY MIN(margin)"
                       }
                     },
                     "refId": "A",
@@ -975,7 +975,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT CAST(player_deficit AS VARCHAR) AS \"Deficit\", COUNT(*) AS games\nFROM events\nWHERE env = '$env'\n  AND event = 'game_started'\n  AND game = 'xwing'\n  AND player_deficit IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY player_deficit\nORDER BY player_deficit"
+                        "rawSql": "SELECT CAST(player_deficit AS VARCHAR) AS \"Deficit\", COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND game = 'xwing'\n  AND player_deficit IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY player_deficit\nORDER BY player_deficit"
                       }
                     },
                     "refId": "A",

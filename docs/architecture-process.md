@@ -344,6 +344,14 @@ Install detection and resume detection are in separate `useEffect` calls. The in
 
 Dashboards are defined as JSON under `grafana/` and can be imported directly into any Grafana instance. All require an InfluxDB datasource configured against the `dmgctrl` bucket (InfluxDB 3.x / SQL query language). Each dashboard has an **Environment** variable (`$env`) — dropdown with `production` / `development` — that filters all panels to a single deployment environment.
 
+Public (externally shared) dashboards do not substitute variables, so `$env` reaches the query as the literal text `$env`. Every environment filter is therefore written with a production fallback, and the public links show production data:
+
+```sql
+WHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END
+```
+
+A bare `env = '$env'` works on the private dashboard and returns nothing on the public one. `src/test/grafanaDashboards.test.ts` fails on any query in `grafana/` that uses `$env` without the fallback.
+
 | File | Purpose | Public link |
 |---|---|---|
 | `grafana/dmgctrl-dashboard.json` | Core app analytics — cross-game metrics, game selection, settings | [dmgCtrl Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/022803ee5cd043dcaf0a19ce2f8e1d4a) |
