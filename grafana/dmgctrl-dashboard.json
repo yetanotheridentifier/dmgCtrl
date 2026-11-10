@@ -274,7 +274,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day,\n  COUNT(CASE WHEN game IS NULL OR game = 'swu' THEN 1 END) AS \"SWU\",\n  COUNT(CASE WHEN game = 'xwing' THEN 1 END) AS \"X-Wing\"\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day,\n  COUNT(CASE WHEN game IS NULL OR game = 'swu' THEN 1 END) AS \"SWU\",\n  COUNT(CASE WHEN game = 'xwing' THEN 1 END) AS \"X-Wing\",\n  COUNT(CASE WHEN game = 'sealed' THEN 1 END) AS \"Sealed\"\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
                       }
                     },
                     "refId": "A",
@@ -388,6 +388,21 @@
                         "value": {
                           "mode": "fixed",
                           "fixedColor": "semi-dark-red"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "Sealed"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-purple"
                         }
                       }
                     ]
@@ -980,7 +995,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT CASE WHEN game = 'xwing' THEN 'X-Wing' ELSE 'SWU' END AS game, COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND $__timeFilter(time)\nGROUP BY 1\nORDER BY games DESC"
+                        "rawSql": "SELECT CASE WHEN game IS NULL OR game = 'swu' THEN 'SWU' WHEN game = 'xwing' THEN 'X-Wing' WHEN game = 'sealed' THEN 'Sealed' ELSE game END AS game, COUNT(*) AS games\nFROM events\nWHERE env = CASE WHEN '$env' LIKE '$%' THEN 'production' ELSE '$env' END\n  AND event = 'game_started'\n  AND $__timeFilter(time)\nGROUP BY 1\nORDER BY games DESC"
                       }
                     },
                     "refId": "A",
@@ -1072,6 +1087,21 @@
                         "value": {
                           "mode": "fixed",
                           "fixedColor": "semi-dark-red"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "Sealed"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-purple"
                         }
                       }
                     ]
