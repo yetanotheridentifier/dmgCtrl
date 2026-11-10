@@ -265,6 +265,8 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
   // When the board was dealt, for the saved record. Set with the initial state, so a rematch
   // starts it again.
   const startedAtRef = useRef(0)
+  // What the usage event said about this game's decks at the deal; the end event repeats it.
+  const gameStartRef = useRef<SealedGameStart | null>(null)
 
   // The opponent's pace, read by timers that outlive the render that set them.
   const delayRef = useRef(0)
@@ -449,7 +451,8 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
         })
         initialStateRef.current = state
         startedAtRef.current = Date.now()
-        void onGameStarted(gameStart(playerDeck, opponentDeck, generation > 0, cards, servedAs))
+        gameStartRef.current = gameStart(playerDeck, opponentDeck, generation > 0, cards, servedAs)
+        void onGameStarted(gameStartRef.current)
 
         // If the AI won the initiative roll it moves first: before the human sees the board when it
         // is instant, and onto the opening board when it is paced.
@@ -486,13 +489,17 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
     const initial = initialStateRef.current
     if (!initial) return
     const endedAt = Date.now()
-    void onGameEnded({
-      result: gameState.winner === 'draw' ? 'draw' : gameState.winner === HUMAN ? 'win' : 'loss',
-      round: gameState.round,
-      durationSeconds: Math.round((endedAt - startedAtRef.current) / 1000),
-      undo_count: undoCountRef.current,
-      ...(gameState.concededBy ? { conceded_by: gameState.concededBy } : {}),
-    })
+    const start = gameStartRef.current
+    if (start) {
+      void onGameEnded({
+        ...start,
+        result: gameState.winner === 'draw' ? 'draw' : gameState.winner === HUMAN ? 'win' : 'loss',
+        round: gameState.round,
+        durationSeconds: Math.round((endedAt - startedAtRef.current) / 1000),
+        undo_count: undoCountRef.current,
+        conceded_by: gameState.concededBy ?? 'none',
+      })
+    }
     void saveGameRecord({
       playerDeckName: playerDeck.name,
       opponentDeckName: opponentDeck.name,

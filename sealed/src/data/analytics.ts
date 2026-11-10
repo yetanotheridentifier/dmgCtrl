@@ -86,14 +86,18 @@ export interface SealedGameStart {
   opponent_aspect: string
 }
 
-export interface SealedGameEnd {
+/**
+ * A game's end, with its decks repeated from the start: nothing links a game's two events, so a
+ * result by leader or set can only be read from this one.
+ */
+export interface SealedGameEnd extends SealedGameStart {
   /** For the player. */
   result: 'win' | 'loss' | 'draw'
   round: number
   durationSeconds: number
   undo_count: number
-  /** Absent when nobody conceded. */
-  conceded_by?: 'player' | 'opponent'
+  /** `none` when nobody conceded, so the field exists from the first game, not the first concession. */
+  conceded_by: 'player' | 'opponent' | 'none'
 }
 
 export function onAppStarted(): Promise<void> {

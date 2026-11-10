@@ -374,6 +374,7 @@ A bare `env = '$env'` works on the private dashboard and returns nothing on the 
 | `grafana/dmgctrl-dashboard.json` | Core app analytics: cross-game metrics, game selection, settings | [dmgCtrl Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/022803ee5cd043dcaf0a19ce2f8e1d4a) |
 | `grafana/dmgctrl-swu-dashboard.json` | SWU-specific analytics: sessions, bases, competitive play, settings | [dmgCtrl SWU Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/02e71e370db24d1bbf6519ab9074405f) |
 | `grafana/dmgctrl-xwing-dashboard.json` | X-Wing analytics: sessions, countries, results, duration, timer, squad points | [dmgCtrl X-Wing Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/57328004542545778d63605a37f9f44b) |
+| `grafana/dmgctrl-sealed-dashboard.json` | Sealed analytics: sessions, countries, results against the bot, leaders, sets, builds | [dmgCtrl Sealed Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/496a98f3e940411b9de97bdc81018791) |
 
 The files are in the Grafana v2 resource format (`apiVersion: dashboard.grafana.app/v2`), and `metadata.name` is the dashboard UID. A file can be created or replaced on the stack through the dashboards API (`/apis/dashboard.grafana.app/v2/namespaces/stacks-1634354/dashboards`) as well as by importing it in the UI. Every dashboard needs the **Business Charts** panel plugin (`volkovlabs-echarts-panel`) installed on the stack for its country map (see [Country maps](#country-maps)).
 
@@ -462,11 +463,30 @@ What the X-Wing events can and cannot show:
 - **Lists live only on the device**, so "Lists saved per faction" counts saves in the time range, not the lists players hold, and saving an edited list counts again.
 - **`result` is stored as the string `'null'`** when a game ends without one, not as a SQL `NULL`; the Results panel maps everything other than `win` / `loss` / `draw` to "no result".
 
+**Sealed dashboard panels (`dmgctrl-sealed-dashboard.json`):**
+
+Every panel filters with `AND game = 'sealed'`. Sealed sends its events from its own sender (see [sealed/docs/architecture.md](../sealed/docs/architecture.md)); a game end repeats the game start's deck fields, so the result panels read `game_ended` alone. The dashboard title is "dmgCtrl Sealed Analytics".
+
+| Panel | Type | What it shows |
+|---|---|---|
+| Sessions over time | Time series | Distinct `sessionId` values per day with any Sealed event |
+| Games over time | Time series | Sealed `game_started` per day, rematches included |
+| Sessions by country | Business Charts (world map) | Each country shaded by Sealed sessions there |
+| Win rate by leader | Bar gauge | The player's win rate against the bot by `player_leader` (a card id), top 20; draws count as not won; the label carries the number of games |
+| Results against the bot | Donut | `result` as won / lost / drawn, using the results palette above |
+| How games end | Donut | `conceded_by`: played out = `semi-dark-blue`, bot conceded = `semi-dark-green` (an offer to concede the player accepted), player conceded = `semi-dark-red` |
+| Games finished | Stat | `game_ended` as a share of `game_started`: leaving for a new setup or closing the app sends no end |
+| Avg game duration | Stat | Mean `durationSeconds` in minutes, for games over 60 seconds |
+| Rounds per game | Bar gauge | Games by the `round` they ended in |
+| Opponent deck | Donut | `opponent_deck`: generated = `semi-dark-blue`, saved = `#9e9e9e`; "Any of my decks" counts as saved |
+| Set popularity | Bar gauge | Games by `player_set` |
+| Sessions by version | Bar gauge | Distinct sessions per Sealed `version`, newest release first (top 12) |
+
 #### Country maps
 
-Each dashboard has one country map (core and SWU "Sessions by country", X-Wing "Games by country"). They are Business Charts panels because the built-in Geomap cannot shade a country from query data: its GeoJSON layer styles shapes only by properties in the file.
+Each dashboard has one country map (core, SWU and Sealed "Sessions by country", X-Wing "Games by country"). They are Business Charts panels because the built-in Geomap cannot shade a country from query data: its GeoJSON layer styles shapes only by properties in the file.
 
-All three run the same script, and `src/test/grafanaDashboards.test.ts` fails if any copy differs, so a fix to it is made in all three files. Only the query changes between them. The query returns a `country` column and one count column. The script names the count in the tooltip and legend after that column (`games`, `sessions`), and turns the two-letter `country` code into the English country name the plugin's world map uses, with `Intl.DisplayNames` and a short alias table for the names that differ (for example `US` is "United States of America"). Countries too small for that map, such as Malta or Singapore, are counted but not drawn, and development traffic has no country.
+They all run the same script, and `src/test/grafanaDashboards.test.ts` fails if any copy differs, so a fix to it is made in every dashboard file. Only the query changes between them. The query returns a `country` column and one count column. The script names the count in the tooltip and legend after that column (`games`, `sessions`), and turns the two-letter `country` code into the English country name the plugin's world map uses, with `Intl.DisplayNames` and a short alias table for the names that differ (for example `US` is "United States of America"). Countries too small for that map, such as Malta or Singapore, are counted but not drawn, and development traffic has no country.
 
 ### `base_aspects` InfluxDB measurement
 

@@ -695,7 +695,12 @@ describe('useGame', () => {
         await winFromTheStart(result)
 
         await waitFor(() => expect(onGameEnded).toHaveBeenCalledTimes(1))
-        expect(onGameEnded).toHaveBeenCalledWith({ result: 'win', round: result.current.gameState!.round, durationSeconds: 90, undo_count: 1 })
+        // The decks as the start reported them, then how it ended; `none` when nobody conceded, so the
+        // field exists from the first game rather than the first concession.
+        expect(onGameEnded).toHaveBeenCalledWith({
+          ...vi.mocked(onGameStarted).mock.calls[0][0],
+          result: 'win', round: result.current.gameState!.round, durationSeconds: 90, undo_count: 1, conceded_by: 'none',
+        })
         expect(onGameStarted).toHaveBeenCalledTimes(1)
       } finally {
         vi.restoreAllMocks()
