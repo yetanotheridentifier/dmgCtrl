@@ -500,6 +500,11 @@ export default function XwingGameScreenView(props: Props) {
         </>
       )
     }
+    // While the round is scored the First choice steps aside (the FIRST badge still shows it),
+    // so mission points and the next-round button fit the panel without scrolling.
+    if (scoringOpen) {
+      return <>{mission}<BigButton testId="next-round-btn" title={nextRoundLabel} subtitle={`Round ${round} scored`} onClick={onEndOfRound} /></>
+    }
     return (
       <>
         <SegmentedControl
@@ -508,9 +513,7 @@ export default function XwingGameScreenView(props: Props) {
           value={initiative}
           onChange={v => (v === 'player' ? onInitiativePlayer() : onInitiativeOpponent())}
         />
-        {scoringOpen
-          ? <>{mission}<BigButton testId="next-round-btn" title={nextRoundLabel} subtitle={`Round ${round} scored`} onClick={onEndOfRound} /></>
-          : <BigButton testId="round-btn" title={`Round ${round} of 12`} subtitle="Tap to score the round" onClick={onOpenScoring} />}
+        <BigButton testId="round-btn" title={`Round ${round} of 12`} subtitle="Tap to score the round" onClick={onOpenScoring} />
       </>
     )
   })()
