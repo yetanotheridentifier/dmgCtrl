@@ -6,7 +6,7 @@
     "deploy": "wrangler deploy --config wrangler.toml"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.4.9",
-    "vitest": "^5.0.5"
+    "@cloudflare/vitest-plugin": "^1.5.1",
+    "vitest": "^5.1.0"
   }
 }
