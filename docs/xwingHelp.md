@@ -28,7 +28,7 @@ Each player has a card. Tap it to choose that player's list from a sheet of your
 
 - **Your list** is remembered, so next time it is already chosen. Tap **Change list** to pick another.
 - **Your opponent** is chosen each game. Their card says **Choose opponent's list** and offers last game's opponent in one tap; **Choose another list** opens the sheet.
-- **Build a list** in the sheet opens the list builder (see Squad lists) for that player. When you save, you come back to setup with the new list already chosen for them. **Back** returns to setup without saving.
+- **Build a list** in the sheet opens the list builder (see Squad lists) for that player. When you save, you come back to setup with the new list already chosen for them. **Back** returns to setup without saving, asking first once the list has pilots.
 - **Import XWS** in the sheet opens the paste box on **Squad Lists** (see Squad lists). Tap **Back** to return; your choices so far are kept and the new list is ready to pick.
 - **No list** comes last, as a fallback: there are no ships to tap on the game screen, so you set the player's mission point deficit (0–4) with the stepper on their card. The deficit is added to the opponent's score if all of that player's ships are destroyed.
 
@@ -58,7 +58,7 @@ Tap **New list** (or **Build a list** on setup).
 
 While building, a unique pilot already in the list is greyed out, a generic pilot at its per-list limit shows "2 of 2, the limit" and its **+** is disabled, and at 8 ships every pilot is disabled with the reason shown.
 
-**Back** with nothing added returns to the faction choice; after that it leaves the builder without saving.
+**Back** with nothing added returns to the faction choice. Once there are pilots in the list, or you have changed a saved list's pilots, **Back** first asks whether to discard them: **Discard** leaves the builder without saving, **Keep editing** stays. A saved list whose pilots are unchanged leaves without asking.
 
 ### Saving
 
@@ -66,7 +66,7 @@ The save sheet shows the list's points, ships, faction and pilots, with a **Name
 
 ### Importing a list
 
-Export your squad from any squad builder as XWS and copy the JSON text. Tap **Import XWS**, paste it into the box and tap **Check**. Points are counted at today's costs, whatever the squad builder said when the list was exported, and an imported list is saved at today's costs. A list that cannot be read shows an error. A list that breaks a rule above shows each problem and cannot be saved: a pilot the app doesn't know is named by its place in the list, with the nearest pilot it does know ("Ship 3: no pilot called bigsdarklighter. Did you mean Biggs Darklighter?"). **Fix in builder** then opens the list builder on the pilots it knows and the list's faction, as a new list named after the import; **Back** returns to the paste. A legal list shows its pilots, points and faction, and **Save list** opens the same save sheet. **Clear** empties the box.
+Export your squad from any squad builder as XWS and copy the JSON text. Tap **Import XWS**, paste it into the box and tap **Check**. Points are counted at today's costs, whatever the squad builder said when the list was exported, and an imported list is saved at today's costs. A list that cannot be read shows an error. A list that breaks a rule above shows each problem and cannot be saved: a pilot the app doesn't know is named by its place in the list, with the nearest pilot it does know ("Ship 3: no pilot called bigsdarklighter. Did you mean Biggs Darklighter?"). **Fix in builder** then opens the list builder on the pilots it knows and the list's faction, as a new list named after the import; **Back** asks before discarding it, then returns to the paste. A legal list shows its pilots, points and faction, and **Save list** opens the same save sheet. **Clear** empties the box.
 
 ### Saved lists
 
