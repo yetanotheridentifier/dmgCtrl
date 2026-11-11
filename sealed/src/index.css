@@ -58,9 +58,12 @@ select option {
   color: var(--color-text-primary);
 }
 
-/* Starfield background — same recipe as the main app. */
+/* Starfield background: the same recipe as the main app. Taller than the window by the top inset, as
+   the PWA's page is: under the translucent status bar the installed iPhone app is drawn from the top
+   of the screen, but iOS reports the window short by that inset, and nothing below a page only the
+   window's height is drawn (a plain strip at the bottom). */
 html {
-  min-height: 100%;
+  min-height: calc(100% + env(safe-area-inset-top));
   background-color: var(--color-bg-dark);
   background-attachment: fixed;
   background-image:
@@ -83,6 +86,16 @@ body {
   margin: 0;
   background: transparent;
   color: var(--color-text-primary);
+}
+
+/* The taller page would scroll by the inset. Off the setup screen's desktop layout (DESKTOP_QUERY in
+   hooks/useMediaQuery.ts), every screen fits the window and scrolls inside itself, so the
+   page does not scroll, as the PWA's does not. A desktop setup grows with its content and scrolls
+   the page. */
+@media not all and (min-width: 1024px) and (min-height: 600px) {
+  html, body {
+    overflow: hidden;
+  }
 }
 
 /* The help page's rendered markdown: a copy of the PWA stylesheet's `.help-content` rules for

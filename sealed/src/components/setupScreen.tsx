@@ -27,8 +27,9 @@ interface Props {
   /** Beside More in the header: what the caller wants there (the share-games pill). */
   headerExtra?: ReactNode
   /**
-   * Last on the page, under Go to game, so it never moves the cards or Go: a notice the caller owns
-   * (the share-games question, until answered).
+   * A question the caller owns (the share-games one, until answered) that must be answered before a
+   * game: it stands in place of Go to game, which an installed iPhone app had no height for beside it,
+   * and in portrait of the opponent card too.
    */
   notice?: ReactNode
 }
@@ -39,14 +40,17 @@ type Layout = 'portrait' | 'landscape' | 'desktop'
 const labelStyle: React.CSSProperties = { fontSize: '0.75rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-accent)' }
 const cardStyle: React.CSSProperties = { background: 'var(--color-surface)', borderRadius: '16px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, minHeight: 0 }
 
-/** Copies at each cost as bars, tallest full height. */
-function CostCurve({ curve, grow }: { curve: number[]; grow: boolean }) {
+/**
+ * Copies at each cost as bars, tallest full height: the height the deck card has left. It is the one
+ * part of the card that gives way, down to nothing, so the leader and base are never cut short.
+ */
+function CostCurve({ curve }: { curve: number[] }) {
   const most = Math.max(1, ...curve)
   return (
     <div
       role="img"
       aria-label={`Cost curve: ${curve.map((n, i) => `${n} at ${CURVE_LABELS[i]}`).join(', ')}`}
-      style={{ marginTop: 'auto', display: 'flex', alignItems: 'flex-end', gap: '6px', height: grow ? undefined : '64px', flex: grow ? 1 : undefined, minHeight: '40px' }}
+      style={{ marginTop: 'auto', display: 'flex', alignItems: 'flex-end', gap: '6px', flex: '1 1 0px', minHeight: 0, overflow: 'hidden' }}
     >
       {curve.map((n, i) => (
         <div key={i} style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', gap: '4px' }}>
@@ -63,6 +67,10 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, headerExtra, n
   const portrait = useMediaQuery(PORTRAIT_QUERY)
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const layout: Layout = portrait ? 'portrait' : desktop ? 'desktop' : 'landscape'
+  // On a phone the deck card takes what the opponent card leaves (stacked) or half (side by side).
+  // Stacked, the opponent card never shrinks below its content.
+  const deckCardStyle = layout === 'desktop' ? cardStyle : { ...cardStyle, flex: portrait ? '1 1 auto' : '1 1 0px' }
+  const opponentCardStyle = layout === 'desktop' ? cardStyle : { ...cardStyle, flex: portrait ? '0 0 auto' : '1 1 0px' }
 
   // The sheets open, the one on top last. A sheet opened from another goes back to it on close, the
   // way the design's sub-sheets have Back; a deck view covers the screen beneath whatever is on top.
@@ -121,7 +129,7 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, headerExtra, n
       const row = layout === 'landscape'
       const each = row ? { flex: 1 } : undefined
       return (
-        <div data-testid="deck-card" style={cardStyle}>
+        <div data-testid="deck-card" style={deckCardStyle}>
           <div style={{ ...labelStyle, minHeight: '44px', display: 'flex', alignItems: 'center' }}>Your deck</div>
           <div style={{ fontSize: '1.25rem' }}>Choose your deck</div>
           <p style={mutedStyle}>{none ? 'Generate one from any set to play straight away, or import a deck\'s JSON.' : 'One of your saved decks, a generated one, or a new import.'}</p>
@@ -138,29 +146,26 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, headerExtra, n
     }
     const groups = deckGroups(deckEntries(chosen, cards))
     const set = deckSet(chosen) ?? ''
-    const buttons = (
-      <>
-        {layout !== 'desktop' && <Button onClick={() => (chosenId ? view(chosenId) : setStack(['generate']))} style={portrait ? { flex: 1 } : undefined}>View</Button>}
-        <Button onClick={() => setStack(['deck'])} style={portrait ? { flex: 2 } : undefined}>Change deck</Button>
-      </>
-    )
+    // Everything but the cost curve keeps its height: the curve is what gives way to fit. View and
+    // Change deck sit beside the label, leaving the room for the leader and base in portrait.
+    const fixed: React.CSSProperties = { flexShrink: 0 }
     return (
-      <div data-testid="deck-card" style={cardStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minHeight: '44px' }}>
+      <div data-testid="deck-card" style={deckCardStyle}>
+        <div style={{ ...fixed, display: 'flex', alignItems: 'center', gap: '8px', minHeight: '44px' }}>
           <div style={{ ...labelStyle, flex: 1 }}>Your deck</div>
-          {!portrait && buttons}
+          {layout !== 'desktop' && <Button onClick={() => (chosenId ? view(chosenId) : setStack(['generate']))}>View</Button>}
+          <Button onClick={() => setStack(['deck'])}>Change deck</Button>
         </div>
         {portrait && <LeaderAndBase deck={chosen} cards={cards} width={150} show={show} row />}
-        <div data-testid="deck-name" style={{ fontSize: '1.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chosen.name}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', color: 'var(--color-text-body)', minWidth: 0 }}>
+        <div data-testid="deck-name" style={{ ...fixed, fontSize: '1.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chosen.name}</div>
+        <div style={{ ...fixed, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', color: 'var(--color-text-body)', minWidth: 0 }}>
           <AspectIcons aspects={deckAspects(chosen, cards)} size={20} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{deckLine(chosen, cards, false)}</span>
         </div>
-        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+        <div style={{ ...fixed, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
           {[`${cardCount(chosen)} cards`, set, ...(layout === 'desktop' ? [] : [typeSummary(groups)])].filter(Boolean).join(' · ')}
         </div>
-        {layout !== 'desktop' && <CostCurve curve={costCurve(groups.flatMap(g => g.entries))} grow={portrait} />}
-        {portrait && <div style={{ display: 'flex', gap: '8px' }}>{buttons}</div>}
+        {layout !== 'desktop' && <CostCurve curve={costCurve(groups.flatMap(g => g.entries))} />}
       </div>
     )
   }
@@ -185,7 +190,7 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, headerExtra, n
       lines = [deckLine(opponentDeck, cards), ...(record ? [`Your record: ${record}`] : [])]
     }
     return (
-      <div data-testid="opponent-card" style={cardStyle}>
+      <div data-testid="opponent-card" style={opponentCardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minHeight: '44px' }}>
           <div style={{ ...labelStyle, flex: 1 }}>Opponent</div>
           <Button onClick={() => setStack(['opponent'])}>Change opponent</Button>
@@ -200,7 +205,8 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, headerExtra, n
     )
   }
 
-  const go = (
+  // Until a notice is answered, it stands in place of Go to game.
+  const go = notice ?? (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', flexShrink: 0 }}>
       {!chosen && <span style={mutedStyle}>Choose your deck first</span>}
       <Button variant="primary" onClick={() => void s.play()} disabled={!chosen} style={{ minHeight: '52px', minWidth: '176px', flex: portrait || layout === 'desktop' ? 1 : undefined }}>Go to game</Button>
@@ -225,20 +231,21 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, headerExtra, n
         {deckCard()}
         {opponentCard()}
         <div style={{ marginTop: 'auto' }}>{go}</div>
-        {notice}
       </div>
       {beside}
     </div>
   ) : (
     <>
-      {/* Fills the height, and never shrinks below its cards: with the notice showing, the page scrolls.
-          Stacked in portrait, the deck card taking the height the opponent card leaves. */}
-      <div data-testid="setup-cards" style={{ flex: '1 0 auto', display: 'grid', gap: '16px', ...(portrait ? { gridTemplateRows: '1fr auto' } : { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }) }}>
+      {/* Exactly the height the header and Go to game (or the notice in its place) leave, whatever the
+          cards' content measures (iOS measured it taller than it was), the cost curve giving way to fit.
+          Stacked in portrait, the deck card taking the height the opponent card leaves; side by side in
+          landscape. A portrait notice stands in place of the opponent card as well, since the banner
+          and both cards did not fit an installed iPhone's window with a deck chosen. */}
+      <div data-testid="setup-cards" style={{ flex: '1 1 0px', minHeight: 0, display: 'flex', flexDirection: portrait ? 'column' : 'row', gap: '16px' }}>
         {deckCard()}
-        {opponentCard()}
+        {!(portrait && notice) && opponentCard()}
       </div>
       {go}
-      {notice}
     </>
   )
 
@@ -263,8 +270,7 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, headerExtra, n
         color: 'var(--color-text-primary)',
       }}
     >
-      {/* A definite height on a phone, so the cards can fill it and the curve's bars can size off it;
-          what does not fit (the share notice) overflows into the page's scroll. */}
+      {/* A definite height on a phone, so the cards can fill it and the curve's bars can size off it. */}
       <div style={{ height: layout === 'desktop' ? undefined : '100%', maxWidth: layout === 'desktop' ? '1232px' : undefined, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
         {topBar}
         {body}

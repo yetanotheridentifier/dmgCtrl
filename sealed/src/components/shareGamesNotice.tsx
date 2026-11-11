@@ -49,14 +49,15 @@ export function ShareGamesPill({ onOpenSettings }: { onOpenSettings: () => void 
 }
 
 /**
- * Until the player answers, a banner in the page: not a dialog, covering nothing, with a game
- * startable above it. It is the PWA's install banner in shape (one raised row, a title and a line
+ * Until the player answers, a banner in the page: not a dialog, covering nothing. It is the PWA's
+ * install banner in shape (one raised row, a title and a line
  * under it, the answers at its end), so the app asks for things one way. What is sent is a line
  * here and in full in Help, a tap away. The two answers are the same shared button and neither is
  * chosen for the player.
  *
- * `App` hands it to the setup screen, which puts it last, under Go to game. The screen spaces it, so
- * the banner has no margin of its own, and once answered it renders nothing.
+ * `App` hands it to the setup screen, which puts it in place of Go to game until it is answered, so
+ * a first game waits on an answer either way. The screen spaces it, so the banner has no margin of
+ * its own, and once answered it renders nothing.
  */
 export function ShareGamesNotice({ onHelp }: { onHelp: (section: string) => void }) {
   const { settings, update } = useSettings()

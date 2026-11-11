@@ -156,7 +156,7 @@ A **Credit token** (**CRED n**, with how many are held) is spare money: while yo
 
 **What is not sent:** your name, your deck names, or anything else that identifies you. There is no account, and your IP address is not linked to games. Because of that, a game cannot be traced back to you, and it also cannot be found and deleted later.
 
-This data export is disabled unless you turn it on, and you can change it at any time in Settings.
+This data export is disabled unless you turn it on, and you can change it at any time in Settings. On your first visit the setup screen asks, with **Share my games** or **Not now**, in place of **Go to game** (and, held upright on a phone, of the Opponent card) until you answer, either way.
 
 Turning it off stops future games being sent and does not recall games already sent.
 

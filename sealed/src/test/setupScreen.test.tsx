@@ -933,16 +933,75 @@ describe('SetupScreen', () => {
       expect(await within(deckCard()).findByRole('button', { name: /^Darth Vader.*: see the card$/ })).toBeInTheDocument()
     })
 
-    // jsdom does no layout, so this pins the structure that keeps a notice under the cards from
-    // squeezing them on a phone: both cards in one block that never shrinks, so the page scrolls.
-    it.each([['portrait', [PORTRAIT_QUERY]], ['landscape', []]])('keeps the cards at full height under a notice in %s', (layout, media) => {
+    const notice = <aside data-testid="notice">notice</aside>
+
+    // A game cannot start until the notice is answered, so it stands where Go to game does: an
+    // installed iPhone app in portrait had no room for both.
+    it.each([['portrait', [PORTRAIT_QUERY]], ['landscape', []], ['desktop', [DESKTOP_QUERY]]])('puts a notice in place of Go to game in %s', async (layout, media) => {
       withMedia(media)
-      render(<SetupScreen onPlay={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} notice={<aside>Share your games?</aside>} />)
+      const user = userEvent.setup()
+      const a = vader()
+      render(<SetupScreen onPlay={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} notice={notice} />)
+      await chooseDeck(user, a.id)
+      expect(screen.getByTestId('setup-screen')).toHaveAttribute('data-layout', layout)
+      expect(screen.getByTestId('notice')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Go to game' })).toBeNull()
+      expect(screen.queryByText('Choose your deck first')).toBeNull()
+      // Portrait has no height for the banner and both cards with a deck chosen (the deck card measured
+      // 107pt short), so there it stands in place of the opponent card too.
+      if (layout === 'portrait') expect(screen.queryByTestId('opponent-card')).toBeNull()
+      else expect(screen.getByTestId('opponent-card')).toBeInTheDocument()
+    })
+
+    // jsdom does no layout, so this pins the structure that keeps Go to game (or the notice in its
+    // place) on a phone's screen: the cards take exactly the height the header and that row leave,
+    // whatever their content measures (iOS measured landscape cards up to 66pt taller than their
+    // content). The cost curve is the one part of the deck card that gives way, all the way to nothing:
+    // the leader and base, the name and the buttons keep their height (an installed iPhone in portrait,
+    // with a deck chosen, measured 5pt short for them with no curve at all, so the buttons moved too).
+    it.each([
+      ['portrait', [PORTRAIT_QUERY], undefined], ['landscape', [], undefined],
+      ['portrait', [PORTRAIT_QUERY], notice], ['landscape', [], notice],
+    ])('fits the cards to the screen in %s', async (layout, media, shown) => {
+      withMedia(media)
+      const user = userEvent.setup()
+      const a = vader()
+      render(<SetupScreen onPlay={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} notice={shown} />)
+      await chooseDeck(user, a.id)
       expect(screen.getByTestId('setup-screen')).toHaveAttribute('data-layout', layout)
       const cards = screen.getByTestId('setup-cards')
-      expect(cards).toContainElement(screen.getByTestId('deck-card'))
-      expect(cards).toContainElement(screen.getByTestId('opponent-card'))
-      expect(cards).toHaveStyle({ flexShrink: '0' })
+      expect([cards.style.flexGrow, cards.style.flexShrink, cards.style.flexBasis, cards.style.minHeight]).toEqual(['1', '1', '0px', '0px'])
+      const curve = within(deckCard()).getByRole('img', { name: /^Cost curve: / })
+      expect([curve.style.flexGrow, curve.style.flexShrink, curve.style.flexBasis, curve.style.minHeight, curve.style.overflow]).toEqual(['1', '1', '0px', '0px', 'hidden'])
+      const rest = [...deckCard().children].filter(child => child !== curve) as HTMLElement[]
+      expect(rest.map(child => child.style.flexShrink)).toEqual(rest.map(() => '0'))
+    })
+
+    // jsdom does no layout, so this pins the row that makes room for the leader and base in portrait:
+    // View and Change deck sit beside the label, as in landscape, rather than in a row of their own.
+    it.each([['portrait', [PORTRAIT_QUERY]], ['landscape', []]])('puts View and Change deck beside the label in %s', async (layout, media) => {
+      withMedia(media)
+      const user = userEvent.setup()
+      const a = vader()
+      renderSetup()
+      await chooseDeck(user, a.id)
+      expect(screen.getByTestId('setup-screen')).toHaveAttribute('data-layout', layout)
+      const header = within(deckCard()).getByText('Your deck').parentElement!
+      expect(header).toContainElement(within(deckCard()).getByRole('button', { name: 'View' }))
+      expect(header).toContainElement(within(deckCard()).getByRole('button', { name: 'Change deck' }))
+    })
+
+    // jsdom does no layout, so this pins the structure that stops the opponent card being squeezed
+    // below its content: a grid row sized `auto` beside a `1fr` was, on iOS after turning the phone.
+    // Stacked in portrait, side by side in landscape; the opponent card never shrinks in portrait.
+    it.each([['portrait', 'column', [PORTRAIT_QUERY]], ['landscape', 'row', []]])('lays the %s cards out as a flex %s', (layout, direction, media) => {
+      withMedia(media as string[])
+      renderSetup()
+      const cards = screen.getByTestId('setup-cards')
+      expect([cards.style.display, cards.style.flexDirection]).toEqual(['flex', direction])
+      const opponent = screen.getByTestId('opponent-card')
+      expect(opponent.style.flexShrink).toBe(layout === 'portrait' ? '0' : '1')
+      expect(deckCard().style.flexGrow).toBe('1')
     })
 
     // jsdom does no layout, so this pins the structure that stops the page itself scrolling on a phone.
