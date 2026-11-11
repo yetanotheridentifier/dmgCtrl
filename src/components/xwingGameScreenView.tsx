@@ -324,9 +324,9 @@ function MissionPoints({ round, scenario, alreadyScored, pendingPlayer, pendingO
       ))}
     </div>
   )
+  // The scenario's name above labels them, so they take no heading's height from the panel.
   return (
-    <div style={{ ...PANEL_BLOCK, display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px' }}>
-      <div style={{ ...MUTED_CAPS, textAlign: 'center' }}>{`MISSION POINTS · ROUND ${round}`}</div>
+    <div role="group" aria-label={`Mission points, round ${round}`} style={{ ...PANEL_BLOCK, display: 'flex', flexDirection: 'column', gap: '6px', padding: '6px' }}>
       {row('player', pendingPlayer, disabledPlayer, onPlayer)}
       {row('opponent', pendingOpponent, disabledOpp, onOpponent)}
     </div>
@@ -341,7 +341,8 @@ function BigButton({ testId, title, subtitle, onClick }: { testId: string; title
       onClick={onClick}
       style={{
         flex: 1,
-        minHeight: '56px',
+        minHeight: '48px',
+        padding: '0 4px',
         border: 'none',
         borderRadius: '14px',
         background: 'var(--color-accent)',
@@ -356,7 +357,8 @@ function BigButton({ testId, title, subtitle, onClick }: { testId: string; title
         WebkitTapHighlightColor: 'transparent',
       }}
     >
-      <span style={{ fontSize: '20px', fontWeight: 600 }}>{title}</span>
+      {/* One line, so the button keeps its height in the narrowest panel. */}
+      <span style={{ fontSize: '20px', fontWeight: 600, whiteSpace: 'nowrap' }}>{title}</span>
       {subtitle && <span style={{ fontSize: '12px' }}>{subtitle}</span>}
     </button>
   )
@@ -444,7 +446,8 @@ export default function XwingGameScreenView(props: Props) {
     if (!gameStarted) {
       return (
         <>
-          <div style={{ flex: 1 }} />
+          {/* In the panel, not over the ships, so the tiles keep their size when it goes. */}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', fontSize: '12px', color: 'var(--color-text-muted)', textAlign: 'center' }}>{PRE_GAME_HINT}</div>
           <Button variant="primary" onClick={onStartGame} style={{ minHeight: '56px' }}>
             <span data-testid="start-game-btn">Start game</span>
           </Button>
@@ -523,15 +526,14 @@ export default function XwingGameScreenView(props: Props) {
 
   return (
     <AppScreenLayout>
-      <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) clamp(180px, 24cqw, 240px) minmax(0, 1fr)', gap: '12px', color: 'var(--color-text-primary)' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) clamp(180px, 24cqw, 240px) minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr)', gap: '12px', color: 'var(--color-text-primary)' }}>
         <div data-testid="player-column" style={{ display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
           {header('player')}
-          {!gameStarted && <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', textAlign: 'center' }}>{PRE_GAME_HINT}</div>}
           {showOverPlayerColumn && <ScoreButtons scorer="opponent" disabled={gameOver} onIncrement={() => onOpponentIncrement(1)} onDecrement={() => onOpponentDecrement(1)} />}
           <ShipColumn side="player" ships={playerShips} names={playerNames} disabled={tilesDisabled} gameOver={gameOver} onAdvance={onPlayerShipAdvance} />
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', boxSizing: 'border-box', borderRadius: '16px', background: 'var(--color-sheet)', minHeight: 0, overflowY: 'auto', position: 'relative' }}>
+        <div data-testid="centre-panel" style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', boxSizing: 'border-box', borderRadius: '16px', background: 'var(--color-sheet)', minHeight: 0, overflowY: 'auto', position: 'relative' }}>
           <button
             type="button"
             data-testid="round-timer-btn"

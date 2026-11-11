@@ -72,11 +72,20 @@ async function tapPhase(user: ReturnType<typeof userEvent.setup>, times: number)
 }
 
 describe('ship tiles', () => {
-  it('shows a hint over the ship columns before the game, which goes once it starts', async () => {
+  it('shows a hint in the centre panel before the game, so your ships keep their size when it goes', async () => {
     const { user } = renderGame()
-    expect(screen.getByText('Tap a ship to damage it; tap again or long-press to destroy')).toBeInTheDocument()
+    const hint = 'Tap a ship to damage it; tap again or long-press to destroy'
+    expect(within(screen.getByTestId('centre-panel')).getByText(hint)).toBeInTheDocument()
+    expect(within(screen.getByTestId('player-column')).queryByText(hint)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Start game' }))
-    expect(screen.queryByText('Tap a ship to damage it; tap again or long-press to destroy')).not.toBeInTheDocument()
+    expect(screen.queryByText(hint)).not.toBeInTheDocument()
+  })
+
+  // Its one row is the screen's height, so a centre panel taller than the screen scrolls inside
+  // itself rather than stretching the row and moving the ships.
+  it('holds the three columns to the screen height', () => {
+    renderGame()
+    expect(screen.getByTestId('player-column').parentElement).toHaveStyle({ gridTemplateRows: 'minmax(0, 1fr)' })
   })
 
   it('shows every ship before the game, disabled', () => {
@@ -187,6 +196,19 @@ describe('centre panel, phase tracker off', () => {
     expect(within(screen.getByTestId('opponent-score-tile')).getByText('FIRST')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /Start round 3/ }))
     expect(screen.getByRole('group', { name: 'First' })).toBeInTheDocument()
+  })
+
+  // The scenario's name above them labels the points, so they carry no heading of their own and
+  // the scoring fits a phone's centre panel without it scrolling.
+  it('scores the mission points under the scenario name, without a heading of their own', async () => {
+    const { user } = await start({ scenario: 'Assault at the Satellite Array' })
+    await user.click(screen.getByTestId('round-btn'))
+    await user.click(screen.getByRole('button', { name: /Start round 2/ }))
+    await user.click(screen.getByTestId('round-btn'))
+    const points = screen.getByRole('group', { name: 'Mission points, round 2' })
+    expect(within(points).getByTestId('player-scenario-4')).toBeInTheDocument()
+    expect(screen.queryByText(/MISSION POINTS/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('scenario-name')).toHaveTextContent('Assault at the Satellite Array')
   })
 
   it('opening the scoring is logged, so Undo takes back a mistaken tap', async () => {

@@ -84,7 +84,7 @@ The game screen is landscape only: held in portrait it stays landscape on the ph
 
 ### Ships
 
-Every ship in each list has a tile, with its faction symbol before the pilot's name. Tap a ship to damage it; tap again or long-press to destroy.
+Every ship in each list has a tile, with its faction symbol before the pilot's name. Tap a ship to damage it; tap again or long-press to destroy (the centre panel says so before the game).
 
 - **Damaged** shows half its points scored, such as "Half · 2 of 5", and gives the other player half the ship's points (rounded down)
 - **Destroyed** gives the rest of the points, strikes the name through and shows the dmgCtrl mark in place of the faction symbol; the tile stays in place
