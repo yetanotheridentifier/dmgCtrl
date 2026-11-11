@@ -250,8 +250,11 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, headerExtra, n
       data-layout={layout}
       style={{
         boxSizing: 'border-box',
-        height: layout === 'desktop' ? undefined : '100dvh',
-        minHeight: layout === 'desktop' ? '100dvh' : undefined,
+        // On a phone the screen is pinned to the window, as the deck view and help are, and scrolls
+        // only inside itself. Sized in 100dvh it could measure taller than the window on iOS (by the
+        // status bar inset in the installed app, and after turning the phone), and the page scrolled
+        // its top into the notch. A desktop setup grows with its content and scrolls the page.
+        ...(layout === 'desktop' ? { minHeight: '100dvh' } : { position: 'fixed', inset: 0 }),
         overflowY: 'auto',
         paddingTop: 'var(--edge-top)',
         paddingRight: 'var(--edge-right)',

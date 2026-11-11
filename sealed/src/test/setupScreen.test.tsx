@@ -945,6 +945,25 @@ describe('SetupScreen', () => {
       expect(cards).toHaveStyle({ flexShrink: '0' })
     })
 
+    // jsdom does no layout, so this pins the structure that stops the page itself scrolling on a phone.
+    // A screen sized in 100dvh or 100vh can measure taller than the window on iOS (by the status bar
+    // inset in an installed app, and after turning the phone), which scrolls the top into the notch.
+    // Pinned to the window, as the deck view and help are, the screen is the window's size and
+    // scrolls only inside itself. A desktop setup grows with its content and scrolls the page.
+    it.each([['portrait', [PORTRAIT_QUERY]], ['landscape', []]])('pins the %s screen to the window', (layout, media) => {
+      withMedia(media)
+      renderSetup()
+      const setup = screen.getByTestId('setup-screen')
+      expect(setup).toHaveAttribute('data-layout', layout)
+      expect([setup.style.position, setup.style.inset, setup.style.overflowY, setup.style.height]).toEqual(['fixed', '0px', 'auto', ''])
+    })
+
+    it('leaves a desktop setup in the page, to grow with its content', () => {
+      withMedia([DESKTOP_QUERY])
+      renderSetup()
+      expect(screen.getByTestId('setup-screen').style.position).toBe('')
+    })
+
     // jsdom does no layout, so this pins the structure that keeps Go to game on a 844x390 screen with
     // no decks saved: the deck card's two buttons in one row in landscape, stacked elsewhere.
     it.each([['landscape', 'row', []], ['portrait', 'column', [PORTRAIT_QUERY]], ['desktop', 'column', [DESKTOP_QUERY]]])(
