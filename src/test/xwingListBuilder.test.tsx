@@ -238,6 +238,30 @@ describe('XwingListBuilder', () => {
     expect(onBack).not.toHaveBeenCalled()
   })
 
+  it('Back with pilots added asks before discarding the list; Keep editing keeps it', async () => {
+    const user = userEvent.setup()
+    const { onBack } = renderBuilder()
+    await startEmpire(user)
+    await add(user, 'howlrunner')
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    const sheet = screen.getByRole('dialog', { name: 'Discard this list?' })
+    await user.click(within(sheet).getByRole('button', { name: 'Keep editing' }))
+    expect(screen.queryByRole('dialog', { name: 'Discard this list?' })).not.toBeInTheDocument()
+    expect(within(listPanel()).getByText('• "Howlrunner"')).toBeInTheDocument()
+    expect(onBack).not.toHaveBeenCalled()
+  })
+
+  it('Discard leaves the builder without saving', async () => {
+    const user = userEvent.setup()
+    const { onBack } = renderBuilder()
+    await startEmpire(user)
+    await add(user, 'howlrunner')
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Discard this list?' })).getByRole('button', { name: 'Discard' }))
+    expect(onBack).toHaveBeenCalled()
+    expect(mockXwingLists.saveList).not.toHaveBeenCalled()
+  })
+
   // --- Saving ---
 
   it('Save list stays disabled, with the reason, until the list is legal', async () => {
@@ -303,10 +327,32 @@ describe('XwingListBuilder', () => {
     expect(status()).toHaveTextContent('4 points over (46–50): costs have changed')
   })
 
-  it('Back while editing leaves the builder', async () => {
+  it('Back while editing, with the list as saved, leaves the builder without asking', async () => {
     const user = userEvent.setup()
     const { onBack } = renderBuilder({ editing: SWARM })
     await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    expect(onBack).toHaveBeenCalled()
+  })
+
+  it('Back while editing, with the pilots changed, asks before discarding them', async () => {
+    const user = userEvent.setup()
+    const { onBack } = renderBuilder({ editing: SWARM })
+    await user.click(screen.getByRole('button', { name: 'Remove "Wampa"' }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    const sheet = screen.getByRole('dialog', { name: 'Discard changes?' })
+    expect(onBack).not.toHaveBeenCalled()
+    await user.click(within(sheet).getByRole('button', { name: 'Discard' }))
+    expect(onBack).toHaveBeenCalled()
+  })
+
+  it('a list changed and changed back is as saved, so Back does not ask', async () => {
+    const user = userEvent.setup()
+    const { onBack } = renderBuilder({ editing: SWARM })
+    await user.click(screen.getByRole('button', { name: 'One fewer Academy Pilot' }))
+    await user.click(option('academypilot'))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(onBack).toHaveBeenCalled()
   })
 
@@ -343,6 +389,14 @@ describe('XwingListBuilder', () => {
     await user.click(within(sheet).getByRole('button', { name: 'Save list' }))
     expect(mockXwingLists.saveList).toHaveBeenCalledWith('Fixed swarm', expect.arrayContaining([p('howlrunner')]), 'galacticempire')
     expect(onSaved).toHaveBeenCalledWith('new-id')
+  })
+
+  it('Back from a starting list asks before discarding it, as any new list with pilots does', async () => {
+    const user = userEvent.setup()
+    const { onBack } = renderBuilder({ start: { name: 'Fixed swarm', faction: 'galacticempire', pilots: SWARM.pilots } })
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('dialog', { name: 'Discard this list?' })).toBeInTheDocument()
+    expect(onBack).not.toHaveBeenCalled()
   })
 
   it('a starting list with no faction takes it from its pilots', () => {

@@ -357,7 +357,7 @@ describe('XwingListsScreen', () => {
     expect(screen.queryByRole('button', { name: 'Fix in builder' })).not.toBeInTheDocument()
   })
 
-  it('Fix in builder opens a new list on the known pilots and faction, and Back returns to the paste', async () => {
+  it('Fix in builder opens a new list on the known pilots and faction, and Back (discarding it) returns to the paste', async () => {
     const user = userEvent.setup()
     renderScreen()
     await openImport(user)
@@ -371,6 +371,7 @@ describe('XwingListsScreen', () => {
     expect(within(list).queryByText(/bigsdarklighter/)).not.toBeInTheDocument()
     expect(screen.getByTestId('builder-status')).toHaveTextContent('47/ 50 pts· 3 ships (3–8)')
     await user.click(screen.getByRole('button', { name: 'Back' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Discard this list?' })).getByRole('button', { name: 'Discard' }))
     expect(screen.getByTestId('lists-textarea')).toHaveValue(REBEL_BEEF_XWS)
     expect(screen.getByRole('alert')).toHaveTextContent('2 problems')
   })

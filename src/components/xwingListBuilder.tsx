@@ -104,6 +104,7 @@ export default function XwingListBuilder({ editing, start, side, onBack, onSaved
   const [swapIndex, setSwapIndex] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [shipSheet, setShipSheet] = useState(false)
+  const [discarding, setDiscarding] = useState(false)
 
   const forWhom = side ? FOR[side] : undefined
 
@@ -167,8 +168,12 @@ export default function XwingListBuilder({ editing, start, side, onBack, onSaved
   }
   const chooseShip = (s: string) => { setShip(s); setSearch(''); setShipSheet(false) }
 
+  // Order aside, an edited list with the pilots it was saved with loses nothing on Back.
+  const names = (list: XwingPilot[]) => list.map(p => p.name).sort().join()
+  const unsaved = editing ? names(pilots) !== names(editing.pilots) : pilots.length > 0
   const back = () => {
     if (!editing && pilots.length === 0) setFaction(undefined)
+    else if (unsaved) setDiscarding(true)
     else onBack()
   }
 
@@ -301,6 +306,18 @@ export default function XwingListBuilder({ editing, start, side, onBack, onSaved
     />
   )
 
+  const discardSheet = (
+    <Sheet open={discarding} title={editing ? 'Discard changes?' : 'Discard this list?'} onClose={() => setDiscarding(false)}>
+      <div style={{ fontSize: '0.9rem', lineHeight: 1.45, color: 'var(--color-text-body)' }}>
+        {editing ? `Your changes to ${editing.name} aren't saved.` : "The pilots you've chosen aren't saved."}
+      </div>
+      <div style={{ marginTop: 'auto', paddingTop: '4px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+        <Button onClick={() => setDiscarding(false)}>Keep editing</Button>
+        <Button onClick={onBack} style={{ color: 'var(--color-error)' }}>Discard</Button>
+      </div>
+    </Sheet>
+  )
+
   if (isPortrait) {
     return (
       <AppScreenLayout>
@@ -324,6 +341,7 @@ export default function XwingListBuilder({ editing, start, side, onBack, onSaved
           ))}
         </Sheet>
         {saveSheet}
+        {discardSheet}
       </AppScreenLayout>
     )
   }
@@ -356,6 +374,7 @@ export default function XwingListBuilder({ editing, start, side, onBack, onSaved
         </div>
       </div>
       {saveSheet}
+      {discardSheet}
     </AppScreenLayout>
   )
 }
