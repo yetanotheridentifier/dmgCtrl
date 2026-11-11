@@ -11,6 +11,10 @@ import type { SwuCard } from '../data/cards'
 import { retryPendingCollection } from '../data/collectionSend'
 import { onAppStarted } from '../data/analytics'
 import { SHARING_HELP_SECTION } from '../utils/helpSections'
+import { PORTRAIT_QUERY } from '../hooks/useMediaQuery'
+
+/** A phone held upright: the default mock matches no query, which the screens read as landscape. */
+const portraitMedia = (query: string) => ({ matches: query === PORTRAIT_QUERY, media: query, addEventListener: () => {}, removeEventListener: () => {} })
 
 /**
  * The setup screen caches the set its generators are pointed at as soon as it opens, which would put
@@ -77,7 +81,8 @@ async function startGame(user: User, stored: Partial<Settings> = {}) {
   }
   const deck = saveDeck({ name: 'Playable', leader: 'TST_001', base: 'TST_002', cards: [{ id: 'TST_900', count: 30 }] })
   // The opponent replies at once: either side may open, and a paced reply would land mid-assertion.
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), opponentDelayMs: 0, ...stored }))
+  // The sharing notice is answered, since a game cannot start until it is.
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), opponentDelayMs: 0, shareGames: 'no', ...stored }))
   render(<App />)
 
   await goWith(user, deck.id)
@@ -127,6 +132,7 @@ describe('App shell', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network')))
     const user = userEvent.setup()
     const deck = saveDeck({ name: 'Ready Deck', leader: 'SOR_010', base: 'SOR_029', cards: [] })
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), shareGames: 'no' }))
     render(<App />)
     await goWith(user, deck.id)
 
@@ -226,21 +232,29 @@ describe('App shell', () => {
   })
 
   /**
-   * Sharing games to train the bot is asked about once, on the setup screen, and the question must
-   * never stand between the player and a game.
+   * Sharing games to train the bot is asked about once, on the setup screen, before the first game:
+   * the banner stands where Go to game does until it is answered, either way.
    */
   describe('the notice about sharing games', () => {
-    it('is on the setup screen on a first visit, last in the page and over nothing', () => {
+    it.each([['portrait', portraitMedia], ['landscape', undefined]])('is the banner in place of Go to game on a first visit, in %s', (_layout, media) => {
+      if (media) vi.stubGlobal('matchMedia', media)
       render(<App />)
 
-      const setup = screen.getByTestId('setup-screen')
-      const notice = within(setup).getByTestId('share-games-notice')
+      const notice = within(screen.getByTestId('setup-screen')).getByTestId('share-games-notice')
       expect(screen.queryByRole('dialog')).toBeNull()
-      // After both cards and Go to game, so none of them is pushed down or off the screen by it.
-      const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
-      expect(follows(screen.getByTestId('deck-card'), notice)).toBe(true)
-      expect(follows(screen.getByTestId('opponent-card'), notice)).toBe(true)
-      expect(follows(screen.getByRole('button', { name: 'Go to game' }), notice)).toBe(true)
+      expect(within(notice).getByRole('heading', { name: 'Help improve the bot' })).toBeInTheDocument()
+      for (const name of ["What's sent", 'Share my games', 'Not now']) {
+        expect(within(notice).getByRole('button', { name })).toBeInTheDocument()
+      }
+      expect(screen.queryByRole('button', { name: 'Go to game' })).toBeNull()
+    })
+
+    it.each(['Share my games', 'Not now'])('offers Go to game once answered with %s', async answer => {
+      const user = userEvent.setup()
+      render(<App />)
+      await user.click(within(screen.getByTestId('share-games-notice')).getByRole('button', { name: answer }))
+      expect(screen.getByRole('button', { name: 'Go to game' })).toBeInTheDocument()
+      expect(screen.queryByTestId('share-games-notice')).toBeNull()
     })
 
     it('opens the Help section on what is sent from the notice, leaving it unanswered', async () => {
@@ -338,19 +352,6 @@ describe('App shell', () => {
       await startGame(user, { shareGames: stored })
 
       expect(screen.queryByTestId('share-games-pill')).toBeNull()
-    })
-
-    /** Ignoring it means no: a game starts with the notice untouched, and nobody is opted in. */
-    it('lets a game start without being answered, and takes that as a no', async () => {
-      const user = userEvent.setup()
-      await startGame(user)
-
-      expect(loadSettings().shareGames).toBe('no')
-
-      // Back on setup it is the pill, and the question is not asked again.
-      await user.click(screen.getByRole('button', { name: 'Leave the game' }))
-      expect(screen.queryByTestId('share-games-notice')).toBeNull()
-      expect(screen.getByTestId('share-games-pill')).toHaveTextContent('Improve the bot')
     })
 
     it('leaves an opted-in player opted in when a game starts', async () => {

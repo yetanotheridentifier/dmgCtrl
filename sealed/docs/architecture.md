@@ -504,21 +504,21 @@ stepper could not show, reads as the default.
 
 `shareGames` is the player's answer about sending finished games to train the bot: `unasked`
 (the default in every build), `yes` or `no`. It is opt-in, so only `yes` permits anything, and a
-stored value that is none of the three reads as `unasked`: a damaged blob opts nobody in. Three
+stored value that is none of the three reads as `unasked`: a damaged blob opts nobody in. Two
 surfaces write it, and one module reads it to act on it (`data/collection.ts`, see "What a game
 record holds" above):
 
 - **The notice** (`components/shareGamesNotice.tsx`), shown while the answer is `unasked`. `App`
-  passes it to `SetupScreen` as `notice`, a slot the screen renders last, under Go to game, so it
-  never moves the cards or Go; where it does not fit, the page scrolls rather than squeezing them.
-  So the notice reads the settings and the setup screen does not. It is a banner in the page, never
-  a dialog: it covers nothing and the setup screen works untouched. It has the PWA install banner's
+  passes it to `SetupScreen` as `notice` only while the answer is `unasked`, so the notice reads
+  the settings and the setup screen does not. The screen puts it in place of Go to game, so a first
+  game waits on an answer, either one; in portrait it stands in place of the opponent card as well,
+  since the banner and both cards did not fit an installed iPhone's portrait screen with a deck
+  chosen. The cards still fit the screen above it. It is a banner in the
+  page, never a dialog: it covers nothing and the rest of the setup screen works. It has the PWA install banner's
   shape (one raised row: a title, a line under it, the answers at its end) and says what is sent in
   one line, `ShareGamesSummary`, the same words and "What's sent" Help link as the settings switch's
   note. Its two answers are the shared secondary `Button`, so neither is the highlighted one, and
   nothing is chosen in advance.
-- **Starting a game.** `App` turns `unasked` into `no` as the first game starts, so ignoring the
-  notice is a refusal and the question is put once.
 - **The settings sheet**, where a switch maps on to `yes` and off to `no`.
 
 Once the answer is not `unasked`, the notice renders nothing. In its place `ShareGamesPill` (same
@@ -602,9 +602,14 @@ choice opens a `Sheet`, and the only text box is the import sheet's.
   side, filling a phone's 844x390 without scrolling, with no saved deck's Generate and Import side
   by side so Go to game stays on screen), portrait (stacked, the deck card taking the
   height the opponent card leaves, with the leader and base on it) and desktop (at least 1024x600:
-  the cards in a column with the chosen deck's list beside them). On a phone the two cards share
-  one block that fills the height and never shrinks below them, so a notice under Go scrolls the
-  page. The portrait query is the one the shared `Sheet` reads, so a sheet and its screen
+  the cards in a column with the chosen deck's list beside them). On a phone the setup screen is
+  pinned to the window and the two cards share exactly the height the header and Go to game leave.
+  On the deck card the cost curve is the one part that gives way, down to nothing, so the leader and
+  base, the name and the buttons (View and Change deck, beside the label) keep their height. The
+  page itself does not scroll on a phone: `index.css` hides its overflow outside the desktop query,
+  and makes `html` taller than the window by the top safe-area inset, as the PWA's stylesheet does,
+  because under the translucent status bar an installed iPhone app reports its window short by that
+  inset and draws nothing below a page only that tall. The portrait query is the one the shared `Sheet` reads, so a sheet and its screen
   agree on the orientation.
 - **No aspect** is the generator's `NO_ASPECT` base aspect: `generationOptions` lists it last, and
   only for a pool printing a base without an aspect, and `buildDeckForLeader` builds on such a base

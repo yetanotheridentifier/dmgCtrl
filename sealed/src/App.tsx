@@ -50,11 +50,13 @@ function AppShell() {
     setHelpSection(section)
     setHelpOpen(true)
   }
-  const { settings, update } = useSettings()
+  const { settings } = useSettings()
   useUpdateOnDeckScreen(screen === 'game')
 
   return (
-    <div className="min-h-screen text-ink font-sans">
+    // No height of its own: in the installed app 100vh measured taller than the window, so a root
+    // that tall scrolled the page. The screens size themselves.
+    <div className="text-ink font-sans">
       {screen === 'game' && selectedDeck && opponentDeck ? (
         // The game screen is full-bleed: its own header (dmgCtrl icon = exit, ? =
         // help) lives in the log column, so the play area reaches the top.
@@ -71,13 +73,11 @@ function AppShell() {
           // Setup only, since the game screen has its own header. Absent until the notice in the
           // page is answered.
           headerExtra={<ShareGamesPill onOpenSettings={() => setSettingsOpen(true)} />}
-          // Part of the page, last on it: it covers nothing, and every control works whether or not
-          // it has been answered. Passed in so the setup screen needs no settings.
-          notice={<ShareGamesNotice onHelp={openHelp} />}
+          // Part of the page, covering nothing, in place of Go to game until it is answered. Passed in
+          // so the setup screen needs no settings, and only while it is unanswered, since Go to game
+          // is shown only without it.
+          notice={settings.shareGames === 'unasked' ? <ShareGamesNotice onHelp={openHelp} /> : undefined}
           onPlay={(deck, opponent) => {
-            // The notice is put once. A player who starts a game without answering it has not
-            // agreed, so that is recorded as a no and the header pill replaces it.
-            if (settings.shareGames === 'unasked') update({ shareGames: 'no' })
             setSelectedDeck(deck)
             setOpponentDeck(opponent)
             setScreen('game')
