@@ -25,4 +25,8 @@ function makeMatchMediaMock(isPortrait = false) {
 makeMatchMediaMock()
 beforeEach(() => makeMatchMediaMock())
 
+// The app keeps some choices for the session (X-Wing setup's, the screen across an update reload),
+// and jsdom's sessionStorage lasts the whole file, so each test starts a fresh session.
+beforeEach(() => { if (hasDom) sessionStorage.clear() })
+
 export { makeMatchMediaMock }

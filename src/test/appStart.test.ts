@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { gameFromPath, launchScreen, readLastGame, recordLastGame, recordLaunch, launchCount } from '../utils/appStart'
+import { gameFromPath, launchScreen, readLastGame, recordLastGame, recordLaunch, launchCount, saveForUpdate, takeForUpdate } from '../utils/appStart'
 
 beforeEach(() => localStorage.clear())
 
@@ -91,6 +91,56 @@ describe('launches', () => {
     expect(launchCount()).toBe(1)
     recordLaunch()
     expect(launchCount()).toBe(2)
+  })
+
+})
+
+describe('the screen kept across an update reload', () => {
+
+  const noTournaments = { tournamentInProgress: false, xwingTournamentInProgress: false }
+
+  beforeEach(() => sessionStorage.clear())
+
+  it('comes back once, with the screens Back returns to', () => {
+    saveForUpdate({ screen: 'settings', backStack: ['xwingSetup'] })
+    expect(takeForUpdate(noTournaments)).toEqual({ screen: 'settings', backStack: ['xwingSetup'] })
+    expect(takeForUpdate(noTournaments)).toBeNull()
+  })
+
+  it('is none when nothing was kept', () => {
+    expect(takeForUpdate(noTournaments)).toBeNull()
+  })
+
+  /** sessionStorage survives a reload but not a fresh launch, so a relaunch opens as it always has. */
+  it('is kept for the session, not for good', () => {
+    saveForUpdate({ screen: 'help', backStack: ['setup'] })
+    expect(localStorage.length).toBe(0)
+    expect(sessionStorage.length).toBe(1)
+  })
+
+  it('is none for a game: a game is never reloaded', () => {
+    saveForUpdate({ screen: 'game', backStack: [] })
+    expect(takeForUpdate(noTournaments)).toBeNull()
+    saveForUpdate({ screen: 'help', backStack: ['xwing'] })
+    expect(takeForUpdate(noTournaments)).toBeNull()
+  })
+
+  it('is none for a tournament screen once that tournament is over', () => {
+    saveForUpdate({ screen: 'tournament', backStack: [] })
+    expect(takeForUpdate(noTournaments)).toBeNull()
+    saveForUpdate({ screen: 'help', backStack: ['xwingTournament'] })
+    expect(takeForUpdate(noTournaments)).toBeNull()
+    saveForUpdate({ screen: 'help', backStack: ['xwingTournament'] })
+    expect(takeForUpdate({ ...noTournaments, xwingTournamentInProgress: true })).toEqual({ screen: 'help', backStack: ['xwingTournament'] })
+  })
+
+  it('ignores anything stored that is not a screen', () => {
+    sessionStorage.setItem('update_resume', JSON.stringify({ screen: 'chess', backStack: [] }))
+    expect(takeForUpdate(noTournaments)).toBeNull()
+    sessionStorage.setItem('update_resume', JSON.stringify({ screen: 'help', backStack: ['chess'] }))
+    expect(takeForUpdate(noTournaments)).toBeNull()
+    sessionStorage.setItem('update_resume', '{not json')
+    expect(takeForUpdate(noTournaments)).toBeNull()
   })
 
 })

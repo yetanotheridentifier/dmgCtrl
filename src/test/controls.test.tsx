@@ -3,6 +3,7 @@ import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Button, ControlRow, IconButton, SegmentedControl, SelectButton, Stepper, Sheet, Switch } from '../components/shared/controls'
 import { FIELD_STYLE } from '../styles/field'
+import { isUpdateHeld } from '../components/shared/updateHold'
 
 const mockOrientation = { isPortrait: false, vmin: 390 }
 vi.mock('../hooks/useOrientation', () => ({
@@ -226,6 +227,18 @@ describe('Sheet', () => {
   it('renders nothing when closed', () => {
     render(<Sheet open={false} title="Opponent's list" onClose={vi.fn()}>content</Sheet>)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  /** A sheet holds choices not yet made (a round's opponent, a tournament's rounds), which a reload
+   *  into a new version would drop. */
+  it('holds an update while open, and lets go when closed', () => {
+    const { rerender, unmount } = render(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+    expect(isUpdateHeld()).toBe(true)
+    rerender(<Sheet open={false} title="More" onClose={vi.fn()}>content</Sheet>)
+    expect(isUpdateHeld()).toBe(false)
+    rerender(<Sheet open title="More" onClose={vi.fn()}>content</Sheet>)
+    unmount()
+    expect(isUpdateHeld()).toBe(false)
   })
 
   it('is a modal dialog named by its title, with its content', () => {

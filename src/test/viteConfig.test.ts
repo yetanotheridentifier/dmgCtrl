@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { ConfigEnv, UserConfig } from 'vite'
 import { getManifest } from 'workbox-build'
-import configFn, { PWA_MANIFEST, PWA_WORKBOX } from '../../vite.config'
+import configFn, { PWA_MANIFEST, PWA_REGISTER_TYPE, PWA_WORKBOX } from '../../vite.config'
 
 /**
  * `vite-plugin-mkcert` fetches the mkcert release list from the GitHub API when Vite resolves
@@ -103,6 +103,14 @@ describe('root vite config', () => {
     plugin.generateBundle.call({ emitFile: (f: { fileName: string; source: unknown }) => emitted.push(f) }, {}, bundle)
     expect(emitted.map(f => f.fileName).sort()).toEqual(['swu/index.html', 'xwing/index.html'])
     for (const f of emitted) expect(f.source).toBe('<html>app</html>')
+  })
+
+  /**
+   * 'autoUpdate' reloads the page by itself the moment a new version takes over, mid-game
+   * included. A new version must wait, so useAppUpdate can apply it only when nothing holds it.
+   */
+  it('has a new version wait to be applied rather than reload by itself', () => {
+    expect(PWA_REGISTER_TYPE).toBe('prompt')
   })
 
   it('keeps one install, started at the root, with a shortcut to each game', () => {

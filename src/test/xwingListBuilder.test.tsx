@@ -5,6 +5,7 @@ import XwingListBuilder from '../components/xwingListBuilder'
 import type { XwingList } from '../hooks/useXwingLists'
 import { xwaPilots } from '../data/xwaCards'
 import { makeMatchMediaMock } from './setup'
+import { isUpdateHeld } from '../components/shared/updateHold'
 
 const p = (id: string, points = xwaPilots[id].points) => ({ name: id, ship: xwaPilots[id].ship, points })
 
@@ -354,6 +355,28 @@ describe('XwingListBuilder', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(onBack).toHaveBeenCalled()
+  })
+
+  // --- Updates ---
+
+  /** An unsaved list lives only in the builder's memory, so a reload into a new version would lose it. */
+  it('holds an update while the list has unsaved pilots, and only then', async () => {
+    const user = userEvent.setup()
+    renderBuilder()
+    await startEmpire(user)
+    expect(isUpdateHeld()).toBe(false)
+    await add(user, 'howlrunner')
+    expect(isUpdateHeld()).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Remove "Howlrunner"' }))
+    expect(isUpdateHeld()).toBe(false)
+  })
+
+  it('an edited list holds an update once changed, not while it is as saved', async () => {
+    const user = userEvent.setup()
+    renderBuilder({ editing: SWARM })
+    expect(isUpdateHeld()).toBe(false)
+    await user.click(screen.getByRole('button', { name: 'Remove "Wampa"' }))
+    expect(isUpdateHeld()).toBe(true)
   })
 
   it('save changes is pre-filled with the name and updates the list in place', async () => {
