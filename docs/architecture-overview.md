@@ -40,7 +40,7 @@ The app is served at the root of `dmgctrl.app` and is designed to be added to an
 ### Goals
 
 - **Mobile-first** — designed for a phone held in landscape orientation during play
-- **Offline-ready** — PWA with service worker; usable without network after first load. The service worker precaches the app's code, pages and every image in `public/` (patterns in `PWA_WORKBOX`, `vite.config.ts`), about 960 KiB; base card art comes from the CDN and is not precached
+- **Offline-ready** — PWA with service worker; usable without network after first load. The service worker precaches the app's code, pages and every image in `public/` (patterns in `PWA_WORKBOX`, `vite.config.ts`), about 960 KiB; base card art comes from the CDN and is not precached. A new version is looked for each time the app returns to the foreground and applied, by reloading, as soon as nothing held only in memory would be lost (`useAppUpdate`, `updateHold.ts`); the screen showing comes back after the reload
 - **Simplicity** — minimal UI, minimal dependencies, lightweight infrastructure
 - **Fast startup** — data is cached in localStorage so repeat visits are instant
 - **Accurate art** — show high-resolution card art where available, with graceful degradation

@@ -56,6 +56,12 @@ export const PWA_WORKBOX: Partial<VitePWAOptions['workbox']> = {
 }
 
 /**
+ * A new version waits to be applied rather than reloading the page by itself, which 'autoUpdate'
+ * does the moment it takes over, mid-game included. useAppUpdate applies it once nothing holds it.
+ */
+export const PWA_REGISTER_TYPE = 'prompt' as const
+
+/**
  * GitHub Pages has no fallback to the app's page, so a first visit to /swu would be a 404. The
  * build writes the app's page again at swu/index.html and xwing/index.html; the app reads the
  * address to open that game. Its asset paths are absolute (from `base`), so the copy works one
@@ -123,7 +129,7 @@ export default defineConfig(({ command, mode }) => {
         return `export default ${JSON.stringify(html)}`
       },
     }, ...(localDevServer ? [mkcert()] : []), react(), VitePWA({
-      registerType: 'autoUpdate',
+      registerType: PWA_REGISTER_TYPE,
       devOptions: { enabled: false },
       workbox: PWA_WORKBOX,
       // The manifest icons are in public/ and already matched by PWA_WORKBOX's patterns.

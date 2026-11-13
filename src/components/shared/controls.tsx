@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useOrientation } from '../../hooks/useOrientation'
 import { useFrameTurn } from '../../hooks/useFrameTurn'
 import { ChevronDownIcon, CloseIcon } from '../icons'
+import { useHoldsUpdate } from './updateHold'
 
 // The X-Wing control set agreed in #853: every control filled (never an empty outline), radius 12,
 // at least 44px so it can be hit at the table.
@@ -357,6 +358,8 @@ export function Sheet({ open, title, onClose, children, wide = false, action }: 
   const onScreenKeyboard = useSyncExternalStore(subscribeToViewport, keyboardSnapshot, () => '')
   const keyboard = turned ? '' : onScreenKeyboard
   const [visibleTop, covered] = keyboard ? keyboard.split(' ').map(Number) : [0, 0]
+  // An open sheet holds choices not yet made, which a reload into a new version would drop.
+  useHoldsUpdate(open)
 
   useEffect(() => {
     const dialog = dialogRef.current

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import XwingListsScreen from '../components/xwingListsScreen'
 import type { XwingList } from '../hooks/useXwingLists'
+import { isUpdateHeld } from '../components/shared/updateHold'
 
 const VALID_XWS = JSON.stringify({
   name: 'Scum Syndicate',
@@ -266,6 +267,18 @@ describe('XwingListsScreen', () => {
     await openImport(user)
     expect(screen.getByRole('heading', { name: 'Import XWS' })).toBeInTheDocument()
     expect(screen.getByTestId('lists-textarea')).toBeInTheDocument()
+  })
+
+  /** A paste not yet saved lives only in memory, so a reload into a new version would lose it. */
+  it('holds an update while the paste box has a paste in it', async () => {
+    const user = userEvent.setup()
+    renderScreen()
+    await openImport(user)
+    expect(isUpdateHeld()).toBe(false)
+    fireEvent.change(screen.getByTestId('lists-textarea'), { target: { value: 'not json' } })
+    expect(isUpdateHeld()).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(isUpdateHeld()).toBe(false)
   })
 
   it('opened straight to the paste box, Back leaves the screen', async () => {

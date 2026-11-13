@@ -1,8 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { useBases } from '../hooks/useBases'
+import { isUpdateHeld } from '../components/shared/updateHold'
+
+// The service worker is not under test here: App hands useAppUpdate what to do just before a reload.
+const appUpdate = vi.hoisted(() => ({ beforeReload: () => {} }))
+vi.mock('../hooks/useAppUpdate', () => ({
+  useAppUpdate: (beforeReload: () => void) => { appUpdate.beforeReload = beforeReload },
+}))
 
 const mockUseTournament = vi.hoisted(() => ({
   tournament: null as null | object,
@@ -1585,6 +1592,77 @@ describe('App X-Wing tournament', () => {
     await waitFor(() => expect(hub()).toBeInTheDocument())
     await openFromMore(user, 'Help')
     expectHelpAt('X-Wing help', 'Tournament')
+  })
+
+})
+
+describe('App updates', () => {
+
+  beforeEach(() => sessionStorage.clear())
+
+  // What useAppUpdate does just before it reloads into a new version.
+  const reloadForUpdate = () => { appUpdate.beforeReload(); cleanup(); render(<App />) }
+
+  /** A game lives only in memory, so a reload mid-game would lose it. */
+  it('holds an update while an SWU game is open, and lets go on Back to setup', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    expect(isUpdateHeld()).toBe(false)
+    await chooseBaseAndGo(user, 'Catacombs of Cadera')
+    expect(isUpdateHeld()).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(isUpdateHeld()).toBe(false)
+  })
+
+  /** Back from a tournament game leaves the game mounted under the tournament screen. */
+  it('still holds on the tournament screen while its match is under way', async () => {
+    const user = userEvent.setup()
+    mockUseTournament.tournament = {
+      base: mockBases[0], format: 'premier', playMode: 'bo3', totalRounds: 5,
+      rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],
+    }
+    mockUseTournament.matchInProgress = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
+    expect(isUpdateHeld()).toBe(false)
+    await user.click(screen.getByRole('button', { name: 'Return to round 1' }))
+    await waitFor(() => expect(screen.getByText('Start')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to round 1' })).toBeInTheDocument())
+    expect(isUpdateHeld()).toBe(true)
+  })
+
+  it('reopens Help after the reload, with Back still returning to the screen it was opened from', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.startScreen = 'gameSelect'
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: /^star wars: unlimited/i }))
+    await waitForSetup()
+    await openFromMore(user, 'Help')
+    reloadForUpdate()
+    expectHelpAt('SWU help', 'Setup')
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(setupMarker()).toBeInTheDocument()
+  })
+
+  it('reopens Settings from X-Wing setup after the reload, and Back returns to X-Wing setup', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.startScreen = 'xwing'
+    render(<App />)
+    await screen.findByRole('button', { name: /^Scenario: / })
+    await openFromMore(user, 'Settings')
+    mockUserSettings.startScreen = 'gameSelect'
+    reloadForUpdate()
+    expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByRole('button', { name: /^Scenario: / })).toBeInTheDocument()
+  })
+
+  it('a fresh launch, with nothing kept, opens as it always has', async () => {
+    mockUserSettings.startScreen = 'gameSelect'
+    render(<App />)
+    expect(await screen.findByRole('button', { name: /^star wars: unlimited/i })).toBeInTheDocument()
   })
 
 })

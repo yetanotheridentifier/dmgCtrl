@@ -3,7 +3,9 @@ import { SwuSplash, SwuOffline } from './components/swuCardDataScreens'
 import GameSelectScreen from './components/gameSelectScreen'
 import InstallBanner from './components/installBanner'
 import { useInstallPrompt } from './hooks/useInstallPrompt'
-import { gameFromPath, launchScreen, readLastGame, recordLastGame, type Game } from './utils/appStart'
+import { gameFromPath, launchScreen, readLastGame, recordLastGame, saveForUpdate, takeForUpdate, type Game, type Screen } from './utils/appStart'
+import { useAppUpdate } from './hooks/useAppUpdate'
+import { useHoldsUpdate } from './components/shared/updateHold'
 import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
 import SwuTwinSunsGame from './components/swuTwinSunsGame'
@@ -12,7 +14,7 @@ import SwuTournamentScreen from './components/swuTournamentScreen'
 import HelpScreen, { type HelpSource } from './components/helpScreen'
 import SettingsScreen from './components/settingsScreen'
 import { Base, useBases } from './hooks/useBases'
-import type { XwingMatchType, XwingScenario } from './hooks/useXwingSetup'
+import { clearXwingSetupSession, type XwingMatchType, type XwingScenario } from './hooks/useXwingSetup'
 import type { XwingPilot } from './utils/parseXwsText'
 import { useTournament } from './hooks/useTournament'
 import { useXwingTournament, type XwingRoundResult, type XwingTournamentList } from './hooks/useXwingTournament'
@@ -30,14 +32,23 @@ const XwingGameScreen = lazy(() => import('./components/xwingGameScreen'))
 const XwingListsScreen = lazy(() => import('./components/xwingListsScreen'))
 const XwingTournamentScreen = lazy(() => import('./components/xwingTournamentScreen'))
 
-type Screen = 'gameSelect' | 'xwingSetup' | 'xwing' | 'xwingLists' | 'xwingTournament' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
-
 // The install banner shows only on these: never over a game.
 const BANNER_SCREENS: Screen[] = ['gameSelect', 'setup', 'xwingSetup']
 
 // Settings shows the settings of the game it was opened from, and every game's from game select.
 const gameOfScreen = (screen: Screen | undefined): Game | undefined =>
   screen === 'gameSelect' || screen === undefined ? undefined : screen.startsWith('xwing') ? 'xwing' : 'swu'
+
+// Help opens at the section for the screen it was opened from.
+const helpSourceOf = (screen: Screen | undefined): HelpSource =>
+  screen === 'gameSelect' ? 'gameSelect' :
+  screen === 'game' ? 'game' :
+  screen === 'tournament' ? 'tournament' :
+  screen === 'xwing' ? 'xwing' :
+  screen === 'xwingSetup' ? 'xwingSetup' :
+  screen === 'xwingLists' ? 'xwingLists' :
+  screen === 'xwingTournament' ? 'xwingTournament' :
+  'setup'
 
 function AppScreens() {
   const { startScreen } = useUserSettings()
@@ -56,15 +67,20 @@ function AppScreens() {
   // Where the app opens is settled once, at launch. SWU setup that has no card data yet shows the
   // splash or the offline screen in its place (below), so nothing else waits for SWU card data.
   // Sealed, a separate app, opens Settings at ?settings: every game's, with Back to game select.
+  // A reload into a new version reopens the screen it left, ahead of all of that.
   const [settingsLink] = useState(() => new URLSearchParams(window.location.search).has('settings'))
-  const [screen, setScreen] = useState<Screen>(() => settingsLink ? 'settings' : launchScreen({
+  const [resumed] = useState(() => takeForUpdate({
+    tournamentInProgress: tournament !== null,
+    xwingTournamentInProgress: xwingTournament.tournament !== null,
+  }))
+  const [screen, setScreen] = useState<Screen>(() => resumed ? resumed.screen : settingsLink ? 'settings' : launchScreen({
     tournamentInProgress: tournament !== null,
     xwingTournamentInProgress: xwingTournament.tournament !== null,
     route: gameFromPath(window.location.pathname, import.meta.env.BASE_URL),
     startScreen,
     lastGame: readLastGame(),
   }))
-  const [backStack, setBackStack] = useState<Screen[]>(() => settingsLink ? ['gameSelect'] : [])
+  const [backStack, setBackStack] = useState<Screen[]>(() => resumed ? resumed.backStack : settingsLink ? ['gameSelect'] : [])
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
   // Two players: their base. Held for this session only, so a tournament resumed after a reload plays one-player.
   const [selectedTheirBase, setSelectedTheirBase] = useState<Base | null>(null)
@@ -73,7 +89,7 @@ function AppScreens() {
   const [selectedPlayMode, setSelectedPlayMode] = useState<PlayMode>('casual')
   const [isInGame, setIsInGame] = useState(false)
   const [isInXwing, setIsInXwing] = useState(false)
-  const [isInXwingSetup, setIsInXwingSetup] = useState(screen === 'xwingSetup')
+  const [isInXwingSetup, setIsInXwingSetup] = useState(screen === 'xwingSetup' || backStack.includes('xwingSetup'))
   // Squad Lists opened from a list sheet's Import XWS starts at the paste box.
   const [xwingListsImport, setXwingListsImport] = useState(false)
   const [xwingPlayerDeficit, setXwingPlayerDeficit] = useState(0)
@@ -87,9 +103,13 @@ function AppScreens() {
   const [isXwingTournamentGame, setIsXwingTournamentGame] = useState(false)
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
-  const [helpSource, setHelpSource] = useState<HelpSource>('setup')
+  const [helpSource, setHelpSource] = useState<HelpSource>(() => helpSourceOf(backStack[backStack.length - 1]))
   const { loading, bases, error: basesError, retry: retryBases } = useBases()
   const install = useInstallPrompt()
+
+  // A game lives only in memory, and stays mounted under Help, Settings and its tournament.
+  useHoldsUpdate(isInGame || isInXwing)
+  useAppUpdate(() => saveForUpdate({ screen, backStack }))
 
   useEffect(() => { void onAppStart() }, [])
 
@@ -134,6 +154,7 @@ function AppScreens() {
   }
 
   const leaveXwingSetup = () => {
+    clearXwingSetupSession()
     setIsInXwingSetup(false)
     setScreen('gameSelect')
   }
@@ -206,16 +227,7 @@ function AppScreens() {
   }
 
   const handleHelp = () => {
-    const source: HelpSource =
-      screen === 'gameSelect' ? 'gameSelect' :
-      screen === 'game' ? 'game' :
-      screen === 'tournament' ? 'tournament' :
-      screen === 'xwing' ? 'xwing' :
-      screen === 'xwingSetup' ? 'xwingSetup' :
-      screen === 'xwingLists' ? 'xwingLists' :
-      screen === 'xwingTournament' ? 'xwingTournament' :
-      'setup'
-    setHelpSource(source)
+    setHelpSource(helpSourceOf(screen))
     setBackStack(prev => [...prev, screen])
     setScreen('help')
   }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const STORAGE_KEY = 'xwing_setup'
 
@@ -63,6 +63,61 @@ function clampDeficit(v: number): number {
   return Math.max(0, Math.min(4, v))
 }
 
+/**
+ * The choices for the next game are kept for the session, not for good: a reload into a new
+ * version keeps them, and a fresh launch starts them afresh. Your list is also remembered for
+ * good, above, so it is here only to keep a choice of No list.
+ */
+const SESSION_KEY = 'xwing_setup_session'
+
+interface SessionChoices {
+  playerDeficit: number
+  opponentDeficit: number
+  scenario: XwingScenario
+  playerChoice: XwingPlayerChoice | null | undefined
+  opponentChoice: XwingPlayerChoice | null
+}
+
+function isChoice(v: unknown): v is XwingPlayerChoice {
+  const c = v as Partial<{ kind: unknown; listId: unknown }> | null
+  return !!c && typeof c === 'object' && (c.kind === 'none' || (c.kind === 'list' && typeof c.listId === 'string'))
+}
+
+function loadSession(): SessionChoices {
+  let parsed: Record<string, unknown> = {}
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY)
+    if (raw) parsed = JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    // Unreadable: start afresh, as a new session would.
+  }
+  const deficit = (v: unknown) => typeof v === 'number' ? clampDeficit(v) : 0
+  return {
+    playerDeficit: deficit(parsed.playerDeficit),
+    opponentDeficit: deficit(parsed.opponentDeficit),
+    scenario: XWING_SCENARIOS.includes(parsed.scenario as XwingScenario) ? parsed.scenario as XwingScenario : 'None',
+    playerChoice: isChoice(parsed.playerChoice) ? parsed.playerChoice : undefined,
+    opponentChoice: isChoice(parsed.opponentChoice) ? parsed.opponentChoice : null,
+  }
+}
+
+/** Leaving X-Wing for game select starts its setup afresh, within the session too. */
+export function clearXwingSetupSession(): void {
+  try {
+    sessionStorage.removeItem(SESSION_KEY)
+  } catch {
+    // Storage refused: nothing was kept to clear.
+  }
+}
+
+function saveSession(choices: SessionChoices): void {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(choices))
+  } catch {
+    // Storage refused: the choices still hold until the page reloads.
+  }
+}
+
 export interface XwingSetupValue {
   ruleset: XwingRuleset
   setRuleset: (v: XwingRuleset) => void
@@ -85,14 +140,20 @@ export interface XwingSetupValue {
 
 export function useXwingSetup(): XwingSetupValue {
   const [persisted, setPersisted] = useState<PersistedSetup>(load)
-  const [playerDeficit, setPlayerDeficitState] = useState(0)
-  const [opponentDeficit, setOpponentDeficitState] = useState(0)
-  const [scenario, setScenario] = useState<XwingScenario>('None')
+  const [session] = useState(loadSession)
+  const [playerDeficit, setPlayerDeficitState] = useState(session.playerDeficit)
+  const [opponentDeficit, setOpponentDeficitState] = useState(session.opponentDeficit)
+  const [scenario, setScenario] = useState<XwingScenario>(session.scenario)
   const [playerChoice, setPlayerChoiceState] = useState<XwingPlayerChoice | null>(() => {
+    if (session.playerChoice !== undefined) return session.playerChoice
     const id = persisted.playerListId
     return id ? { kind: 'list', listId: id } : null
   })
-  const [opponentChoice, setOpponentChoiceState] = useState<XwingPlayerChoice | null>(null)
+  const [opponentChoice, setOpponentChoiceState] = useState<XwingPlayerChoice | null>(session.opponentChoice)
+
+  useEffect(() => {
+    saveSession({ playerDeficit, opponentDeficit, scenario, playerChoice, opponentChoice })
+  }, [playerDeficit, opponentDeficit, scenario, playerChoice, opponentChoice])
 
   function update(patch: Partial<PersistedSetup>) {
     setPersisted(prev => {

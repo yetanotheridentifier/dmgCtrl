@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useXwingSetup } from '../hooks/useXwingSetup'
+import { clearXwingSetupSession, useXwingSetup } from '../hooks/useXwingSetup'
 
 const STORAGE_KEY = 'xwing_setup'
 
@@ -11,10 +11,69 @@ beforeEach(() => {
     removeItem: vi.fn(),
     clear: vi.fn(),
   })
+  sessionStorage.clear()
 })
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe('useXwingSetup: the choices for the next game', () => {
+
+  /** An update reloads the page; these choices live for the session, so the reload keeps them. */
+  it('keep the scenario, deficits and both lists across a reload', () => {
+    const first = renderHook(() => useXwingSetup())
+    act(() => {
+      first.result.current.setScenario('Salvage Mission')
+      first.result.current.setPlayerDeficit(2)
+      first.result.current.setOpponentDeficit(3)
+      first.result.current.setPlayerChoice({ kind: 'none' })
+      first.result.current.setOpponentChoice({ kind: 'list', listId: 'swarm' })
+    })
+    first.unmount()
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.scenario).toBe('Salvage Mission')
+    expect(result.current.playerDeficit).toBe(2)
+    expect(result.current.opponentDeficit).toBe(3)
+    expect(result.current.playerChoice).toEqual({ kind: 'none' })
+    expect(result.current.opponentChoice).toEqual({ kind: 'list', listId: 'swarm' })
+  })
+
+  it('start afresh in a new session, as they always have', () => {
+    const first = renderHook(() => useXwingSetup())
+    act(() => {
+      first.result.current.setScenario('Salvage Mission')
+      first.result.current.setOpponentChoice({ kind: 'list', listId: 'swarm' })
+    })
+    first.unmount()
+    sessionStorage.clear()
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.scenario).toBe('None')
+    expect(result.current.opponentChoice).toBeNull()
+  })
+
+  /** Leaving X-Wing for game select starts its setup afresh, within the session too. */
+  it('start afresh once cleared', () => {
+    const first = renderHook(() => useXwingSetup())
+    act(() => first.result.current.setScenario('Salvage Mission'))
+    first.unmount()
+    clearXwingSetupSession()
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.scenario).toBe('None')
+  })
+
+  it('ignore anything kept for the session that is not a valid choice', () => {
+    sessionStorage.setItem('xwing_setup_session', JSON.stringify({
+      scenario: 'Chess', playerDeficit: 9, opponentDeficit: 'two', playerChoice: { kind: 'squad' }, opponentChoice: 7,
+    }))
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.scenario).toBe('None')
+    expect(result.current.playerDeficit).toBe(4)
+    expect(result.current.opponentDeficit).toBe(0)
+    expect(result.current.playerChoice).toBeNull()
+    expect(result.current.opponentChoice).toBeNull()
+  })
+
 })
 
 describe('useXwingSetup', () => {

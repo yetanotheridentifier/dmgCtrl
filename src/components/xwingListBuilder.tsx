@@ -7,6 +7,7 @@ import { xwaPilots } from '../data/xwaCards'
 import AppScreenLayout from './layout/appScreenLayout'
 import { BackIcon, CloseIcon, SearchIcon } from './icons'
 import { Button, IconButton, OptionRow, SelectButton, Sheet } from './shared/controls'
+import { useHoldsUpdate } from './shared/updateHold'
 import { FactionIcon } from './factionIcon'
 import { FIELD_STYLE } from '../styles/field'
 import { XwingSaveListSheet } from './xwingSaveListSheet'
@@ -108,6 +109,12 @@ export default function XwingListBuilder({ editing, start, side, onBack, onSaved
 
   const forWhom = side ? FOR[side] : undefined
 
+  // Order aside, an edited list with the pilots it was saved with loses nothing on Back.
+  const names = (list: XwingPilot[]) => list.map(p => p.name).sort().join()
+  const unsaved = editing ? names(pilots) !== names(editing.pilots) : pilots.length > 0
+  // Unsaved pilots live only here, so a reload into a new version waits for them.
+  useHoldsUpdate(unsaved)
+
   if (faction === undefined) {
     return (
       <AppScreenLayout>
@@ -168,9 +175,6 @@ export default function XwingListBuilder({ editing, start, side, onBack, onSaved
   }
   const chooseShip = (s: string) => { setShip(s); setSearch(''); setShipSheet(false) }
 
-  // Order aside, an edited list with the pilots it was saved with loses nothing on Back.
-  const names = (list: XwingPilot[]) => list.map(p => p.name).sort().join()
-  const unsaved = editing ? names(pilots) !== names(editing.pilots) : pilots.length > 0
   const back = () => {
     if (!editing && pilots.length === 0) setFaction(undefined)
     else if (unsaved) setDiscarding(true)

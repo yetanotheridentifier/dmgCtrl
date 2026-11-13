@@ -5,6 +5,7 @@ import type { XwingList } from '../hooks/useXwingLists'
 import AppScreenLayout from './layout/appScreenLayout'
 import { BackIcon, HelpIcon } from './icons'
 import { Button, IconButton } from './shared/controls'
+import { useHoldsUpdate } from './shared/updateHold'
 import { FactionIcon } from './factionIcon'
 import { FIELD_STYLE } from '../styles/field'
 import XwingListBuilder from './xwingListBuilder'
@@ -46,6 +47,8 @@ export default function XwingListsScreen({ onBack, onHelp, startWith }: Props) {
   const [mode, setMode] = useState<Mode>(startWith === 'import' ? { kind: 'import' } : { kind: 'lists' })
   // The paste outlives a trip to the builder to fix it, and is dropped on the way back to the lists.
   const [importText, setImportText] = useState('')
+  // A paste not yet saved lives only here, so a reload into a new version waits for it.
+  useHoldsUpdate(importText !== '')
   const toLists = () => { setImportText(''); setMode({ kind: 'lists' }) }
 
   if (mode.kind === 'build') {
