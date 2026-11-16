@@ -12305,6 +12305,7 @@ registerCard('LAW_141', whenDefeated('Attached unit gains: "When Defeated: An op
 const chewiePick = (optional: boolean) => (s: GameState, ctx: Resumable): GameState =>
   resourceThen(s, ctx, { holder: ctx.owner, optional, step: 'chewie', text: 'defeat a friendly resource to deal 2 damage to a unit and create a Credit token' })
 registerCard('LAW_013', { // Chewbacca
+  deployCost: 4, // "Epic Action [C=4]: Deploy this leader."
   ...leaderFront('[C=1, Exhaust, defeat a friendly resource]: Deal 2 damage to a unit and create a Credit token.', {
     cost: 1,
     usable: (s, ctx) => s.players[ctx.owner].resources.length > 0,
