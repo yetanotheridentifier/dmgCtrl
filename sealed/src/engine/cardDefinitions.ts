@@ -6798,6 +6798,7 @@ const trenchOffer = (s: GameState, ctx: Resumable, st: TrenchStep): GameState =>
   return pushChoice(s, { kind: 'selectCardThen', id: `${ctx.sourceInstanceId}-draw`, controller: ctx.owner, candidates: st.cards, text: 'draw one of the revealed cards; the others are discarded', then: resume(ctx, `draw:${JSON.stringify(st)}`) })
 }
 registerCard('JTL_014', { // Admiral Trench
+  deploy: { cost: 3, exhaust: true, controls: 6, action: true }, // "Action [C=3, Exhaust]: If you control 6 or more resources, deploy this leader."
   ...leaderFront('Discard a card that costs 3 or more from your hand. If you do, draw a card.', {
     usable: (s, ctx) => s.players[ctx.owner].hand.some(id => (s.cards[id]?.cost ?? 0) >= 3),
     effect: (s, ctx) => pushChoice(s, {
@@ -11741,6 +11742,7 @@ registerCard('SHD_122', { abilities: [{ trigger: 'onAttackEnd', description: 'Wh
 } }] })
 
 registerCard('SEC_008', { // Bail Organa
+  deploy: { exhaust: true, discard: 2, controls: 4, action: true }, // "Action [Exhaust, discard 2 cards from your hand]: If you control 4 or more resources, deploy this leader."
   ...leaderFront("If a friendly unit was defeated this phase, return a friendly resource to its owner's hand. If you do, put the top card of your deck into play as a resource.", {
     cost: 1,
     usable: (s, ctx) => defeatedThisPhase(s, ctx.owner).length > 0 && s.players[ctx.owner].resources.length > 0,
@@ -12305,7 +12307,7 @@ registerCard('LAW_141', whenDefeated('Attached unit gains: "When Defeated: An op
 const chewiePick = (optional: boolean) => (s: GameState, ctx: Resumable): GameState =>
   resourceThen(s, ctx, { holder: ctx.owner, optional, step: 'chewie', text: 'defeat a friendly resource to deal 2 damage to a unit and create a Credit token' })
 registerCard('LAW_013', { // Chewbacca
-  deployCost: 4, // "Epic Action [C=4]: Deploy this leader."
+  deploy: { cost: 4 }, // "Epic Action [C=4]: Deploy this leader."
   ...leaderFront('[C=1, Exhaust, defeat a friendly resource]: Deal 2 damage to a unit and create a Credit token.', {
     cost: 1,
     usable: (s, ctx) => s.players[ctx.owner].resources.length > 0,

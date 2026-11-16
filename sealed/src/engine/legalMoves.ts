@@ -145,19 +145,35 @@ function attackMoves(
 }
 
 /**
- * Whether `playerId`'s leader may take its deploy epic action now, the one gate the legal moves, the
- * AI and the bench read. Not once it is deployed or the epic action is spent (a defeated leader does
- * not redeploy, CR 3.4.5). Then, by default, CONTROLLING resources equal to the leader's cost
- * (CR 2.6.1: controlled, not spent, so exhausted ones count); or a custom `deployCondition`
- * (Bo-Katan); or, for a paid deploy (`deployCost`, Chewbacca), being able to pay it.
+ * Why `playerId`'s leader may not deploy now, or `undefined` when it may: the one gate the legal moves,
+ * the AI, the bench and the leader menu's reason read. Not once it is deployed, nor once the epic
+ * action is spent (a defeated leader does not redeploy, CR 3.4.5). Then, by default, CONTROLLING
+ * resources equal to the leader's cost (CR 2.6.1: controlled, not spent, so exhausted ones count); or a
+ * custom `deployCondition` (Bo-Katan); or the leader's own printed `deploy`, whose costs must be payable
+ * and whose resource count must hold. A `deploy` that is an ordinary Action (Admiral Trench, Bail
+ * Organa) does not spend the epic action, so it is not barred by a spent one.
  */
-export function leaderCanDeploy(state: GameState, playerId: PlayerId): boolean {
-  const { leader, resources } = state.players[playerId]
+export function deployBlockedBy(state: GameState, playerId: PlayerId): string | undefined {
+  const { leader, resources, hand } = state.players[playerId]
   const card = state.cards[leader.cardId]
-  if (!card || leader.deployed || leader.epicActionUsed) return false
+  if (!card || leader.deployed) return 'Already deployed'
   const def = getCardDefinition(leader.cardId)
-  if (def?.deployCost !== undefined) return canPay(state, playerId, def.deployCost)
-  return def?.deployCondition ? def.deployCondition(state, playerId) : resources.length >= card.cost
+  const deploy = def?.deploy
+  if (leader.epicActionUsed && !deploy?.action) return 'Already deployed this game'
+  if (deploy) {
+    if (deploy.exhaust && leader.exhausted) return 'Your leader is exhausted'
+    if (resources.length < (deploy.controls ?? 0)) return `Needs ${deploy.controls} resources; you have ${resources.length}`
+    if (hand.length < (deploy.discard ?? 0)) return `Discards ${deploy.discard} cards to deploy; you have ${hand.length}`
+    const cost = deploy.cost ?? 0
+    return canPay(state, playerId, cost) ? undefined : `Costs ${cost} to deploy; you can pay ${payable(state, playerId)}`
+  }
+  if (def?.deployCondition) return def.deployCondition(state, playerId) ? undefined : 'Not available now'
+  return resources.length >= card.cost ? undefined : `Needs ${card.cost} resources; you have ${resources.length}`
+}
+
+/** Whether `playerId`'s leader may deploy now: see `deployBlockedBy`. */
+export function leaderCanDeploy(state: GameState, playerId: PlayerId): boolean {
+  return deployBlockedBy(state, playerId) === undefined
 }
 
 /**

@@ -207,7 +207,7 @@ function dispatchAction(state: GameState, action: Action): GameState {
     case 'deployLeader':
       return requirePhase(state, 'action', () => {
         // Deploying a Support leader opens a support attack — hold the turn to resolve it.
-        const deployed = action.targetInstanceId === undefined ? deployLeader(state) : deployLeaderAsPilot(state, state.activePlayer, action.targetInstanceId)
+        const deployed = action.targetInstanceId === undefined ? deployByAction(state) : deployLeaderAsPilot(state, state.activePlayer, action.targetInstanceId)
         // A When Deployed an opponent answers (Admiral Trench) hands control to them first.
         return activeChoice(deployed) ? resetPasses(handOffOpponentChoice(deployed, deployed.activePlayer)) : advanceTurn(resetPasses(deployed))
       })
@@ -3013,22 +3013,46 @@ function handOffOpponentChoice(state: GameState, actor: PlayerId): GameState {
   return other === actor ? state : { ...state, activePlayer: other, pendingResumeActive: actor }
 }
 
+/** The step a deploy's "discard a card from your hand" cost resumes at, followed by how many are left. */
+const DEPLOY_DISCARD = 'deployDiscard:'
+
 /**
- * Deploy the active player's leader. The normal epic action sets `epicActionUsed` so it can't be
- * used again (and a defeated leader can't redeploy, CR 3.4.5). Grogu's *triggered* deploy
- * passes `epicUsed: false` — it's gated on "if this leader is ready", not once-per-game, so he can
- * redeploy after being defeated once he readies at regroup.
+ * The deploy the leader menu offers. By default the Epic Action, which spends no resources (CR 2.6.1).
+ * A leader that prints its own deploy (`CardDefinition.deploy`) pays it first: the cost (Credit tokens
+ * may pay), exhausting the leader, then each discard, picked one at a time. One that is an ordinary
+ * Action does not spend the epic action.
  */
-function deployLeader(unpaid: GameState, epicUsed = true): GameState {
-  const playerId = unpaid.activePlayer
-  const { leader } = unpaid.players[playerId]
-  if (leader.deployed || (epicUsed && leader.epicActionUsed)) {
+function deployByAction(state: GameState): GameState {
+  const playerId = state.activePlayer
+  const spec = getCardDefinition(state.players[playerId].leader.cardId)?.deploy
+  if (!spec) return deployLeader(state)
+  const paid = pay(state, playerId, spec.cost ?? 0)
+  return deployAfterDiscards(spec.exhaust ? exhaustLeader(paid, playerId) : paid, playerId, spec.discard ?? 0)
+}
+
+/** Ask for the next of `left` discards a deploy costs, or deploy once none are left. */
+function deployAfterDiscards(state: GameState, playerId: PlayerId, left: number): GameState {
+  const { leader, hand } = state.players[playerId]
+  if (left <= 0 || hand.length === 0) return deployLeader(state, !getCardDefinition(leader.cardId)?.deploy?.action)
+  return pushChoice(state, {
+    kind: 'selectHandCardThen', id: `${leader.cardId}-deploy-discard-${left}`, controller: playerId,
+    handIndices: hand.map((_, i) => i), text: `discard a card from your hand to deploy (${left} to discard)`,
+    then: { cardId: leader.cardId, owner: playerId, step: `${DEPLOY_DISCARD}${left}` },
+  })
+}
+
+/**
+ * Deploy the active player's leader. The epic action sets `epicActionUsed` so it can't be used again
+ * (and a defeated leader can't redeploy, CR 3.4.5). A deploy that is not the epic action passes
+ * `epicUsed: false`, so the leader can redeploy after being defeated: Grogu's triggered one ("if this
+ * leader is ready") and an ordinary Action deploy (Admiral Trench, Bail Organa).
+ */
+function deployLeader(state: GameState, epicUsed = true): GameState {
+  const playerId = state.activePlayer
+  const p = state.players[playerId]
+  if (p.leader.deployed || (epicUsed && p.leader.epicActionUsed)) {
     throw new Error('deployLeader: leader cannot deploy')
   }
-  // Deploying is an epic action: no resources are spent (CR 2.6.1), except for a leader whose epic
-  // action prints a cost (Chewbacca's "Epic Action [C=4]: Deploy this leader"), paid like any other.
-  const state = epicUsed ? pay(unpaid, playerId, getCardDefinition(leader.cardId)?.deployCost ?? 0) : unpaid
-  const p = state.players[playerId]
 
   // The leader arrives in the ground arena, ready (CR 3.4.4).
   const leaderUnit: UnitState = {
@@ -3552,6 +3576,11 @@ function finishIndirectDamage(state: GameState, then: IndirectDamageFollowUp | u
 
 /** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */
 function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef; playerChosen?: PlayerId; arenaChosen?: Arena; optionIndex?: number; nameChosen?: string; disclosed?: string[] } = {}): GameState {
+  // A deploy's discard cost belongs to the engine, not the card, so it resumes here rather than in the card's hook.
+  if (then.step?.startsWith(DEPLOY_DISCARD) && settled.handIndex !== undefined) {
+    const left = Number(then.step.slice(DEPLOY_DISCARD.length)) - 1
+    return deployAfterDiscards(discardFromHand(state, then.owner, settled.handIndex), then.owner, left)
+  }
   // Attributed like the ability it resumes, so "if you do, deal 2 damage" is dealt by that card.
   return checkWin(resumeAbility(state, then, settled))
 }

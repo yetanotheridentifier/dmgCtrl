@@ -236,6 +236,27 @@ export interface IfYouDoContext extends EffectContext {
   disclosed?: string[]
 }
 
+/**
+ * A leader's own deploy, as printed: "Epic Action [C=4]: Deploy this leader" (Chewbacca, Hero of
+ * Kessel), or "Action [C=3, Exhaust]: If you control 6 or more resources, deploy this leader" (Admiral
+ * Trench). The costs are paid in the order listed here; the discards are the player's pick, one at a time.
+ */
+export interface LeaderDeploy {
+  /** [C=N]: paid from ready resources and whatever else pays (Credit tokens). */
+  cost?: number
+  /** [Exhaust]: the leader exhausts, so only a ready leader deploys. */
+  exhaust?: boolean
+  /** [discard N cards from your hand]. */
+  discard?: number
+  /** "If you control N or more resources": controlled, so exhausted ones count. No count gate when absent. */
+  controls?: number
+  /**
+   * An ordinary Action rather than the Epic Action: it does not spend the epic action, so a deployed
+   * leader that is defeated (back in the leader zone, exhausted) deploys again once it is ready.
+   */
+  action?: boolean
+}
+
 export interface CardDefinition {
   abilities?: AbilityDef[]
   /**
@@ -657,12 +678,11 @@ export interface CardDefinition {
   /** Custom epic-action deploy gate; default is `resources ≥ leader.cost`. */
   deployCondition?: (state: GameState, owner: PlayerId) => boolean
   /**
-   * "Epic Action [C=N]: Deploy this leader" (Chewbacca, Hero of Kessel): the deploy is paid, N from
-   * ready resources and whatever else pays (Credit tokens), rather than gated on a resource count. It
-   * replaces the count gate, so controlling N resources is neither required nor enough. Read by
-   * `leaderCanDeploy` (legalMoves.ts) and paid by `deployLeader` (resolve.ts).
+   * A deploy that prints its own cost and condition, in place of the default gate (controlling
+   * resources equal to the leader's cost). Read by `deployBlockedBy` (legalMoves.ts), the one gate the
+   * legal moves, the AI, the bench and the leader menu share, and paid by `deployByAction` (resolve.ts).
    */
-  deployCost?: number
+  deploy?: LeaderDeploy
   /**
    * The units in play this unit may enter play as a copy of (Clone). Asked as it is played, through an
    * `enterAsCopy` choice; see `UnitState.physicalCardId`.

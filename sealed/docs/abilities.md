@@ -517,7 +517,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `halvesCosts` | its controller pays half, rounded up, applied last |
 | `providesAspects` | supplies aspect icons while paying costs |
 | `deployCondition` | replaces the resource gate on deploying a leader |
-| `deployCost` | the deploy is paid rather than gated: "Epic Action [C=N]: Deploy this leader" (Chewbacca) |
+| `deploy` | the leader's own printed deploy: its cost, exhaust and discards, its resource count, and whether it is an ordinary Action (Chewbacca, Admiral Trench, Bail Organa) |
 | `suppressesFriendlyAdvantage` | Advantage tokens are not spent after combat |
 | `suppressesEnemyCredits` | the other player's Credit tokens can't be defeated to pay for anything (Conveyex Security Captain) |
 | `blanksHost` | the host loses all abilities while it returns a blank, keeping what the blank names (Imprisoned, Condemn, Exiled from the Force); see Losing all abilities in [keywords-effects.md](keywords-effects.md) |
@@ -647,11 +647,25 @@ doing. Charging the flag there left a deployed leader ready and its action unspe
 
 Deploying is an epic action requiring the player to **control** resources equal to the leader's
 printed cost, not to spend them. A `deployCondition` hook replaces that gate where a card says
-something else. A leader whose epic action prints a cost, "Epic Action [C=4]: Deploy this leader"
-(Chewbacca, Hero of Kessel), declares `deployCost` instead: the deploy is **paid**, through the same
-paying step as any other cost (Credit tokens may pay), and the resource count plays no part.
-`leaderCanDeploy` (`legalMoves.ts`) is the one gate, read by the legal moves (so by the leader menu
-and the AI) and by the bench's `pinsLeader`.
+something else. A leader that prints its own deploy declares it as `deploy` (`LeaderDeploy` in
+`abilities.ts`), which replaces the resource gate:
+
+| leader | printed | `deploy` |
+| --- | --- | --- |
+| Chewbacca, Hero of Kessel | Epic Action [C=4]: Deploy this leader | `{ cost: 4 }` |
+| Admiral Trench | Action [C=3, Exhaust]: If you control 6 or more resources, deploy this leader | `{ cost: 3, exhaust: true, controls: 6, action: true }` |
+| Bail Organa | Action [Exhaust, discard 2 cards from your hand]: If you control 4 or more resources, deploy this leader | `{ exhaust: true, discard: 2, controls: 4, action: true }` |
+
+The cost is **paid** through the same paying step as any other (Credit tokens may pay), then the
+leader exhausts, then each discard is a `selectHandCardThen` the player answers, one card at a time,
+and the leader deploys after the last. A resource count, where printed, is controlled resources, so
+exhausted ones count. `action: true` marks an ordinary Action rather than the Epic Action: it does not
+set `epicActionUsed`, so a leader defeated after deploying (back in the leader zone, exhausted)
+deploys again once it is ready.
+
+`deployBlockedBy` (`legalMoves.ts`) is the one gate, and says why a deploy is not available.
+`leaderCanDeploy` reads it for the legal moves (so the AI) and the bench's `pinsLeader`, and the
+leader menu shows its reason. `deployByAction` (`resolve.ts`) pays a printed deploy.
 
 **A leader that flips instead of deploying** (Chancellor Palpatine // Darth Sidious) never deploys
 (`deployCondition` is false). Which face is up is `LeaderState.flipped`, each face's "Action

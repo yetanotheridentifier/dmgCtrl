@@ -1,22 +1,14 @@
 import type { GameState, UnitState } from '../engine/types'
 import type { Action } from '../engine/actions'
 import { hasKeyword } from '../engine/keywords'
-import { getCardDefinition } from '../engine/abilities'
-import { payable } from '../engine/payment'
+import { deployBlockedBy } from '../engine/legalMoves'
 
 /** Why your leader can't deploy, when deploying is not among your legal moves: the leader menu's reason. */
 export function deployBlocker(state: GameState): string {
-  const p = state.players.player
-  if (p.leader.epicActionUsed) return 'Already deployed this game'
+  const blocked = deployBlockedBy(state, 'player')
+  if (blocked === 'Already deployed this game') return blocked
   if (state.winner !== null || state.activePlayer !== 'player' || state.phase !== 'action') return 'Only on your action'
-  const deployCost = getCardDefinition(p.leader.cardId)?.deployCost
-  if (deployCost !== undefined) {
-    const can = payable(state, 'player')
-    return can < deployCost ? `Costs ${deployCost} to deploy; you can pay ${can}` : 'Not available now'
-  }
-  const cost = state.cards[p.leader.cardId]?.cost ?? 0
-  if (p.resources.length < cost) return `Needs ${cost} resources; you have ${p.resources.length}`
-  return 'Not available now'
+  return blocked ?? 'Not available now'
 }
 
 /** The unit an action is taken with and what it is aimed at, for ringing them on the board. */
