@@ -349,8 +349,10 @@ export default function SetupScreen({ onPlay, onHelp, onSettings, headerExtra, n
           cards={cards}
           portrait={portrait}
           onBack={back}
-          status={s.generated && !s.generated.report.ok && (
-            <p data-testid="generated-deck-violations" style={{ ...mutedStyle, color: 'var(--color-warning)' }}>Shape rules broken: {s.generated.report.violations.join('; ')}</p>
+          status={s.generated && s.generated.report.offAspect > 0 && (
+            <p data-testid="generated-deck-splash" style={mutedStyle}>
+              {s.generated.report.offAspect} off-aspect {s.generated.report.offAspect === 1 ? 'card' : 'cards'}, paying the aspect penalty
+            </p>
           )}
           actions={(
             <>

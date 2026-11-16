@@ -17,32 +17,24 @@ order is a decision about attention rather than a dependency.
 Ordered on one principle: **correctness, then structure, then calibration.** Anything that changes the
 engine or the horizon invalidates a calibration done before it.
 
-1. **#587 turn the leader ranking into a blind-spot queue.** The matrix has run on the corrected
-   generator (55,120 games over 52 decks, none dropped) and its findings are in
-   [experiments.md](experiments.md).
+1. **Re-read the leader ratings on pool decks, over several suites.** The matrix suites are now built
+   from opened sealed pools, so the ratings in [experiments.md](experiments.md), measured on whole-set
+   decks, want re-reading before they are relied on. Most of the bottom of that ranking was
+   **pool-dependent rather than misplayed** (Grogu, Bo-Katan Kryze, Moff Gideon, The Mandalorian, Vane),
+   and Sabine Wren's rating predates the closing pass being modelled.
 
-   Read against real-play reputation, most of the bottom of the ranking is **pool-dependent rather than
-   misplayed**: Grogu, Bo-Katan Kryze, Moff Gideon, The Mandalorian and Vane each need specific cards an
-   algorithmic deck rarely supplies. **Sabine Wren's candidate blind spot (#589) was the search, not
-   the leader**: once the opponent has claimed, a line that stopped was scored before the pass that
-   ends the round while `pass` itself was scored after it, so her ability (2 Advantage tokens for the
-   opponent) beat passing with nothing left to play. The closing pass is now modelled; her rating, and
-   any leader whose ranking leaned on that asymmetry, was measured before it and wants re-reading on
-   the next matrix run.
+   **Whether a different deck suite moves a leader's rating is still open**, and is now worth asking:
+   a pool varies which cards a leader can have at all, where a seed used to vary only the draw from the
+   whole set. Each suite is a separate seed, and a payload played on different decks is refused. Per-card
+   win rates need far more decks than 52 before a card-sized effect clears the noise, and several pool
+   suites are how they get them. The pack model's three estimates (rare leader rate, foil rarity, no
+   repeats within a pack) are the place to calibrate against real openings.
 
-   **Whether a different deck suite moves a leader's rating is still open.** The runs replayed one
-   suite because the matrix children built the default seed; that is fixed, and a payload played on
-   different decks is now refused. A real multi-suite run waits for the pool generator below: the copy
-   caps alone moved leaders by up to 12 points, and a pool step will move them again.
-
-2. **Make the deck generator model a sealed pool.** Open six packs, then build from what came out,
-   rather than from the full set under quotas. Duplicates are already rolled by rarity; the pool step
-   is what remains, and example pools from real openings will calibrate it.
-
-   It also unlocks two things that are thin today. Several deck suites become more meaningful, since a
-   pool varies which cards a leader can have at all, where a seed only varies the draw from the whole
-   set. And per-card win
-   rates need far more decks than 52 before a card-sized effect can clear the noise.
+2. **#1125 build a pool deck as a player would.** Choose the leader and base the pool best supports
+   (most Legendaries and Rares, at least 6 turn-1 plays, then the curve), value removal (counting it
+   is the first step), and splash an off-aspect card because it is strong or combines with the deck,
+   not only to fill a thin pool. Either changes the decks the matrix plays, so it lands before a long
+   multi-suite run or after it, not during.
 
 ## Deferred
 
@@ -113,7 +105,7 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
 
 ## After the baseline
 
-- **Epic 7 data pipeline** (#407; its child tickets are all done). Saved games export to a local
+- **The data pipeline is built**; what remains deferred is below. Saved games export to a local
   JSON file and the bench turns an export into training rows. Games from players who opted in are
   posted to the card Worker, written straight into a D1 table under the key the training rows give
   the same game, and read from there (or from a snapshot of it) as rows.
@@ -125,7 +117,7 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
   delivered stay whole), none for a player who does not share.
   Bench self-play is the second source of records, and needs no consent: `--record` on the
   head-to-head run keeps its completed games in the exported shape, with the bot on each seat named.
-  The per-card, per-deck question the epic set out to answer (#407) is a function over those records
+  The per-card, per-deck question the pipeline was built to answer is a function over those records
   with no command in front of it. Recording is on that one run only; making it a choice on every game
   run is in the rest of #565 above, and the runner already takes the callback as one of its recorders.
   **Deferred: what a seat learned during the game.** The mover's view is made from one state, which
@@ -406,28 +398,15 @@ extra ids for no extra work: each needs one line in `data/reprints.ts` naming it
 
 ## Player-facing UI (third stream)
 
-Both came out of play-testing the trigger-ordering work, and both sort the same ~72 pending-choice
-kinds, so **#552 first**: it has to classify every kind anyway.
-
-The card programme is finished, but each new set can add kinds, so the classification wants to be a
-rule read off the payload rather than a table of the kinds that exist on the day it ships.
-
-- **#552 triggered choices belong in an overlay, not the action column.** A triggered choice reads as a
-  centre-screen overlay when two abilities trigger and as small buttons beside Pass when one does. The
-  split to aim for is by how a choice is answered: click-a-unit stays on the board, pick-a-button moves
-  to an overlay. The action column keeps what the player initiates.
-
 ### Phone and the PWA
 
 Sealed is redesigned for a phone as well as a desktop, as a separate PWA under `/sealed` that may
 merge with the dmgCtrl PWA later. The UI shares the PWA's controls and colour tokens; the engine and
 AI share nothing.
 
-1. **The redesigned screens**: #1012 the last of the phone game prompts (left: the screenshots: the
-   prompts at 844x390, and the game at 1280x720 and 844x390 for G19 and G26 to G29).
-2. **Time the AI on a real phone** once the board plays there: the longest main-thread task per
-   decision, and the time to the AI's move, beside the desktop figures in `experiments.md`. The
-   search runs in a worker; only a desktop with CPU throttling has been measured.
+1. **Time the AI on a real phone**: the longest main-thread task per decision, and the time to the
+   AI's move, beside the desktop figures in `experiments.md`. The search runs in a worker; only a
+   desktop with CPU throttling has been measured.
 
 ## Deferred
 
@@ -446,7 +425,7 @@ AI share nothing.
   sits in the search's hot path, so landing it needs a bench run against a matched control rather
   than a green suite.
 - **Token-unit art**, and a permanent set for ASH tokens.
-- **Concession accept and decline rates, once live records arrive** (#407). The bot offers to concede a
+- **Concession accept and decline rates, once live records arrive.** The bot offers to concede a
   certain loss and the player chooses. When games are transmitted back, measure how often each answer
   is chosen, and how often players concede on their own; if one answer dominates, the offer may be
   replaced by that behaviour outright.

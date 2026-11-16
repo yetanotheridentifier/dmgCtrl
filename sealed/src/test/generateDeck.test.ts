@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import ashSet from './fixtures/ashSet.json'
 import type { SwuCard } from '../data/cards'
-import { buildDeckForLeader, generateDeck } from '../deckgen/generateDeck'
+import { generateDeck } from '../deckgen/generateDeck'
 import { deckReport, MAX_COPIES, MAX_COPIES_BY_RARITY } from '../deckgen/rules'
 
 /**
- * The deck generator (#408): a reusable primitive that builds one legal, penalty-free, realistically
- * shaped deck for a given leader (choosing the base itself). The strong proof is that it produces a
- * fully rule-satisfying deck for EVERY real ASH leader, and does so deterministically.
+ * The deck generator building from the whole set, as the coverage sweep does: one legal,
+ * penalty-free, realistically shaped deck for a leader and base. The strong proof is that it produces
+ * a fully rule-satisfying deck for EVERY real ASH leader, and does so deterministically. Decks built
+ * from an opened pool are tested in `sealedPool.test.ts`.
  */
 const POOL = ashSet as unknown as SwuCard[]
 const LEADERS = POOL.filter(c => c.Type === 'Leader')
@@ -38,14 +39,23 @@ describe('generateDeck with forced copies', () => {
   })
 })
 
-describe('buildDeckForLeader', () => {
+/**
+ * A whole-set deck, as the coverage sweep builds: from every card of the set, on a base of a colour
+ * the leader does not carry.
+ */
+function wholeSet(leader: SwuCard, seed: number) {
+  const base = POOL.find(c => c.Type === 'Base' && !(c.Aspects ?? []).some(a => (leader.Aspects ?? []).includes(a)))!
+  return generateDeck({ leader, base, pool: POOL, seed })
+}
+
+describe('generateDeck from the whole set', () => {
   it('has 18 ASH leaders to build for', () => {
     expect(LEADERS).toHaveLength(18)
   })
 
   for (const leader of LEADERS) {
     it(`builds a rule-satisfying deck for ${leader.Name}`, () => {
-      const { deck, report } = buildDeckForLeader(leader, POOL, 1)
+      const { deck, report } = wholeSet(leader, 1)
       expect(report.violations, `${leader.Name}: ${report.violations.join('; ')}`).toEqual([])
       // deckReport recomputed independently agrees.
       expect(deckReport(deck, byId(POOL)).ok).toBe(true)
@@ -54,16 +64,9 @@ describe('buildDeckForLeader', () => {
 
   /**
    * **A pool is what limits copies in sealed, not a deckbuilding rule.** The 3-copy cap is a
-   * constructed-format rule and does not apply here: you play what you opened, five copies included.
-   * What actually limits you is how unlikely a duplicate is, and that depends entirely on rarity.
-   *
-   * A six-pack pool yields roughly 0-3 Legendaries in total and essentially never two of the same, a
-   * duplicate Rare only a few percent of the time, and 2 or at a push 3 of a given Common. Building
-   * from the whole set under a flat 3-copy cap ignores all of that: the matrix run at seed 42 put
-   * **three copies of Zeb Orrelios**, a Legendary, into four decks.
-   *
-   * These caps stand in for the pool until the generator models one properly. They are an
-   * approximation of a distribution, not a rule of the game.
+   * constructed-format rule and does not apply here. A deck built from the whole set has no pool to
+   * limit it, so it rolls for duplicates at the rate a pool yields them, by rarity, and caps the tail:
+   * without that, a flat 3-copy cap put three copies of a Legendary into four matrix decks.
    */
   /**
    * **Duplicates are a probability, not a cap.** How often you open two of the same card is entirely
@@ -77,7 +80,7 @@ describe('buildDeckForLeader', () => {
       const seen = new Map<string, { entries: number; duplicated: number }>()
       for (let seed = 1; seed <= 25; seed++) {
         for (const leader of LEADERS) {
-          for (const entry of buildDeckForLeader(leader, POOL, seed).deck.cards) {
+          for (const entry of wholeSet(leader, seed).deck.cards) {
             const rarity = card.get(entry.id)?.Rarity ?? 'Common'
             const t = seen.get(rarity) ?? { entries: 0, duplicated: 0 }
             t.entries++
@@ -112,8 +115,8 @@ describe('buildDeckForLeader', () => {
     })
   })
 
-  describe('copies are capped by rarity, standing in for a pool', () => {
-    const copiesByRarity = (deck: ReturnType<typeof buildDeckForLeader>['deck'], pool: SwuCard[]) => {
+  describe('copies are capped by rarity, with no pool to limit them', () => {
+    const copiesByRarity = (deck: ReturnType<typeof wholeSet>['deck'], pool: SwuCard[]) => {
       const card = byId(pool)
       const worst = new Map<string, number>()
       for (const entry of deck.cards) {
@@ -125,7 +128,7 @@ describe('buildDeckForLeader', () => {
 
     for (const leader of LEADERS) {
       it(`respects the per-rarity cap for ${leader.Name}`, () => {
-        const { deck } = buildDeckForLeader(leader, POOL, 1)
+        const { deck } = wholeSet(leader, 1)
         for (const [rarity, most] of copiesByRarity(deck, POOL)) {
           const cap = MAX_COPIES_BY_RARITY[rarity as keyof typeof MAX_COPIES_BY_RARITY] ?? MAX_COPIES
           expect(most, `${rarity} in ${leader.Name}'s deck`).toBeLessThanOrEqual(cap)
@@ -137,35 +140,11 @@ describe('buildDeckForLeader', () => {
     it('never triples a Legendary, whatever the seed', () => {
       for (let seed = 1; seed <= 5; seed++) {
         for (const leader of LEADERS) {
-          const { deck } = buildDeckForLeader(leader, POOL, seed)
+          const { deck } = wholeSet(leader, seed)
           const most = copiesByRarity(deck, POOL).get('Legendary') ?? 0
           expect(most, `${leader.Name} at seed ${seed}`).toBeLessThanOrEqual(1)
         }
       }
-    })
-  })
-
-  /**
-   * **A base must not double an aspect the leader already supplies.** This set has no card with a
-   * doubled aspect, so the overlap buys nothing, and one colour does not yield enough playables. The
-   * picker used to take the first base that produced a legal deck, in pool order, which is how Luke
-   * Skywalker (Vigilance) ended up on Fortress of the Great Mothers (Vigilance).
-   */
-  describe('base choice', () => {
-    const aspectOf = (id: string) => byId(POOL).get(id)?.Aspects ?? []
-
-    for (const leader of LEADERS) {
-      it(`does not double ${leader.Name}'s aspect`, () => {
-        const { deck } = buildDeckForLeader(leader, POOL, 1)
-        const overlap = aspectOf(deck.base).filter(a => (leader.Aspects ?? []).includes(a))
-        expect(overlap, `base ${deck.base}`).toEqual([])
-      })
-    }
-
-    /** And it should not be the same base for everyone: the aspect is a real choice. */
-    it('varies the base across leaders', () => {
-      const bases = new Set(LEADERS.map(l => buildDeckForLeader(l, POOL, 1).deck.base))
-      expect(bases.size).toBeGreaterThan(1)
     })
   })
 
@@ -177,7 +156,7 @@ describe('buildDeckForLeader', () => {
   it('varies the unit, upgrade and event counts across seeds', () => {
     const shapes = new Set<string>()
     for (let seed = 1; seed <= 12; seed++) {
-      const { deck } = buildDeckForLeader(LEADERS[0], POOL, seed)
+      const { deck } = wholeSet(LEADERS[0],seed)
       const card = byId(POOL)
       const count = (type: string) => deck.cards
         .filter(c => card.get(c.id)?.Type === type)
@@ -188,8 +167,8 @@ describe('buildDeckForLeader', () => {
   })
 
   it('is deterministic for a given seed', () => {
-    const a = buildDeckForLeader(LEADERS[0], POOL, 7).deck
-    const b = buildDeckForLeader(LEADERS[0], POOL, 7).deck
+    const a = wholeSet(LEADERS[0],7).deck
+    const b = wholeSet(LEADERS[0],7).deck
     expect(b).toEqual(a)
   })
 })

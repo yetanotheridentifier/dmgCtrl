@@ -287,16 +287,32 @@ leaders is the obvious candidate. What it does establish is that **which cards a
 leader's rating by 12 points**, so a rating describes this generator as much as the leader. Whether a
 different suite from the same generator moves it too has not been measured.
 
-### The deck generator does not model a sealed pool
+### Matchup and generated decks are built from an opened sealed pool
 
-Worth stating plainly because it bounds everything the matrix can say: `generateDeck` builds from the
-**whole card set** under rarity quotas. There is no pool step, so the decks are not sealed decks.
+Each matchup deck, and the setup screen's generated deck, is built from **six packs opened from one
+set** (`deckgen/packs.ts`), plays only the copies those packs held, and builds on any Common base of
+the set or a rare base the pool opened. Coverage decks still build from the whole set, since their job
+is reaching every card.
 
-Copy counts no longer give it away: duplicates are rolled by rarity (`DUPLICATE_CHANCE`, so a Common
-is doubled 40% of the time and a Legendary essentially never), with per-rarity caps as a backstop.
-What remains is the pool itself. A real six-pack pool decides which cards a leader can have at all, so
-the pool-dependent leaders above are rated on decks no player would open. A pool-aware generator would
-move their ratings by an unknown amount, and the copy caps alone moved leaders by up to 12 points.
+**The leader ratings above were measured on whole-set decks** and want re-reading on pool decks before
+they are relied on. A pool decides which cards a leader can have at all, so the pool-dependent leaders
+are the ones most likely to move, and the copy caps alone once moved leaders by up to 12 points.
+
+Measured over 40 seeds for every non-Special leader of each of the nine sealed sets (640 decks a set):
+
+- **Every pool fills a legal deck**, at the base's size. Under the whole-set shape rules 42% to 82%
+  of decks came out short, though the median pool holds 35 to 38 on-aspect playables: the shape caps
+  were the limit, not the pool. So a pool deck is held to legality alone, and the shape rules are
+  what the generator aims for.
+- **Splashing is rare.** 0% to 10.5% of decks take off-aspect cards (LOF highest, then SEC at 4.8%),
+  averaging 1 to 4.4 cards when they do, mostly for a leader with one aspect.
+- **Most pool decks miss a shape rule.** 4% to 36% pass every curve, type, rarity and alignment rule,
+  against all of them for a whole-set deck.
+- **A rare base** is used in 4% to 9% of decks for a set printing them, only when opened.
+
+The pack model rests on three **estimates** rather than published rates: a rare leader in 1 pack in
+8, the foil slot's rarity in the pack's own 9:3:1 split, and no repeated common or uncommon within
+one pack.
 
 ### Per-card win rates are not measurable at this scale
 

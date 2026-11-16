@@ -35,6 +35,11 @@ export function seededUnit(seed: number): number {
   return mulberry32(seed)()
 }
 
+/** A stream of numbers in [0, 1) from one seed, for a caller drawing many values in sequence (opening packs). */
+export function seededRandom(seed: number): () => number {
+  return mulberry32(seed || 1)
+}
+
 /** Advance the stored seed after consuming randomness (golden-ratio step). */
 export function nextSeed(seed: number): number {
   return (seed + 0x9e3779b9) >>> 0

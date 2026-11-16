@@ -43,11 +43,15 @@ describe('buildMatchupDecks', () => {
     expect(new Set(labels).size).toBe(labels.length)
   })
 
-  it('builds rule-satisfying decks', () => {
-    for (const d of buildMatchupDecks(POOL, 4, 1)) {
-      const report = deckReport(d.deck, byId)
+  /** Each deck is built from its own opened pool, so it is held to legality, not to the shape rules. */
+  it('builds legal decks from sealed pools', () => {
+    const decks = buildMatchupDecks(POOL, 4, 1)
+    for (const d of decks) {
+      const report = deckReport(d.deck, byId, { fromPool: true })
       expect(report.violations, `${d.label}: ${report.violations.join(', ')}`).toEqual([])
     }
+    // A pool rarely meets every shape rule; a whole-set deck always does.
+    expect(decks.filter(d => !deckReport(d.deck, byId).ok).length).toBeGreaterThan(0)
   })
 
   /** The point of a seed: a different suite, same leaders and aspects, different card choices. */

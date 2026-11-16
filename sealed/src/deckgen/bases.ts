@@ -10,8 +10,9 @@ import { isRareBase, RARE_BASE_CHANCE } from './rules'
  *
  * A deck reads three things from its base: its aspects, the deck size it sets, and whether it is
  * rare. Bases agreeing on all three build the same deck, so the choice is made in two steps:
- * {@link colourBases} picks what to build on, and {@link settleBase} picks which of the equivalent
- * bases the built deck sits on.
+ * {@link colourBases} picks what a whole-set (coverage) deck builds on (a pool deck picks among the
+ * bases its pool offers, in `buildDeckFromPool`), and {@link settleBase} picks which of the
+ * equivalent bases the built deck sits on.
  */
 
 const id = (c: SwuCard): string => `${c.Set}_${c.Number}`

@@ -167,6 +167,28 @@ describe('deckReport', () => {
     expect(deckReport(deck, byId).violations.some(v => /event/i.test(v))).toBe(true)
   })
 
+  /**
+   * A deck from an opened pool is held to its size alone: the shape is a guideline, an off-aspect card
+   * is a splash paying its penalty (counted, not broken), and copies are what the pool opened.
+   */
+  it('holds a pool deck to its size alone, counting the off-aspect cards', () => {
+    const spec = validSpec()
+    spec[10].card = { ...spec[10].card, Aspects: ['Villainy'] }
+    spec[11].card = { ...spec[11].card, Aspects: ['Villainy'] }
+    for (let i = 0; i < 7; i++) spec[12 + i].card = { ...spec[12 + i].card, Type: 'Event', Cost: '2', Rarity: 'Legendary' }
+    spec[0].count = 4
+    const { deck, byId } = build(spec)
+    expect(deckReport(deck, byId).violations.length).toBeGreaterThan(3)
+
+    const pool = deckReport(deck, byId, { fromPool: true })
+    expect(pool.offAspect).toBe(2)
+    expect(pool.violations).toEqual(['size 33 != 30'])
+
+    spec[0].count = 1
+    const legal = build(spec)
+    expect(deckReport(legal.deck, legal.byId, { fromPool: true }).ok).toBe(true)
+  })
+
   it('flags too many legendaries', () => {
     const spec = validSpec()
     for (let i = 0; i < 4; i++) spec[9 + i].card = { ...spec[9 + i].card, Rarity: 'Legendary' }
