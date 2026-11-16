@@ -13,13 +13,15 @@ import { PROXY_CONFIG, printedJson, runWrangler, type WranglerRun } from './wran
  * The store of collected games: the D1 table `collected_games` that the collection Worker writes
  * as each game arrives (`proxy/records.js`, schema in `proxy/migrations/`). One row a game: its key,
  * the UTC day it arrived and nothing finer, the build copied out of the payload, and the payload
- * gzipped.
+ * gzipped. Beside it, the game's latest replay check, which the bench writes and the Worker never
+ * does (`refusedGames.ts`).
  *
  * **Read from this machine by loading it** (`loadStore`) into an archive in memory, the same table
  * `recordArchive.ts` keeps in a local file, so the status, the snapshot and the rows read either
  * one the same way. An `ArchivedGame`'s `pulledDay` is the day the game reached its store.
  *
- * `CollectedStore` is all the commands know of D1: a page of rows, every key, and adding games. The
+ * `CollectedStore` is all the commands know of D1: a page of rows, every key, adding and
+ * removing games, and reading and writing their checks. The
  * one implementation runs `wrangler d1 execute` (`wrangler.ts`). A payload comes back as hex (the
  * JSON answer has no bytes) and goes in as a hex literal from a file of statements.
  */
@@ -31,13 +33,39 @@ export interface CollectedStore {
   keys(): string[]
   /** Add these games. A game already held keeps its row as first written. */
   add(games: ArchivedGame[]): void
+  /** Every game without its payload: its build and its latest replay check, in key order. */
+  games(): StoredGame[]
+  /** Keep these as the games' latest replay checks. */
+  recordChecks(checks: (ReplayCheck & { gameKey: string })[]): void
+  /** Remove these games. */
+  remove(keys: string[]): void
+}
+
+/**
+ * The outcome of a game's latest replay on the bench (`refusedGames.ts`): the build it was replayed
+ * on, why it did not reach its own result (`null` when it did), and whether that refusal is a sign
+ * of an engine defect, kept until someone has looked at it.
+ */
+export interface ReplayCheck {
+  checkedOn: string
+  refusal: string | null
+  flagged: boolean
+}
+
+/** A game in the store as its checks see it: its key, the build that played it, and its latest check. */
+export interface StoredGame {
+  gameKey: string
+  release: string | null
+  commitId: string | null
+  /** `null` until it has been replayed. */
+  check: ReplayCheck | null
 }
 
 const BINDING = 'GAME_DB'
 const GAME_KEY = /^[0-9a-f]{16}$/
 const DAY = /^\d{4}-\d{2}-\d{2}$/
 
-/** How many games one statement file carries, so a large move is several modest uploads. */
+/** How many statements one file carries, so a large move is several modest uploads. */
 const ADD_BATCH = 200
 
 /** A key, checked before it is put into SQL text. */
@@ -47,6 +75,23 @@ function key(value: string): string {
 }
 
 const text = (value: string | null | undefined): string => (value === null || value === undefined ? 'NULL' : `'${value.replaceAll("'", "''")}'`)
+
+const orNull = (value: unknown): string | null => (value === null || value === undefined ? null : String(value))
+
+/** Run these statements on the database, from a file of a modest number at a time. */
+function runStatements(run: WranglerRun, database: string[], statements: string[]): void {
+  for (let from = 0; from < statements.length; from += ADD_BATCH) {
+    const dir = mkdtempSync(join(tmpdir(), 'collected-'))
+    const file = join(dir, 'statements.sql')
+    try {
+      writeFileSync(file, statements.slice(from, from + ADD_BATCH).join(''))
+      // `--yes`: nothing is there to answer wrangler's prompt before a file is run on the account.
+      run([...database, '--file', file, '--yes'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+}
 
 /** The rows a `d1 execute --json` printed. */
 function results(stdout: string): Record<string, unknown>[] {
@@ -83,17 +128,21 @@ export function d1Store(run: WranglerRun = runWrangler, where: string[] = ['--re
         const payload = gzipSync(game.payload).toString('hex')
         return `INSERT INTO collected_games (game_key, received_day, release, commit_id, payload) VALUES ('${key(game.gameKey)}', '${game.pulledDay}', ${text(build?.release)}, ${text(build?.commitId)}, X'${payload}') ON CONFLICT (game_key) DO NOTHING;\n`
       })
-      for (let from = 0; from < statements.length; from += ADD_BATCH) {
-        const dir = mkdtempSync(join(tmpdir(), 'collected-'))
-        const file = join(dir, 'add.sql')
-        try {
-          writeFileSync(file, statements.slice(from, from + ADD_BATCH).join(''))
-          // `--yes`: nothing is there to answer wrangler's prompt before a file is run on the account.
-          run([...database, '--file', file, '--yes'])
-        } finally {
-          rmSync(dir, { recursive: true, force: true })
-        }
-      }
+      runStatements(run, database, statements)
+    },
+    games() {
+      return query('SELECT game_key, release, commit_id, checked_on, refusal, flagged FROM collected_games ORDER BY game_key').map(row => ({
+        gameKey: String(row.game_key),
+        release: orNull(row.release),
+        commitId: orNull(row.commit_id),
+        check: row.checked_on === null ? null : { checkedOn: String(row.checked_on), refusal: orNull(row.refusal), flagged: Number(row.flagged) === 1 },
+      }))
+    },
+    recordChecks(checks) {
+      runStatements(run, database, checks.map(c => `UPDATE collected_games SET checked_on = ${text(c.checkedOn)}, refusal = ${text(c.refusal)}, flagged = ${c.flagged ? 1 : 0} WHERE game_key = '${key(c.gameKey)}';\n`))
+    },
+    remove(keys) {
+      runStatements(run, database, keys.map(k => `DELETE FROM collected_games WHERE game_key = '${key(k)}';\n`))
     },
   }
 }

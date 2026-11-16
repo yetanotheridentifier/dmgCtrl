@@ -39,9 +39,10 @@ describe('--delete', () => {
     expect(parseArgs(['--pull', '--delete', '--dry-run'])).toMatchObject({ pull: true, delete: true, dryRun: true })
   })
 
-  it('is refused without --pull, and so is --dry-run without --delete', () => {
-    expect(() => parseArgs(['--delete', '--backup', '/x'])).toThrow('--delete applies to --pull only')
-    expect(() => parseArgs(['--pull', '--dry-run'])).toThrow('--dry-run applies to --pull --delete only')
+  it('is refused without --pull or --refused, and so is --dry-run without --delete', () => {
+    expect(() => parseArgs(['--delete', '--backup', '/x'])).toThrow('--delete applies to --pull and --refused only')
+    expect(() => parseArgs(['--pull', '--dry-run'])).toThrow('--dry-run applies to --delete only')
+    expect(() => parseArgs(['--refused', '--dry-run'])).toThrow('--dry-run applies to --delete only')
   })
 })
 
@@ -118,5 +119,33 @@ describe('the collected-game modes and the rest of the bench', () => {
 
   it('--pull is not a source for --rows: the rows are made from the archive afterwards', () => {
     expect(() => parseArgs(['--rows', '--pull', '--out', 'rows.jsonl'])).toThrow('--pull runs on its own')
+  })
+})
+
+describe('--refused', () => {
+  it('is off unless asked for, and on its own lists the refused games', () => {
+    expect(parseArgs(['beam-reply']).refused).toBe(false)
+    expect(parseArgs(['--refused'])).toMatchObject({ refused: true, delete: false, dryRun: false, lookedAt: [] })
+  })
+
+  it('deletes with a folder to back the store up to first, and needs none as a dry run', () => {
+    expect(parseArgs(['--refused', '--delete', '--backup', '/mnt/drive/games'])).toMatchObject({ refused: true, delete: true, backup: '/mnt/drive/games' })
+    expect(parseArgs(['--refused', '--delete', '--dry-run'])).toMatchObject({ refused: true, delete: true, dryRun: true })
+    expect(() => parseArgs(['--refused', '--delete'])).toThrow('--delete needs --backup DIR')
+  })
+
+  it('takes the flagged games someone has looked at, by key', () => {
+    const a = '0123456789abcdef'
+    const b = 'fedcba9876543210'
+    expect(parseArgs(['--refused', '--delete', '--dry-run', '--looked-at', `${a},${b}`]).lookedAt).toEqual([a, b])
+    expect(() => parseArgs(['--refused', '--looked-at', 'nope'])).toThrow('--looked-at takes game keys')
+    expect(() => parseArgs(['--refused', '--looked-at', a])).toThrow('--looked-at applies to --refused --delete only')
+  })
+
+  it('works on the D1 store only, and on its own', () => {
+    expect(() => parseArgs(['--refused', '--archive', 'games.db'])).toThrow('--refused works on the D1 store')
+    expect(() => parseArgs(['--refused', '--rows', '--out', 'r.jsonl', '--collected'])).toThrow('--refused runs on its own')
+    expect(() => parseArgs(['--refused', '--pull'])).toThrow('--refused runs on its own')
+    expect(() => parseArgs(['--refused', 'beam-reply'])).toThrow('takes no names or files')
   })
 })

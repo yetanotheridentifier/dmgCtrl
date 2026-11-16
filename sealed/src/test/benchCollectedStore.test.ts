@@ -1,55 +1,26 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
-import { DatabaseSync } from 'node:sqlite'
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
-import { addToStore, d1Store, loadStore, migrateToStore, restoreToStore, type CollectedStore } from '../bench/collectedStore'
+import { addToStore, loadStore, migrateToStore, restoreToStore } from '../bench/collectedStore'
 import { archiveGame, archiveStatus, archivedGames, openArchive, writeSnapshot, type ArchivedGame } from '../bench/recordArchive'
 import { STAGING_PREFIX } from '../bench/staging'
+import { fakeD1 } from './helpers/fakeD1'
 import { fakeStaging, stagedGame } from './helpers/stagedGames'
 
 /**
  * The store of collected games: the D1 table the collection Worker writes (`proxy/records.js`),
  * read and written from this machine through wrangler. Here wrangler is stood in for by the same
- * schema in a local SQLite database (the Worker's own migration file), so the SQL this module sends
- * is the SQL that is run.
+ * schema in a local SQLite database (the Worker's own migration files, `helpers/fakeD1.ts`), so the
+ * SQL this module sends is the SQL that is run.
  */
 
-const SCHEMA = readFileSync(resolve(process.cwd(), '../proxy/migrations/0001_collected_games.sql'), 'utf8')
 const GAMES = [7, 11, 23].map(stagedGame)
 const DAY = '2026-11-16'
 
 const asArchived = (game: { gameKey: string; text: string }, day = DAY): ArchivedGame => ({ gameKey: game.gameKey, pulledDay: day, payload: game.text })
-
-interface FakeD1 {
-  db: DatabaseSync
-  calls: string[][]
-  store: CollectedStore
-}
-
-/** wrangler's `d1 execute`, answered from a local database holding the Worker's table. */
-function fakeD1(): FakeD1 {
-  const db = new DatabaseSync(':memory:')
-  db.exec(SCHEMA)
-  const calls: string[][] = []
-  const run = (args: string[]): string => {
-    calls.push(args)
-    const at = (flag: string): string | undefined => {
-      const i = args.indexOf(flag)
-      return i === -1 ? undefined : args[i + 1]
-    }
-    const file = at('--file')
-    if (file !== undefined) {
-      db.exec(readFileSync(file, 'utf8'))
-      return ' ⛅️ wrangler 4.154.0\n🚣 Executed 3 queries\n'
-    }
-    const results = db.prepare(at('--command')!).all()
-    return ` ⛅️ wrangler 4.154.0\n───────────\n${JSON.stringify([{ results, success: true, meta: {} }], null, 2)}\n`
-  }
-  return { db, calls, store: d1Store(run) }
-}
 
 describe('the D1 store, through wrangler', () => {
   it('keeps each game gzipped, with its key, day and build, and gives back the payload as it was sent', () => {
@@ -185,5 +156,56 @@ describe('moving the staged and archived games into the store', () => {
     migrateToStore(d1.store, staging, local, DAY)
 
     expect(migrateToStore(d1.store, staging, local, DAY)).toMatchObject({ games: 2, added: 0, duplicates: 2, missing: [] })
+  })
+})
+
+describe('the replay check kept beside each game', () => {
+  const build = (game: { text: string }) => (JSON.parse(game.text) as { build?: { release: string; commitId: string } }).build
+
+  it('starts unchecked, and lists every game with its build and no payload', () => {
+    const d1 = fakeD1()
+    d1.store.add(GAMES.map(g => asArchived(g)))
+
+    const games = d1.store.games()
+    expect(games.map(g => g.gameKey)).toEqual(GAMES.map(g => g.gameKey).sort())
+    for (const game of games) {
+      const staged = GAMES.find(g => g.gameKey === game.gameKey)!
+      expect(game).toEqual({ gameKey: game.gameKey, release: build(staged)?.release ?? null, commitId: build(staged)?.commitId ?? null, check: null })
+    }
+  })
+
+  it('records the build each game was checked on and the refusal, or none for a game that replayed', () => {
+    const d1 = fakeD1()
+    d1.store.add(GAMES.map(g => asArchived(g)))
+    const [a, b] = GAMES.map(g => g.gameKey).sort()
+
+    d1.store.recordChecks([
+      { gameKey: a, checkedOn: 'abc1234', refusal: null, flagged: false },
+      { gameKey: b, checkedOn: 'abc1234', refusal: "the replay threw: it's not legal", flagged: true },
+    ])
+
+    const checks = new Map(d1.store.games().map(g => [g.gameKey, g.check]))
+    expect(checks.get(a)).toEqual({ checkedOn: 'abc1234', refusal: null, flagged: false })
+    expect(checks.get(b)).toEqual({ checkedOn: 'abc1234', refusal: "the replay threw: it's not legal", flagged: true })
+    expect([...checks.values()].filter(c => c === null)).toHaveLength(1)
+  })
+
+  it('keeps no time with a check, only the build it was made on', () => {
+    const d1 = fakeD1()
+    const columns = (d1.db.prepare('PRAGMA table_info(collected_games)').all() as { name: string }[]).map(c => c.name)
+    expect(columns).toEqual(['game_key', 'received_day', 'release', 'commit_id', 'payload', 'checked_on', 'refusal', 'flagged'])
+  })
+
+  it('removes the games named and no others, and never a key it was not given as one', () => {
+    const d1 = fakeD1()
+    d1.store.add(GAMES.map(g => asArchived(g)))
+    const keys = GAMES.map(g => g.gameKey).sort()
+
+    d1.store.remove([keys[0], keys[2]])
+
+    expect(d1.store.keys()).toEqual([keys[1]])
+    expect(() => d1.store.remove(["x' OR 1=1 --"])).toThrow('not a game key')
+    expect(() => d1.store.recordChecks([{ gameKey: "x' OR 1=1 --", checkedOn: 'abc1234', refusal: null, flagged: false }])).toThrow('not a game key')
+    expect(d1.store.keys()).toEqual([keys[1]])
   })
 })

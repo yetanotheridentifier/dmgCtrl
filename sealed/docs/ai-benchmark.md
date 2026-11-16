@@ -2011,10 +2011,13 @@ these commands read it, back it up and restore it. How to run them and where to 
 | `--migrate` | moves every game in the local archive (`bench-results/collected-games.db` unless given) and in KV staging into D1, then reads every key back. Deletes nothing |
 | `--pull` | from KV staging into the local archive: fetches the games it does not hold, verifies each and archives it. Read-only |
 | `--delete` | with `--pull`: removes from staging the listed games the archive holds. Refused without `--backup` |
-| `--dry-run` | with `--pull --delete`: removes nothing and lists each key that would go |
+| `--dry-run` | with `--delete`: removes nothing and lists each key that would go |
+| `--refused` | the D1 games whose latest check refused them, by reason and by the build that played them. With `--delete`, deletes those refused on this build, after a `--backup` read back to hold them, keeping flagged ones |
+| `--looked-at KEY[,KEY ...]` | with `--refused --delete`: flagged games someone has looked at, which go with the rest |
 
-**The store is behind three calls** (`CollectedStore` in `bench/collectedStore.ts`): a page of rows
-by key, every key, and adding games (a game already held keeps its row). The one implementation
+**The store is behind six calls** (`CollectedStore` in `bench/collectedStore.ts`): a page of rows
+by key, every key, adding games (a game already held keeps its row), every game's build and check
+without its payload, keeping checks, and removing games. The one implementation
 runs `wrangler d1 execute` against the database `proxy/wrangler.toml` binds as `GAME_DB`, so no
 token is handled here. A payload is read as `hex(payload)`, since the JSON answer carries no bytes,
 and written as a hex literal from a file of statements. **It is read by loading it** (`loadStore`)
@@ -2030,9 +2033,17 @@ then held, so a count it reports is a count of games in the store.
 | `received_day` | the UTC date it arrived, `YYYY-MM-DD`. The table refuses anything but a date |
 | `release`, `commit_id` | the build that played it, copied from the payload so the store counts by build |
 | `payload` | the record as JSON text, gzipped: replay data, result, duration and provenance |
+| `checked_on` | the build (commit id) its latest replay check ran on, `NULL` until one has. A build, not a time |
+| `refusal` | why that replay did not reach the stored result, `NULL` when it did |
+| `flagged` | 1 for a refusal of a game played on the checking build or the one before, kept until looked at |
 
-**No game is replayed on its way in.** `--rows` replays every game and refuses one that diverges,
-so a game this build cannot replay is still kept, for a build that can.
+The Worker writes the first five and never the check, so a game arrives unchecked.
+
+**No game is replayed on its way in.** `--rows --collected` replays every game and refuses one that
+diverges, and keeps each outcome on the game's row (`refusedGames.ts`): a game this build cannot
+replay stays until `--refused --delete` removes it. A game already refused on the build running
+`--rows` is left out without being replayed again. A flagged game is never deleted until it is
+named with `--looked-at`; operations.md has the commands.
 
 **KV staging and the local archive** are where games went before D1: the Worker no longer writes
 staging, and `--migrate` moves both into D1 (`migrateToStore`). A staged game is checked to be the
@@ -2251,10 +2262,13 @@ eight of eighteen modules were missing.
   groups a game's rows.
 - `bench/rowSources.ts` where `--rows` gets its games (an export file, the archive of collected
   games, a snapshot of it) and the writing of their rows a game at a time.
-- `bench/collectedStore.ts` the D1 store of collected games as three calls (a page of rows, every
-  key, add), the implementation that makes them through `wrangler`, loading the store as an
+- `bench/collectedStore.ts` the D1 store of collected games as six calls (a page of rows, every
+  key, add, every game's build and replay check, keep checks, remove), the implementation that makes them through `wrangler`, loading the store as an
   archive in memory, restoring a snapshot into it, and the one-off move of KV staging and the local
   archive into it behind `--migrate`.
+- `bench/refusedGames.ts` collected games that no longer replay: which `--rows` leaves out, the
+  checks it keeps and the flag on a likely engine defect, the listing behind `--refused`, and its
+  backup-first delete. Asks git for the build before, so not pure.
 - `bench/wrangler.ts` running `wrangler` against the proxy Worker's config, and reading the JSON it
   prints. Starts a process, so not pure.
 - `bench/staging.ts` the KV staging store games were sent to before D1, as three calls (list, get,

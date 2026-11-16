@@ -437,7 +437,7 @@ npm run bench --prefix sealed -- --collected
 ```
 
 **Training rows from it** (`--rows` replays every game and refuses, by name, one this build cannot
-replay to its stored result; the rest are written):
+replay to its stored result; the rest are written, and each outcome is kept, below):
 
 ```bash
 npm run bench --prefix sealed -- --rows --collected --out /path/to/rows.jsonl
@@ -445,6 +445,41 @@ npm run bench --prefix sealed -- --rows --collected --out /path/to/rows.jsonl
 
 Each of these loads the whole store over the network first: one wrangler process (a second or two)
 for every 500 games.
+
+**Games that no longer replay.** A rules fix leaves some games refused, because they played out the
+old rules. `--rows --collected` keeps each game's outcome in the store beside it: the build it was
+replayed on and the refusal's reason, or none. The next run on the same build leaves out the games
+already known refused (`left out`) instead of replaying them again. A run from a tree with
+uncommitted changes is no build: it leaves nothing out and keeps no checks (`checks kept: none`).
+With `--archive FILE` nothing is kept.
+
+```bash
+npm run bench --prefix sealed -- --refused
+```
+
+lists the refused games by reason and by the build that played them. A refused game is **deleted
+for good**, with no retention period, once the run that refused it is on the same build:
+
+```bash
+npm run bench --prefix sealed -- --refused --delete --dry-run      # lists each key that would go
+npm run bench --prefix sealed -- --refused --delete --backup /path/to/a/folder
+```
+
+The delete writes a backup of the whole store first, reads it back, and removes nothing unless it
+holds every game about to go; then it reads the store's keys again. So run `--rows --collected` and
+then the delete on the same commit, with a clean tree: a game refused on another build is kept
+(`on another build`), since it may replay now.
+
+**A flagged game is kept.** A refusal of a game played on the build doing the check, or the one before
+(`HEAD` and its first parent, so on `main` the merge before), is not the rules changing: it points
+at an engine defect. It is printed as `FLAGGED` on every `--rows` and `--refused` run, and the delete
+leaves it, until someone has looked at it and names it:
+
+```bash
+npm run bench --prefix sealed -- --refused --delete --backup /path/to/a/folder --looked-at KEY[,KEY ...]
+```
+
+A flag stays raised however far the builds move on, and drops only when the game replays.
 
 **Back up.** Writes the whole store as one dated, compressed file in a folder you name:
 
