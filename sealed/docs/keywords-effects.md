@@ -594,8 +594,8 @@ only in which units are candidates, what abilities they lend the attacker, and w
 offered at all (Ambush reads "attack an enemy unit", so it is not, unless a card in play says its
 controller's units "can attack bases while using Ambush": Fett's Firespray, read by `ambushAttacksBases`).
 One statement of a targeting rule therefore binds all five. Whether an Ambush has anything to hit, which
-decides if the unit enters ready and the choice is raised, is `ambushHasTarget`, which reads the same
-permission.
+decides if the unit enters ready and, asked again as Ambush resolves, whether the choice is raised, is
+`ambushHasTarget`, which reads the same permission.
 
 **The restriction is on the target, not on the damage.** An attack declares a legal target and only
 then computes damage, so a unit that cannot attack bases still trickles Overwhelm excess onto one

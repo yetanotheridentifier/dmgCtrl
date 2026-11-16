@@ -584,10 +584,12 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
       // unit" looks the unit up by instance id. Correct it here against the live keyword set, which
       // does see it.
       if (inPlay().exhausted) readyUp()
-      keywordAbilities.push(KEYWORD_AMBUSH)
     } else if (ready !== true && !grantEntersReady && !inPlay().exhausted) {
       exhaust() // no target → settle into a normal exhausted entry, unless an ability entered it ready
     }
+    // Queued either way: whether it has a target is asked again as it resolves, since another ability
+    // in the batch can give it one (Blue Leader moving itself to the ground) or take it away.
+    keywordAbilities.push(KEYWORD_AMBUSH)
   } else {
     // No (or aura-stripped) Ambush: it was constructed ready only if the card printed Ambush, so revert
     // to the normal exhausted entry — unless an ability entered it ready (Fennec `ready`, or a Neel-style
@@ -3128,8 +3130,9 @@ function shieldedOnEntry(state: GameState, entered: UnitState): string[] {
  */
 function collectDeployKeywords(state: GameState, owner: PlayerId, leaderUnit: UnitState): PendingTrigger[] {
   const keywords = shieldedOnEntry(state, leaderUnit)
+  // Ambush is queued with or without a target: the ability asks again as it resolves.
   if (unitHasKeyword(state, leaderUnit, 'Ambush')) {
-    if (ambushHasTarget(state, leaderUnit, owner)) keywords.push(KEYWORD_AMBUSH)
+    keywords.push(KEYWORD_AMBUSH)
   } else if (unitHasKeyword(state, leaderUnit, 'Support')) {
     keywords.push(KEYWORD_SUPPORT)
   }

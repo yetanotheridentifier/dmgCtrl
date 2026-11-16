@@ -2129,8 +2129,12 @@ registerCard('ASH_137', attackWithRider('Attack with a unit. For this attack, yo
  * to deal its 1 damage until after it had taken its Ambush attack: a choice on the board stops the
  * rest of the batch (CR 7.6.12), and this one was there before the batch began.
  *
- * The unit's ready state is NOT decided here. Ambush enters its unit ready so it can attack, which is
- * part of entering play rather than part of the ability, and stays in `playUnitCard`.
+ * Ambush enters its unit ready when it has something to attack, which is part of entering play and
+ * stays in `playUnitCard`. Ambush is queued whether or not it has a target, though, because the rest
+ * of the batch can change that before it resolves: Blue Leader's "move this unit to the ground arena"
+ * gives it a ground target it lacked in space, or takes away the only one it had. So the target is
+ * asked again here, and the ready state follows the answer: readied to attack one found now, and
+ * exhausted when there is none (unless the unit entered ready on its own, `ambushStaysReady`).
  */
 export const KEYWORD_AMBUSH = 'KEYWORD_AMBUSH'
 registerCard(KEYWORD_AMBUSH, {
@@ -2139,10 +2143,12 @@ registerCard(KEYWORD_AMBUSH, {
     description: 'You may attack with this unit.',
     effect: (s, ctx) => {
       const u = findUnit(s, ctx.sourceInstanceId!)
-      // Re-checked as the ability resolves: an earlier ability in the same batch may have cleared the
-      // arena, and an Ambush with nothing to hit offers nothing.
-      if (!u || !ambushHasTarget(s, u.unit, ctx.owner)) return s
-      return pushChoice(s, {
+      if (!u) return s
+      // Nothing to hit: no attack, and no reason to have entered ready.
+      if (!ambushHasTarget(s, u.unit, ctx.owner)) return ctx.ambushStaysReady ? s : exhaustUnit(s, u.unit.instanceId)
+      const ready = u.unit.exhausted ? readyUnit(s, u.unit.instanceId) : s
+      if (findUnit(ready, u.unit.instanceId)?.unit.exhausted !== false) return ready // it cannot ready
+      return pushChoice(ready, {
         kind: 'ambush',
         id: ctx.sourceInstanceId!,
         controller: ctx.owner,

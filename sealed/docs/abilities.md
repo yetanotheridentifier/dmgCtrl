@@ -146,8 +146,11 @@ Pseudo cards (`KEYWORD_*`, and the `GRANT_*` abilities one card hands to others)
 setup panel's manifest, `data/implementedCards.ts`, must list every registered card id in any set, and
 its test counts only ids shaped `<SET>_<number>`, so a pseudo card is left out and any other shape fails.
 
-The unit's ready state is not part of that: entering ready so Ambush can attack is part of entering
-play, and stays in `playUnitCard`.
+Entering ready so Ambush can attack is part of entering play, and stays in `playUnitCard`, which
+readies the unit when it has something to attack as it arrives. Ambush is queued whether or not it
+does, and asks again as it resolves, since the rest of the batch can change the answer (Blue Leader
+moving itself to the ground): it readies the unit for a target found then, and exhausts it when there
+is none, unless the unit entered ready on its own.
 
 **Shielded and Hidden are read from the unit's LIVE keywords once it is in play** (`shieldedOnEntry`
 and `applyHidden`, shared by a unit played from hand and a leader deploying), for the same reason
