@@ -12,7 +12,7 @@ describe('--pull', () => {
   it('is off unless asked for, and read-only when asked', () => {
     expect(parseArgs(['beam-reply']).pull).toBe(false)
     const args = parseArgs(['--pull'])
-    expect(args).toMatchObject({ pull: true, delete: false, dryRun: false, backup: undefined, archive: DEFAULT_ARCHIVE_PATH })
+    expect(args).toMatchObject({ pull: true, delete: false, dryRun: false, backup: undefined, archive: undefined })
   })
 
   it('takes the archive from --archive, and a folder to snapshot to from --backup', () => {
@@ -63,6 +63,31 @@ describe('--backup and --restore', () => {
   it('do not combine: a restore is its own run', () => {
     expect(() => parseArgs(['--restore', 'a.jsonl.gz', '--pull'])).toThrow('--restore runs on its own')
     expect(() => parseArgs(['--restore', 'a.jsonl.gz', '--backup', '/x'])).toThrow('--restore runs on its own')
+  })
+})
+
+describe('the store the collected-game commands use', () => {
+  it('is the D1 store unless --archive names a local file', () => {
+    for (const mode of [['--collected'], ['--backup', '/x'], ['--restore', 'a.jsonl.gz'], ['--rows', '--collected', '--out', 'r.jsonl']]) {
+      expect(parseArgs(mode).archive).toBeUndefined()
+      expect(parseArgs([...mode, '--archive', '/data/games.db']).archive).toBe('/data/games.db')
+    }
+  })
+})
+
+describe('--migrate', () => {
+  it('is off unless asked for, and takes the local archive from --archive', () => {
+    expect(parseArgs(['--collected']).migrate).toBe(false)
+    expect(parseArgs(['--migrate'])).toMatchObject({ migrate: true, archive: undefined })
+    expect(parseArgs(['--migrate', '--archive', '/data/games.db'])).toMatchObject({ migrate: true, archive: '/data/games.db' })
+  })
+
+  it.each([['--pull'], ['--backup', '/x'], ['--restore', 'a.jsonl.gz'], ['--collected'], ['--rows', '--out', 'r.jsonl']])('runs on its own, not with %s', (...other) => {
+    expect(() => parseArgs(['--migrate', ...other])).toThrow('--migrate runs on its own')
+  })
+
+  it('takes no AI names or files', () => {
+    expect(() => parseArgs(['--migrate', 'beam-reply'])).toThrow('takes no names or files')
   })
 })
 

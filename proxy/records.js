@@ -1,20 +1,21 @@
 import contract from './recordContract.json'
 
 /**
- * POST /records: stages one finished game, sent by a player who opted in to sharing games.
+ * POST /records: stores one finished game, sent by a player who opted in to sharing games, as a row
+ * of the D1 table `collected_games` (`GAME_DB`).
  *
  * The notice that player agreed to says nothing identifies them, that their IP address is not
  * linked to games, and that a sent game cannot be found and deleted later. This module is what
  * makes those true on the server, so the rules are strict:
  *
- * - **The staged value is the validated payload and nothing else.** No address, header, `cf` field
- *   or arrival time is written with it, and the write passes no metadata and no expiry (an expiry
- *   is a write time in disguise).
+ * - **The row is the validated payload and what is copied out of it, and nothing else.** No
+ *   address, header or `cf` field is written with it, and the only "when" is the UTC day it
+ *   arrived: no time of day.
  * - **Nothing is logged.** This module never calls `console`, not even on an error: a log line is
  *   a second store, with a timestamp on it.
- * - **The key is made from the game alone** (`gameKey`), so the same game sent twice is staged
+ * - **The key is made from the game alone** (`gameKey`), so the same game sent twice is stored
  *   once, and no id is minted that the sender could be told or later ask for.
- * - **There is no way to read or remove a staged game through the Worker.** Only POST and its
+ * - **There is no way to read or remove a stored game through the Worker.** Only POST and its
  *   preflight are served.
  * - **The address is used once**, as the key of the rate limiter's counter, which Cloudflare keeps
  *   for the limiter's window and which cannot be read back. It goes nowhere else.
@@ -33,7 +34,6 @@ const ALLOWED_KEYS = new Set([...contract.required, ...contract.optional])
 const TEXT = new RegExp(contract.text)
 const SEATS = new Set(['player', 'opponent'])
 const WINNERS = new Set(['player', 'opponent', 'draw'])
-const KEY_PREFIX = 'records/'
 
 function corsHeaders(origin) {
   if (!ALLOWED_ORIGINS.has(origin)) return {}
@@ -169,7 +169,7 @@ export async function handleRecords(request, env) {
   }
   // The switch (`RECORD_COLLECTION` in wrangler.toml) and the store. Without either, nothing is
   // collected and the rest of the Worker carries on.
-  if (env.RECORD_COLLECTION !== 'on' || !env.GAME_RECORDS) {
+  if (env.RECORD_COLLECTION !== 'on' || !env.GAME_DB) {
     return refuse(503, 'collection_off', cors)
   }
   const type = (request.headers.get('Content-Type') ?? '').split(';')[0].trim().toLowerCase()
@@ -199,10 +199,29 @@ export async function handleRecords(request, env) {
   }
 
   try {
-    // A key and a value. No third argument: metadata and an expiry would both be kept beside the game.
-    await env.GAME_RECORDS.put(KEY_PREFIX + (await gameKey(record)), JSON.stringify(record))
+    await storeRecord(env.GAME_DB, record)
   } catch {
     return refuse(503, 'not_staged', cors)
   }
+  // Sent only once the row is written (or was already there), so the device can take it as delivery.
   return new Response(null, { status: 204, headers: cors })
+}
+
+/** Text as gzipped bytes. */
+async function gzip(text) {
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'))
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
+/**
+ * One row of `collected_games` (migrations/): the game's key, the day it arrived in UTC and nothing
+ * finer, the build copied out of the payload, and the payload gzipped. A game already held keeps its
+ * row as first written, so a second send changes nothing and still counts as delivered.
+ */
+async function storeRecord(db, record) {
+  const day = new Date().toISOString().slice(0, 10)
+  await db
+    .prepare('INSERT INTO collected_games (game_key, received_day, release, commit_id, payload) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (game_key) DO NOTHING')
+    .bind(await gameKey(record), day, record.build?.release ?? null, record.build?.commitId ?? null, await gzip(JSON.stringify(record)))
+    .run()
 }

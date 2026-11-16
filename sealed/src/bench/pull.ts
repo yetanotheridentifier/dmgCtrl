@@ -39,6 +39,17 @@ const GAME_KEY = /^[0-9a-f]{16}$/
  * for a value that is not the game its key names, or does not replay to its own result.
  */
 export function verifyStaged(key: string, text: string, cards: CardDb): { gameKey: string; payload: string } {
+  const checked = checkStaged(key, text)
+  replayedStates(JSON.parse(checked.payload) as CollectedRecord, cards)
+  return checked
+}
+
+/**
+ * The first half of `verifyStaged`: the value is a game record and the game its key names. No
+ * replay, which is what moving games into the D1 store wants (`collectedStore.ts`): there the replay
+ * check is made when rows are read.
+ */
+export function checkStaged(key: string, text: string): { gameKey: string; payload: string } {
   const named = key.startsWith(STAGING_PREFIX) ? key.slice(STAGING_PREFIX.length) : key
   if (!GAME_KEY.test(named)) throw new Error('not a game key: a staged game is named by 16 hex digits')
   let record: Partial<CollectedRecord> | null
@@ -53,7 +64,6 @@ export function verifyStaged(key: string, text: string, cards: CardDb): { gameKe
   const game = record as CollectedRecord
   const actual = gameKey(game)
   if (actual !== named) throw new Error(`the key does not match the game: the value is game ${actual}`)
-  replayedStates(game, cards)
   return { gameKey: named, payload: JSON.stringify(game) }
 }
 

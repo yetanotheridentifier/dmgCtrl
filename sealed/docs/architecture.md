@@ -831,26 +831,32 @@ The **benchmark harness** does keep a SQLite database, at `bench-results/bench.d
 That is a developer tool on the dev machine, not app storage: nothing the app runs reads or writes it,
 and it ships with nothing. See [ai-benchmark.md](ai-benchmark.md).
 
-**Collected games end in a second SQLite file on the dev machine**, the archive
-(`bench-results/collected-games.db`, `bench/recordArchive.ts`), which is the long-term home of games
+**Collected games are kept in a Cloudflare D1 table**, `collected_games` (`proxy/migrations/`),
+which the collection Worker writes as each game arrives and which is the long-term home of games
 sent by players who opted in. A game travels one way:
 
 | Stage | Where | Holds |
 |---|---|---|
 | the device | IndexedDB `games` | the full record, with deck names, timestamps and its id |
 | the request | `POST /records` | the named fields of `CollectedRecord` only: no deck names, no id, a duration and no times |
-| staging | Workers KV, `records/<gameKey>` | that payload and nothing else, until it is pulled and deleted |
-| the archive | SQLite, one row per `gameKey` | that payload whole, the build copied out of it, and the UTC day it was pulled |
-| training rows | a JSON Lines file | one row a move, made by replaying the payload (`--rows --collected`) |
+| the store | D1, one row per `gameKey` | that payload gzipped, the build copied out of it, and the UTC day it arrived |
+| snapshots | `collected-games-<day>.jsonl.gz` | the whole store as one compressed file of JSON Lines (`--backup`) |
+| training rows | a JSON Lines file | one row a move, made by replaying the payload (`--rows`) |
 
-Nothing is added on the way that the players' notice does not allow: staging has no arrival time to
-read, the pull takes key names and values only, and the archive's one fact about time is the date of
-the pull. The archive is keyed by the game, so a game pulled twice is held once. A pull verifies each
-game before archiving it (its key is the hash of its own position and moves, and it replays to the
-winner it names) and removes a game from staging only when asked, only once the archive holds it and
-only after a snapshot of the archive has been written. The snapshot is the archive as one compressed
-file of JSON Lines, which restores into an empty archive and which the row tool reads directly. See
-"Collected games" in [operations.md](operations.md).
+Nothing is added on the way that the players' notice does not allow: the store's one fact about time
+is the day, and the table has no rowid, so not even the order games arrived in is kept. One caveat
+is Cloudflare's: D1's Time Travel keeps the database's history for its retention window (7 days on
+the free plan), so for that window the minute a row was written could be recovered by restoring the
+database to a point in time. It holds no address, and after the window only the day remains. The
+store is keyed by the game, so a game sent twice is held once. No game is replayed on its way in:
+`--rows` replays each one and refuses a game that diverges, so a game this build cannot replay is
+kept for one that can. The commands on the dev machine (`bench/collectedStore.ts`) read the store
+through `wrangler`, back it up as a snapshot, which restores into an empty store and which the row
+tool reads directly, and restore one. See "Collected games" in [operations.md](operations.md).
+
+Before the D1 store, games were staged in Workers KV and pulled from there into a SQLite file on the
+dev machine (`bench-results/collected-games.db`, `bench/recordArchive.ts`). Both are still in
+place: `--migrate` moves what they hold into D1, and they are removed by hand once that is checked.
 
 ## Network
 
@@ -884,10 +890,11 @@ be found and deleted later. The endpoint is built to make each of those true:
 
 | The Worker | So that |
 |---|---|
-| writes the validated payload and nothing else: no address, header, `cf` field or arrival time, no metadata and no expiry on the write | a staged game holds only what the notice lists |
+| writes the validated payload, the build copied out of it and the UTC day, and nothing else: no address, header, `cf` field or time of day | a stored game holds only what the notice lists |
 | never calls `console` in this route, on success or on any failure | there is no second copy with a timestamp and an address beside it |
-| keys a game by a hash of its starting position and moves, the same definition as `gameKey` in `bench/trainingRows.ts` | the same game sent twice is staged once, a staged game and its training rows share a key, and no id is minted that a sender could be told |
-| serves POST and its preflight only | a staged game cannot be read back or removed through the Worker |
+| keys a game by a hash of its starting position and moves, the same definition as `gameKey` in `bench/trainingRows.ts` | the same game sent twice is stored once, a stored game and its training rows share a key, and no id is minted that a sender could be told |
+| answers 204 only once the row is written, or was already there | the device can take the answer as confirmation of delivery |
+| serves POST and its preflight only | a stored game cannot be read back or removed through the Worker |
 | uses the sender's address once, as the key of a rate limiter counter (30 a minute) that Cloudflare holds for the minute at the location that served the request and that cannot be read back | the limit exists without a stored link between an address and a game |
 
 It refuses anything else: another origin than `dmgctrl.app` or `dev.dmgctrl.app`, a body that is not
@@ -895,14 +902,15 @@ JSON, one over the size cap (declared or actual), a field not on the list, a mis
 string that is not id-like. Refusals say what went wrong in a fixed word and repeat nothing they
 were sent.
 
-Records are staged in a Workers KV namespace (binding `GAME_RECORDS`), as `records/<gameKey>` with
-the payload as JSON. KV keeps no write time that its API returns, which is why it holds the staging
-copy: an object store stamps each object with the second it arrived, and a game's arrival time is
-when it finished, which the payload leaves out on purpose. The staging copy is short-term: games are
-pulled from it into a local archive and then deleted from it (see "Storage tiers" above). The Worker
-has no part in that, which is done from the dev machine with the account's own credentials.
+Records are stored in a D1 database (binding `GAME_DB`), one row of `collected_games` per game:
+its key, the UTC day it arrived, the build, and the payload as JSON text, gzipped. The day is the
+only "when" the Worker writes, since a game's arrival time is when it finished, which the payload
+leaves out on purpose. Compressed, a game is roughly 1 KB, so a free 500 MB database holds several
+hundred thousand. Reading and backing up the store is done from the dev machine with the account's
+own credentials; the Worker has no part in it. The KV namespace games were staged in before
+(binding `GAME_RECORDS`) is still bound and no longer written.
 
-The endpoint answers 503 and stages nothing when its switch (`RECORD_COLLECTION` in
+The endpoint answers 503 and stores nothing when its switch (`RECORD_COLLECTION` in
 `proxy/wrangler.toml`) is anything but `on`, or when the store is not bound. The card routes do not
 depend on either. Workers Logs are off for this Worker (`proxy/wrangler.toml` has no
 `[observability]` block), and must stay off: with them on, Cloudflare would record each request with

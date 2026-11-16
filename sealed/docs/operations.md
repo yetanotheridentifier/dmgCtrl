@@ -337,29 +337,37 @@ curl -sI "https://worker.dmgctrl.app/art/images/cards/SOR/086.png" | grep -i con
 
 ### Game collection (`POST /records`)
 
-The proxy stages finished games from players who opted in (`proxy/records.js`; what it keeps and
-what it refuses to keep is in [architecture.md](architecture.md#network)). Three bindings in
+The proxy stores finished games from players who opted in (`proxy/records.js`; what it keeps and
+what it refuses to keep is in [architecture.md](architecture.md#network)). Four bindings in
 `proxy/wrangler.toml` belong to it:
 
 | Binding | What it is | Needs creating |
 |---|---|---|
-| `GAME_RECORDS` | the Workers KV namespace games are staged in | by hand, once: it exists |
+| `GAME_DB` | the D1 database `collected-games`, whose table `collected_games` games are written to | by hand, once: it exists |
+| `GAME_RECORDS` | the Workers KV namespace games were staged in before D1. No longer written; kept until its games are moved (`--migrate`) and it is removed by hand | it exists |
 | `RECORDS_RATE_LIMITER` | a Workers rate limiter, 30 requests a minute per sender | no: it exists once deployed |
 | `RECORD_COLLECTION` | the switch, a plain variable: `on`, or anything else for off | no |
 
-The namespace exists and its id is in `proxy/wrangler.toml`, so a normal `npm run deploy:proxy`
-needs none of the steps below.
+The database exists, its table is made, and its id is in `proxy/wrangler.toml`, so a normal
+`npm run deploy:proxy` needs none of the steps below.
 
-**Rebuilding it from scratch, in this order** (a new account, or a namespace that was deleted). The
+**Changing the table** is a new file in `proxy/migrations/`, applied before the Worker that needs it
+is deployed:
+
+```bash
+npx wrangler d1 migrations apply GAME_DB --remote --config proxy/wrangler.toml
+```
+
+**Rebuilding it from scratch, in this order** (a new account, or a database that was deleted). The
 store comes first because the config names it by id, and a deploy is refused while that id names
-no namespace.
+no database.
 
-1. Create the namespace: `npx wrangler kv namespace create GAME_RECORDS --config proxy/wrangler.toml`.
-   It prints an id.
-2. Put that id in `proxy/wrangler.toml`, as the `id` of the `GAME_RECORDS` entry under
-   `[[kv_namespaces]]`.
-3. Deploy the proxy: `npm run deploy:proxy`.
-4. Check it answers. A preflight from the app's origin should come back 204 naming that origin:
+1. Create the database: `npx wrangler d1 create collected-games`. It prints an id.
+2. Put that id in `proxy/wrangler.toml`, as the `database_id` of the `GAME_DB` entry under
+   `[[d1_databases]]`.
+3. Make the table: the `migrations apply` command above.
+4. Deploy the proxy: `npm run deploy:proxy`.
+5. Check it answers. A preflight from the app's origin should come back 204 naming that origin:
 
 ```bash
 curl -si -X OPTIONS https://worker.dmgctrl.app/records -H "Origin: https://dmgctrl.app" | head -n 12
@@ -369,17 +377,17 @@ curl -si -X OPTIONS https://worker.dmgctrl.app/records -H "Origin: https://dmgct
 While the endpoint is unreachable or off, no game is lost outright: each undelivered game waits on
 its device (up to 50) and is offered again on a later start.
 
-**Reading what is staged.** Each game is one key, `records/<gameKey>`, whose value is the payload as
-JSON. `<gameKey>` is the key the training rows give the same game.
+**Reading what is stored.** Each game is one row, keyed by `<gameKey>`, the key the training rows
+give the same game. The payload is gzipped, so read games through the bench commands ("Collected
+games" below); by hand, the counts are:
 
 ```bash
-npx wrangler kv key list --binding GAME_RECORDS --prefix records/ --remote --config proxy/wrangler.toml
-npx wrangler kv key get "records/<gameKey>" --binding GAME_RECORDS --remote --config proxy/wrangler.toml
+npx wrangler d1 execute GAME_DB --remote --config proxy/wrangler.toml --command "SELECT received_day, release, COUNT(*) FROM collected_games GROUP BY 1, 2"
 ```
 
-A staged payload is replay data in the exported shape less its deck names and timestamps. Staging is
-a waiting room: a staged game has no expiry and stays until it is pulled and deleted (see "Collected
-games" below).
+A stored payload is replay data in the exported shape less its deck names and timestamps. The
+Worker answers 204 only once the row is written (or the game was already held), so a device can
+take that answer as delivered.
 
 **Switching collection off.** Fastest first:
 
@@ -389,7 +397,7 @@ games" below).
 - **From the repo**, set `RECORD_COLLECTION = "off"` in `proxy/wrangler.toml` and run
   `npm run deploy:proxy`.
 
-Off, the endpoint answers 503 and stages nothing, and the card routes carry on. Each app keeps its
+Off, the endpoint answers 503 and stores nothing, and the card routes carry on. Each app keeps its
 undelivered games on the device and offers them again later, so switching back on loses nothing
 that is still within a device's list of 50. Players are not told: nothing in the app changes.
 
@@ -400,24 +408,98 @@ which is exactly the link between a person and a game that the players' notice s
 Cloudflare's aggregate analytics for the zone (request counts, countries) are outside the Worker's
 control and are not tied to a stored game.
 
-**What KV limits mean here.** On the free plan KV takes 1,000 writes a day, so that is the most
-games a day that can be staged: past it writes fail, the endpoint answers 503, and the games wait
-on their devices. A value can be 25 MiB; the endpoint's own cap is 512 KiB.
+**What D1 limits mean here.** On the free plan D1 takes 100,000 rows written a day, far past any
+expected rate of games, and a database holds 500 MB. A game is roughly 1 KB compressed, so that is
+several hundred thousand games. Past either limit writes fail, the endpoint answers 503, and the
+games wait on their devices. When the database nears full, the options in order are: older games
+rolled out to dated snapshots (in R2, free to 10 GB) and deleted from D1, or Workers Paid (10 GB a
+database). Training never reads D1 directly: it reads snapshots, which `--rows` takes as they are.
 
-### Collected games: pulling, deleting, backing up
+**D1 Time Travel** keeps the database's history for 7 days on the free plan, so for that window the
+time a row was written could be recovered by restoring to a point in time. It holds no address,
+and after the window only the day remains. Do not restore the production database to a point in
+time except to recover lost games.
 
-Staged games are pulled into **the archive**, a SQLite file on this machine
-(`sealed/bench-results/collected-games.db`, gitignored; `--archive FILE` on any command below keeps
-it somewhere else). One row a game: its key, the payload as it was staged, the build that played it
-and **the day it was pulled, in UTC, and nothing finer**. No time of day is recorded anywhere, since
-none exists upstream. Every command ends by saying what the archive holds, by build. Use absolute
-paths: the commands run with `sealed/` as the working directory.
+### Collected games: reading, backing up, restoring
 
-**The archive is not like the rest of `bench-results/`.** Everything else in that folder can be
-measured again. Once staging has been emptied, the archive is the only copy of the games in it, so
-do not clear the folder wholesale, and keep a backup.
+Each game a player sends is written by the Worker straight into **the store**, the D1 table above.
+Nothing has to be run for a game to reach it. One row a game: its key, the payload gzipped, the
+build that played it and **the day it arrived, in UTC, and nothing finer**. The commands below read
+it through `wrangler`, so they need `npx wrangler whoami` to show a signed-in account and nothing
+else; `--archive FILE` on any of them uses a local SQLite archive instead. Every command ends by
+saying what the store holds, by build. Use absolute paths: the commands run with `sealed/` as the
+working directory.
 
-**Pull.** Read-only: nothing in staging changes.
+**What the store holds**, by build:
+
+```bash
+npm run bench --prefix sealed -- --collected
+```
+
+**Training rows from it** (`--rows` replays every game and refuses, by name, one this build cannot
+replay to its stored result; the rest are written):
+
+```bash
+npm run bench --prefix sealed -- --rows --collected --out /path/to/rows.jsonl
+```
+
+Each of these loads the whole store over the network first: one wrangler process (a second or two)
+for every 500 games.
+
+**Back up.** Writes the whole store as one dated, compressed file in a folder you name:
+
+```bash
+npm run bench --prefix sealed -- --backup /path/to/a/folder
+```
+
+The file is `collected-games-<YYYY-MM-DD>.jsonl.gz`: gzipped JSON Lines, a header line and then a
+game to a line with its key, its day and its payload. A later backup the same day replaces it;
+another day's sits beside it, and each is the whole store, so older ones can be deleted. It needs
+nothing but `gunzip` to read, and `--rows` reads it as it stands, so a snapshot is usable without
+the database. Training reads snapshots rather than D1.
+
+**Restore.** Into an empty store, or into one that holds some of the games already (it adds the
+missing ones and keeps the day each first arrived):
+
+```bash
+npm run bench --prefix sealed -- --restore /path/to/a/folder/collected-games-<YYYY-MM-DD>.jsonl.gz
+```
+
+Each game's key is worked out again from its payload, so a damaged line is refused and named, the
+rest are restored, and the command exits 1. It then reads the store's keys back and stops (exit 2)
+if any game it added is not there. With `--archive FILE` it restores into that local file instead.
+
+**Where to keep the backups, for free.** Any of these, none of which the commands know about:
+
+- **A folder a cloud drive already syncs.** Point `--backup` at it and the drive's client uploads
+  the file. Nothing to set up, and each snapshot is one small file (about 0.6 to 1.4 KB a game).
+- **A private git repository of the snapshot files.** Commit each dated snapshot as it is written.
+  It gives history and an off-machine copy, and the files are already compressed. Keep the
+  repository private, and never put a snapshot in this repository, its Actions artifacts or its
+  logs: this repository is public, and the snapshots are players' games.
+
+**Moving KV staging and the local archive into D1.** Before the D1 store, games were staged in KV
+and pulled into a local archive (`sealed/bench-results/collected-games.db`). One command moves both:
+
+```bash
+npm run bench --prefix sealed -- --migrate
+```
+
+It reads every game in the local archive and every staged game, writes the ones D1 does not hold,
+then reads D1's keys back. It prints `archived / staged`, `games` (distinct, from both),
+`added / already held`, `refused` and `missing from D1`, and exits 1 unless the last two are 0. A
+staged value that is not the game its key names is refused and left; a game is not replayed. It
+**deletes nothing**: running it again adds nothing. Once its numbers have been checked, the old
+copies are removed by hand: the KV namespace and `collected-games.db`. Keep a `--backup` of D1
+first.
+
+### The local archive and KV staging
+
+Until they are removed, these commands still work on the old stores. **The archive is not like the
+rest of `bench-results/`.** Everything else in that folder can be measured again; the archive and
+staging hold games, so do not clear the folder wholesale.
+
+**Pull.** From KV staging into the local archive. Read-only: nothing in staging changes.
 
 ```bash
 npm run bench --prefix sealed -- --pull
@@ -439,7 +521,7 @@ command exit 1. What to do depends on the reason:
 
 - *the game replays to ..., but the record says ...* or *the replay threw*: this build's rules differ
   from those of the build that played the game (the payload's `build`, read with
-  `wrangler kv key get` as above). It is a real game that this build cannot turn into rows either.
+  `npx wrangler kv key get "records/<gameKey>" --binding GAME_RECORDS --remote --config proxy/wrangler.toml`). It is a real game that this build cannot turn into rows either.
   It stays staged, and is refused again on each pull, until the rules agree again or it is removed
   by hand.
 - *no card data for ...*: the game holds a card from a set this checkout does not bundle. Pull again
@@ -448,28 +530,7 @@ command exit 1. What to do depends on the reason:
   not something the Worker wrote. Read it by hand before deciding; nothing removes it but a
   `wrangler kv key delete` you run yourself.
 
-**Back up.** Writes the whole archive as one dated, compressed file in a folder you name:
-
-```bash
-npm run bench --prefix sealed -- --backup /path/to/a/folder
-```
-
-The file is `collected-games-<YYYY-MM-DD>.jsonl.gz`: gzipped JSON Lines, a header line and then a
-game to a line with its key, its pulled day and its payload. A later backup the same day replaces
-it; another day's sits beside it, and each is the whole archive, so older ones can be deleted. It
-needs nothing but `gunzip` to read, and `--rows` reads it as it stands, so a snapshot is usable
-without the database. `--pull --backup DIR` does both in one run.
-
-**Restore.** Into a new archive, or into one that holds some of the games already (it adds the
-missing ones and keeps the day each was first pulled):
-
-```bash
-npm run bench --prefix sealed -- --restore /path/to/a/folder/collected-games-<YYYY-MM-DD>.jsonl.gz
-```
-
-Each game's key is worked out again from its payload, so a damaged line is refused and named, the
-rest are restored, and the command exits 1. Restoring a snapshot into an empty archive gives back
-the same rows it was made from.
+`--pull --backup DIR` also writes a snapshot of the local archive.
 
 **Delete from staging.** Only as part of a pull, only with a backup folder, and only the staged
 games the archive holds:
@@ -486,23 +547,6 @@ and read back to confirm it holds every game about to go, and only then is the d
 cut off before that, or a delete that fails (`NOT DELETED`, exit 1), leaves the games both staged
 and archived; the next `--pull --delete` sees them as already archived and removes them then. A
 refused game is never deleted.
-
-**Where to keep the backups, for free.** Any of these, none of which the commands know about:
-
-- **A folder a cloud drive already syncs.** Point `--backup` at it and the drive's client uploads
-  the file. Nothing to set up, and each snapshot is one small file (about 0.6 to 1.4 KB a game).
-- **A private git repository of the snapshot files.** Commit each dated snapshot as it is written.
-  It gives history and an off-machine copy, and the files are already compressed. Keep the
-  repository private: the snapshots are players' games.
-- **Cloudflare D1's free tier, later.** The archive is one SQLite table, which D1 takes almost
-  unchanged, and one free database holds roughly 50,000 games. That moves the archive itself off
-  this machine, which a backup does not, and is a change to where the pull writes.
-
-**What the archive holds** at any time, without touching the network:
-
-```bash
-npm run bench --prefix sealed -- --collected
-```
 
 ## Client-side state (support playbook)
 
