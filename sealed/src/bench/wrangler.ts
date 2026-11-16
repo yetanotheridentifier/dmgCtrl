@@ -3,9 +3,8 @@ import { resolve } from 'node:path'
 
 /**
  * Running `wrangler` against the proxy Worker's bindings, which is how the collected-game commands
- * reach the account (`collectedStore.ts`, `staging.ts`): wrangler is already signed in and is how
- * the stores are read by hand (operations.md), so the bench needs no token of its own and no
- * dependency.
+ * reach the account (`collectedStore.ts`): wrangler is already signed in and is how the store is
+ * read by hand (operations.md), so the bench needs no token of its own and no dependency.
  */
 
 /** Runs one command, given as its arguments from `wrangler` on, and returns what it printed. */

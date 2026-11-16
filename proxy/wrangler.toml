@@ -10,7 +10,7 @@ routes = [
 
 # Game record collection (POST /records, records.js). See sealed/docs/operations.md.
 #
-# The switch: anything but "on" and the endpoint answers 503 and stages nothing. The card routes
+# The switch: anything but "on" and the endpoint answers 503 and stores nothing. The card routes
 # are unaffected either way.
 [vars]
 RECORD_COLLECTION = "on"
@@ -23,12 +23,6 @@ binding = "GAME_DB"
 database_name = "collected-games"
 database_id = "f76f66d4-0ac1-4d82-8cac-c25f3fa1ca01"
 migrations_dir = "migrations"
-
-# Where records were staged before the D1 store. The Worker no longer writes it; the binding stays so
-# the games already staged can be read and moved into D1 (`--migrate`, operations.md).
-[[kv_namespaces]]
-binding = "GAME_RECORDS"
-id = "b6f958778bec4a1790f705611db114e8"
 
 # Per-sender limit on POST /records. Nothing to create: `namespace_id` is any number unique to this
 # account's limiters. The counter is keyed on the sender's address, lives at the Cloudflare

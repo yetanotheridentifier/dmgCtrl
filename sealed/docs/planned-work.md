@@ -119,10 +119,7 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
   the same game, and read from there (or from a snapshot of it) as rows.
   Rows come in the whole state or the mover's view of it (`--view mover`), which is the one to
   imitate from.
-  **Next: retire KV staging and the local archive** (#1113), once `--migrate` has moved both into D1
-  and the user has checked it: remove `--pull` with its `--delete` (`--refused --delete` stays),
-  `bench/staging.ts`, `bench/pull.ts` and the `GAME_RECORDS` binding. Deleting the KV namespace and
-  `collected-games.db` is the user's step. Each stored game keeps its latest replay check, and
+  The D1 store is the only store. Each stored game keeps its latest replay check, and
   `--refused --delete` removes the refused ones after a backup.
   The device keeps a summary of every game and its replay data only until delivered (the two newest
   delivered stay whole), none for a player who does not share.

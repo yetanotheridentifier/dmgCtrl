@@ -26,7 +26,7 @@ const GAMES = SEEDS.map(stagedGame)
 const DAY = '2026-10-13'
 
 const dir = mkdtempSync(join(tmpdir(), 'rows-'))
-const archive = openArchive(join(dir, 'collected-games.db'))
+const archive = openArchive()
 for (const game of GAMES) archiveGame(archive, { gameKey: game.gameKey, pulledDay: DAY, payload: game.text })
 const snapshot = writeSnapshot(archive, dir, DAY).path
 
@@ -98,7 +98,7 @@ describe('rows from the archive of collected games', () => {
   })
 
   it('name a game that no longer replays by its key, and write the rest', () => {
-    const db = openArchive(':memory:')
+    const db = openArchive()
     const [good, bad] = GAMES
     archiveGame(db, { gameKey: good.gameKey, pulledDay: DAY, payload: good.text })
     const flipped = JSON.parse(bad.text) as { winner: string }

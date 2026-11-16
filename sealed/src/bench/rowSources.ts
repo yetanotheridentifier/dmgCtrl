@@ -11,12 +11,12 @@ import { recordsOfExport, rowsForRecord, type RowOptions, type RowSource } from 
  * Three sources, one transformation (`trainingRows.ts`):
  *
  * - **an export file**: what the app downloads, or what a `--record` run writes;
- * - **the archive of collected games** (`recordArchive.ts`);
- * - **a snapshot of that archive**, which is why a backup is usable without the database.
+ * - **the collected games**: the D1 store, loaded into an archive in memory (`collectedStore.ts`);
+ * - **a snapshot of the store**, which is why a backup is usable without the database.
  *
- * A collected game is its payload as it was staged, which is replay data with its provenance beside
- * it, so it is handed over as it stands. The same game gives the same rows from the archive and
- * from a snapshot, byte for byte.
+ * A collected game is its payload as it was sent, which is replay data with its provenance beside
+ * it, so it is handed over as it stands. The same game gives the same rows from the store and from
+ * a snapshot, byte for byte.
  */
 
 /** One game to turn into rows, with what to call it if it is refused. */

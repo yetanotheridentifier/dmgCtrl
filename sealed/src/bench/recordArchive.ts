@@ -1,31 +1,27 @@
 import { DatabaseSync } from 'node:sqlite'
 import { appendFileSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import type { CollectedRecord } from '../data/collection'
 import { gameKey } from './trainingRows'
 
 /**
- * The archive of collected games: a local SQLite database, via Node's built-in `node:sqlite` as the
- * bench results are (`store.ts`), holding one row for each game pulled out of staging (`pull.ts`).
+ * The collected games as the bench reads them: the D1 store loaded into an in-memory SQLite
+ * database (`loadStore` in `collectedStore.ts`, via Node's built-in `node:sqlite`), and the
+ * snapshot files that back the store up.
  *
- * **A row is the game's key, the payload, and the day it was pulled.** The payload is what the
- * player's app sent and the Worker staged, kept whole as JSON, so the archive holds exactly what
- * was collected and anything derived from a game (its training rows) is derived again from here.
- * The build beside it is copied out of the payload so the archive can be counted by build without
- * parsing every game.
+ * **A row is the game's key, the payload, and the day it reached the store.** The payload is what
+ * the player's app sent, kept whole as JSON, so anything derived from a game (its training rows) is
+ * derived again from it. The build beside it is copied out of the payload so the games can be
+ * counted by build without parsing every one.
  *
- * **The day is all the archive knows about when.** The payload says how long a game took and not
- * when it was played, the Worker records no arrival time, and a pull adds only its own date. The
- * table refuses a `pulled_day` that is anything but a date.
+ * **The day is all anyone knows about when.** The payload says how long a game took and not when it
+ * was played, and the store keeps the day of arrival and nothing finer. The table refuses a
+ * `pulled_day` that is anything but a date.
  *
- * It is a file of its own, apart from the bench results, because those can be measured again and
- * this cannot: once staging has been emptied the archive is the only copy. Hence the snapshot
- * (`writeSnapshot`), which is the archive as one compressed file of plain JSON Lines that restores
- * into an empty archive and that the row tool reads as it stands.
+ * The snapshot (`writeSnapshot`) is the store as one compressed file of plain JSON Lines, which
+ * restores into the store (`restoreToStore`) and which the row tool reads as it stands.
  */
-
-export const DEFAULT_ARCHIVE_PATH = 'bench-results/collected-games.db'
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS collected_games (
@@ -37,16 +33,9 @@ const SCHEMA = `
   );
 `
 
-/** As `store.ts`: a write takes milliseconds, so waiting out another writer is always right. */
-const BUSY_TIMEOUT_MS = 30_000
-
-/** Open (creating if absent) the archive at `path`. */
-export function openArchive(path: string): DatabaseSync {
-  const inMemory = path === ':memory:'
-  if (!inMemory) mkdirSync(dirname(path), { recursive: true })
-  const db = new DatabaseSync(path)
-  db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`)
-  if (!inMemory) db.exec('PRAGMA journal_mode = WAL')
+/** A new, empty archive in memory. */
+export function openArchive(): DatabaseSync {
+  const db = new DatabaseSync(':memory:')
   db.exec(SCHEMA)
   return db
 }
@@ -66,8 +55,7 @@ export function today(now: Date = new Date()): string {
 
 /**
  * Add one game. `false` when the archive already holds that key, in which case nothing changes:
- * the game keeps the day it was first pulled. Each call is its own committed write, so a game this
- * has returned for is on disk before the caller does anything else with it.
+ * the game keeps the day it was first written.
  */
 export function archiveGame(db: DatabaseSync, game: ArchivedGame): boolean {
   const build = (JSON.parse(game.payload) as Pick<CollectedRecord, 'build'>).build
@@ -76,10 +64,6 @@ export function archiveGame(db: DatabaseSync, game: ArchivedGame): boolean {
     .prepare('INSERT INTO collected_games (game_key, pulled_day, release, commit_id, payload) VALUES (?, ?, ?, ?, ?) ON CONFLICT (game_key) DO NOTHING')
     .run(game.gameKey, game.pulledDay, build?.release ?? null, build?.commitId ?? null, game.payload)
   return Number(done.changes) === 1
-}
-
-export function hasGame(db: DatabaseSync, key: string): boolean {
-  return db.prepare('SELECT 1 FROM collected_games WHERE game_key = ?').get(key) !== undefined
 }
 
 /**
@@ -142,9 +126,8 @@ export function snapshotPath(dir: string, day: string): string {
  * Write the whole archive to `dir` as one dated file: gzipped JSON Lines, a header and then a game
  * to a line with its payload as plain JSON. Nothing but `gunzip` is needed to read it.
  *
- * The games are read through the database, in one read transaction, and not by copying its file,
- * which could be part way through a write. They are compressed `batch` at a time into one file (a
- * gzip file may be several compressed pieces end to end), so writing holds no more than a batch.
+ * The games are compressed `batch` at a time into one file (a gzip file may be several compressed
+ * pieces end to end), so writing holds no more than a batch.
  *
  * As `records.ts` writes its files: the snapshot appears under its name only when it is whole.
  */
@@ -225,26 +208,4 @@ export function checkedSnapshot(path: string): { games: ArchivedGame[]; refused:
     else games.push(game)
   }
   return { games, refused }
-}
-
-/**
- * Put a snapshot's games into an archive, in one transaction. Into an empty archive that is a
- * restore; into one that holds games it adds the ones missing. A damaged line is refused
- * (`checkedSnapshot`).
- */
-export function restoreSnapshot(db: DatabaseSync, path: string): RestoreResult {
-  const { games, refused } = checkedSnapshot(path)
-  const result: RestoreResult = { added: 0, duplicates: 0, refused }
-  db.exec('BEGIN IMMEDIATE')
-  try {
-    for (const game of games) {
-      if (archiveGame(db, game)) result.added++
-      else result.duplicates++
-    }
-    db.exec('COMMIT')
-  } catch (err) {
-    db.exec('ROLLBACK')
-    throw err
-  }
-  return result
 }
