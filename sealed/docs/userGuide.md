@@ -158,6 +158,8 @@ A **Credit token** (**CRED n**, with how many are held) is spare money: while yo
 
 **What is not sent:** your name, your deck names, or anything else that identifies you. There is no account, and your IP address is not linked to games. Because of that, a game cannot be traced back to you, and it also cannot be found and deleted later.
 
+**How sent games are kept:** each game is stored with the day it arrived and nothing more precise. The store keeps a rolling backup of the last 7 days, so for that week a game's arrival time could be narrowed down. After that, only the day remains.
+
 This data export is disabled unless you turn it on, and you can change it at any time in Settings. On your first visit the setup screen asks, with **Share my games** or **Not now**, in place of **Go to game** (and, held upright on a phone, of the Opponent card) until you answer, either way.
 
 Turning it off stops future games being sent, and deletes from your device the moves of every game on it, including any not yet sent. Their summaries stay, so your record by matchup is unchanged. It does not recall games already sent.
