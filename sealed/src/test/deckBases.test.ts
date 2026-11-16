@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { SwuCard } from '../data/cards'
-import { buildDeckForLeader, generateDeck } from '../deckgen/generateDeck'
+import { generateDeck } from '../deckgen/generateDeck'
 import { generateRandomDeck } from '../deckgen/randomDeck'
 import { deckReport } from '../deckgen/rules'
 import { minimumDeckSize } from '../utils/parseProtectThePod'
@@ -52,12 +52,20 @@ function payable(card: SwuCard, leader: SwuCard, base: SwuCard): boolean {
     [...tally(aspects)].every(([a, n]) => (supply.get(a) ?? 0) >= n))
 }
 
+/** A whole-set deck (the coverage sweep's), on a Common base of the given colour or one the leader lacks. */
+function wholeSet(pool: SwuCard[], leader: SwuCard, colour?: string) {
+  const base = basesOf(pool).find(b => b.Rarity === 'Common' && (colour
+    ? (b.Aspects ?? []).includes(colour)
+    : !(b.Aspects ?? []).some(a => (leader.Aspects ?? []).includes(a))))!
+  return generateDeck({ leader, base, pool, seed: 1 })
+}
+
 describe('aspect icons', () => {
   for (const [code, pool] of Object.entries(SETS)) {
-    it(`never puts a card in a ${code} deck that its leader and base cannot pay for`, () => {
+    it(`never puts a card in a whole-set ${code} deck that its leader and base cannot pay for`, () => {
       const cards = byId(pool)
       for (const leader of leadersOf(pool)) {
-        const { deck } = buildDeckForLeader(leader, pool, 1)
+        const { deck } = wholeSet(pool, leader)
         const base = cards.get(deck.base)!
         const unpaid = deck.cards.map(e => cards.get(e.id)!).filter(c => !payable(c, leader, base)).map(c => c.Name)
         expect(unpaid, `${leader.Name} on ${base.Name}`).toEqual([])
@@ -82,7 +90,7 @@ describe('aspect icons', () => {
     for (const leader of leadersOf(JTL)) {
       const colour = (leader.Aspects ?? []).find(a => !['Heroism', 'Villainy'].includes(a))
       if (!colour) continue
-      const { deck } = buildDeckForLeader(leader, JTL, 1, undefined, colour)
+      const { deck } = wholeSet(JTL, leader, colour)
       found += deck.cards.filter(e => doubled(cards.get(e.id)!)).length
     }
     expect(found).toBeGreaterThan(0)
@@ -123,18 +131,21 @@ describe('which base a deck is built on', () => {
     expect(commons.filter(b => !used.has(b))).toEqual([])
   })
 
-  /** A rare base turns up about once in 25 decks: it is a rare a pool has to open. */
-  it('builds on a rare base about once in 25 decks', () => {
+  /**
+   * A rare base is a rare the pool has to open, and then one candidate among the colours: about one
+   * deck in 15 to 20 for a set printing them.
+   */
+  it('builds on a rare base only now and then', () => {
     const rare = jtlDecks.filter(g => jtlBases.get(g.deck.base)?.Rarity !== 'Common').length / jtlDecks.length
     expect(rare).toBeGreaterThan(0.01)
     expect(rare).toBeLessThan(0.08)
   })
 
   /**
-   * A pool offering only rare bases still builds, on the bases it has. No sealed-sized set prints only
-   * rare bases (TS26 and IBH do, and are too small to fill a deck), so JTL stands in with its commons removed.
+   * A set printing only rare bases still builds, on the bases it has, opened or not. No sealed-sized
+   * set does (TS26 and IBH do, and are too small to fill a deck), so JTL stands in with its commons removed.
    */
-  it('builds on rare bases when the pool has no common one', () => {
+  it('builds on rare bases when the set prints no common one', () => {
     const rareOnly = JTL.filter(c => c.Type !== 'Base' || c.Rarity !== 'Common')
     for (const seed of SEEDS.slice(0, 10)) {
       const built = generateRandomDeck(rareOnly, seed)

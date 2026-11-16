@@ -12,7 +12,7 @@ The chosen deck is summed up on its card: its name, its aspects, its leader and 
 
 **Viewing a deck** shows its leader and base, then its cards: units, then upgrades, then events, each by cost, with no heading for a type the deck has none of. Tap any card, the leader and base included, to see it full size, and tap again to put it away. **Use this deck** chooses it, and **Delete** removes it from this device.
 
-**Generate a deck** builds a deck for you from one set and shows it the same way. Choose the set at the top (it starts on the newest), **Generate again** for another, and **Use this deck** to play it. A generated deck is never kept: it lasts until you choose another deck or close the app.
+**Generate a deck** opens a sealed pool of one set, builds a deck from it for you and shows it the same way. Choose the set at the top (it starts on the newest), **Generate again** for another, and **Use this deck** to play it. A generated deck is never kept: it lasts until you choose another deck or close the app.
 
 **Import deck JSON**:
 
@@ -47,8 +47,10 @@ The **Opponent** card says what the AI plays, and **Change opponent** opens the 
 
 How a generated deck is built, for yours and the opponent's alike:
 
-- **No aspect penalties.** Every aspect icon on every card is paid by the leader and base, so a card with two Aggression icons only appears in a deck whose leader and base both bring Aggression. A card with another way to be played counts when that way is paid: The Mandalorian prints two Cunning but pilots for one, and a Smuggle cost can carry aspects of its own.
-- **Any base of the colour.** The deck is built on any of the set's bases of its colour, not the same one each time. A **rare base** turns up in about one deck in 25, as it would from opening packs, and takes the place of one of the deck's rare cards.
+- **From a sealed pool.** Six packs are opened from the set, each with a leader, a base, nine commons, three uncommons, a rare or legendary and a foil, and the deck is built from what came out: only the cards opened, and only as many copies as were opened. A random leader is one the pool opened; a leader you choose is put into the pool if it didn't open one.
+- **Aspect penalties only when the pool is thin.** The deck plays cards whose aspect icons the leader and base pay, so a card with two Aggression icons needs a leader and base that both bring Aggression. A card with another way to be played counts when that way is paid: The Mandalorian prints two Cunning but pilots for one, and a Smuggle cost can carry aspects of its own. When the pool cannot fill the deck that way, it splashes off-aspect cards that pay the penalty, as a player would, and the deck view says how many.
+- **Any common base.** The deck is built on any of the set's common bases, opened or not, as at a sealed event where common bases are on the table. A **rare base** is used only when the pool opened it.
+- **A shape to aim for.** The deck aims for a sensible curve, a few events and upgrades, and its leader's alignment on about half its cards, but a pool doesn't always allow it, and the deck is still built.
 - **Deck size follows the base.** A Thermal Oscillator deck has 25 cards and a Data Vault deck 40; the curve, card-type and rarity limits scale with it.
 - **Homeworlds worlds.** Where a colour has several world bases (Tatooine, Naboo, Endor, Kashyyyk), the deck takes the world its cards name most, and any of them where none does.
 

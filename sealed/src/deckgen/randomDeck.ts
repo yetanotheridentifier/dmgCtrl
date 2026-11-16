@@ -1,8 +1,8 @@
 import type { SwuCard } from '../data/cards'
 import type { SavedDeck } from '../data/deckStore'
 import { seededUnit } from '../engine/rng'
-import { buildDeckForLeader, NO_ASPECT } from './generateDeck'
-import { deckReport } from './rules'
+import { buildDeckFromPool, NO_ASPECT } from './generateDeck'
+import { openPool } from './packs'
 import { minimumDeckSize } from '../utils/parseProtectThePod'
 import type { DeckReport } from './rules'
 
@@ -11,8 +11,8 @@ import type { DeckReport } from './rules'
  *
  * The point is validating the **generator**, not convenience: a deck you can look at card by card,
  * play, and judge against what a real pool would give you. That is why the report travels with it
- * rather than being discarded, since a deck that violates the shape rules is exactly the thing worth
- * seeing.
+ * rather than being discarded: it says what the deck splashed off-aspect, and a deck that breaks a
+ * rule is exactly the thing worth seeing.
  *
  * It is a `SavedDeck` so it can go straight into `onPlay` beside imported decks, but it is **never
  * persisted**: the id is marked so nothing mistakes it for one of the player's own, and regenerating
@@ -72,36 +72,42 @@ export function generationOptions(pool: SwuCard[]): GenerationOptions {
   return { leaders, aspects }
 }
 
-/** Leaders a deck can be built around: every leader in the pool. */
+/** Every leader in a card list. */
 function leadersIn(pool: SwuCard[]): SwuCard[] {
   return pool.filter(c => c.Type === 'Leader')
 }
 
 /**
- * Build one deck around a leader and a base aspect, each either chosen or picked by `seed`.
+ * Open a six-pack sealed pool from a set and build one deck from it, around a leader and a base aspect
+ * each either chosen or picked by `seed`.
  *
  * Seeded rather than `Math.random` so a deck that looks wrong can be reproduced from its seed, which
- * is the difference between a bug report and an anecdote. Returns `null` when the pool holds no
- * leader, or cannot fill a whole deck, which is what an empty or partial cache looks like. Other shape
- * violations still come back in the report, but a short deck is not playable at all: the engine deals
- * a short opening hand from it and the setup AI has nothing to resource.
+ * is the difference between a bug report and an anecdote. Returns `null` when the set holds no
+ * leader, or the deck cannot be filled, which is what an empty or partial cache looks like: a short
+ * deck is not playable at all, since the engine deals a short opening hand from it and the setup AI
+ * has nothing to resource.
+ *
+ * A random leader is one the pool opened. A chosen leader the pool did not open is swapped into it,
+ * as the bench builds around a named leader, so the rest of the pool is the one the seed opens anyway.
  *
  * **Only a deliberate choice pairs a leader with a base sharing its aspect.** A random base already
  * avoids the leader's aspects, and a random leader here avoids a chosen base aspect, so the pairing the
  * generator never builds by accident is still one a player can ask for by choosing both.
  */
-export function generateRandomDeck(pool: SwuCard[], seed: number, choice: GenerationChoice = {}): GeneratedDeck | null {
-  const leaders = leadersIn(pool)
+export function generateRandomDeck(cards: SwuCard[], seed: number, choice: GenerationChoice = {}): GeneratedDeck | null {
+  const named = leadersIn(cards).find(l => cardId(l) === choice.leaderId)
+  const opened = openPool(cards, seed)
+  const pool = named && !opened.includes(named) ? openPool(cards, seed, { leader: named }) : opened
+  const leaders = [...new Set(leadersIn(pool))]
   if (leaders.length === 0) return null
 
   const { baseAspect } = choice
-  const named = leaders.find(l => cardId(l) === choice.leaderId)
   const avoiding = baseAspect === undefined ? leaders : leaders.filter(l => !(l.Aspects ?? []).includes(baseAspect))
   const from = avoiding.length > 0 ? avoiding : leaders
   const leader = named ?? from[Math.floor(seededUnit(seed || 1) * from.length) % from.length]
-  const { deck } = buildDeckForLeader(leader, pool, seed, undefined, baseAspect)
-  if (deck.cards.reduce((n, c) => n + c.count, 0) < minimumDeckSize(deck.base)) return null
-  const byId = new Map(pool.map(c => [`${c.Set}_${c.Number}`, c]))
+  const { deck, report } = buildDeckFromPool(leader, pool, cards, seed, baseAspect)
+  if (report.size < minimumDeckSize(deck.base)) return null
+  const byId = new Map(cards.map(c => [cardId(c), c]))
 
   const entries: GeneratedDeckEntry[] = deck.cards.map(c => {
     const card = byId.get(c.id)
@@ -124,7 +130,7 @@ export function generateRandomDeck(pool: SwuCard[], seed: number, choice: Genera
       id: GENERATED_DECK_ID,
       importedAt: Date.now(),
     },
-    report: deckReport(deck, byId),
+    report,
     leaderName: leader.Name,
     entries,
   }

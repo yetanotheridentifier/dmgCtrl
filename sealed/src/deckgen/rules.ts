@@ -16,28 +16,24 @@ import { alternativeAspects } from '../engine/cardDb'
  *
  * The generator builds decks to satisfy this; the coverage sweep relies on it to explain any deck it
  * could not build cleanly. Thresholds come from the format and the observed pack distribution.
+ *
+ * Both kinds hold for a **whole-set** deck (the coverage sweep's). A deck built from an opened pool is
+ * held to its size alone: the shape is what it aims for, and an off-aspect card is a splash.
  */
 
 export const ALIGNMENTS = ['Heroism', 'Villainy']
 export const DECK_SIZE = 30
 export const MAX_COPIES = 3
 /**
- * Copies of one card a sealed pool realistically yields, by rarity.
+ * Copies of one card a sealed pool realistically yields, by rarity, for a **whole-set** deck (the
+ * coverage sweep's). A deck built from an opened pool plays the copies it opened instead.
  *
  * **Not a rule of the game.** The 3-copy cap is a constructed-format rule and does not apply in
  * sealed: you may play every copy you opened, five included. What limits you is how unlikely a
  * duplicate is, and that is entirely a function of rarity. A six-pack pool yields roughly 0-3
  * Legendaries in total and essentially never two of the same, a duplicate Rare only a few percent of
- * the time, and 2 or at a push 3 of a given Common.
- *
- * This stands in for a pool the generator does not yet model, which is the real fix: it builds from
- * the **whole set** under rarity quotas, so before this a flat cap let it take three copies of a
- * Legendary, and the first matrix duly put three Zeb Orrelios into four decks.
- *
- * `Special` covers 2 leaders, 6 units and 2 upgrades in this set. The two **leaders** are guaranteed
- * to every player at prerelease and so are always available to build around, but that is a leader
- * availability rule rather than a copy count. The Special non-leaders are about as likely as a
- * Legendary, hence the same cap.
+ * the time, and 2 or at a push 3 of a given Common. Without it a whole-set deck could take three
+ * copies of a Legendary.
  */
 export const MAX_COPIES_BY_RARITY: Record<string, number> = {
   Common: 3,
@@ -48,16 +44,13 @@ export const MAX_COPIES_BY_RARITY: Record<string, number> = {
 }
 
 /**
- * Chance that a card already in the deck gets **another** copy, by rarity.
+ * Chance that a card already in a **whole-set** deck gets **another** copy, by rarity. A deck built
+ * from an opened pool makes no roll: its duplicates are whatever came out of the packs.
  *
  * Rolled per extra copy, so the copies of a card follow a geometric distribution: a Common is
  * doubled 40% of the time and tripled 16%, a Rare doubled 3% of the time, and a Legendary
  * essentially never. That is the shape of opening packs, where a duplicate is a draw rather than a
- * deckbuilding decision, and it replaces {@link MAX_COPIES_BY_RARITY} as the thing that actually
- * governs copy counts; the caps remain only as a backstop.
- *
- * Still an approximation of a pool rather than a pool. The real fix opens six packs and builds from
- * what came out, which would make these probabilities an emergent property instead of a constant.
+ * deckbuilding decision, and it governs copy counts; {@link MAX_COPIES_BY_RARITY} is the backstop.
  */
 export const DUPLICATE_CHANCE: Record<string, number> = {
   Common: 0.40,
@@ -110,7 +103,10 @@ export function unpaidAspects(card: SwuCard, leader: SwuCard, base: SwuCard): st
   return alternativeAspects(card).some(aspects => unpaidFor(aspects).length === 0) ? [] : printed
 }
 
-/** Chance that a generated deck is built on a rare base, where its set prints any: a rare a pool has to open. */
+/**
+ * Chance that a **whole-set** deck is built on a rare base, where its set prints any: a rare a pool has
+ * to open. A deck built from an opened pool uses a rare base only when the pool opened it.
+ */
 export const RARE_BASE_CHANCE = 1 / 25
 
 /** A base from a pack's rare slot rather than its common one: Rare, Legendary or Special. */
@@ -169,6 +165,8 @@ export interface DeckReport {
   ok: boolean
   size: number
   violations: string[]
+  /** Copies in the deck taking an aspect penalty: a violation for a whole-set deck, a splash for a pool deck. */
+  offAspect: number
   counts: { units: number; events: number; upgrades: number; cheapUnits: number; bombUnits: number }
   rarity: Record<string, number>
   alignmentFraction: number
@@ -187,8 +185,15 @@ function expand(deck: ParsedDeck, byId: Map<string, SwuCard>): SwuCard[] {
   return out
 }
 
-/** Check a deck against every rule, returning a report whose `violations` is empty iff it is valid. */
-export function deckReport(deck: ParsedDeck, byId: Map<string, SwuCard>): DeckReport {
+/**
+ * Check a deck against every rule, returning a report whose `violations` is empty iff it is valid.
+ *
+ * A deck built from an opened pool (`fromPool`) is held to legality alone, its size: the shape rules
+ * are what the generator aims for, not what a pool can always give, and an off-aspect card is a splash
+ * that pays its penalty, counted in `offAspect` rather than broken. Copies are limited by what was
+ * opened, which in sealed may be more than three.
+ */
+export function deckReport(deck: ParsedDeck, byId: Map<string, SwuCard>, opts: { fromPool?: boolean } = {}): DeckReport {
   const leader = byId.get(deck.leader)
   const base = byId.get(deck.base)
   if (!leader || !base) throw new Error('deckReport: missing leader/base card data')
@@ -212,13 +217,17 @@ export function deckReport(deck: ParsedDeck, byId: Map<string, SwuCard>): DeckRe
   const violations: string[] = []
   const inRange = (n: number, r: { min: number; max: number }) => n >= r.min && n <= r.max
 
+  const offCards = cards.filter(c => unpaidAspects(c, leader, base).length > 0)
+  const report = () => ({ ok: violations.length === 0, size: cards.length, violations, offAspect: offCards.length, counts, rarity, alignmentFraction })
+
   if (cards.length !== shape.size) violations.push(`size ${cards.length} != ${shape.size}`)
+  if (opts.fromPool) return report()
   for (const entry of deck.cards) {
     if (entry.count > MAX_COPIES) violations.push(`${entry.count} copies of ${entry.id} (> ${MAX_COPIES})`)
   }
-  for (const c of cards) {
-    const off = unpaidAspects(c, leader, base)
-    if (off.length) { violations.push(`off-aspect card ${c.Set}_${c.Number} (${off.join(',')})`); break }
+  if (offCards.length > 0) {
+    const c = offCards[0]
+    violations.push(`off-aspect card ${c.Set}_${c.Number} (${unpaidAspects(c, leader, base).join(',')})`)
   }
   const { cheapUnits, bombUnits, maxUpgrades, maxEvents } = shape
   if (!inRange(counts.cheapUnits, cheapUnits)) violations.push(`cheap units ${counts.cheapUnits} not in ${cheapUnits.min}-${cheapUnits.max} (curve)`)
@@ -232,5 +241,5 @@ export function deckReport(deck: ParsedDeck, byId: Map<string, SwuCard>): DeckRe
     violations.push(`alignment fraction ${alignmentFraction.toFixed(2)} not in ${ALIGNMENT_FRACTION.min}-${ALIGNMENT_FRACTION.max}`)
   }
 
-  return { ok: violations.length === 0, size: cards.length, violations, counts, rarity, alignmentFraction }
+  return report()
 }

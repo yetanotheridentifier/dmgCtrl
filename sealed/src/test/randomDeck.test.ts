@@ -5,6 +5,7 @@ import type { SavedDeck } from '../data/deckStore'
 import jtlSet from './fixtures/jtlSet.json'
 import { generateRandomDeck, generationOptions, NO_ASPECT } from '../deckgen/randomDeck'
 import { DECK_SIZE } from '../deckgen/rules'
+import { openPool } from '../deckgen/packs'
 
 /**
  * Choosing the leader and base aspect of a generated deck.
@@ -52,6 +53,21 @@ describe('generateRandomDeck', () => {
     const { deck } = generateRandomDeck(POOL, 1, { leaderId: idOf(CAD_BANE), baseAspect: 'Aggression' })!
     expect(deck.leader).toBe(idOf(CAD_BANE))
     expect(baseAspect(deck)).toBe('Aggression')
+  })
+
+  /**
+   * The deck is built from a six-pack pool opened from the set: a random leader is one the pool opened,
+   * and every card is one it opened, as many copies as came out. A chosen leader is swapped in.
+   */
+  it('builds from a pool opened from the set', () => {
+    for (const seed of SEEDS) {
+      const opened = openPool(POOL, seed)
+      const { deck } = generateRandomDeck(POOL, seed)!
+      expect(opened.map(idOf), `seed ${seed}`).toContain(deck.leader)
+      for (const e of deck.cards) {
+        expect(e.count, `seed ${seed}: ${e.id}`).toBeLessThanOrEqual(opened.filter(c => idOf(c) === e.id).length)
+      }
+    }
   })
 
   it('builds a whole deck from a full set', () => {

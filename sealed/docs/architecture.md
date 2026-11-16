@@ -631,8 +631,13 @@ choice opens a `Sheet`, and the only text box is the import sheet's.
   inset and draws nothing below a page only that tall. The portrait query is the one the shared `Sheet` reads, so a sheet and its screen
   agree on the orientation.
 - **No aspect** is the generator's `NO_ASPECT` base aspect: `generationOptions` lists it last, and
-  only for a pool printing a base without an aspect, and `buildDeckForLeader` builds on such a base
-  when it is named.
+  only for a set printing a base without an aspect, and `buildDeckFromPool` builds on such a base
+  when it is named, taking it from the set when the pool did not open it.
+- **A generated deck** (`generateRandomDeck`) opens a six-pack pool from the set (`deckgen/packs.ts`,
+  `openPool`) and builds from it (`buildDeckFromPool`): only the copies opened, any Common base of the
+  set or a rare one the pool opened, off-aspect cards only to fill a thin pool. A random leader is one
+  the pool opened; a chosen one is swapped into the first pack's leader slot. Its report holds the
+  deck to legality (size) and counts the off-aspect cards, which the deck view shows.
 
 ## UI (GameScreen)
 

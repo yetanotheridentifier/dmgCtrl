@@ -1,22 +1,23 @@
 import type { SwuCard } from '../data/cards'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
+import { minimumDeckSize } from '../utils/parseProtectThePod'
 import { seededUnit } from '../engine/rng'
-import { colourBases, settleBase } from './bases'
+import { settleBase } from './bases'
 import {
-  deckReport, deckShape, isAlignment, unpaidAspects, type DeckReport,
+  deckReport, deckShape, isAlignment, isRareBase, unpaidAspects, type DeckReport,
   MAX_COPIES, MAX_COPIES_BY_RARITY, DUPLICATE_CHANCE, CHEAP_COST_MAX, BOMB_COST_MIN,
 } from './rules'
 
 /**
- * The deck generator (#408): build one legal, penalty-free, realistically shaped deck. Deterministic
- * (seeded), so a deck set is reproducible. `generateDeck` builds for a specific leader + base;
- * `buildDeckForLeader` chooses the best base itself. Reusable by the coverage sweep and by a future
- * "play a random representative deck" setup feature.
+ * The deck generator: build one realistically shaped deck. Deterministic (seeded), so a deck set is
+ * reproducible. `generateDeck` builds for a specific leader + base, from the whole set (the coverage
+ * sweep) or from an opened pool (`available`); `buildDeckFromPool` builds from a pool and chooses the
+ * base itself, for the setup screen's generated deck and the bench's matchup suites.
  *
- * Construction is a scored greedy: fill the base's deck size (30 unless the base changes it) one slot at a time, each slot taking the eligible card
- * that best serves the still-unmet quotas (curve, type caps, rarity mix, alignment balance), with a
- * seeded jitter for deterministic variety. `prefer` biases toward specific cards, which is how the
- * coverage sweep steers the pool toward not-yet-covered cards.
+ * Construction is a scored greedy: fill the base's deck size (30 unless the base changes it) one slot
+ * at a time, each slot taking the eligible card that best serves the still-unmet quotas (curve, type
+ * caps, rarity mix, alignment balance), with a seeded jitter for deterministic variety. `prefer`
+ * biases toward specific cards, which is how the coverage sweep steers toward not-yet-covered cards.
  */
 
 const id = (c: SwuCard): string => `${c.Set}_${c.Number}`
@@ -70,6 +71,11 @@ export interface GenerateOptions {
    * that is quietly illegal is worse than one that fails to build.
    */
   require?: Map<string, number>
+  /**
+   * Copies of each card a sealed pool opened. When given, a card is limited to the copies opened and
+   * the duplicate roll is not made: a pool's duplicates are whatever came out of the packs.
+   */
+  available?: Map<string, number>
 }
 
 interface Counts {
@@ -105,10 +111,9 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
   // would admit 13, which is over half.
   const alignTarget = resolveTarget(seed, 5, { ...ALIGN_TARGET, base: Math.floor((ALIGN_TARGET.base * shape.size) / 30) })
 
-  const eligible = pool.filter(c =>
-    (c.Type === 'Unit' || c.Type === 'Event' || c.Type === 'Upgrade') &&
-    unpaidAspects(c, leader, base).length === 0,
-  )
+  const deckCards = pool.filter(c => c.Type === 'Unit' || c.Type === 'Event' || c.Type === 'Upgrade')
+  const eligible = deckCards.filter(c => unpaidAspects(c, leader, base).length === 0)
+  const offAspect = deckCards.filter(c => unpaidAspects(c, leader, base).length > 0)
 
   const counts: Counts = {
     size: 0, cheap: 0, bomb: 0, events: 0, upgrades: 0, align: 0,
@@ -136,6 +141,7 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
    */
   const copiesAtMax = (c: SwuCard): boolean => {
     const have = counts.copies.get(id(c)) ?? 0
+    if (opts.available) return have >= (opts.available.get(id(c)) ?? 0)
     if (have === 0) return false
     if (have >= (MAX_COPIES_BY_RARITY[c.Rarity ?? 'Common'] ?? MAX_COPIES)) return true
     const chance = DUPLICATE_CHANCE[c.Rarity ?? 'Common'] ?? 0
@@ -203,6 +209,24 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
       const sc = score(c)
       if (sc > bestScore) { bestScore = sc; best = c }
     }
+    // A sealed pool rarely meets every shape cap, and a player fills the deck regardless, so for a
+    // pool the caps give way to the deck size: the best card with a copy left, whatever its role.
+    if (!best && opts.available) {
+      for (const c of eligible) {
+        if (copiesAtMax(c)) continue
+        const sc = score(c)
+        if (sc > bestScore) { bestScore = sc; best = c }
+      }
+    }
+    // A pool too thin in the deck's aspects (a one-aspect leader, most often) is filled the way a
+    // player fills it: off-aspect cards paying the penalty, the fewest unpaid icons first.
+    if (!best && opts.available) {
+      for (const c of offAspect) {
+        if (copiesAtMax(c)) continue
+        const sc = score(c) - 1000 * unpaidAspects(c, leader, base).length
+        if (sc > bestScore) { bestScore = sc; best = c }
+      }
+    }
     if (!best) break // pool exhausted under the caps; report will flag the short size
     add(best)
   }
@@ -214,7 +238,7 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
 
   const deck: ParsedDeck = { name: `${leader.Name} (${base.Aspects?.[0] ?? 'base'})`, leader: id(leader), base: id(base), cards }
   const byIdMap = new Map(pool.map(c => [id(c), c]))
-  return { deck, report: deckReport(deck, byIdMap) }
+  return { deck, report: deckReport(deck, byIdMap, { fromPool: opts.available !== undefined }) }
 }
 
 /**
@@ -223,39 +247,55 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
  */
 export const NO_ASPECT = 'None'
 
+const hasAspect = (aspect: string) => (b: SwuCard): boolean =>
+  aspect === NO_ASPECT ? (b.Aspects ?? []).length === 0 : (b.Aspects ?? []).includes(aspect)
+
 /**
- * Build a deck for a leader, choosing its base. Deterministic. This is the entry point a single-deck
- * consumer uses. `baseAspect` restricts it to that aspect, including one the leader already carries.
+ * Build a deck for a leader from an opened sealed pool (`openPool`). `cards` is the set's card data.
+ * Deterministic. `baseAspect` restricts the base to that aspect, including one the leader carries.
  *
- * Each colour offers one base to build on ({@link colourBases}: common, or rare on a rare roll), the
- * colours are tried in a seeded order, and the first clean deck wins. The built deck is then settled
- * on the base its cards want among those that build the same deck ({@link settleBase}).
+ * **Any Common base of the set is usable**, as at a sealed event, where common bases are on the table;
+ * a rare base only when the pool opened it. A set printing no Common base uses what it has.
+ *
+ * **A random base never doubles an aspect the leader already supplies**: one colour rarely fills a
+ * deck. A named aspect wins, even one the leader carries, since that is a player asking for the
+ * doubled cards. A named aspect the pool cannot offer (JTL's rare, colourless Lake Country, unopened)
+ * is taken from the set anyway, as a chosen leader is swapped into the pool.
+ *
+ * Each kind of base (colour, rarity, deck size) is tried in a seeded order and ranked: a full deck
+ * first, since a short one cannot be played, then the fewest off-aspect cards, then the fewest shape
+ * rules missed, which are guidelines here rather than rules but still say which base the pool supports
+ * best. The winner is settled on the base its cards want among those of its kind ({@link settleBase}).
  */
-export function buildDeckForLeader(leader: SwuCard, pool: SwuCard[], seed: number, prefer?: Set<string>, baseAspect?: string): { deck: ParsedDeck; report: DeckReport } {
-  const all = pool.filter(c => c.Type === 'Base')
+export function buildDeckFromPool(leader: SwuCard, pool: SwuCard[], cards: SwuCard[], seed: number, baseAspect?: string): { deck: ParsedDeck; report: DeckReport } {
+  const available = new Map<string, number>()
+  for (const c of pool) available.set(id(c), (available.get(id(c)) ?? 0) + 1)
 
-  /**
-   * **A random base never doubles an aspect the leader already supplies**: one colour rarely fills a
-   * deck. A named aspect wins, even one the leader carries, since that is a player asking for the
-   * doubled cards rather than the generator stumbling into it. Kept as a filter with a fallback: a
-   * leader carrying every base aspect would otherwise have no base at all.
-   */
+  const setBases = cards.filter(c => c.Type === 'Base')
+  const offered = setBases.filter(b => !isRareBase(b) || available.has(id(b)))
+  const open = offered.length > 0 ? offered : setBases
+  const from = baseAspect !== undefined && !open.some(hasAspect(baseAspect)) ? setBases : open
+
   const leaderAspects = new Set(leader.Aspects ?? [])
-  const usable = all.filter(b => !(b.Aspects ?? []).some(a => leaderAspects.has(a)))
-  const named = baseAspect === undefined ? []
-    : baseAspect === NO_ASPECT ? all.filter(b => (b.Aspects ?? []).length === 0)
-      : all.filter(b => (b.Aspects ?? []).includes(baseAspect))
-  const allowed = named.length > 0 ? named : usable.length > 0 ? usable : all
+  const usable = from.filter(b => !(b.Aspects ?? []).some(a => leaderAspects.has(a)))
+  const named = baseAspect === undefined ? [] : from.filter(hasAspect(baseAspect))
+  const allowed = named.length > 0 ? named : usable.length > 0 ? usable : from
 
-  const candidates = colourBases(allowed, seed)
-  // Rotated by seed rather than always tried in pool order, which made the first legal colour the
+  const kind = (b: SwuCard) => `${(b.Aspects ?? []).join(',')}|${isRareBase(b)}|${minimumDeckSize(id(b))}`
+  const candidates = [...new Map(allowed.map(b => [kind(b), b])).values()]
+  const known = [...new Map([...pool, ...from].map(c => [id(c), c])).values()]
+  // Rotated by seed rather than always tried in card order, which made the first legal colour the
   // answer for almost every leader.
   const start = Math.floor(seededUnit(((seed * 40503) ^ 0x9e37) >>> 0 || 1) * candidates.length)
-  let best: { deck: ParsedDeck; report: DeckReport } | undefined
-  for (let i = 0; i < candidates.length; i++) {
-    const result = generateDeck({ leader, base: candidates[(start + i) % candidates.length], pool, seed, prefer })
-    if (!best || result.report.violations.length < best.report.violations.length) best = result
-    if (best.report.ok) break
+  const byId = new Map(known.map(c => [id(c), c]))
+  const rank = ({ deck, report }: { deck: ParsedDeck; report: DeckReport }) =>
+    (minimumDeckSize(deck.base) - report.size) * 1_000_000 + report.offAspect * 1000 + deckReport(deck, byId).violations.length
+  let best: { deck: ParsedDeck; report: DeckReport; rank: number } | undefined
+  for (let i = 0; i < candidates.length && best?.rank !== 0; i++) {
+    const result = generateDeck({ leader, base: candidates[(start + i) % candidates.length], pool: known, seed, available })
+    const r = rank(result)
+    if (!best || r < best.rank) best = { ...result, rank: r }
   }
-  return { deck: settleBase(best!.deck, pool, seed), report: best!.report }
+  const deck = settleBase(best!.deck, known, seed)
+  return { deck, report: deckReport(deck, byId, { fromPool: true }) }
 }

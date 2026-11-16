@@ -1040,8 +1040,10 @@ benchmark plays hundreds of thousands of games where the answer is never read.
 The decks come from `deckgen/generateDeck.ts` (a reusable primitive that builds one legal,
 penalty-free, realistically curved deck for a leader, respecting rarity mix and aspect balance, see
 `deckgen/rules.ts`) orchestrated by `bench/coverageDecks.ts` (which picks leaders and bases so the
-union covers the pool). The generator is deliberately separate from the bench so the setup screen's
-generated decks reuse it.
+union covers the pool). Coverage decks build from the **whole set**, rolling for duplicates by rarity,
+since their job is reaching every card; the matchup suites and the setup screen's generated decks
+build from an opened sealed pool instead (see the matchup matrix). The generator is deliberately
+separate from the bench so the setup screen reuses it.
 
 A card is penalty-free only when the leader and base pay each of its aspect icons, by its printed
 aspects or by those of its Smuggle or Piloting cost. A card with a doubled aspect is otherwise covered
@@ -1050,12 +1052,14 @@ than two, since SOR's Aggression and Cunning each print only one it can play. Th
 base's size (25 on Thermal Oscillator, 40 on Data Vault) with the shape rules scaled to match, and a
 rare base counts against the deck's rares.
 
-Bases are chosen by `deckgen/bases.ts` for the bench suites and the setup screen alike. `colourBases`
-offers one base per colour to build on, common unless that colour's seeded roll lands inside one in
-25 and it prints a rare base. `settleBase` then puts the built deck on whichever base of the same
-colour, size and rarity its cards name most (a Homeworlds world), and otherwise on a seeded pick, so
-the suites spread across every base. A suite therefore varies with its seed in which base each deck
-sits on, not only in which cards it holds.
+For a coverage deck, `colourBases` (`deckgen/bases.ts`) offers one base per colour to build on,
+common unless that colour's seeded roll lands inside one in 25 and it prints a rare base. A pool deck
+(the matchup suites and the setup screen) builds on any Common base of the set or a rare one its pool
+opened, one candidate per colour, rarity and size, ranked by a full deck, then the fewest off-aspect
+cards, then the fewest shape rules missed. Either way `settleBase` then puts the built deck on
+whichever base of the same colour, size and rarity its cards name most (a Homeworlds world), and
+otherwise on a seeded pick, so the suites spread across every base. A suite therefore varies with its
+seed in which base each deck sits on, not only in which cards it holds.
 
 ## Card triage: sizing an unimplemented set
 
@@ -1621,14 +1625,19 @@ of every comparison.
 `--matrix` measures **deck strength** and **matchups**. It builds an even deck set
 (`bench/matchupDecks.ts`): every one of the 18 leaders paired with each base aspect it does not already
 carry, since a base doubling a leader's aspect is not a deck anyone builds in sealed. That is 52 decks,
-still 13 per aspect. Under one fixed AI model it plays every deck against every deck (mirrors
+still 13 per aspect. **Each deck is built from its own sealed pool**: six packs opened around its
+leader (`openPool` in `deckgen/packs.ts`, the leader swapped into the first pack), seeded by the suite's
+seed, the leader and the aspect. The deck plays only the copies opened, on any Common base of its
+aspect or a rare one the pool opened, splashing off-aspect cards only when the pool cannot fill it
+otherwise; the shape rules are aimed for but not required. Under one fixed AI model it plays every deck against every deck (mirrors
 included). First player is alternated so seat advantage cancels, which means "i vs j" already measures
 "j vs i", so only the upper triangle is played and the rest derived.
 
 **`--seed` picks the deck suite as well as the games.** A different seed builds different cards for the
 same 52 pairings, and the run directory keys on the seed, so several suites bank and resume separately.
 Read one suite's leader ratings as describing that suite: a change to how the generator picks cards
-has moved leaders by up to 12 points (see `experiments.md`).
+has moved leaders by up to 12 points (see `experiments.md`). Ratings from runs before the suites were
+built from pools describe whole-set decks, and do not compare with later ones.
 
 **`--set` picks the set the decks are built from**, ASH when absent. The matrix takes exactly one set,
 because it rates a set's leaders against each other and a mixed pool would pair leaders with bases no
@@ -2185,7 +2194,8 @@ eight of eighteen modules were missing.
 - `bench/lockoutDecks.ts` the asymmetric wall set behind `--decks lockout`: every coverage deck facing
   one fixed, hand-built shielded-Sentinel deck (`WALL_DECK`), and the only source where the two seats
   are dealt different lists.
-- `bench/matchupDecks.ts` the leader-by-base deck set the matrix plays: 18 leaders x 4 base aspects.
+- `bench/matchupDecks.ts` the leader-by-base deck set the matrix plays: 18 leaders x 4 base aspects,
+  each deck built from its own opened sealed pool.
 - `bench/sweep.ts` the whole-pool fuzzing sweep behind `--sweep`, which reports cards **played** rather
   than decked and names anything decked but never drawn.
 - `bench/playCoverage.ts` the per-card play tracking that backs it.
