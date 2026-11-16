@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { COLLECTION_URL, MAX_PENDING, PENDING_KEY, retryPendingCollection, sendForCollection } from '../data/collectionSend'
+import { COLLECTION_URL, retryPendingCollection, sendForCollection } from '../data/collectionSend'
+import { MAX_PENDING, PENDING_KEY } from '../data/collectionPending'
 import { recordForCollection } from '../data/collection'
 import { SWU_DB_API } from '../data/cards'
 import { db } from '../data/db'

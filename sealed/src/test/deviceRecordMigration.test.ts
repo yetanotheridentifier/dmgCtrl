@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import Dexie from 'dexie'
 import { db } from '../data/db'
-import { PENDING_KEY } from '../data/collectionSend'
+import { PENDING_KEY } from '../data/collectionPending'
 import { playedRecord } from './helpers/playedRecord'
 
 /**
