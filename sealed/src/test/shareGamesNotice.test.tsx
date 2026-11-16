@@ -232,6 +232,16 @@ describe('ShareGamesNotice', () => {
     expect(help).toContain('This data export is disabled unless you turn it on')
   })
 
+  /** The backup window is the one way a game's arrival can be narrowed below the day, so the notice says so, naming no provider. */
+  it('says how long sent games can be narrowed below the day, and names no technology', () => {
+    const section = parseGuide(userGuideHtml).sections.find(s => s.title === SHARING_HELP_SECTION)!
+    const help = text(section.html)
+
+    expect(help).toContain('How sent games are kept: each game is stored with the day it arrived and nothing more precise.')
+    expect(help).toContain('rolling backup of the last 7 days')
+    expect(help).not.toMatch(/cloudflare|\bD1\b|\bKV\b|worker/i)
+  })
+
   /** The usage events go for everyone, so the same section says so, and says they are not the export. */
   it('says, in the same section, which usage statistics are sent for everyone', () => {
     const section = parseGuide(userGuideHtml).sections.find(s => s.title === SHARING_HELP_SECTION)!
