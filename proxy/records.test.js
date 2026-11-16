@@ -225,10 +225,8 @@ describe('POST /records: storing a game', () => {
     await expect(env.GAME_DB.prepare('SELECT rowid FROM collected_games').all()).rejects.toThrow('no such column')
   })
 
-  it('no longer writes the KV staging store', async () => {
-    await SELF.fetch(post(record()))
-
-    expect((await env.GAME_RECORDS.list()).keys).toEqual([])
+  it('binds no KV store: D1 is the only place a game is kept', () => {
+    expect(env.GAME_RECORDS).toBeUndefined()
   })
 
   it('does not tell the sender where the game was staged', async () => {

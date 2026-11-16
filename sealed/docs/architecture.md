@@ -873,10 +873,6 @@ kept for one that can. The commands on the dev machine (`bench/collectedStore.ts
 through `wrangler`, back it up as a snapshot, which restores into an empty store and which the row
 tool reads directly, and restore one. See "Collected games" in [operations.md](operations.md).
 
-Before the D1 store, games were staged in Workers KV and pulled from there into a SQLite file on the
-dev machine (`bench-results/collected-games.db`, `bench/recordArchive.ts`). Both are still in
-place: `--migrate` moves what they hold into D1, and they are removed by hand once that is checked.
-
 ## Network
 
 `api.swu-db.com` serves no CORS headers, so the browser cannot fetch it directly.
@@ -926,8 +922,8 @@ its key, the UTC day it arrived, the build, and the payload as JSON text, gzippe
 only "when" the Worker writes, since a game's arrival time is when it finished, which the payload
 leaves out on purpose. Compressed, a game is roughly 1 KB, so a free 500 MB database holds several
 hundred thousand. Reading and backing up the store is done from the dev machine with the account's
-own credentials; the Worker has no part in it. The KV namespace games were staged in before
-(binding `GAME_RECORDS`) is still bound and no longer written.
+own credentials; the Worker has no part in it. The D1 table is the only place the Worker keeps a
+game.
 
 The endpoint answers 503 and stores nothing when its switch (`RECORD_COLLECTION` in
 `proxy/wrangler.toml`) is anything but `on`, or when the store is not bound. The card routes do not

@@ -4,11 +4,10 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
-import { addToStore, loadStore, migrateToStore, restoreToStore } from '../bench/collectedStore'
+import { addToStore, loadStore, restoreToStore } from '../bench/collectedStore'
 import { archiveGame, archiveStatus, archivedGames, openArchive, writeSnapshot, type ArchivedGame } from '../bench/recordArchive'
-import { STAGING_PREFIX } from '../bench/staging'
 import { fakeD1 } from './helpers/fakeD1'
-import { fakeStaging, stagedGame } from './helpers/stagedGames'
+import { stagedGame } from './helpers/stagedGames'
 
 /**
  * The store of collected games: the D1 table the collection Worker writes (`proxy/records.js`),
@@ -66,7 +65,7 @@ describe('the D1 store, through wrangler', () => {
 })
 
 describe('reading the store as an archive', () => {
-  it('holds every game, so status, snapshots and rows read it as they read the local file', () => {
+  it('holds every game, so status, snapshots and rows all read it the same way', () => {
     const d1 = fakeD1()
     d1.store.add(GAMES.map(g => asArchived(g)))
 
@@ -91,7 +90,7 @@ describe('adding to the store', () => {
   })
 
   it('restores a snapshot, refusing a line whose payload is not its key', () => {
-    const local = openArchive(':memory:')
+    const local = openArchive()
     for (const g of GAMES) archiveGame(local, asArchived(g))
     const path = writeSnapshot(local, mkdtempSync(join(tmpdir(), 'store-')), DAY).path
     const d1 = fakeD1()
@@ -100,62 +99,6 @@ describe('adding to the store', () => {
 
     expect(restored).toEqual({ added: GAMES.length, duplicates: 0, refused: [] })
     expect(d1.store.keys()).toEqual(GAMES.map(g => g.gameKey).sort())
-  })
-})
-
-describe('moving the staged and archived games into the store', () => {
-  it('moves every game from both, once, and checks each key is then in the store', () => {
-    const local = openArchive(':memory:')
-    archiveGame(local, asArchived(GAMES[0], '2026-10-13'))
-    archiveGame(local, asArchived(GAMES[1], '2026-10-13'))
-    const staging = fakeStaging([GAMES[1], GAMES[2]])
-    const d1 = fakeD1()
-
-    const moved = migrateToStore(d1.store, staging, local, DAY)
-
-    expect(moved).toMatchObject({ archived: 2, staged: 2, games: 3, added: 3, duplicates: 0, refused: [], missing: [] })
-    const held = d1.store.rows('', 10)
-    expect(held.map(g => g.gameKey)).toEqual(GAMES.map(g => g.gameKey).sort())
-    // An archived game keeps the day it was pulled; a game only in staging takes the day of the move.
-    expect(held.find(g => g.gameKey === GAMES[1].gameKey)!.pulledDay).toBe('2026-10-13')
-    expect(held.find(g => g.gameKey === GAMES[2].gameKey)!.pulledDay).toBe(DAY)
-  })
-
-  it('deletes nothing from staging or from the archive', () => {
-    const local = openArchive(':memory:')
-    archiveGame(local, asArchived(GAMES[0]))
-    const staging = fakeStaging([GAMES[1]])
-
-    migrateToStore(fakeD1().store, staging, local, DAY)
-
-    expect(staging.calls.filter(c => c.op === 'delete')).toEqual([])
-    expect(staging.values.size).toBe(1)
-    expect(archiveStatus(local).games).toBe(1)
-  })
-
-  it('moves a staged game without replaying it, and refuses one whose value is not the game its key names', () => {
-    const payload = JSON.parse(GAMES[0].text) as { winner: string }
-    // A real game whose stored winner this build would not reach: the replay check is the row tool's now.
-    const divergent = { ...GAMES[0], text: JSON.stringify({ ...payload, winner: payload.winner === 'player' ? 'opponent' : 'player' }) }
-    const stray = { key: `${STAGING_PREFIX}0000000000000000`, text: GAMES[1].text }
-    const staging = fakeStaging([divergent, stray])
-    const d1 = fakeD1()
-
-    const moved = migrateToStore(d1.store, staging, openArchive(':memory:'), DAY)
-
-    expect(moved.refused).toEqual([{ key: stray.key, reason: expect.stringContaining('the key does not match the game') }])
-    expect(d1.store.keys()).toEqual([GAMES[0].gameKey])
-    expect(d1.store.rows('', 10)[0].payload).toBe(divergent.text)
-  })
-
-  it('is safe to run again: the second run adds nothing', () => {
-    const local = openArchive(':memory:')
-    archiveGame(local, asArchived(GAMES[0]))
-    const staging = fakeStaging([GAMES[1]])
-    const d1 = fakeD1()
-    migrateToStore(d1.store, staging, local, DAY)
-
-    expect(migrateToStore(d1.store, staging, local, DAY)).toMatchObject({ games: 2, added: 0, duplicates: 2, missing: [] })
   })
 })
 

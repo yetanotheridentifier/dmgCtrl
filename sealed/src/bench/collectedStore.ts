@@ -4,9 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import type { CollectedRecord } from '../data/collection'
-import { checkStaged } from './pull'
-import { archiveGame, archivedGames, checkedSnapshot, openArchive, type ArchivedGame, type RestoreResult } from './recordArchive'
-import type { StagingStore } from './staging'
+import { archiveGame, checkedSnapshot, openArchive, type ArchivedGame, type RestoreResult } from './recordArchive'
 import { PROXY_CONFIG, printedJson, runWrangler, type WranglerRun } from './wrangler'
 
 /**
@@ -16,9 +14,9 @@ import { PROXY_CONFIG, printedJson, runWrangler, type WranglerRun } from './wran
  * gzipped. Beside it, the game's latest replay check, which the bench writes and the Worker never
  * does (`refusedGames.ts`).
  *
- * **Read from this machine by loading it** (`loadStore`) into an archive in memory, the same table
- * `recordArchive.ts` keeps in a local file, so the status, the snapshot and the rows read either
- * one the same way. An `ArchivedGame`'s `pulledDay` is the day the game reached its store.
+ * **Read from this machine by loading it** (`loadStore`) into an archive in memory
+ * (`recordArchive.ts`), which the status, the snapshot and the rows all read. An `ArchivedGame`'s
+ * `pulledDay` is the day the game reached the store.
  *
  * `CollectedStore` is all the commands know of D1: a page of rows, every key, adding and
  * removing games, and reading and writing their checks. The
@@ -149,7 +147,7 @@ export function d1Store(run: WranglerRun = runWrangler, where: string[] = ['--re
 
 /** Every game in the store, as an archive in memory, read `page` at a time by key. */
 export function loadStore(store: CollectedStore, page = 500): DatabaseSync {
-  const db = openArchive(':memory:')
+  const db = openArchive()
   let after = ''
   for (;;) {
     const games = store.rows(after, page)
@@ -178,65 +176,4 @@ export function addToStore(store: CollectedStore, games: ArchivedGame[]): { adde
 export function restoreToStore(store: CollectedStore, path: string): RestoreResult {
   const { games, refused } = checkedSnapshot(path)
   return { ...addToStore(store, games), refused }
-}
-
-export interface MigrateResult {
-  /** Games in the local archive. */
-  archived: number
-  /** Keys in KV staging. */
-  staged: number
-  /** Staged values left out because they are not the game their key names. Still staged. */
-  refused: { key: string; reason: string }[]
-  /** Distinct games moved or already in the store. */
-  games: number
-  added: number
-  duplicates: number
-  /** Keys of games from either source that the store does not hold once the move is done. Empty when it worked. */
-  missing: string[]
-}
-
-/**
- * The one-off move into the store: every game in the local archive and every game in KV staging,
- * then every key of both read back from the store. **Nothing is deleted from either source**: that
- * is a separate step, by hand, once the move has been checked.
- *
- * An archived game keeps the day it was pulled. A staged game is checked to be the game its key
- * names (`checkStaged`) and is not replayed, since the store holds games whether or not this build
- * can replay them; it takes `day`. A game in both is moved once, with its archived day.
- */
-export function migrateToStore(store: CollectedStore, staging: StagingStore, archive: DatabaseSync, day: string): MigrateResult {
-  const fromArchive = [...archivedGames(archive)]
-  const games = new Map(fromArchive.map(game => [game.gameKey, game]))
-
-  const listed: string[] = []
-  let cursor: string | undefined
-  do {
-    const page = staging.list(cursor)
-    listed.push(...page.keys)
-    cursor = page.cursor
-  } while (cursor !== undefined)
-
-  const refused: MigrateResult['refused'] = []
-  const values = staging.get(listed)
-  for (const name of listed) {
-    try {
-      const value = values.get(name)
-      if (value === undefined) throw new Error('listed, but no value came back for it')
-      const game = checkStaged(name, value)
-      if (!games.has(game.gameKey)) games.set(game.gameKey, { gameKey: game.gameKey, pulledDay: day, payload: game.payload })
-    } catch (err) {
-      refused.push({ key: name, reason: (err as Error).message })
-    }
-  }
-
-  const added = addToStore(store, [...games.values()])
-  const held = new Set(store.keys())
-  return {
-    archived: fromArchive.length,
-    staged: listed.length,
-    refused,
-    games: games.size,
-    ...added,
-    missing: [...games.keys()].filter(k => !held.has(k)).sort(),
-  }
 }

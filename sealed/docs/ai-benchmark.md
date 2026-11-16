@@ -1841,12 +1841,12 @@ and then move order.
 
 - **An export file**: what `__sealedExportGames()` downloads (see "Exporting game records" in
   [operations.md](operations.md)), or what a `--record` run writes.
-- **The store of collected games**, with `--collected`: the D1 table the collection Worker writes,
-  or a local archive with `--archive FILE`. See "Collected games" below.
+- **The store of collected games**, with `--collected`: the D1 table the collection Worker writes.
+  See "Collected games" below.
 - **A snapshot of that store**, named as a file like an export (`collected-games-<day>.jsonl.gz`).
   A file ending `.gz` is read as a snapshot.
 
-Sources are read in the order given, files first and then the archive, whose games come in key order.
+Sources are read in the order given, files first and then the store, whose games come in key order.
 `--out` is required and is written afresh on each run, so the file holds exactly its inputs' rows. As
 with `npm run tune`, prefer absolute paths: `npm run --prefix sealed` runs with `sealed/` as the
 working directory.
@@ -1864,7 +1864,7 @@ One row shape serves both uses. Imitation reads `state` and `action`; value lear
 | `outcome` | `win`, `loss` or `draw`, **from the mover's side** |
 | `information` | which view `state` is: `full`, or `mover` with `--view mover`. See below |
 | `build`, `opponentAi`, `humanSeat`, `undoCount` | the record's provenance as exported, each left out when the record never had it |
-| `durationMs` | only on a collected game (from the archive or a snapshot of it): how long the game took, which is all its payload says about time |
+| `durationMs` | only on a collected game (from the store or a snapshot of it): how long the game took, which is all its payload says about time |
 | `ai`, `deck`, `bench` | only on a game the bench recorded: the bot that sat where the move was made, the name of the deck it played, and the record's `bench` field whole. See "Recording games" |
 | `action` | the move that was made |
 | `chosenIndex`, `legalMoves` | only with `--legal`: every move the engine offered in the position, and where `action` is in that list |
@@ -1993,9 +1993,8 @@ sample of that.
 ## Collected games: the store
 
 ```bash
-npm run bench --prefix sealed -- --backup DIR | --restore SNAPSHOT.jsonl.gz | --collected  [--archive FILE]
-npm run bench --prefix sealed -- --migrate [--archive FILE]
-npm run bench --prefix sealed -- --pull [--delete [--dry-run]] [--backup DIR] [--archive FILE]
+npm run bench --prefix sealed -- --backup DIR | --restore SNAPSHOT.jsonl.gz | --collected
+npm run bench --prefix sealed -- --refused [--delete [--dry-run] [--backup DIR] [--looked-at KEY[,KEY ...]]]
 ```
 
 Games from players who opted in are written by the collection Worker straight into a D1 table, and
@@ -2007,10 +2006,7 @@ these commands read it, back it up and restore it. How to run them and where to 
 | `--collected` | alone: what the store holds, by build. With `--rows`: the store as a source |
 | `--backup DIR` | writes the whole store to `DIR` as one dated, gzipped JSON Lines file |
 | `--restore FILE` | reads a snapshot into the store, adding the games it does not hold |
-| `--archive FILE` | use a local SQLite archive instead of D1 (and, for `--pull` and `--migrate`, which local archive) |
-| `--migrate` | moves every game in the local archive (`bench-results/collected-games.db` unless given) and in KV staging into D1, then reads every key back. Deletes nothing |
-| `--pull` | from KV staging into the local archive: fetches the games it does not hold, verifies each and archives it. Read-only |
-| `--delete` | with `--pull`: removes from staging the listed games the archive holds. Refused without `--backup` |
+| `--delete` | with `--refused`: see below. Refused without `--backup` |
 | `--dry-run` | with `--delete`: removes nothing and lists each key that would go |
 | `--refused` | the D1 games whose latest check refused them, by reason and by the build that played them. With `--delete`, deletes those refused on this build, after a `--backup` read back to hold them, keeping flagged ones |
 | `--looked-at KEY[,KEY ...]` | with `--refused --delete`: flagged games someone has looked at, which go with the rest |
@@ -2021,11 +2017,12 @@ without its payload, keeping checks, and removing games. The one implementation
 runs `wrangler d1 execute` against the database `proxy/wrangler.toml` binds as `GAME_DB`, so no
 token is handled here. A payload is read as `hex(payload)`, since the JSON answer carries no bytes,
 and written as a hex literal from a file of statements. **It is read by loading it** (`loadStore`)
-into an archive in memory, the same table as the local file, so status, snapshots and rows read
-either one the same way. Adding games reads the keys back afterwards and throws for any game not
+into an archive in memory (`bench/recordArchive.ts`), which status, snapshots and rows all read.
+Adding games reads the keys back afterwards and throws for any game not
 then held, so a count it reports is a count of games in the store.
 
-**The D1 table** is the archive's table with the payload gzipped (`proxy/migrations/`):
+**The D1 table** is the in-memory archive's table with the payload gzipped (`proxy/migrations/`),
+and the day named `received_day` where the archive says `pulled_day`:
 
 | Column | Holds |
 | --- | --- |
@@ -2045,41 +2042,10 @@ replay stays until `--refused --delete` removes it. A game already refused on th
 `--rows` is left out without being replayed again. A flagged game is never deleted until it is
 named with `--looked-at`; operations.md has the commands.
 
-**KV staging and the local archive** are where games went before D1: the Worker no longer writes
-staging, and `--migrate` moves both into D1 (`migrateToStore`). A staged game is checked to be the
-game its key names (`checkStaged`) and not replayed; an archived game keeps its pulled day, and a
-game only in staging takes the day of the move.
-
-**Staging is behind three calls** (`StagingStore` in `bench/staging.ts`): list a page of keys, get
-some values, delete some keys. The one implementation runs `wrangler kv key list`, `kv bulk get` and
-`kv bulk delete` against the namespace `proxy/wrangler.toml` binds, because wrangler is already
-signed in: no token is handled here and nothing is installed. A store that moves is another
-implementation of the three calls. Only key names are read from a listing, never the expiry or
-metadata a listing can carry.
-
-**A game is archived only when it checks out** (`verifyStaged` in `bench/pull.ts`): its key is the
-`gameKey` of its own starting position and moves, which catches a value that was damaged or altered,
-and it replays on this build to the winner it names, which is the check `--rows` makes. Anything else
-is reported and left where it is.
-
-**The local archive** (`bench/recordArchive.ts`) is one table, `collected_games`:
-
-| Column | Holds |
-| --- | --- |
-| `game_key` | the primary key: the game's `gameKey`, so the same game pulled twice is held once |
-| `pulled_day` | the UTC date it was pulled, `YYYY-MM-DD`. The table refuses anything but a date |
-| `release`, `commit_id` | the build that played it, copied from the payload so the archive counts by build |
-| `payload` | the staged record as JSON, whole: replay data, result, duration and provenance |
-
-It is a file of its own, apart from `bench.db`, because a bench result can be measured again and a
-collected game cannot.
-
-Measured over 300 games staged in wrangler's local store (bot games on the bench deck, payloads of
-5.6 to 16.6 KB, 11.2 KB on average): a pull takes 10.3s, of which 1.3s is the listing, 4.9s the three
-bulk gets and 4.1s verifying and writing (13.6 ms a game); a second pull, with nothing new, takes
-1.4s; a delete with its backup takes 3.3s. The archive is 11.9 KB a game on disk and the snapshot
-0.6 KB a game, since games on one deck compress well together (1.3 KB each when compressed alone).
-Fetching a key at a time would cost a wrangler process, over a second, per game.
+**A snapshot** (`bench/recordArchive.ts`) is gzipped JSON Lines: a header naming the format and the
+number of games, then a game to a line with its key, day and payload as plain JSON. A restore works
+each key out again from its payload and refuses a line where they differ. Games on one deck compress
+well together: 0.6 KB a game in a snapshot against 1.3 KB each compressed alone.
 
 ## Where results go: the SQLite database
 
@@ -2260,23 +2226,18 @@ eight of eighteen modules were missing.
   whole state or the mover's view of it (`engine/seatView.ts`, which is not a bench module). Also owns the
   card database a record is replayed against (`trainingCardDb`, every bundled set) and the key that
   groups a game's rows.
-- `bench/rowSources.ts` where `--rows` gets its games (an export file, the archive of collected
+- `bench/rowSources.ts` where `--rows` gets its games (an export file, the store of collected
   games, a snapshot of it) and the writing of their rows a game at a time.
 - `bench/collectedStore.ts` the D1 store of collected games as six calls (a page of rows, every
   key, add, every game's build and replay check, keep checks, remove), the implementation that makes them through `wrangler`, loading the store as an
-  archive in memory, restoring a snapshot into it, and the one-off move of KV staging and the local
-  archive into it behind `--migrate`.
+  archive in memory, and restoring a snapshot into it.
 - `bench/refusedGames.ts` collected games that no longer replay: which `--rows` leaves out, the
   checks it keeps and the flag on a likely engine defect, the listing behind `--refused`, and its
   backup-first delete. Asks git for the build before, so not pure.
 - `bench/wrangler.ts` running `wrangler` against the proxy Worker's config, and reading the JSON it
   prints. Starts a process, so not pure.
-- `bench/staging.ts` the KV staging store games were sent to before D1, as three calls (list, get,
-  delete), and the implementation that makes them through `wrangler`.
-- `bench/pull.ts` pulling staged games into the archive behind `--pull`: the verification a game
-  must pass, and the order that makes `--delete` safe to interrupt.
-- `bench/recordArchive.ts` the SQLite archive of collected games, and its snapshot: writing one,
-  reading one and restoring from one.
+- `bench/recordArchive.ts` the in-memory SQLite archive the store is loaded into, and the snapshot:
+  writing one, reading one and checking each line's key against its payload.
 - `bench/main.ts` the command line: the only impure file (reads arguments, prints, saves).
 
 ## A note on trusting numbers while the engine still has bugs
