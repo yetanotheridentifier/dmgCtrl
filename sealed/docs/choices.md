@@ -864,7 +864,7 @@ a unit's upgrades and names every call to it, so a new attach fails until it is 
 and from each ability that plays a unit, whether from hand (`playUnitFromHand`), a deck search
 (`searchPlayFree`), the discard (`mayPlayUnitFromDiscard`) or the top of the deck (Camtono's
 `mayPlayTopFree`). An ability play is still a play (CR 6.2.0a), so the door records it as played this
-phase before anything else, then enters the unit, fires its arrival batch and runs the unique rule. A unit
+phase before anything else, then enters the unit and fires its arrival batch. A unit
 that arrives without being played (a token created, control taken, a captured card released, a leader
 deployed) does not record. Each of those still *enters play*, though, and raises the arrival triggers for
 it; taking control is the exception, since that unit is already in play. `unitPlaySites.test.ts` names
@@ -881,7 +881,10 @@ resolve down to one.
   upgrades of one card id raises `selectUniqueToDefeat`; you pick one to defeat (mandatory, no
   cancel, centre-screen overlay). Keyed on the upgrade's `owner`, so the opponent's copy does not
   conflict.
-- **Units:** `uniqueUnitCheck(state, owner)` runs at the end of `playUnitCard`, covering every
-  play-a-unit path. It raises `selectUniqueUnitToDefeat` as a **board-target** selection, since the
-  copies may differ in damage and upgrades. A unit that entered play as a copy (Clone) is not unique
+- **Units:** `uniqueUnitChecks` runs as every action ends in `resolve`, after the state-based defeat
+  sweep, for both players. That covers every way a second copy arrives, not just playing one: a
+  rescue, a guardian leaving play and releasing its captives, a change of control or its end, and an
+  upgrade becoming a unit. It raises `selectUniqueUnitToDefeat` as a **board-target** selection, since
+  the copies may differ in damage and upgrades. A player with one already pending is not asked again,
+  so the next copy's choice follows the answer. A unit that entered play as a copy (Clone) is not unique
   and is left out.

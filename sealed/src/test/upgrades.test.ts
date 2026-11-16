@@ -6,7 +6,7 @@ import { resolve } from '../engine/resolve'
 import { normaliseCard } from '../engine/cardDb'
 import { card, state, unit, player, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_EXPERIENCE, TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
-import type { PlayerId, UpgradeAttachment } from '../engine/types'
+import type { GameState, PlayerId, UpgradeAttachment } from '../engine/types'
 
 const UPGRADE = (over: Partial<Parameters<typeof card>[0]> = {}) =>
   card({ id: 'TST_UP', type: 'upgrade', cost: 1, power: 0, hp: 0, ...over })
@@ -390,5 +390,52 @@ describe('unique unit rule', () => {
     })
     expect(second.players.player.units.filter(u => u.cardId === 'UNIQ_UNIT')).toHaveLength(1)
     expect(second.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  const uniqueChoices = (s: GameState) => (s.pendingChoices ?? []).filter(c => c.kind === 'selectUniqueUnitToDefeat')
+
+  it('a copy released from capture beside another forces the same choice', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ units: [unit('u1', 'UNIQ_UNIT'), unit('a1', 'TST_U1', { exhausted: false })] }),
+        opponent: player({ units: [unit('g1', 'COMMON_UNIT', { captured: [{ cardId: 'UNIQ_UNIT', owner: 'player' }] })] }),
+      },
+    })
+    const attacked = resolve(s, { type: 'attack', attackerId: 'a1', target: { kind: 'unit', instanceId: 'g1' } })
+    expect(attacked.players.opponent.units.some(u => u.instanceId === 'g1')).toBe(false) // the guardian fell
+    expect(attacked.players.player.units.filter(u => u.cardId === 'UNIQ_UNIT')).toHaveLength(2)
+    expect(uniqueChoices(attacked)).toHaveLength(1)
+    expect(uniqueChoices(attacked)[0]).toMatchObject({ controller: 'player', cardId: 'UNIQ_UNIT' })
+    expect(attacked.activePlayer).toBe('player') // the player answers before the turn passes
+
+    const choice = uniqueChoices(attacked)[0] as { id: string; candidates: string[] }
+    const done = resolve(attacked, { type: 'acceptChoice', choiceId: choice.id, targetInstanceId: choice.candidates[1] })
+    expect(done.players.player.units.filter(u => u.cardId === 'UNIQ_UNIT')).toHaveLength(1)
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('a copy coming back under its owner\'s control beside another forces the same choice', () => {
+    // The opponent held the player's copy until a unit that has left play left (Grand Moff Tarkin).
+    const s = state({
+      cards,
+      players: {
+        player: player({ units: [unit('u1', 'UNIQ_UNIT')] }),
+        opponent: player({ units: [unit('x1', 'UNIQ_UNIT', { owner: 'player', controlUntil: 'gone' })] }),
+      },
+    })
+    const next = resolve(s, { type: 'pass' })
+    expect(next.players.player.units.filter(u => u.cardId === 'UNIQ_UNIT')).toHaveLength(2)
+    expect(uniqueChoices(next)).toHaveLength(1)
+    expect(uniqueChoices(next)[0]).toMatchObject({ controller: 'player', cardId: 'UNIQ_UNIT' })
+  })
+
+  it('playing a second copy raises the choice once, not once per check', () => {
+    const s = state({
+      cards,
+      players: { player: player({ hand: ['UNIQ_UNIT'], resources: ready(2), units: [unit('u1', 'UNIQ_UNIT')] }), opponent: player() },
+    })
+    expect(uniqueChoices(resolve(s, { type: 'playUnit', handIndex: 0 }))).toHaveLength(1)
   })
 })
