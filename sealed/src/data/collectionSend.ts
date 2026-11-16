@@ -1,5 +1,6 @@
 import { SWU_DB_API } from './cards'
 import { recordForCollection } from './collection'
+import { pendingIds, writePending } from './collectionPending'
 import { db } from './db'
 import { hasReplayData, recordDelivered, trimGameRecords } from './gameRecords'
 import type { GameRecord } from './gameRecords'
@@ -22,32 +23,8 @@ import { isDev } from '../env'
 /** The card Worker, on the path it collects games at (`proxy/records.js`). */
 export const COLLECTION_URL = `${SWU_DB_API}/records`
 
-/** localStorage: the ids of games that are owed an attempt, oldest first. Never leaves the device. */
-export const PENDING_KEY = 'sealed_collection_pending'
-
-/** How many undelivered games are remembered. Past it the oldest is let go, so the list is bounded. */
-export const MAX_PENDING = 50
-
 /** How long one attempt may take before it counts as a failure. */
 const TIMEOUT_MS = 20_000
-
-export function pendingIds(): string[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(PENDING_KEY) ?? '[]')
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-function writePending(ids: string[]): void {
-  try {
-    if (ids.length === 0) localStorage.removeItem(PENDING_KEY)
-    else localStorage.setItem(PENDING_KEY, JSON.stringify(ids.slice(-MAX_PENDING)))
-  } catch {
-    // Storage that cannot be written loses the retry, not the game in progress.
-  }
-}
 
 /** A game already waiting keeps its place, so the oldest stays first. */
 const remember = (id: string) => {

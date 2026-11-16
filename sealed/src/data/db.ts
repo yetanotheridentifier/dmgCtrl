@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import { pendingIds } from './collectionSend'
+import { pendingIds } from './collectionPending'
 import type { SavedGame } from './gameRecords'
 
 /**
