@@ -23,6 +23,8 @@ import { recordsOfExport, rowsForRecord, type RowOptions, type RowSource } from 
 export interface RowInput {
   label: string
   record: RowSource
+  /** The key of a game from the archive, by which its replay check is kept. A game from a file has none. */
+  gameKey?: string
 }
 
 /** The games of one file: a snapshot if it is gzipped, an export otherwise. Throws for a file that is neither. */
@@ -35,7 +37,7 @@ export function inputsFromFile(path: string): RowInput[] {
 
 /** The archive's games, in key order, read as they are asked for. */
 export function* inputsFromArchive(db: DatabaseSync): Generator<RowInput> {
-  for (const game of archivedGames(db)) yield { label: `archive game ${game.gameKey}`, record: JSON.parse(game.payload) as RowSource }
+  for (const game of archivedGames(db)) yield { label: `archive game ${game.gameKey}`, record: JSON.parse(game.payload) as RowSource, gameKey: game.gameKey }
 }
 
 export interface RowsWritten {
@@ -46,6 +48,8 @@ export interface RowsWritten {
   offList: number
   /** The games that did not replay, each as its label and the reason. They wrote no rows. */
   refused: string[]
+  /** Each keyed input's outcome, in the order read: the refusal's reason, or `null` for a game that replayed. */
+  checked: { gameKey: string; refusal: string | null }[]
 }
 
 /**
@@ -57,15 +61,18 @@ export interface RowsWritten {
 export function writeRows(inputs: Iterable<RowInput>, cards: CardDb, options: RowOptions, out: string): RowsWritten {
   mkdirSync(dirname(out), { recursive: true })
   writeFileSync(out, '')
-  const written: RowsWritten = { games: 0, rows: 0, bytes: 0, offList: 0, refused: [] }
+  const written: RowsWritten = { games: 0, rows: 0, bytes: 0, offList: 0, refused: [], checked: [] }
   for (const input of inputs) {
     let rows
     try {
       rows = rowsForRecord(input.record, cards, options)
     } catch (err) {
-      written.refused.push(`${input.label}: ${(err as Error).message}`)
+      const reason = (err as Error).message
+      written.refused.push(`${input.label}: ${reason}`)
+      if (input.gameKey !== undefined) written.checked.push({ gameKey: input.gameKey, refusal: reason })
       continue
     }
+    if (input.gameKey !== undefined) written.checked.push({ gameKey: input.gameKey, refusal: null })
     const lines = rows.map(r => `${JSON.stringify(r)}\n`).join('')
     appendFileSync(out, lines)
     written.games++

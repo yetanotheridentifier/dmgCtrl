@@ -50,7 +50,8 @@ import { inputsFromArchive, inputsFromFile, writeRows, type RowInput } from './r
 import { archiveStatus, DEFAULT_ARCHIVE_PATH, openArchive, restoreSnapshot, today, writeSnapshot } from './recordArchive'
 import { pullStaged } from './pull'
 import type { DatabaseSync } from 'node:sqlite'
-import { d1Store, loadStore, migrateToStore, restoreToStore } from './collectedStore'
+import { d1Store, loadStore, migrateToStore, restoreToStore, type CollectedStore, type StoredGame } from './collectedStore'
+import { deleteRefused, knownRefused, nextChecks, recentBuilds, refusedReport } from './refusedGames'
 import { wranglerStaging } from './staging'
 
 /**
@@ -138,9 +139,9 @@ interface Args {
   pull: boolean
   /** Move every game in the local archive and in KV staging into the D1 store (`collectedStore.ts`). Deletes nothing. */
   migrate: boolean
-  /** With `--pull`: remove from staging the games the archive holds. */
+  /** With `--pull`: remove from staging the games the archive holds. With `--refused`: delete the refused games from the store. */
   delete: boolean
-  /** With `--pull --delete`: remove nothing, and list what would be removed. */
+  /** With `--delete`: remove nothing, and list what would be removed. */
   dryRun: boolean
   /** Write a snapshot of the archive to this folder. On its own, or after a pull. */
   backup?: string
@@ -153,6 +154,10 @@ interface Args {
    * and `--pull` and `--migrate` use `DEFAULT_ARCHIVE_PATH`.
    */
   archive?: string
+  /** List the collected games that no longer replay; with `--delete`, delete them (`refusedGames.ts`). */
+  refused: boolean
+  /** With `--refused --delete`: flagged games someone has looked at, which go with the rest. */
+  lookedAt: string[]
   aiExplicit: boolean
   /**
    * Every AI named positionally. The head-to-head modes take the first two; `--cost` and `--budget`
@@ -205,6 +210,8 @@ export function parseArgs(argv: string[]): Args {
   let restore: string | undefined
   let collected = false
   let archive: string | undefined
+  let refused = false
+  let lookedAt: string[] | undefined
   /** The value after a flag that needs one, refusing a missing one or another flag in its place. */
   const valueOf = (i: number, needs: string): string => {
     const v = argv[i]
@@ -259,6 +266,12 @@ export function parseArgs(argv: string[]): Args {
     else if (arg === '--backup') backup = valueOf(++i, '--backup needs a folder to write the snapshot to')
     else if (arg === '--restore') restore = valueOf(++i, '--restore needs a snapshot file')
     else if (arg === '--archive') archive = valueOf(++i, '--archive needs a file, the database the collected games are kept in')
+    else if (arg === '--refused') refused = true
+    else if (arg === '--looked-at') {
+      const keys = valueOf(++i, '--looked-at takes game keys, 16 hex digits each, separated by commas').split(',')
+      if (!keys.every(k => /^[0-9a-f]{16}$/.test(k))) throw new Error('--looked-at takes game keys, 16 hex digits each, separated by commas')
+      lookedAt = keys
+    }
     else if (arg === '--view') {
       const v = argv[++i]
       if (v !== 'full' && v !== 'mover') throw new Error(`--view must be full or mover, got "${v}"`)
@@ -289,10 +302,17 @@ export function parseArgs(argv: string[]): Args {
   // The collected-game modes (`pull.ts`, `recordArchive.ts`). Each refusal is made here, so a
   // command that would remove games from staging without a backup stops before it reaches the network.
   if (restore !== undefined && (pull || backup !== undefined || rows || collected)) throw new Error('--restore runs on its own: restore first, then pull, back up or make rows')
-  if (del && !pull) throw new Error('--delete applies to --pull only')
-  if (dryRun && !del) throw new Error('--dry-run applies to --pull --delete only')
-  if (del && !dryRun && backup === undefined) throw new Error('--delete needs --backup DIR: once a game is removed from staging the archive is its only copy')
-  const collectedMode = pull || migrate || backup !== undefined || restore !== undefined || (collected && !rows)
+  if (refused && (pull || migrate || rows || restore !== undefined || collected)) throw new Error('--refused runs on its own: check the games with --rows --collected first, then list or delete the refused')
+  if (refused && archive !== undefined) throw new Error('--refused works on the D1 store, where the replay checks are kept, and takes no --archive')
+  if (del && !pull && !refused) throw new Error('--delete applies to --pull and --refused only')
+  if (dryRun && !del) throw new Error('--dry-run applies to --delete only')
+  if (del && !dryRun && backup === undefined) {
+    throw new Error(refused
+      ? '--delete needs --backup DIR: once a game is deleted from the store the backup is its only copy'
+      : '--delete needs --backup DIR: once a game is removed from staging the archive is its only copy')
+  }
+  if (lookedAt !== undefined && !(refused && del)) throw new Error('--looked-at applies to --refused --delete only')
+  const collectedMode = pull || migrate || refused || backup !== undefined || restore !== undefined || (collected && !rows)
   if (collectedMode && positional.length > 0) throw new Error(`a collected-games run takes no names or files, got ${positional.join(' ')}`)
   // The game runs over a population hand their games to a recorder (`records.ts`). Refused here, so a
   // mode that keeps no records says so before it plays anything, where taking the flag and writing
@@ -308,7 +328,7 @@ export function parseArgs(argv: string[]): Args {
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
   // The matrix rates one set's leaders against each other; a mixed pool builds decks nobody builds.
   if (matrix && poolSets.length !== 1) throw new Error(`--matrix takes one set, got ${poolSets.join(',')}`)
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, poolSets, decks, sets: positional.map(s => s.toUpperCase()), rows, legal, view, files: positional, record, pull, migrate, delete: del, dryRun, backup, restore, collected, archive, aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, poolSets, decks, sets: positional.map(s => s.toUpperCase()), rows, legal, view, files: positional, record, pull, migrate, delete: del, dryRun, backup, restore, collected, archive, refused, lookedAt: lookedAt ?? [], aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 /**
@@ -1741,6 +1761,13 @@ function runRowsMode(args: Args): void {
   const out = args.out!
   const start = Date.now()
   const cards = trainingCardDb()
+  // From the D1 store, each game's latest replay check (`refusedGames.ts`): a game known refused on
+  // this build is left out, and this run's checks are kept. A tree with uncommitted changes is no
+  // build, so it leaves nothing out and keeps nothing.
+  const build = COMMIT_ID.endsWith('-dirty') ? undefined : COMMIT_ID
+  let store: CollectedStore | undefined
+  let stored: StoredGame[] = []
+  let skipped: StoredGame[] = []
   // Each source is opened when the rows before it are written, so a file that cannot be read stops
   // the run where it stands, as it always has, and the archive is read a page at a time.
   function* inputs(): Generator<RowInput> {
@@ -1759,31 +1786,61 @@ function runRowsMode(args: Args): void {
     }
     if (args.collected) {
       let db: DatabaseSync
+      let skip = new Set<string>()
       try {
-        db = openCollected(args)
+        if (args.archive === undefined) {
+          store = d1Store()
+          stored = store.games()
+          if (build !== undefined) skip = knownRefused(stored, build)
+          skipped = stored.filter(g => skip.has(g.gameKey))
+          db = loadStore(store)
+        } else {
+          db = openArchive(args.archive)
+        }
       } catch (err) {
         console.error(`bench: ${collectedName(args)}: ${(err as Error).message}`)
         process.exit(2)
         return
       }
-      yield* inputsFromArchive(db)
+      for (const input of inputsFromArchive(db)) if (!skip.has(input.gameKey!)) yield input
     }
   }
-  const { games, rows: rowCount, bytes, offList, refused } = writeRows(inputs(), cards, { legalMoves: args.legal, view: args.view }, out)
+  const { games, rows: rowCount, bytes, offList, refused, checked } = writeRows(inputs(), cards, { legalMoves: args.legal, view: args.view }, out)
+  let kept: ReturnType<typeof nextChecks> = []
+  let keepFailed: string | undefined
+  if (store !== undefined && build !== undefined) {
+    kept = nextChecks(stored, checked, build, recentBuilds())
+    try {
+      store.recordChecks(kept)
+    } catch (err) {
+      keepFailed = (err as Error).message
+    }
+  }
+  // Said on every run, whether found now or left out as already known: a sign of an engine defect.
+  const flagged = [
+    ...skipped.filter(g => g.check!.flagged).map(g => ({ gameKey: g.gameKey, reason: g.check!.refusal! })),
+    ...kept.filter(c => c.flagged).map(c => ({ gameKey: c.gameKey, reason: c.refusal! })),
+  ]
   const each = (n: number, per: number): string => (per === 0 ? '-' : Math.round(n / per).toLocaleString('en-GB'))
   console.log(`\ntraining rows  (engine ${COMMIT_ID}, row format ${ROWS_FORMAT_VERSION})`)
   console.log(row('files', String(args.files.length)))
   if (args.collected) console.log(row('collected games', collectedName(args)))
   console.log(row('view', args.view === 'mover' ? 'mover  (each state as the seat that moved saw it)' : 'full  (each state whole, both hands and both decks)'))
   console.log(row('games / refused', `${games} / ${refused.length}`))
+  if (store !== undefined) {
+    console.log(row('left out', `${skipped.length}  (known refused on this build, not replayed again: --refused lists them)`))
+    console.log(row('checks kept', build === undefined ? 'none  (the tree has uncommitted changes, so this run is no build)' : `${keepFailed === undefined ? kept.length : 0}  (on build ${build})`))
+  }
   console.log(row('rows', `${rowCount.toLocaleString('en-GB')}  (${each(rowCount, games)} a game)`))
   console.log(row('size', `${bytes.toLocaleString('en-GB')} bytes  (${each(bytes, rowCount)} a row, ${each(bytes, games)} a game)`))
   if (args.legal) console.log(row('moves off the list', `${offList}  (made, but not among the engine's legal moves)`))
   console.log(row('time', `${((Date.now() - start) / 1000).toFixed(1)}s`))
   console.log(row('written to', out))
   for (const line of refused) console.error(`  refused: ${line}`)
+  if (keepFailed !== undefined) console.error(`  CHECKS NOT KEPT: ${keepFailed}. The rows are written; the next run replays these games again.`)
+  for (const f of flagged) console.error(`  FLAGGED: game ${f.gameKey} is refused on the build that played it or the one before, so the engine, not the rules, is suspect: ${f.reason}`)
   console.log('')
-  if (refused.length > 0) process.exit(1)
+  if (refused.length > 0 || keepFailed !== undefined) process.exit(1)
 }
 
 /** What the archive holds: its games, and how many each build played. */
@@ -1810,9 +1867,10 @@ function openCollected(args: Args): DatabaseSync {
  * The collected-game modes: `--collected`, `--backup DIR` and `--restore FILE` on the D1 store, or
  * on the local archive `--archive` names (`collectedStore.ts`, `recordArchive.ts`); `--migrate`,
  * which moves the local archive and KV staging into D1; and `--pull [--delete [--dry-run]]
- * [--backup DIR]`, from KV staging into the local archive.
+ * [--backup DIR]`, from KV staging into the local archive; and `--refused [--delete ...]`, the D1
+ * games that no longer replay (`refusedGames.ts`).
  *
- * Only a pull with `--delete` removes anything (`pull.ts` says what and in what order). Each ends by
+ * Only `--delete` removes anything (`pull.ts` and `refusedGames.ts` say what and in what order). Each ends by
  * saying what the store it worked on now holds. A refused game, a game missing after a move, or a
  * delete that failed makes the run exit non-zero.
  */
@@ -1870,6 +1928,27 @@ function runCollectedMode(args: Args): void {
       for (const r of pulled.refused) console.error(`  refused: ${r.key}: ${r.reason}`)
       if (pulled.deleteFailed !== undefined) console.error(`  NOT DELETED: ${pulled.deleteFailed}. Nothing is lost: the games are archived, and the next --pull --delete removes them.`)
       failed = pulled.refused.length > 0 || pulled.deleteFailed !== undefined
+    } else if (args.refused) {
+      const store = d1Store()
+      const build = COMMIT_ID.endsWith('-dirty') ? undefined : COMMIT_ID
+      const report = refusedReport(store.games(), build ?? COMMIT_ID, new Set(args.lookedAt))
+      const deleting = args.delete && !args.dryRun
+      console.log(`\nrefused games  (engine ${COMMIT_ID}, ${deleting ? 'deleting from the store' : 'read-only'})`)
+      console.log(row('refused', `${report.refused.length}  (the latest replay check did not reach the game's result)`))
+      for (const r of report.byReason) console.log(row(`  ${r.games}`, r.reason))
+      for (const b of report.byBuild) console.log(row(`  played on ${b.build}`, String(b.games)))
+      console.log(row('on another build', `${report.otherBuild.length}  (kept: --rows --collected checks them on this one first)`))
+      console.log(row('flagged', `${report.flagged.length}  (refused on the build that played them or the one before: kept until looked at)`))
+      console.log(row('deletable', `${report.deletable.length}  (refused on this build: --delete removes exactly these)`))
+      for (const g of report.flagged) console.error(`  FLAGGED: game ${g.gameKey}, build ${g.release ?? '?'} (${g.commitId ?? '?'}): ${g.check!.refusal}`)
+      if (args.dryRun) for (const key of report.deletable) console.log(`  would delete: ${key}`)
+      if (deleting) {
+        if (build === undefined) throw new Error('the tree has uncommitted changes, so this is no build and nothing was checked on it: commit, run --rows --collected, then delete')
+        const done = deleteRefused(store, report.deletable, args.backup!, today())
+        if (done.snapshot) console.log(row('snapshot', `${done.snapshot.games} games, ${done.snapshot.bytes.toLocaleString('en-GB')} bytes  →  ${done.snapshot.path}`))
+        console.log(row('deleted from the store', String(done.deleted.length)))
+      }
+      db = loadStore(store)
     } else if (args.backup !== undefined) {
       db = openCollected(args)
       const file = writeSnapshot(db, args.backup, today())
@@ -1905,12 +1984,13 @@ function main(): void {
     console.error('       npm run bench --prefix sealed -- --pull [--delete [--dry-run]] [--backup DIR] [--archive FILE]')
     console.error('       npm run bench --prefix sealed -- --backup DIR | --restore SNAPSHOT.jsonl.gz | --collected  [--archive FILE]')
     console.error('       npm run bench --prefix sealed -- --migrate [--archive FILE]')
+    console.error('       npm run bench --prefix sealed -- --refused [--delete [--dry-run] [--backup DIR] [--looked-at KEY[,KEY ...]]]')
     process.exit(2)
     return
   }
 
   if (args.rows) { runRowsMode(args); return }
-  if (args.pull || args.migrate || args.backup !== undefined || args.restore !== undefined || args.collected) { runCollectedMode(args); return }
+  if (args.pull || args.migrate || args.refused || args.backup !== undefined || args.restore !== undefined || args.collected) { runCollectedMode(args); return }
   if (args.triage) { void runTriageMode(args); return }
   if (args.fixture) { void runFixtureMode(args); return }
   if (args.sweep) { runSweepMode(args); return }

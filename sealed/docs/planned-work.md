@@ -120,10 +120,11 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
   Rows come in the whole state or the mover's view of it (`--view mover`), which is the one to
   imitate from.
   **Next: retire KV staging and the local archive** (#1113), once `--migrate` has moved both into D1
-  and the user has checked it: remove `--pull`, `--delete`, `bench/staging.ts`, `bench/pull.ts` and
-  the `GAME_RECORDS` binding. Deleting the KV namespace and `collected-games.db` is the user's step.
-  **Next: a replay result for each stored game** (#1109), and deleting games refused for good after
-  a backup; then trimming device records once their delivery is confirmed (#1110).
+  and the user has checked it: remove `--pull` with its `--delete` (`--refused --delete` stays),
+  `bench/staging.ts`, `bench/pull.ts` and the `GAME_RECORDS` binding. Deleting the KV namespace and
+  `collected-games.db` is the user's step. Each stored game keeps its latest replay check, and
+  `--refused --delete` removes the refused ones after a backup.
+  **Next: trimming device records once their delivery is confirmed** (#1110).
   Bench self-play is the second source of records, and needs no consent: `--record` on the
   head-to-head run keeps its completed games in the exported shape, with the bot on each seat named.
   The per-card, per-deck question the epic set out to answer (#407) is a function over those records

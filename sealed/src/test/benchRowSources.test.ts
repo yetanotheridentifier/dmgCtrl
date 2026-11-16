@@ -57,7 +57,8 @@ describe('rows from the archive of collected games', () => {
   it('are the same bytes as the rows of a snapshot of it, read as a file', () => {
     const fromSnapshot = written('snapshot', inputsFromFile(snapshot))
     expect(readFileSync(fromSnapshot.out).equals(readFileSync(fromArchive.out))).toBe(true)
-    expect(fromSnapshot.result).toEqual(fromArchive.result)
+    // The same but for the outcomes by key, which only a game read from the store gives.
+    expect(fromSnapshot.result).toEqual({ ...fromArchive.result, checked: [] })
   })
 
   it('carry what the payload holds: the build, the bot, the seat, the take-backs and how long it took', () => {
@@ -108,6 +109,16 @@ describe('rows from the archive of collected games', () => {
 
     expect(result.games).toBe(1)
     expect(result.refused).toEqual([expect.stringMatching(new RegExp(`^archive game ${bad.gameKey}: .*the record says`)) as string])
+    // Each game's outcome by its key, so the store can keep it: the refusal's reason, or none.
+    expect(result.checked).toEqual([
+      { gameKey: good.gameKey, refusal: null },
+      { gameKey: bad.gameKey, refusal: expect.stringMatching(/the record says/) as string },
+    ].sort((x, y) => x.gameKey.localeCompare(y.gameKey)))
+  })
+
+  it('give no outcome by key for a game read from a file, which no store holds', () => {
+    const { result } = written('unkeyed', inputsFromFile(exportFile))
+    expect(result.checked).toEqual([])
   })
 })
 

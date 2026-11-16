@@ -142,6 +142,13 @@ describe('POST /records: storing a game', () => {
     expect(games[0].payload).toEqual(record())
   })
 
+  it('stores a game unchecked: the replay check beside it is the bench\'s to write', async () => {
+    await SELF.fetch(post(record()))
+
+    const [game] = await storedGames()
+    expect(game).toMatchObject({ checked_on: null, refusal: null, flagged: 0 })
+  })
+
   it('keeps the payload gzipped, as the JSON text it was sent as', async () => {
     await SELF.fetch(post(record()))
 
@@ -168,7 +175,8 @@ describe('POST /records: storing a game', () => {
     expect(game.commit_id).toBe('abc1234')
     expect(game.received_day).toMatch(UTC_DAY)
     expect(game.received_day).toBe(new Date().toISOString().slice(0, 10))
-    expect(Object.keys(game).sort()).toEqual(['commit_id', 'game_key', 'payload', 'received_day', 'release'])
+    // The replay check's columns name a build, not a time (migrations/0002).
+    expect(Object.keys(game).sort()).toEqual(['checked_on', 'commit_id', 'flagged', 'game_key', 'payload', 'received_day', 'refusal', 'release'])
   })
 
   /**
