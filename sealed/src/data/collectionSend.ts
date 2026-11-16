@@ -1,6 +1,7 @@
 import { SWU_DB_API } from './cards'
 import { recordForCollection } from './collection'
 import { db } from './db'
+import { hasReplayData, recordDelivered, trimGameRecords } from './gameRecords'
 import type { GameRecord } from './gameRecords'
 import { isDev } from '../env'
 
@@ -30,7 +31,7 @@ export const MAX_PENDING = 50
 /** How long one attempt may take before it counts as a failure. */
 const TIMEOUT_MS = 20_000
 
-function pendingIds(): string[] {
+export function pendingIds(): string[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(PENDING_KEY) ?? '[]')
     return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []
@@ -82,6 +83,8 @@ async function attempt(record: GameRecord): Promise<'settled' | 'later'> {
     })
     const passing = response.status >= 500 || response.status === 429 || response.status === 408
     if (passing) return 'later'
+    // Only a 204 says the game is stored, so only a 204 lets the device trim its copy.
+    if (response.status === 204) await recordDelivered(record.id)
   } catch {
     return 'later'
   }
@@ -90,13 +93,15 @@ async function attempt(record: GameRecord): Promise<'settled' | 'later'> {
 }
 
 /**
- * Offer one finished, saved game for collection. Resolves whatever happens and never throws, so a
- * caller can drop the promise.
+ * Offer one finished, saved game for collection, then trim what the device keeps (`trimGameRecords`),
+ * which for a player who does not share drops this game's replay data at once. A dev build sends
+ * nothing but trims the same. Resolves whatever happens and never throws, so a caller can drop the
+ * promise.
  */
 export async function sendForCollection(record: GameRecord): Promise<void> {
-  if (isDev()) return
   try {
-    await attempt(record)
+    if (!isDev()) await attempt(record)
+    await trimGameRecords()
   } catch {
     // Collection is never worth an error the player sees.
   }
@@ -115,7 +120,8 @@ export async function retryPendingCollection(): Promise<void> {
   try {
     for (const id of pendingIds()) {
       const record = await db.games.get(id)
-      if (!record) {
+      // A summary has nothing left to send: its replay data went when sharing was switched off.
+      if (!record || !hasReplayData(record)) {
         forget(id)
         continue
       }

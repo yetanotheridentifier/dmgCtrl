@@ -50,7 +50,8 @@ export interface CollectedRecord {
   humanSeat?: PlayerId
 }
 
-function sharingGames(): boolean {
+/** Whether the player is opted in to sharing games, read from storage now. */
+export function sharingGames(): boolean {
   return loadSettings().shareGames === 'yes'
 }
 

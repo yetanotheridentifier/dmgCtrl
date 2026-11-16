@@ -6,7 +6,7 @@ import ibhSet from './fixtures/ibhSet.json'
 import type { SwuCard } from '../data/cards'
 import { buildCardDb } from '../engine/cardDb'
 import type { PlayerId } from '../engine/types'
-import { addGame, baseGroup, matchupsOf, sideOf, totalOf } from '../data/matchups'
+import { addGame, baseGroup, matchupsOf, sideOf, sidesOf, totalOf } from '../data/matchups'
 import type { MatchupTally } from '../data/matchups'
 import { player, state } from './helpers/engineFixtures'
 
@@ -52,7 +52,7 @@ describe('tallying games by matchup', () => {
     if (humanSeat === 'opponent') [seats.player, seats.opponent] = [theirs, mine]
     const side = ([leader, base]: [string, string]) => player({ leader: { cardId: leader, deployed: false, epicActionUsed: false, exhausted: false }, base: { cardId: base, damage: 0 } })
     return {
-      initialState: state({ cards: CARDS, players: { player: side(seats.player), opponent: side(seats.opponent) } }),
+      sides: sidesOf(state({ cards: CARDS, players: { player: side(seats.player), opponent: side(seats.opponent) } })),
       winner,
       ...(humanSeat ? { humanSeat } : {}),
     }

@@ -18,9 +18,9 @@ export const EXPORT_FORMAT_VERSION = 1
 /**
  * A `GameRecord` as it leaves the device: no id, no card database, no final state. No consent mark
  * either: that is the collection gate's (`collection.ts`), and a file the player downloads by hand
- * is theirs whatever they answered.
+ * is theirs whatever they answered. Nor the delivery mark, which only says what the device may trim.
  */
-export type ExportedRecord = Omit<GameRecord, 'id' | 'initialState' | 'finalState' | 'consentedAtFinish'> & {
+export type ExportedRecord = Omit<GameRecord, 'id' | 'initialState' | 'finalState' | 'consentedAtFinish' | 'delivered'> & {
   initialState: StateWithoutCards
   /** Only on a game the bench played between two bots (`bench/records.ts`). */
   bench?: BenchProvenance
@@ -57,10 +57,11 @@ export interface GameExport {
  * unknown, and an export must not turn unknown into a value.
  */
 export function exportRecord(record: Omit<GameRecord, 'id'> & { id?: string }): ExportedRecord {
-  const { id, finalState, consentedAtFinish, initialState, ...kept } = record
+  const { id, finalState, consentedAtFinish, delivered, initialState, ...kept } = record
   void id
   void finalState
   void consentedAtFinish
+  void delivered
   return { ...kept, initialState: withoutCards(initialState) }
 }
 

@@ -278,10 +278,29 @@ All four are optional and none is an indexed key, so the `games` store's schema 
 them. A field is absent on a record written before it was captured, which means unknown, and it
 cannot be backfilled.
 
+**Saved games and their replay data.** Every game keeps a row in `games` for good, but its replay
+data (`initialState`, `moves`, `finalState`) only while something needs it. `trimGameRecords`
+(`data/gameRecords.ts`) replaces a record by its `GameSummary`: every other field it was saved with,
+`sides` (each seat's leader and base cards, from `sidesOf`) and `concededBy`. Which records stay
+whole follows the sharing answer as it stands:
+
+- **A player who shares** keeps every game finished while sharing and not yet `delivered`, however
+  many, and the newest `KEPT_AFTER_DELIVERY` (2) of the rest, delivered or never to be sent.
+- **A player who does not share, or has not answered,** keeps none, including a game still waiting
+  to be sent when sharing is switched off.
+
+`delivered` is set on a 204 from the endpoint and on nothing else, since only a 204 says the game is
+stored; a refusal, a 200 or a failure leaves the replay data in place. The trim runs after each game
+is offered for collection (the sender), and as the app opens and whenever the answer changes
+(`App.tsx`), which is what brings a device's older records into line. Schema 3 marks records saved
+before deliveries were marked: one finished while sharing that is no longer in
+`sealed_collection_pending` reads as delivered, the old sender's only record of it. A summary is not
+listed by `listGameRecords`, exported or offered for collection.
+
 **The setup screen reads the records for one thing**: the player's record by matchup
 (`matchupRecords`, tallied by `data/matchups.ts` once as the screen opens). A matchup is a leader on
-a base against a leader on a base, read from each record's `initialState` and the card data it
-carries, so every saved game counts and no deck name or id is involved. Bases are grouped from the
+a base against a leader on a base, read from each game's sides (from its `initialState` while it has
+one, its summary after) and the card data they carry, so every saved game counts and no deck name or id is involved. Bases are grouped from the
 card data alike on both sides: a common base with no ability groups by aspect, a common base with an
 ability groups with every common base of its HP (the Force bases, the splash bases), and a rare or
 special base stands alone. A leader is matched by name and subtitle. A record with no `humanSeat`
@@ -342,7 +361,7 @@ every failure is silent, with no message, no log line and no second attempt on t
   opted out since, when the record is gone, or when the endpoint refused the payload itself (a 4xx
   other than 408 and 429), since it would refuse it again.
 - **Offline, no request is made** (`navigator.onLine`), and the game waits in the list.
-- **A dev build sends nothing** (`isDev`), on finishing a game or on opening.
+- **A dev build sends nothing** (`isDev`), on finishing a game or on opening. It trims the same.
 
 The local export is separate: the player starts it by hand, it keeps the deck names, and it does not
 carry `consentedAtFinish`.
@@ -798,7 +817,7 @@ The board is drawn with art-dominant cards, not text rows:
 | Bundled sets ← `bundledSets.ts` | Every set the setup panel lists, as shipped with the app: Normal printings, one row per card, no tokens. The files are the bench fixtures (`src/test/fixtures/<set>Set.json`), each loaded with `import()` so it is a file of its own, fetched when its set is first asked for | A first visit plays with the card API unreachable; the game plays the card data the bench and tests run against |
 | IndexedDB `cards` ← `setImport.ts` | Whole sets via one SWUDB search call (`?q=set:XXX`), each row passed through `fromSearchRow` first because the search wraps aspects and traits as `{ S: value }` | A set with no bundled snapshot; includes bases the detail endpoint 502s on |
 | IndexedDB `cards` (Dexie v1) | Card JSON + thumbnail bytes | ~KBs per card; queryable; offline |
-| IndexedDB `games` (Dexie v2) | Completed game records, with their provenance; exported to a JSON file from the console | Replayable substrate for E7 training |
+| IndexedDB `games` (Dexie v3) | Completed games: a summary of each for good, replay data only while kept (see "Saved games and their replay data"); the whole ones exported to a JSON file from the console | The record by matchup; replay data until it is delivered |
 
 **A card is read from the cache, then the bundled set, then the network** (`getCard`), and a whole
 set is the bundled set with the cache laid over it (`cachedSetCards`): a cached copy of a card stands
@@ -837,7 +856,7 @@ sent by players who opted in. A game travels one way:
 
 | Stage | Where | Holds |
 |---|---|---|
-| the device | IndexedDB `games` | the full record, with deck names, timestamps and its id |
+| the device | IndexedDB `games` | the full record, with deck names, timestamps and its id, until delivered; then the newest two whole and a summary of the rest |
 | the request | `POST /records` | the named fields of `CollectedRecord` only: no deck names, no id, a duration and no times |
 | the store | D1, one row per `gameKey` | that payload gzipped, the build copied out of it, and the UTC day it arrived |
 | snapshots | `collected-games-<day>.jsonl.gz` | the whole store as one compressed file of JSON Lines (`--backup`) |

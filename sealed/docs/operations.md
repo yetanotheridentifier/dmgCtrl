@@ -591,7 +591,7 @@ Everything is on-device; there is no account or server state.
 |---|---|---|
 | Imported decks | localStorage key `sealed_decks` | Remove buttons in-app, or clear the key |
 | Card cache | IndexedDB `dmgctrl-sealed` → `cards` | Delete the DB in devtools, it re-hydrates on next play |
-| Game records | IndexedDB `dmgctrl-sealed` → `games` | See "Clearing game records" and "Exporting game records" below |
+| Game records | IndexedDB `dmgctrl-sealed` → `games` | One row a game: a summary for good, its replay data only while kept (see below). See "Clearing game records" and "Exporting game records" below |
 
 ### Clearing game records
 
@@ -622,7 +622,8 @@ indexedDB.open('dmgctrl-sealed').onsuccess = e => {
 Or by hand: **Application → IndexedDB → dmgctrl-sealed → games → Clear object store**.
 
 All three touch only `games`. Imported decks (localStorage) and the card cache are untouched, so
-nothing needs re-hydrating afterwards and your decks stay put.
+nothing needs re-hydrating afterwards and your decks stay put. Clearing takes the summaries too, so
+the record by matchup on the setup screen starts again from nothing.
 
 **When you need to:** records written before the AI became state-seeded **do not replay
 faithfully**, because that opponent drew from `Math.random`, so re-resolving the stored move list
@@ -632,7 +633,12 @@ replays, and there's a test pinning that (`deterministicReplay.test.ts`).
 
 ### Exporting game records
 
-Saved games come off the device as one JSON file, from the same console as above:
+Saved games come off the device as one JSON file, from the same console as above. Only games that
+still have their replay data are in it, and a device keeps few of those: for a player who shares,
+the games not yet delivered and the two newest of the rest; for one who does not, none. Every other
+game is a summary (its sides, winner, how it ended, its times and provenance), which the record by
+matchup reads and the export leaves out. See "Saved games and their replay data" in
+[architecture.md](architecture.md) for the rule.
 
 ```js
 __sealedExportGames()

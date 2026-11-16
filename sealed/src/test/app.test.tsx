@@ -12,6 +12,10 @@ import { retryPendingCollection } from '../data/collectionSend'
 import { onAppStarted } from '../data/analytics'
 import { SHARING_HELP_SECTION } from '../utils/helpSections'
 import { PORTRAIT_QUERY } from '../hooks/useMediaQuery'
+import { playedRecord } from './helpers/playedRecord'
+
+/** One finished game, as the app saves it. */
+const PLAYED_GAME = playedRecord(7)
 
 /** A phone held upright: the default mock matches no query, which the screens read as landscape. */
 const portraitMedia = (query: string) => ({ matches: query === PORTRAIT_QUERY, media: query, addEventListener: () => {}, removeEventListener: () => {} })
@@ -369,6 +373,38 @@ describe('App shell', () => {
       await user.click(screen.getByTestId('share-games-pill'))
 
       expect(within(settingsSheet()!).getByRole('switch', { name: 'Share games to improve the bot' })).toHaveAttribute('aria-checked', 'false')
+    })
+
+    /**
+     * What the device keeps follows the answer: the app trims as it opens, which is what brings a
+     * device's older records into line, and again the moment sharing is switched off, when even a
+     * game still waiting to be sent keeps only its summary.
+     */
+    describe('trimming saved games', () => {
+      const waiting = { ...PLAYED_GAME, id: 'waiting', consentedAtFinish: true as const }
+      beforeEach(() => db.games.clear())
+
+      it('keeps only a summary of each game once a player who does not share opens the app', async () => {
+        await db.games.put(waiting)
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), shareGames: 'no' }))
+        render(<App />)
+
+        await waitFor(async () => expect(await db.games.get('waiting')).not.toHaveProperty('moves'))
+      })
+
+      it('drops the replay data of a game still waiting to be sent when sharing is switched off', async () => {
+        const user = userEvent.setup()
+        await db.games.put(waiting)
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), shareGames: 'yes' }))
+        render(<App />)
+        await user.click(screen.getByTestId('share-games-pill'))
+        expect(await db.games.get('waiting')).toHaveProperty('moves')
+
+        await user.click(within(settingsSheet()!).getByRole('switch', { name: 'Share games to improve the bot' }))
+
+        await waitFor(async () => expect(await db.games.get('waiting')).not.toHaveProperty('moves'))
+        expect(await db.games.count()).toBe(1)
+      })
     })
 
     it('opens the Help section on what is sent from Settings', async () => {

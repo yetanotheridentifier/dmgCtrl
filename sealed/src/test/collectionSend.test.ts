@@ -6,6 +6,7 @@ import { SWU_DB_API } from '../data/cards'
 import { db } from '../data/db'
 import { defaultSettings, saveSettings } from '../data/settingsStore'
 import type { ShareGames } from '../data/settingsStore'
+import { listGameRecords } from '../data/gameRecords'
 import type { GameRecord } from '../data/gameRecords'
 import { isDev } from '../env'
 import { playedRecord } from './helpers/playedRecord'
@@ -72,6 +73,16 @@ describe('sending a finished game for collection', () => {
       expect(fetchMock).not.toHaveBeenCalled()
       expect(pending()).toEqual([])
     })
+
+    it.each([false, true])('keeps only a summary of the game it was offered, in a dev build too (%s)', async dev => {
+      mockIsDev.mockReturnValue(dev)
+      answer('no')
+      await db.games.put(agreedRecord())
+
+      await sendForCollection(agreedRecord())
+
+      expect(await db.games.get('game-a')).not.toHaveProperty('moves')
+    })
   })
 
   describe('once the player has opted in', () => {
@@ -113,14 +124,31 @@ describe('sending a finished game for collection', () => {
       expect(pending()).toEqual([])
     })
 
-    it('sends nothing from a dev build', async () => {
-      mockIsDev.mockReturnValue(true)
-      const fetchMock = stubFetch(replies(204))
+    it('marks the game delivered on a 204, which lets older delivered games go to a summary', async () => {
+      const older = [1, 2, 3].map(n => ({ ...agreedRecord(`game-${n}`), endedAt: n, delivered: true as const }))
+      await db.games.bulkPut([...older, agreedRecord()])
+      stubFetch(replies(204))
 
       await sendForCollection(agreedRecord())
 
-      expect(fetchMock).not.toHaveBeenCalled()
-      expect(pending()).toEqual([])
+      expect((await db.games.get('game-a'))?.delivered).toBe(true)
+      expect((await listGameRecords()).map(r => r.id)).toEqual(['game-a', 'game-3'])
+    })
+
+    it.each([
+      ['a 200', () => replies(200)],
+      ['a refusal', () => replies(400)],
+      ['a busy server', () => replies(503)],
+      ['a network failure', () => vi.fn().mockRejectedValue(new TypeError('offline'))],
+    ])('keeps the replay data of a game answered with %s', async (_, reply) => {
+      await db.games.put(agreedRecord())
+      stubFetch(reply())
+
+      await sendForCollection(agreedRecord())
+
+      const stored = await db.games.get('game-a')
+      expect(stored?.delivered).toBeUndefined()
+      expect(stored).toHaveProperty('moves', PLAYED.moves)
     })
 
     describe('when the game cannot be delivered', () => {

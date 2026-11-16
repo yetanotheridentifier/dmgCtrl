@@ -1,6 +1,7 @@
+import { sharingGames } from './collection'
 import { db } from './db'
-import { addGame } from './matchups'
-import type { MatchupTally } from './matchups'
+import { addGame, sidesOf } from './matchups'
+import type { GameSides, MatchupTally } from './matchups'
 import { buildGameExport, downloadJson } from './recordExport'
 import type { Action } from '../engine/actions'
 import type { GameState, PlayerId } from '../engine/types'
@@ -59,6 +60,12 @@ export interface GameRecord {
    * absent on every record finished without consent, which the collection gate reads as a refusal.
    */
   consentedAtFinish?: true
+  /**
+   * Present once the collection endpoint answered 204 for this game, which it does only after the
+   * game is stored, so it is the one answer that says the device's copy is no longer the only one.
+   * Records saved before deliveries were marked had it set by the upgrade to schema 3 (`db.ts`).
+   */
+  delivered?: true
 }
 
 /** Both identifiers of a build: the release a person quotes and the commit that pins the code. */
@@ -66,6 +73,22 @@ export interface BuildIdentity {
   release: string
   commitId: string
 }
+
+type ReplayData = 'initialState' | 'moves' | 'finalState'
+
+/**
+ * A saved game that has lost its replay data: every other field it was saved with, the leaders and
+ * bases at each seat (which is all the record by matchup reads), and who conceded, if anyone did.
+ */
+export interface GameSummary extends Omit<GameRecord, ReplayData> {
+  sides: GameSides
+  concededBy?: PlayerId
+}
+
+/** A row of the `games` table: whole, or trimmed to its summary. */
+export type SavedGame = GameRecord | GameSummary
+
+export const hasReplayData = (game: SavedGame): game is GameRecord => 'initialState' in game
 
 export async function saveGameRecord(record: Omit<GameRecord, 'id'>): Promise<GameRecord> {
   const saved: GameRecord = { ...record, id: crypto.randomUUID() }
@@ -76,18 +99,65 @@ export async function saveGameRecord(record: Omit<GameRecord, 'id'>): Promise<Ga
 /** The player's record by matchup over every saved game (see `data/matchups.ts`), one game at a time. */
 export async function matchupRecords(): Promise<MatchupTally> {
   const tally: MatchupTally = new Map()
-  await db.games.each(game => addGame(tally, game))
+  await db.games.each(game => addGame(tally, { ...game, sides: hasReplayData(game) ? sidesOf(game.initialState) : game.sides }))
   return tally
 }
 
-/** Newest first. */
+/** The games that still have their replay data, newest first. */
 export async function listGameRecords(): Promise<GameRecord[]> {
-  return db.games.orderBy('endedAt').reverse().toArray()
+  return (await db.games.orderBy('endedAt').reverse().toArray()).filter(hasReplayData)
 }
 
 /**
- * Wipe every saved game, returning how many went. Touches only `games` — the card cache and
- * saved decks survive, so nothing needs re-hydrating afterwards.
+ * How many delivered games keep their replay data, newest first, for `__sealedExportGames()` and
+ * debugging. The player's ceiling is 5.
+ */
+export const KEPT_AFTER_DELIVERY = 2
+
+function summaryOf(game: GameRecord): GameSummary {
+  const { initialState, moves, finalState, ...kept } = game
+  void moves
+  const { concededBy } = finalState
+  return { ...kept, sides: sidesOf(initialState), ...(concededBy ? { concededBy } : {}) }
+}
+
+/**
+ * Bring what the device keeps into line with the sharing answer, as it stands now. Every game keeps
+ * its summary. A player who shares keeps the replay data of every game still owed to the collection
+ * (finished while sharing and not yet delivered), and of the newest `KEPT_AFTER_DELIVERY` of the
+ * others, delivered or never to be sent. A player who does not share, or has not answered, keeps
+ * none: nothing on the device reads it, and switching sharing off lets go of a game still waiting.
+ *
+ * Run after every game is offered for collection (`collectionSend.ts`), and as the app opens and
+ * whenever the answer changes (`App.tsx`). Running it twice changes nothing.
+ */
+export async function trimGameRecords(): Promise<void> {
+  const sharing = sharingGames()
+  await db.transaction('rw', db.games, async () => {
+    const trimmed: GameSummary[] = []
+    let kept = 0
+    await db.games.orderBy('endedAt').reverse().each(game => {
+      if (!hasReplayData(game)) return
+      if (sharing && game.consentedAtFinish && !game.delivered) return
+      if (sharing && kept < KEPT_AFTER_DELIVERY) {
+        kept++
+        return
+      }
+      trimmed.push(summaryOf(game))
+    })
+    if (trimmed.length > 0) await db.games.bulkPut(trimmed)
+  })
+}
+
+/** Mark a game delivered, then trim: it may push an older delivered game down to its summary. */
+export async function recordDelivered(id: string): Promise<void> {
+  await db.games.update(id, { delivered: true })
+  await trimGameRecords()
+}
+
+/**
+ * Wipe every saved game, summaries too, returning how many went. Touches only `games` — the card
+ * cache and saved decks survive, so nothing needs re-hydrating afterwards.
  *
  * Reachable from the devtools console as `window.__sealedClearGames()` (see
  * docs/operations.md). It exists because records written before the AI became a pure function
@@ -102,8 +172,9 @@ export async function clearGameRecords(): Promise<number> {
 }
 
 /**
- * Download every saved game as one JSON file, returning how many it holds. With nothing saved
- * there is nothing to download, and it returns zero.
+ * Download every saved game that still has its replay data as one JSON file, returning how many it
+ * holds. A summary is left out, having nothing to replay. With nothing to export there is nothing
+ * to download, and it returns zero.
  *
  * Reachable from the devtools console as `window.__sealedExportGames()` (see docs/operations.md).
  * The file never leaves the device unless the person who downloaded it sends it somewhere.
