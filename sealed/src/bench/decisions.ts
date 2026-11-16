@@ -5,10 +5,9 @@ import { opponentOf, hasPendingChoices } from '../engine/types'
 import type { Ai } from '../ai/types'
 import type { GameWatch } from './selfPlay'
 import { runCorpus, type CorpusGames } from './gameRun'
-import { legalMoves } from '../engine/legalMoves'
+import { leaderCanDeploy, legalMoves } from '../engine/legalMoves'
 import { unitHasKeyword } from '../engine/keywords'
 import { effectivePower } from '../engine/stats'
-import { getCardDefinition } from '../engine/abilities'
 import { resolve } from '../engine/resolve'
 import { COMMIT_ID } from '../buildIdentity'
 import { evaluate, blockedFor, DEFAULT_WEIGHTS } from '../ai/evaluate'
@@ -1158,19 +1157,14 @@ export function randomAcceptChance(split: { declines: number; accepts: number })
  * ground unit whose power covers the leader's deployed HP. Exhausted units and the wrong arena
  * threaten nothing.
  *
- * Returns empty once there is no deploy left to threaten, mirroring `legalMoves`: already deployed, or
- * the epic action spent, or the cost not controlled. Deploy conditions are read through the card
- * definition for the same reason, so a custom one (Bo-Katan) is not silently treated as affordable.
+ * Returns empty once there is no deploy left to threaten, read through the legal moves' own gate
+ * (`leaderCanDeploy`): already deployed, the epic action spent, or the deploy not available (a custom
+ * condition such as Bo-Katan's, or a paid deploy such as Chewbacca's that cannot be paid).
  */
 export function pinsLeader(state: GameState, me: PlayerId): string[] {
   const foe = opponentOf(me)
-  const their = state.players[foe].leader
-  if (their.deployed || their.epicActionUsed) return []
-  const leaderCard = state.cards[their.cardId]
-  if (!leaderCard) return []
-  const condition = getCardDefinition(their.cardId)?.deployCondition
-  const canDeploy = condition ? condition(state, foe) : state.players[foe].resources.length >= leaderCard.cost
-  if (!canDeploy) return []
+  const leaderCard = state.cards[state.players[foe].leader.cardId]
+  if (!leaderCard || !leaderCanDeploy(state, foe)) return []
 
   const hp = leaderCard.hp ?? 0
   if (hp <= 0) return []

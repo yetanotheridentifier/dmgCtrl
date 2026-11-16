@@ -517,6 +517,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `halvesCosts` | its controller pays half, rounded up, applied last |
 | `providesAspects` | supplies aspect icons while paying costs |
 | `deployCondition` | replaces the resource gate on deploying a leader |
+| `deployCost` | the deploy is paid rather than gated: "Epic Action [C=N]: Deploy this leader" (Chewbacca) |
 | `suppressesFriendlyAdvantage` | Advantage tokens are not spent after combat |
 | `suppressesEnemyCredits` | the other player's Credit tokens can't be defeated to pay for anything (Conveyex Security Captain) |
 | `blanksHost` | the host loses all abilities while it returns a blank, keeping what the blank names (Imprisoned, Condemn, Exiled from the Force); see Losing all abilities in [keywords-effects.md](keywords-effects.md) |
@@ -646,7 +647,11 @@ doing. Charging the flag there left a deployed leader ready and its action unspe
 
 Deploying is an epic action requiring the player to **control** resources equal to the leader's
 printed cost, not to spend them. A `deployCondition` hook replaces that gate where a card says
-something else.
+something else. A leader whose epic action prints a cost, "Epic Action [C=4]: Deploy this leader"
+(Chewbacca, Hero of Kessel), declares `deployCost` instead: the deploy is **paid**, through the same
+paying step as any other cost (Credit tokens may pay), and the resource count plays no part.
+`leaderCanDeploy` (`legalMoves.ts`) is the one gate, read by the legal moves (so by the leader menu
+and the AI) and by the bench's `pinsLeader`.
 
 **A leader that flips instead of deploying** (Chancellor Palpatine // Darth Sidious) never deploys
 (`deployCondition` is false). Which face is up is `LeaderState.flipped`, each face's "Action

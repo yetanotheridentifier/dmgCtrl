@@ -657,6 +657,13 @@ export interface CardDefinition {
   /** Custom epic-action deploy gate; default is `resources ≥ leader.cost`. */
   deployCondition?: (state: GameState, owner: PlayerId) => boolean
   /**
+   * "Epic Action [C=N]: Deploy this leader" (Chewbacca, Hero of Kessel): the deploy is paid, N from
+   * ready resources and whatever else pays (Credit tokens), rather than gated on a resource count. It
+   * replaces the count gate, so controlling N resources is neither required nor enough. Read by
+   * `leaderCanDeploy` (legalMoves.ts) and paid by `deployLeader` (resolve.ts).
+   */
+  deployCost?: number
+  /**
    * The units in play this unit may enter play as a copy of (Clone). Asked as it is played, through an
    * `enterAsCopy` choice; see `UnitState.physicalCardId`.
    */

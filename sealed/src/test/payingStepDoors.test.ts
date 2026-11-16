@@ -24,6 +24,7 @@ import type { Action } from '../engine/actions'
 const F: Record<string, EngineCard> = {
   ...CARDS,
   SOR_016: card({ id: 'SOR_016', name: 'Grand Admiral Thrawn', type: 'leader', cost: 6, power: 3, hp: 7 }),
+  LAW_013: card({ id: 'LAW_013', name: 'Chewbacca', type: 'leader', cost: 4, power: 5, hp: 6 }),
   LAW_029: card({ id: 'LAW_029', name: 'Citadel Research Center', type: 'base', hp: 25 }),
   SEC_122: card({ id: 'SEC_122', name: 'Vuutun Palaa', arena: 'space', cost: 7, power: 6, hp: 10 }),
   DROID: card({ id: 'DROID', name: 'Battle Droid', arena: 'ground', cost: 1, traits: ['Droid'] }),
@@ -146,6 +147,12 @@ const DOORS: Door[] = [
     side: resources => ({ resources, base: { cardId: 'LAW_029', damage: 0 } }),
     move: m => m.type === 'useBaseAbility',
     happened: s => s.players.player.base.epicActionUsed === true,
+  },
+  {
+    name: "a leader's paid deploy (Chewbacca's Epic Action [C=4])", cost: 4,
+    side: resources => ({ resources, leader: { cardId: 'LAW_013', deployed: false, epicActionUsed: false, exhausted: false } }),
+    move: m => m.type === 'deployLeader',
+    happened: s => s.players.player.leader.deployed,
   },
   {
     name: 'a playUnitFromHand', cost: 3,

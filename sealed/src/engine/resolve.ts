@@ -3019,15 +3019,18 @@ function handOffOpponentChoice(state: GameState, actor: PlayerId): GameState {
  * passes `epicUsed: false` — it's gated on "if this leader is ready", not once-per-game, so he can
  * redeploy after being defeated once he readies at regroup.
  */
-function deployLeader(state: GameState, epicUsed = true): GameState {
-  const playerId = state.activePlayer
-  const p = state.players[playerId]
-  if (p.leader.deployed || (epicUsed && p.leader.epicActionUsed)) {
+function deployLeader(unpaid: GameState, epicUsed = true): GameState {
+  const playerId = unpaid.activePlayer
+  const { leader } = unpaid.players[playerId]
+  if (leader.deployed || (epicUsed && leader.epicActionUsed)) {
     throw new Error('deployLeader: leader cannot deploy')
   }
+  // Deploying is an epic action: no resources are spent (CR 2.6.1), except for a leader whose epic
+  // action prints a cost (Chewbacca's "Epic Action [C=4]: Deploy this leader"), paid like any other.
+  const state = epicUsed ? pay(unpaid, playerId, getCardDefinition(leader.cardId)?.deployCost ?? 0) : unpaid
+  const p = state.players[playerId]
 
-  // Deploying is an epic action: no resources are spent (CR 2.6.1); the leader
-  // arrives in the ground arena, ready (CR 3.4.4).
+  // The leader arrives in the ground arena, ready (CR 3.4.4).
   const leaderUnit: UnitState = {
     instanceId: `u${state.instanceCounter}`,
     cardId: p.leader.cardId,

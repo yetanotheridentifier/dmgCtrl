@@ -9,6 +9,7 @@ import { unitHasKeyword } from '../engine/keywords'
 import { TOKEN_EXPERIENCE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_CLONE_TROOPER } from '../engine/tokenUnits'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
+import { deployBlocker } from '../components/boardLayout'
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState } from '../engine/types'
 import type { Action } from '../engine/actions'
@@ -326,6 +327,43 @@ describe('LAW_013 Chewbacca', () => {
     const s = decline(attackBase(board({ ...leader('LAW_013', true), units: [leaderUnit('c', 'LAW_013')] }), 'c'))
     expect(s.players.player.resources).toHaveLength(10)
     expect(credits(s)).toBe(0)
+  })
+
+  // "Epic Action [C=4]: Deploy this leader." The deploy is paid, not gated on a resource count, so
+  // controlling 4 resources is neither required nor sufficient. Credit tokens pay it as they pay any
+  // cost, through the paying step (payingStepDoors.test.ts takes the deploy through that step).
+  const deploys = (s: GameState) => offers(s, a => a.type === 'deployLeader')
+  const deploy = (s: GameState) => resolve(s, { type: 'deployLeader' })
+  it('Epic Action [C=4]: deploying pays 4, exhausting the resources', () => {
+    const s = deploy(board({ ...leader('LAW_013'), resources: ready(5) }))
+    expect(s.players.player.leader).toMatchObject({ deployed: true, epicActionUsed: true })
+    expect(s.players.player.units.some(u => u.cardId === 'LAW_013' && u.isLeader)).toBe(true)
+    expect(readyCount(s)).toBe(1)
+  })
+  it('Epic Action [C=4]: four or more resources controlled is not enough when 4 cannot be paid', () => {
+    const mostlyExhausted = [...ready(4).map(r => ({ ...r, exhausted: true })), ...ready(3)]
+    expect(deploys(board({ ...leader('LAW_013'), resources: mostlyExhausted }))).toBe(false)
+  })
+  it('Epic Action [C=4]: fewer than four resources deploy when Credit tokens make up the rest', () => {
+    const s = withCredits(board({ ...leader('LAW_013'), resources: ready(2) }), 'player', 2)
+    expect(deploys(s)).toBe(true)
+    const asked = deploy(s)
+    expect(choice(asked)).toMatchObject({ kind: 'payWith', cost: 4 })
+    const end = resolve(asked, { type: 'acceptChoice', choiceId: choice(asked).id, credits: 2 })
+    expect(end.players.player.leader.deployed).toBe(true)
+    expect(credits(end)).toBe(0)
+    expect(readyCount(end)).toBe(0)
+  })
+  it('Epic Action [C=4]: is not offered when resources and Credit tokens fall short of 4, and the leader menu says why', () => {
+    const s = withCredits(board({ ...leader('LAW_013'), resources: ready(2) }), 'player', 1)
+    expect(deploys(s)).toBe(false)
+    expect(deployBlocker(s)).toBe('Costs 4 to deploy; you can pay 3')
+    const allExhausted = board({ ...leader('LAW_013'), resources: ready(6).map(r => ({ ...r, exhausted: true })) })
+    expect(deployBlocker(allExhausted)).toBe('Costs 4 to deploy; you can pay 0')
+  })
+  it('Epic Action [C=4]: once per game, so a defeated Chewbacca does not deploy again', () => {
+    const s = board({ leader: { cardId: 'LAW_013', deployed: false, epicActionUsed: true, exhausted: false } })
+    expect(deploys(s)).toBe(false)
   })
 })
 

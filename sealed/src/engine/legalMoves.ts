@@ -145,6 +145,22 @@ function attackMoves(
 }
 
 /**
+ * Whether `playerId`'s leader may take its deploy epic action now, the one gate the legal moves, the
+ * AI and the bench read. Not once it is deployed or the epic action is spent (a defeated leader does
+ * not redeploy, CR 3.4.5). Then, by default, CONTROLLING resources equal to the leader's cost
+ * (CR 2.6.1: controlled, not spent, so exhausted ones count); or a custom `deployCondition`
+ * (Bo-Katan); or, for a paid deploy (`deployCost`, Chewbacca), being able to pay it.
+ */
+export function leaderCanDeploy(state: GameState, playerId: PlayerId): boolean {
+  const { leader, resources } = state.players[playerId]
+  const card = state.cards[leader.cardId]
+  if (!card || leader.deployed || leader.epicActionUsed) return false
+  const def = getCardDefinition(leader.cardId)
+  if (def?.deployCost !== undefined) return canPay(state, playerId, def.deployCost)
+  return def?.deployCondition ? def.deployCondition(state, playerId) : resources.length >= card.cost
+}
+
+/**
  * Whether the Pilot card `cardId` may be attached to `host` as an upgrade: the host is a Vehicle with
  * room for a Pilot. A Vehicle takes one Pilot, plus one for each `extraPilots` among its abilities
  * (Millennium Falcon); a card whose upgrade side `ignoresPilotLimit` goes on regardless (R2-D2).
@@ -863,17 +879,13 @@ function actionPhaseMoves(state: GameState): Action[] {
     if (!unit.exhausted) moves.push(...attackMoves(state, unit))
   }
 
-  // Deploy Leader — epic action; requires CONTROLLING resources equal to the leader's
-  // cost (CR 2.6.1 — controlled, not spent; exhausted ones count), unless the leader
-  // supplies a custom deploy condition (e.g. Bo-Katan).
+  // Deploy Leader: the epic action, gated by `leaderCanDeploy`.
   const leaderCard = state.cards[p.leader.cardId]
-  if (leaderCard && !p.leader.deployed && !p.leader.epicActionUsed) {
-    const condition = getCardDefinition(p.leader.cardId)?.deployCondition
-    const canDeploy = condition ? condition(state, playerId) : p.resources.length >= leaderCard.cost
-    if (canDeploy) moves.push({ type: 'deployLeader' })
+  if (leaderCard && leaderCanDeploy(state, playerId)) {
+    moves.push({ type: 'deployLeader' })
     // A leader whose deployed side is a Pilot may deploy as an upgrade instead, on a friendly Vehicle
     // with room for a Pilot. Its printed upgrade +X/+Y is what marks it as one.
-    if (canDeploy && leaderCard.upgradePower !== undefined) {
+    if (leaderCard.upgradePower !== undefined) {
       for (const host of p.units) {
         if (canTakePilot(state, host, leaderCard.id)) moves.push({ type: 'deployLeader', targetInstanceId: host.instanceId })
       }

@@ -881,6 +881,23 @@ describe('pinsLeader', () => {
     expect(pinsLeader(board(pin, { deployed: true }), 'player')).toEqual([])
     expect(pinsLeader(board(pin, { epicActionUsed: true }), 'player')).toEqual([])
   })
+
+  /** A paid deploy (Chewbacca's Epic Action [C=4]) is live when it can be paid, not when resources are counted. */
+  it('reads a paid deploy as threatened only when its cost can be paid', () => {
+    const pin = [unit('p', 'PIN', { arena: 'ground' })]
+    const chewie = (resources: { cardId: string; exhausted: boolean }[], creditTokens = 0): GameState => {
+      const s = board(pin, { cardId: 'LAW_013' })
+      return {
+        ...s,
+        cards: { ...s.cards, LAW_013: card({ id: 'LAW_013', type: 'leader', cost: 4, power: 5, hp: 6 }) },
+        players: { ...s.players, opponent: { ...s.players.opponent, resources, creditTokens } },
+      }
+    }
+    const allExhausted = Array.from({ length: 6 }, (_, i) => ({ cardId: `R${i}`, exhausted: true }))
+    expect(pinsLeader(chewie(allExhausted), 'player')).toEqual([])
+    const two = Array.from({ length: 2 }, (_, i) => ({ cardId: `R${i}`, exhausted: false }))
+    expect(pinsLeader(chewie(two, 2), 'player')).toEqual(['p'])
+  })
 })
 
 /**
