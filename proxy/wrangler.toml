@@ -15,9 +15,17 @@ routes = [
 [vars]
 RECORD_COLLECTION = "on"
 
-# Where records are staged. The namespace is created by hand, once
-# (`npx wrangler kv namespace create GAME_RECORDS`), and this is its id. A deploy is refused while
-# the id names no namespace, which is deliberate: the Worker should not go out without its store.
+# Where records are kept: one D1 table, `collected_games` (migrations/). The database is created by
+# hand, once (`npx wrangler d1 create collected-games`), and this is its id. A deploy is refused
+# while the id names no database, which is deliberate: the Worker should not go out without its store.
+[[d1_databases]]
+binding = "GAME_DB"
+database_name = "collected-games"
+database_id = "f76f66d4-0ac1-4d82-8cac-c25f3fa1ca01"
+migrations_dir = "migrations"
+
+# Where records were staged before the D1 store. The Worker no longer writes it; the binding stays so
+# the games already staged can be read and moved into D1 (`--migrate`, operations.md).
 [[kv_namespaces]]
 binding = "GAME_RECORDS"
 id = "b6f958778bec4a1790f705611db114e8"

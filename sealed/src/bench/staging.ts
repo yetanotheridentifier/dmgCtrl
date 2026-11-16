@@ -1,23 +1,24 @@
-import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
+import { PROXY_CONFIG, printedJson, runWrangler, type WranglerRun } from './wrangler'
+
+export type { WranglerRun } from './wrangler'
 
 /**
- * Where collected games wait before they are pulled: the collection Worker's staging store.
+ * The KV staging store games were sent to before the Worker wrote them to D1 (`collectedStore.ts`).
+ * The Worker no longer writes it; what it holds is read to move it into D1 (`--migrate`) and is
+ * otherwise left in place.
  *
  * `StagingStore` is all a pull knows of it (`pull.ts`): list the keys, get some values, delete some
- * keys. The one implementation shells out to `wrangler`, which is already signed in and is how the
- * store is read by hand (operations.md), so a pull needs no token of its own and no dependency. A
- * store that moves (to D1, to R2, to the REST API) is another implementation of the same three
- * calls.
+ * keys. The one implementation shells out to `wrangler` (`wrangler.ts`).
  *
  * **Nothing about a request is read here.** A listing can carry an expiry and metadata beside each
- * key name; only the name is taken. The Worker writes neither (`proxy/records.js`), and this is the
- * second lock on the same door: a pull cannot bring in a time or an address even if one appeared.
+ * key name; only the name is taken. The Worker wrote neither, and this is the second lock on the
+ * same door: a pull cannot bring in a time or an address even if one appeared.
  */
 
-/** Every staged game's key starts with this. The same prefix as `KEY_PREFIX` in `proxy/records.js`. */
+/** Every staged game's key starts with this: the prefix the Worker staged games under. */
 export const STAGING_PREFIX = 'records/'
 
 export interface StagingStore {
@@ -34,35 +35,8 @@ export interface StagingStore {
 /** The most keys one bulk get takes: the limit of the KV API call behind `wrangler kv bulk get`. */
 export const GET_BATCH = 100
 
-/** Runs one command, given as its arguments from `wrangler` on, and returns what it printed. */
-export type WranglerRun = (args: string[]) => string
-
-const CONFIG = 'proxy/wrangler.toml'
+const CONFIG = PROXY_CONFIG
 const BINDING = 'GAME_RECORDS'
-
-/**
- * Wrangler, started in the repository root, where `proxy/wrangler.toml` is. The config is always
- * named: without it wrangler follows the main app's redirect and reads the wrong Worker's bindings
- * (operations.md, "the redirect trap"). The bench runs with `sealed/` as its working directory.
- */
-function runWrangler(args: string[]): string {
-  const done = spawnSync('npx', args, { cwd: resolve(process.cwd(), '..'), encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
-  if (done.error) throw new Error(`could not start wrangler: ${done.error.message}`)
-  if (done.status !== 0) throw new Error(`wrangler ${args.slice(1, 4).join(' ')} failed: ${(done.stderr || done.stdout).trim()}`)
-  return done.stdout
-}
-
-/** The JSON a command printed, read past any banner before it. Throws, quoting the output, when there is none. */
-function printedJson(stdout: string): unknown {
-  const lines = stdout.split('\n')
-  const start = lines.findIndex(line => line.startsWith('[') || line.startsWith('{'))
-  try {
-    if (start === -1) throw new Error('no JSON')
-    return JSON.parse(lines.slice(start).join('\n'))
-  } catch {
-    throw new Error(`wrangler did not answer with JSON: ${stdout.trim().slice(0, 400)}`)
-  }
-}
 
 /** The key names in what `wrangler kv key list` printed. Names only: see the note at the top. */
 export function parseKeyList(stdout: string): string[] {

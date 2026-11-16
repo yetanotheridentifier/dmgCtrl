@@ -115,20 +115,15 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
 
 - **Epic 7 data pipeline** (#407; its child tickets are all done). Saved games export to a local
   JSON file and the bench turns an export into training rows. Games from players who opted in are
-  posted to the card Worker, staged in a KV namespace under the key the training rows give the same
-  game, pulled into a local SQLite archive and read from there as rows.
+  posted to the card Worker, written straight into a D1 table under the key the training rows give
+  the same game, and read from there (or from a snapshot of it) as rows.
   Rows come in the whole state or the mover's view of it (`--view mover`), which is the one to
   imitate from.
-  **Deferred: the archive off one machine.** It is a file on the dev machine with snapshots wherever
-  they are pointed. If it should live elsewhere, Cloudflare D1 takes the one table almost unchanged
-  (a free database holds roughly 50,000 games) and R2 would hold the snapshots; either is another
-  implementation of where the pull writes, and D1 would also let the Worker write a game straight to
-  its long-term home. Not ticketed: worth it once the volume or a second machine asks for it.
-  **Deferred: staging has no expiry.** A staged game stays until a pull deletes it, and a refused
-  game stays for good, since an expiry on the write would be an arrival time in disguise. Staging
-  therefore grows with every game not yet pulled, against KV's free-plan storage. Pulling and
-  deleting is by hand; scheduling it, or a rule for what becomes of a game refused on every pull,
-  is undecided.
+  **Next: retire KV staging and the local archive** (#1113), once `--migrate` has moved both into D1
+  and the user has checked it: remove `--pull`, `--delete`, `bench/staging.ts`, `bench/pull.ts` and
+  the `GAME_RECORDS` binding. Deleting the KV namespace and `collected-games.db` is the user's step.
+  **Next: a replay result for each stored game** (#1109), and deleting games refused for good after
+  a backup; then trimming device records once their delivery is confirmed (#1110).
   Bench self-play is the second source of records, and needs no consent: `--record` on the
   head-to-head run keeps its completed games in the exported shape, with the bot on each seat named.
   The per-card, per-deck question the epic set out to answer (#407) is a function over those records

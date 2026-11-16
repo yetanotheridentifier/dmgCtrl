@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { env, SELF } from 'cloudflare:test'
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
+import { applyD1Migrations, env, SELF } from 'cloudflare:test'
 import worker from './worker.js'
 import { gameKey, handleRecords } from './records.js'
 import contract from './recordContract.json'
@@ -73,11 +73,31 @@ function post(body, { headers = {}, origin = ORIGIN, cf } = {}) {
   })
 }
 
+/**
+ * A D1 database that records every statement it runs and every value bound to it, in `written`.
+ * With `fail`, each write throws, as a store that is down does.
+ */
+function fakeDb({ fail = false } = {}) {
+  const written = []
+  return {
+    written,
+    prepare: sql => ({
+      bind: (...args) => ({
+        run: async () => {
+          if (fail) throw new Error('d1 down')
+          written.push({ sql, args })
+          return { success: true, meta: { changes: 1 } }
+        },
+      }),
+    }),
+  }
+}
+
 /** A store and a limiter that record every argument they are handed. */
 function fakeEnv(over = {}) {
   return {
     RECORD_COLLECTION: 'on',
-    GAME_RECORDS: { put: vi.fn().mockResolvedValue(undefined) },
+    GAME_DB: fakeDb(),
     RECORDS_RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
     ...over,
   }
@@ -86,35 +106,69 @@ function fakeEnv(over = {}) {
 const CONSOLE_METHODS = ['log', 'info', 'warn', 'error', 'debug', 'trace']
 const watchConsole = () => CONSOLE_METHODS.map(method => vi.spyOn(console, method).mockImplementation(() => {}))
 
-async function stagedKeys() {
-  return (await env.GAME_RECORDS.list()).keys
+/** Gzipped bytes back to their text. */
+async function gunzip(bytes) {
+  const stream = new Blob([new Uint8Array(bytes)]).stream().pipeThrough(new DecompressionStream('gzip'))
+  return new Response(stream).text()
 }
 
+/** Every row of the real (local) store, its payload unpacked. */
+async function storedGames() {
+  const { results } = await env.GAME_DB.prepare('SELECT * FROM collected_games ORDER BY game_key').all()
+  return Promise.all(results.map(async row => ({ ...row, payload: JSON.parse(await gunzip(row.payload)) })))
+}
+
+const UTC_DAY = /^\d{4}-\d{2}-\d{2}$/
+
+beforeAll(async () => {
+  await applyD1Migrations(env.GAME_DB, env.TEST_MIGRATIONS)
+})
 beforeEach(async () => {
-  for (const { name } of await stagedKeys()) await env.GAME_RECORDS.delete(name)
+  await env.GAME_DB.prepare('DELETE FROM collected_games').run()
 })
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
-describe('POST /records: staging a game', () => {
-  it('stages a valid record and answers 204 with nothing in the body', async () => {
+describe('POST /records: storing a game', () => {
+  it('stores a valid record and answers 204 with nothing in the body', async () => {
     const response = await SELF.fetch(post(record()))
 
-    expect(response.status).toBe(204)
     expect(await response.text()).toBe('')
-    const keys = await stagedKeys()
-    expect(keys).toHaveLength(1)
-    expect(await env.GAME_RECORDS.get(keys[0].name, 'json')).toEqual(record())
+    expect(response.status).toBe(204)
+    const games = await storedGames()
+    expect(games).toHaveLength(1)
+    expect(games[0].payload).toEqual(record())
+  })
+
+  it('keeps the payload gzipped, as the JSON text it was sent as', async () => {
+    await SELF.fetch(post(record()))
+
+    const { results } = await env.GAME_DB.prepare('SELECT payload FROM collected_games').all()
+    const bytes = new Uint8Array(results[0].payload)
+    // The gzip magic number.
+    expect([bytes[0], bytes[1]]).toEqual([0x1f, 0x8b])
+    expect(await gunzip(bytes)).toBe(JSON.stringify(record()))
   })
 
   it('keys it by the game alone: its starting position and its moves', async () => {
     await SELF.fetch(post(record()))
 
-    const [{ name }] = await stagedKeys()
-    expect(name).toBe(`records/${await gameKey(record())}`)
-    expect(name).toMatch(/^records\/[0-9a-f]{16}$/)
+    const [{ game_key }] = await storedGames()
+    expect(game_key).toBe(await gameKey(record()))
+    expect(game_key).toMatch(/^[0-9a-f]{16}$/)
+  })
+
+  it('writes the build beside the payload, and the day it arrived in UTC and nothing finer', async () => {
+    await SELF.fetch(post(record()))
+
+    const [game] = await storedGames()
+    expect(game.release).toBe('412')
+    expect(game.commit_id).toBe('abc1234')
+    expect(game.received_day).toMatch(UTC_DAY)
+    expect(game.received_day).toBe(new Date().toISOString().slice(0, 10))
+    expect(Object.keys(game).sort()).toEqual(['commit_id', 'game_key', 'payload', 'received_day', 'release'])
   })
 
   /**
@@ -125,19 +179,23 @@ describe('POST /records: staging a game', () => {
     expect(await gameKey({ initialState: { turn: 1 }, moves: [{ by: 'player', action: { type: 'pass' } }] })).toBe('4b65e2ad9cfd3a18')
   })
 
-  it('stages a game sent twice once', async () => {
+  /**
+   * A second send of a game already held is a delivery all the same: the answer is the 204 the
+   * device takes as its confirmation, and the row is left as it was first written.
+   */
+  it('stores a game sent twice once, and confirms both sends', async () => {
     await SELF.fetch(post(record()))
     const again = await SELF.fetch(post(record()))
 
     expect(again.status).toBe(204)
-    expect(await stagedKeys()).toHaveLength(1)
+    expect(await storedGames()).toHaveLength(1)
   })
 
-  it('stages two different games apart', async () => {
+  it('stores two different games apart', async () => {
     await SELF.fetch(post(record()))
     await SELF.fetch(post(record({ moves: [{ by: 'player', action: { type: 'mulligan' } }] })))
 
-    expect(await stagedKeys()).toHaveLength(2)
+    expect(await storedGames()).toHaveLength(2)
   })
 
   it('accepts a record without the optional fields', async () => {
@@ -147,16 +205,22 @@ describe('POST /records: staging a game', () => {
     const response = await SELF.fetch(post(bare))
 
     expect(response.status).toBe(204)
-    const [{ name }] = await stagedKeys()
-    expect(await env.GAME_RECORDS.get(name, 'json')).toEqual(bare)
+    const [game] = await storedGames()
+    expect(game.payload).toEqual(bare)
+    expect(game.release).toBeNull()
+    expect(game.commit_id).toBeNull()
   })
 
-  it('writes no metadata and no expiry beside the record', async () => {
+  it('keeps no rowid, which would keep the order games arrived in', async () => {
     await SELF.fetch(post(record()))
 
-    const [key] = await stagedKeys()
-    expect(key.metadata).toBeUndefined()
-    expect(key.expiration).toBeUndefined()
+    await expect(env.GAME_DB.prepare('SELECT rowid FROM collected_games').all()).rejects.toThrow('no such column')
+  })
+
+  it('no longer writes the KV staging store', async () => {
+    await SELF.fetch(post(record()))
+
+    expect((await env.GAME_RECORDS.list()).keys).toEqual([])
   })
 
   it('does not tell the sender where the game was staged', async () => {
@@ -174,21 +238,25 @@ describe('POST /records: nothing that identifies the sender is kept', () => {
     const response = await handleRecords(post(record(), { headers: IDENTIFYING, cf: CF }), fake)
 
     expect(response.status).toBe(204)
-    expect(fake.GAME_RECORDS.put).toHaveBeenCalledTimes(1)
-    const args = fake.GAME_RECORDS.put.mock.calls[0]
-    // A key and a value: no options, so no metadata and no expiry.
-    expect(args).toHaveLength(2)
-    expect(JSON.parse(args[1])).toEqual(record())
-    expect(Object.keys(JSON.parse(args[1])).sort()).toEqual([...contract.required, ...contract.optional].sort())
-    for (const tellTale of TELL_TALES) expect(JSON.stringify(args)).not.toContain(tellTale)
+    expect(fake.GAME_DB.written).toHaveLength(1)
+    const [{ args }] = fake.GAME_DB.written
+    // The key, the day, the build's two fields and the payload: nothing else is bound.
+    expect(args).toHaveLength(5)
+    const [key, day, release, commitId, payload] = args
+    expect(key).toBe(await gameKey(record()))
+    expect(day).toMatch(UTC_DAY)
+    expect([release, commitId]).toEqual(['412', 'abc1234'])
+    const sent = JSON.parse(await gunzip(payload))
+    expect(sent).toEqual(record())
+    expect(Object.keys(sent).sort()).toEqual([...contract.required, ...contract.optional].sort())
+    for (const tellTale of TELL_TALES) expect(JSON.stringify([key, day, release, commitId, sent])).not.toContain(tellTale)
   })
 
-  it('stages nothing of the request in the real store either', async () => {
+  it('stores nothing of the request in the real store either', async () => {
     await SELF.fetch(post(record(), { headers: IDENTIFYING, cf: CF }))
 
-    const [key] = await stagedKeys()
-    const staged = JSON.stringify([key, await env.GAME_RECORDS.get(key.name)])
-    for (const tellTale of TELL_TALES) expect(staged).not.toContain(tellTale)
+    const stored = JSON.stringify(await storedGames())
+    for (const tellTale of TELL_TALES) expect(stored).not.toContain(tellTale)
   })
 
   it('logs nothing when it stages a record', async () => {
@@ -202,7 +270,7 @@ describe('POST /records: nothing that identifies the sender is kept', () => {
   it.each([
     ['a refused payload', () => post(record({ extra: 'tell-tale-extra' }), { headers: IDENTIFYING, cf: CF }), fakeEnv],
     ['malformed JSON', () => post('{nope', { headers: IDENTIFYING, cf: CF }), fakeEnv],
-    ['a store that fails', () => post(record(), { headers: IDENTIFYING, cf: CF }), () => fakeEnv({ GAME_RECORDS: { put: vi.fn().mockRejectedValue(new Error('kv down')) } })],
+    ['a store that fails', () => post(record(), { headers: IDENTIFYING, cf: CF }), () => fakeEnv({ GAME_DB: fakeDb({ fail: true }) })],
     ['a sender over the rate limit', () => post(record(), { headers: IDENTIFYING, cf: CF }), () => fakeEnv({ RECORDS_RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: false }) } })],
     ['collection switched off', () => post(record(), { headers: IDENTIFYING, cf: CF }), () => fakeEnv({ RECORD_COLLECTION: 'off' })],
   ])('logs nothing and echoes nothing on %s', async (_, makeRequest, makeEnv) => {
@@ -227,7 +295,7 @@ describe('POST /records: nothing that identifies the sender is kept', () => {
 
     expect(fake.RECORDS_RATE_LIMITER.limit).toHaveBeenCalledTimes(1)
     expect(fake.RECORDS_RATE_LIMITER.limit).toHaveBeenCalledWith({ key: '203.0.113.77' })
-    expect(JSON.stringify(fake.GAME_RECORDS.put.mock.calls)).not.toContain('203.0.113.77')
+    expect(JSON.stringify(fake.GAME_DB.written)).not.toContain('203.0.113.77')
   })
 })
 
@@ -235,7 +303,7 @@ describe('POST /records: validation', () => {
   const refused = async (body, init) => {
     const fake = fakeEnv()
     const response = await handleRecords(post(body, init), fake)
-    expect(fake.GAME_RECORDS.put).not.toHaveBeenCalled()
+    expect(fake.GAME_DB.written).toEqual([])
     return response
   }
 
@@ -325,7 +393,7 @@ describe('POST /records: validation', () => {
 
     expect(response.status).toBe(405)
     expect(response.headers.get('Allow')).toBe('POST, OPTIONS')
-    expect(fake.GAME_RECORDS.put).not.toHaveBeenCalled()
+    expect(fake.GAME_DB.written).toEqual([])
   })
 
   it('does not hand a GET to the card passthrough', async () => {
@@ -366,7 +434,7 @@ describe('POST /records: origins', () => {
 
     expect(response.status).toBe(403)
     expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull()
-    expect(fake.GAME_RECORDS.put).not.toHaveBeenCalled()
+    expect(fake.GAME_DB.written).toEqual([])
   })
 })
 
@@ -378,7 +446,7 @@ describe('POST /records: abuse limits and switching it off', () => {
 
     expect(response.status).toBe(429)
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN)
-    expect(fake.GAME_RECORDS.put).not.toHaveBeenCalled()
+    expect(fake.GAME_DB.written).toEqual([])
   })
 
   /** The limiter as wrangler.toml binds it: 30 a minute for one sender, and another sender is not held up by it. */
@@ -402,7 +470,7 @@ describe('POST /records: abuse limits and switching it off', () => {
     const response = await handleRecords(post(record()), fake)
 
     expect(response.status).toBe(204)
-    expect(fake.GAME_RECORDS.put).toHaveBeenCalledTimes(1)
+    expect(fake.GAME_DB.written).toHaveLength(1)
   })
 
   it.each([['off', 'off'], ['unset', undefined], ['anything but on', 'true']])('answers 503 and stages nothing when collection is %s', async (_, value) => {
@@ -412,19 +480,20 @@ describe('POST /records: abuse limits and switching it off', () => {
 
     expect(response.status).toBe(503)
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN)
-    expect(fake.GAME_RECORDS.put).not.toHaveBeenCalled()
+    expect(fake.GAME_DB.written).toEqual([])
     expect(fake.RECORDS_RATE_LIMITER.limit).not.toHaveBeenCalled()
   })
 
   it('answers 503 when the store is not bound', async () => {
-    const response = await handleRecords(post(record()), fakeEnv({ GAME_RECORDS: undefined }))
+    const response = await handleRecords(post(record()), fakeEnv({ GAME_DB: undefined }))
 
     expect(response.status).toBe(503)
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN)
   })
 
+  /** Only a write that went through is answered 204: the device takes that answer as delivery. */
   it('answers 503 when the store refuses the write', async () => {
-    const fake = fakeEnv({ GAME_RECORDS: { put: vi.fn().mockRejectedValue(new Error('kv down')) } })
+    const fake = fakeEnv({ GAME_DB: fakeDb({ fail: true }) })
 
     const response = await handleRecords(post(record()), fake)
 

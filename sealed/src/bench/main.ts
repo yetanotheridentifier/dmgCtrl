@@ -49,6 +49,8 @@ import { benchRecord, missingRecords, recordsPath, recordsWriter, RECORDS_DIR, t
 import { inputsFromArchive, inputsFromFile, writeRows, type RowInput } from './rowSources'
 import { archiveStatus, DEFAULT_ARCHIVE_PATH, openArchive, restoreSnapshot, today, writeSnapshot } from './recordArchive'
 import { pullStaged } from './pull'
+import type { DatabaseSync } from 'node:sqlite'
+import { d1Store, loadStore, migrateToStore, restoreToStore } from './collectedStore'
 import { wranglerStaging } from './staging'
 
 /**
@@ -132,8 +134,10 @@ interface Args {
   files: string[]
   /** Keep the head-to-head run's completed games as records (`records.ts`). */
   record: boolean
-  /** Pull collected games out of staging into the archive (`pull.ts`). Read-only without `delete`. */
+  /** Pull collected games out of KV staging into the local archive (`pull.ts`). Read-only without `delete`. */
   pull: boolean
+  /** Move every game in the local archive and in KV staging into the D1 store (`collectedStore.ts`). Deletes nothing. */
+  migrate: boolean
   /** With `--pull`: remove from staging the games the archive holds. */
   delete: boolean
   /** With `--pull --delete`: remove nothing, and list what would be removed. */
@@ -144,8 +148,11 @@ interface Args {
   restore?: string
   /** On its own: say what the archive holds. With `--rows`: read the archive's games as a source. */
   collected: boolean
-  /** Where the archive of collected games is. */
-  archive: string
+  /**
+   * A local archive file to use instead of the D1 store. Absent, the collected-game commands use D1,
+   * and `--pull` and `--migrate` use `DEFAULT_ARCHIVE_PATH`.
+   */
+  archive?: string
   aiExplicit: boolean
   /**
    * Every AI named positionally. The head-to-head modes take the first two; `--cost` and `--budget`
@@ -191,12 +198,13 @@ export function parseArgs(argv: string[]): Args {
   let view: RowView = 'full'
   let record = false
   let pull = false
+  let migrate = false
   let del = false
   let dryRun = false
   let backup: string | undefined
   let restore: string | undefined
   let collected = false
-  let archive = DEFAULT_ARCHIVE_PATH
+  let archive: string | undefined
   /** The value after a flag that needs one, refusing a missing one or another flag in its place. */
   const valueOf = (i: number, needs: string): string => {
     const v = argv[i]
@@ -244,6 +252,7 @@ export function parseArgs(argv: string[]): Args {
     else if (arg === '--legal') legal = true
     else if (arg === '--record') record = true
     else if (arg === '--pull') pull = true
+    else if (arg === '--migrate') migrate = true
     else if (arg === '--delete') del = true
     else if (arg === '--dry-run') dryRun = true
     else if (arg === '--collected') collected = true
@@ -273,6 +282,7 @@ export function parseArgs(argv: string[]): Args {
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
   if (fixture && positional.length === 0) throw new Error('--fixture needs at least one set code, e.g. --fixture LAW SEC, or --fixture all')
   if (pull && rows) throw new Error('--pull runs on its own: pull first, then make rows from the archive with --rows --collected')
+  if (migrate && (pull || backup !== undefined || restore !== undefined || rows || collected)) throw new Error('--migrate runs on its own: move the games first, then back up or make rows')
   if (rows && positional.length === 0 && !collected) throw new Error('--rows needs at least one export file, or --collected for the archive, e.g. --rows games.json --out rows.jsonl')
   // No default and no standard output: `npm run` prints its own lines there, which are not rows.
   if (rows && out === undefined) throw new Error('--rows needs --out, the file to write the rows to')
@@ -282,7 +292,7 @@ export function parseArgs(argv: string[]): Args {
   if (del && !pull) throw new Error('--delete applies to --pull only')
   if (dryRun && !del) throw new Error('--dry-run applies to --pull --delete only')
   if (del && !dryRun && backup === undefined) throw new Error('--delete needs --backup DIR: once a game is removed from staging the archive is its only copy')
-  const collectedMode = pull || backup !== undefined || restore !== undefined || (collected && !rows)
+  const collectedMode = pull || migrate || backup !== undefined || restore !== undefined || (collected && !rows)
   if (collectedMode && positional.length > 0) throw new Error(`a collected-games run takes no names or files, got ${positional.join(' ')}`)
   // The game runs over a population hand their games to a recorder (`records.ts`). Refused here, so a
   // mode that keeps no records says so before it plays anything, where taking the flag and writing
@@ -298,7 +308,7 @@ export function parseArgs(argv: string[]): Args {
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
   // The matrix rates one set's leaders against each other; a mixed pool builds decks nobody builds.
   if (matrix && poolSets.length !== 1) throw new Error(`--matrix takes one set, got ${poolSets.join(',')}`)
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, poolSets, decks, sets: positional.map(s => s.toUpperCase()), rows, legal, view, files: positional, record, pull, delete: del, dryRun, backup, restore, collected, archive, aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, poolSets, decks, sets: positional.map(s => s.toUpperCase()), rows, legal, view, files: positional, record, pull, migrate, delete: del, dryRun, backup, restore, collected, archive, aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 /**
@@ -1747,13 +1757,23 @@ function runRowsMode(args: Args): void {
       }
       yield* games
     }
-    if (args.collected) yield* inputsFromArchive(openArchive(args.archive))
+    if (args.collected) {
+      let db: DatabaseSync
+      try {
+        db = openCollected(args)
+      } catch (err) {
+        console.error(`bench: ${collectedName(args)}: ${(err as Error).message}`)
+        process.exit(2)
+        return
+      }
+      yield* inputsFromArchive(db)
+    }
   }
   const { games, rows: rowCount, bytes, offList, refused } = writeRows(inputs(), cards, { legalMoves: args.legal, view: args.view }, out)
   const each = (n: number, per: number): string => (per === 0 ? '-' : Math.round(n / per).toLocaleString('en-GB'))
   console.log(`\ntraining rows  (engine ${COMMIT_ID}, row format ${ROWS_FORMAT_VERSION})`)
   console.log(row('files', String(args.files.length)))
-  if (args.collected) console.log(row('archive', args.archive))
+  if (args.collected) console.log(row('collected games', collectedName(args)))
   console.log(row('view', args.view === 'mover' ? 'mover  (each state as the seat that moved saw it)' : 'full  (each state whole, both hands and both decks)'))
   console.log(row('games / refused', `${games} / ${refused.length}`))
   console.log(row('rows', `${rowCount.toLocaleString('en-GB')}  (${each(rowCount, games)} a game)`))
@@ -1767,7 +1787,7 @@ function runRowsMode(args: Args): void {
 }
 
 /** What the archive holds: its games, and how many each build played. */
-function archiveLines(path: string, db: ReturnType<typeof openArchive>): string[] {
+function archiveLines(path: string, db: DatabaseSync): string[] {
   const status = archiveStatus(db)
   return [
     row('archive', `${status.games.toLocaleString('en-GB')} games  →  ${path}`),
@@ -1775,27 +1795,66 @@ function archiveLines(path: string, db: ReturnType<typeof openArchive>): string[
   ]
 }
 
+/** The D1 store, as the commands name it. */
+const D1_NAME = 'D1 collected-games'
+
+/** Where the collected-game commands read: the local file `--archive` names, or the D1 store. */
+const collectedName = (args: Args): string => args.archive ?? D1_NAME
+
+/** The collected games as an archive: the local file `--archive` names, or the D1 store loaded into memory. */
+function openCollected(args: Args): DatabaseSync {
+  return args.archive !== undefined ? openArchive(args.archive) : loadStore(d1Store())
+}
+
 /**
- * The collected-game modes: `--pull [--delete [--dry-run]] [--backup DIR]`, `--backup DIR`,
- * `--restore FILE` and `--collected`, each on the archive `--archive` names (`recordArchive.ts`).
+ * The collected-game modes: `--collected`, `--backup DIR` and `--restore FILE` on the D1 store, or
+ * on the local archive `--archive` names (`collectedStore.ts`, `recordArchive.ts`); `--migrate`,
+ * which moves the local archive and KV staging into D1; and `--pull [--delete [--dry-run]]
+ * [--backup DIR]`, from KV staging into the local archive.
  *
- * A pull is the only one that reaches the network, and it reads and nothing more unless `--delete`
- * is given (`pull.ts` says what a delete removes and in what order). Each ends by saying what the
- * archive now holds. A refused game, or a delete that failed, makes the run exit non-zero.
+ * Only a pull with `--delete` removes anything (`pull.ts` says what and in what order). Each ends by
+ * saying what the store it worked on now holds. A refused game, a game missing after a move, or a
+ * delete that failed makes the run exit non-zero.
  */
 function runCollectedMode(args: Args): void {
   const start = Date.now()
-  const db = openArchive(args.archive)
+  let db: DatabaseSync
+  let name = collectedName(args)
   let failed = false
   try {
-    if (args.restore !== undefined) {
-      const restored = restoreSnapshot(db, args.restore)
+    if (args.migrate) {
+      const local = args.archive ?? DEFAULT_ARCHIVE_PATH
+      const store = d1Store()
+      const moved = migrateToStore(store, wranglerStaging(), openArchive(local), today())
+      console.log(`\nmigrate  (${local} and KV staging  →  ${D1_NAME}; nothing is deleted from either)`)
+      console.log(row('archived / staged', `${moved.archived} / ${moved.staged}`))
+      console.log(row('games', `${moved.games}  (distinct, from both)`))
+      console.log(row('added / already held', `${moved.added} / ${moved.duplicates}`))
+      console.log(row('refused', `${moved.refused.length}${moved.refused.length > 0 ? '  (not the game their key names; left in staging)' : ''}`))
+      console.log(row('missing from D1', String(moved.missing.length)))
+      for (const r of moved.refused) console.error(`  refused: ${r.key}: ${r.reason}`)
+      for (const key of moved.missing) console.error(`  missing: ${key}`)
+      failed = moved.refused.length > 0 || moved.missing.length > 0
+      name = D1_NAME
+      db = loadStore(store)
+    } else if (args.restore !== undefined) {
+      let restored
+      if (args.archive !== undefined) {
+        db = openArchive(args.archive)
+        restored = restoreSnapshot(db, args.restore)
+      } else {
+        const store = d1Store()
+        restored = restoreToStore(store, args.restore)
+        db = loadStore(store)
+      }
       console.log(`\nrestore  (${args.restore})`)
       console.log(row('added / already held', `${restored.added} / ${restored.duplicates}`))
       console.log(row('refused', String(restored.refused.length)))
       for (const r of restored.refused) console.error(`  refused: game ${r.gameKey}: ${r.reason}`)
       failed = restored.refused.length > 0
     } else if (args.pull) {
+      name = args.archive ?? DEFAULT_ARCHIVE_PATH
+      db = openArchive(name)
       const pulled = pullStaged(wranglerStaging(), db, trainingCardDb(), { delete: args.delete, dryRun: args.dryRun, backupDir: args.backup })
       console.log(`\npull  (engine ${COMMIT_ID}, ${args.delete && !args.dryRun ? 'deleting from staging' : 'read-only'})`)
       console.log(row('staged', String(pulled.listed)))
@@ -1812,10 +1871,12 @@ function runCollectedMode(args: Args): void {
       if (pulled.deleteFailed !== undefined) console.error(`  NOT DELETED: ${pulled.deleteFailed}. Nothing is lost: the games are archived, and the next --pull --delete removes them.`)
       failed = pulled.refused.length > 0 || pulled.deleteFailed !== undefined
     } else if (args.backup !== undefined) {
+      db = openCollected(args)
       const file = writeSnapshot(db, args.backup, today())
       console.log('\nbackup')
       console.log(row('snapshot', `${file.games} games, ${file.bytes.toLocaleString('en-GB')} bytes  →  ${file.path}`))
     } else {
+      db = openCollected(args)
       console.log('\ncollected games')
     }
   } catch (err) {
@@ -1823,7 +1884,7 @@ function runCollectedMode(args: Args): void {
     process.exit(2)
     return
   }
-  for (const line of archiveLines(args.archive, db)) console.log(line)
+  for (const line of archiveLines(name, db)) console.log(line)
   console.log(row('time', `${((Date.now() - start) / 1000).toFixed(1)}s`))
   console.log('')
   if (failed) process.exit(1)
@@ -1843,12 +1904,13 @@ function main(): void {
     console.error('       npm run bench --prefix sealed -- --rows [FILE ...] [--collected] --out ROWS.jsonl [--legal] [--view mover]')
     console.error('       npm run bench --prefix sealed -- --pull [--delete [--dry-run]] [--backup DIR] [--archive FILE]')
     console.error('       npm run bench --prefix sealed -- --backup DIR | --restore SNAPSHOT.jsonl.gz | --collected  [--archive FILE]')
+    console.error('       npm run bench --prefix sealed -- --migrate [--archive FILE]')
     process.exit(2)
     return
   }
 
   if (args.rows) { runRowsMode(args); return }
-  if (args.pull || args.backup !== undefined || args.restore !== undefined || args.collected) { runCollectedMode(args); return }
+  if (args.pull || args.migrate || args.backup !== undefined || args.restore !== undefined || args.collected) { runCollectedMode(args); return }
   if (args.triage) { void runTriageMode(args); return }
   if (args.fixture) { void runFixtureMode(args); return }
   if (args.sweep) { runSweepMode(args); return }

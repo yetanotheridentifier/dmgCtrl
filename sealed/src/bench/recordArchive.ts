@@ -213,19 +213,32 @@ export interface RestoreResult {
 }
 
 /**
+ * A snapshot's games, split into the ones whose key is the key of their own payload and the ones
+ * that are not (`refused`): each key is worked out again, which is what catches a damaged file.
+ */
+export function checkedSnapshot(path: string): { games: ArchivedGame[]; refused: RestoreResult['refused'] } {
+  const games: ArchivedGame[] = []
+  const refused: RestoreResult['refused'] = []
+  for (const game of readSnapshot(path)) {
+    const actual = gameKey(JSON.parse(game.payload) as CollectedRecord)
+    if (actual !== game.gameKey) refused.push({ gameKey: game.gameKey, reason: `its payload is game ${actual}` })
+    else games.push(game)
+  }
+  return { games, refused }
+}
+
+/**
  * Put a snapshot's games into an archive, in one transaction. Into an empty archive that is a
- * restore; into one that holds games it adds the ones missing. Each game's key is worked out again
- * from its payload first, which is what catches a damaged file.
+ * restore; into one that holds games it adds the ones missing. A damaged line is refused
+ * (`checkedSnapshot`).
  */
 export function restoreSnapshot(db: DatabaseSync, path: string): RestoreResult {
-  const games = readSnapshot(path)
-  const result: RestoreResult = { added: 0, duplicates: 0, refused: [] }
+  const { games, refused } = checkedSnapshot(path)
+  const result: RestoreResult = { added: 0, duplicates: 0, refused }
   db.exec('BEGIN IMMEDIATE')
   try {
     for (const game of games) {
-      const actual = gameKey(JSON.parse(game.payload) as CollectedRecord)
-      if (actual !== game.gameKey) result.refused.push({ gameKey: game.gameKey, reason: `its payload is game ${actual}` })
-      else if (archiveGame(db, game)) result.added++
+      if (archiveGame(db, game)) result.added++
       else result.duplicates++
     }
     db.exec('COMMIT')
