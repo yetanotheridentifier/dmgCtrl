@@ -41,7 +41,7 @@ export function resolve(state: GameState, action: Action): GameState {
   // "When this unit leaves play, that unit's owner takes control of it" (Grand Moff Tarkin), and of a
   // resource (DJ), is settled here, once per action, rather than at each of the ways a unit can leave play.
   const swept = checkWin(sweepStateBasedDefeats(returnControlledResources(returnControlledUnits(stepped, false))))
-  return rememberActor(settleChoiceControl(swept, actor), actor)
+  return rememberActor(settleChoiceControl(uniqueUnitChecks(swept), actor), actor)
 }
 
 // The trigger queue asks whether an ability's place in the order could be seen by answering the
@@ -619,7 +619,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   } else {
     next = fireBatch(next, arrivals)
   }
-  return uniqueUnitCheck(next, owner) // two units with the same unique title → defeat one
+  return next // a second copy of a unique unit is settled by `uniqueUnitChecks`, once per action
 }
 
 /**
@@ -2562,12 +2562,12 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     case 'selectUniqueUnitToDefeat': {
-      // Unique rule for units: defeat the chosen duplicate unit, then re-check (3+ → repeat).
+      // Unique rule for units: defeat the chosen duplicate unit. A third copy is raised again by
+      // `uniqueUnitChecks` as this action ends.
       if (targetInstanceId && choice.candidates.includes(targetInstanceId)) {
         next = defeatUnit(next, targetInstanceId)
         next = checkWin(next)
         if (next.winner !== null) return next
-        next = uniqueUnitCheck(next, choice.controller)
       }
       break
     }
@@ -2729,10 +2729,24 @@ function uniqueUpgradeCheck(state: GameState, owner: PlayerId): GameState {
 }
 
 /**
- * Unique rule for units (CR): a player can't control two units that share a unique title. After a
- * unit enters play, if `owner` now controls ≥2 units of one card id, raise a choice to defeat one
- * (their pick, off the board). Re-run after each defeat so 3+ copies resolve down to one. Keyed by
- * card id (a deck's duplicates share it), mirroring the upgrade rule.
+ * Unique rule for units (CR): a player can't control two units that share a unique title. Checked as
+ * every action ends, for both players, whatever put the second copy there: playing it, a rescue or a
+ * guardian leaving play (capture), a change of control or its end, an upgrade becoming a unit. A
+ * player with a pending choice of this kind is not asked again until it is answered, and after each
+ * defeat the next action's check raises another while copies remain, so 3+ resolve down to one.
+ */
+function uniqueUnitChecks(state: GameState): GameState {
+  let next = state
+  for (const owner of ['player', 'opponent'] as PlayerId[]) {
+    if ((next.pendingChoices ?? []).some(c => c.kind === 'selectUniqueUnitToDefeat' && c.controller === owner)) continue
+    next = uniqueUnitCheck(next, owner)
+  }
+  return next
+}
+
+/**
+ * If `owner` controls ≥2 units of one unique card id, raise a choice to defeat one (their pick, off
+ * the board). Keyed by card id (a deck's duplicates share it), mirroring the upgrade rule.
  */
 function uniqueUnitCheck(state: GameState, owner: PlayerId): GameState {
   // A copy is not unique (Clone), so it neither counts nor can be chosen.
