@@ -126,7 +126,7 @@ describe('game records', () => {
     expect(record.build).toEqual({ release: '412', commitId: 'abc1234' })
     expect(record.opponentAi).toBe('beam-reply')
     expect(record.humanSeat).toBe('player')
-    expect(db.verno).toBe(2)
+    expect(db.verno).toBe(3)
   })
 
   /**

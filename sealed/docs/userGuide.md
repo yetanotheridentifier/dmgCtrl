@@ -148,7 +148,9 @@ A **Credit token** (**CRED n**, with how many are held) is spare money: while yo
 
 ## After the game
 
-**Game over** shows over the board: who won and how (the base destroyed, and in which round, or who conceded), your deck and the one it played against, and **Rematch** (fresh shuffle, same decks) or **New setup**, back to choosing the decks. The controls column stays uncovered, so the log is still to hand. Completed games are recorded on-device for future analysis.
+**Game over** shows over the board: who won and how (the base destroyed, and in which round, or who conceded), your deck and the one it played against, and **Rematch** (fresh shuffle, same decks) or **New setup**, back to choosing the decks. The controls column stays uncovered, so the log is still to hand.
+
+**What your device keeps.** Every game you finish is kept on your device as a short summary: the leaders and bases, who won and how, and when. Your record by matchup on the setup screen is counted from these, so it covers every game you have played. The whole game, every move, is kept only while it is needed: if you share games, until it has been sent, and for your two most recent games once sent; if you don't, not at all.
 
 **Improving the bot.** The AI bot gets better by learning from real games. If you opt in, each game you finish is sent to train it.
 
@@ -158,7 +160,7 @@ A **Credit token** (**CRED n**, with how many are held) is spare money: while yo
 
 This data export is disabled unless you turn it on, and you can change it at any time in Settings. On your first visit the setup screen asks, with **Share my games** or **Not now**, in place of **Go to game** (and, held upright on a phone, of the Opponent card) until you answer, either way.
 
-Turning it off stops future games being sent and does not recall games already sent.
+Turning it off stops future games being sent, and deletes from your device the moves of every game on it, including any not yet sent. Their summaries stay, so your record by matchup is unchanged. It does not recall games already sent.
 
 **Usage statistics.** Separately, and for everyone, Sealed sends a short anonymous note when it opens, when a game starts and when it ends, the same as the rest of dmgCtrl. It says which build you are on; for each game, the sets, leaders and bases, whether each deck was generated or saved, and whether it was a rematch; and at the end, the result, the round, how long it took, how many moves you took back, and who conceded if anyone did. It carries no cards, no decisions, no deck names and nothing that identifies you. The country it was sent from is recorded, from the connection rather than your device. These notes are how we know how many games are played and how they go against the bot; they are not affected by the setting above.
 

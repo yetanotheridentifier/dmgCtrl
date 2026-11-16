@@ -8,6 +8,7 @@ import { SettingsProvider, useSettings } from './hooks/useSettings'
 import { useUpdateOnDeckScreen } from './hooks/useUpdateOnDeckScreen'
 import type { SavedDeck } from './data/deckStore'
 import { retryPendingCollection } from './data/collectionSend'
+import { trimGameRecords } from './data/gameRecords'
 import { onAppStarted } from './data/analytics'
 import { RELEASE } from './buildIdentity'
 import { isDev } from './env'
@@ -52,6 +53,12 @@ function AppShell() {
   }
   const { settings } = useSettings()
   useUpdateOnDeckScreen(screen === 'game')
+  // What the device keeps follows the sharing answer: trimmed as the app opens, which brings older
+  // records into line, and again whenever the answer changes, so switching sharing off lets go of
+  // every game's replay data at once. Silent, like everything else to do with collection.
+  useEffect(() => {
+    trimGameRecords().catch(() => {})
+  }, [settings.shareGames])
 
   return (
     // No height of its own: in the installed app 100vh measured taller than the window, so a root

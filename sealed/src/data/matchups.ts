@@ -2,7 +2,8 @@ import type { CardDb, EngineCard, GameState, PlayerId } from '../engine/types'
 
 /**
  * The player's record by matchup: as one leader and base, against each opposing leader and base,
- * read from the leaders and bases a saved game's `initialState` names, so every game saved counts.
+ * read from the leaders and bases a saved game's sides name (its `initialState` while it still has
+ * one, its summary after), so every game saved counts.
  *
  * Bases are grouped, the same way on both sides, from the card data. A common base with no ability
  * of its own is one of a set's aspect bases, which differ only in name, so it groups by its aspect. A
@@ -64,25 +65,37 @@ export function sideOf(leader: EngineCard | undefined, base: EngineCard | undefi
   return { key: `${who}|${group.key}`, label: `${who} · ${group.label}`, leader, base }
 }
 
-/** One seat's side in a game, read from its starting position and the cards that came with it. */
-function seatSide(state: GameState, seat: PlayerId, cards: CardDb): Side | null {
-  const { leader, base } = state.players[seat]
-  return sideOf(cards[leader.cardId], cards[base.cardId])
+/** One seat's leader and base cards, either absent when the game's card data did not hold it. */
+export interface SeatCards {
+  leader?: EngineCard
+  base?: EngineCard
+}
+
+/** Both seats' leader and base cards: what a game keeps for good, so the tally outlives its replay data. */
+export type GameSides = Record<PlayerId, SeatCards>
+
+/** Both seats' leaders and bases, read from a starting position and the cards that came with it. */
+export function sidesOf(state: GameState): GameSides {
+  const seat = (id: PlayerId, cards: CardDb): SeatCards => {
+    const { leader, base } = state.players[id]
+    return { leader: cards[leader.cardId], base: cards[base.cardId] }
+  }
+  return { player: seat('player', state.cards), opponent: seat('opponent', state.cards) }
 }
 
 /** A saved game as the tally reads it. */
 export interface TalliedGame {
-  initialState: GameState
+  sides: GameSides
   winner: PlayerId | 'draw'
   /** Absent on a game saved before the seat was written, which was played from the player seat. */
   humanSeat?: PlayerId
 }
 
 /** Adds one game to the tally. A game whose leaders or bases are not in its card data is left out. */
-export function addGame(tally: MatchupTally, { initialState, winner, humanSeat = 'player' }: TalliedGame): void {
-  const cards = initialState.cards
-  const mine = seatSide(initialState, humanSeat, cards)
-  const theirs = seatSide(initialState, humanSeat === 'player' ? 'opponent' : 'player', cards)
+export function addGame(tally: MatchupTally, { sides, winner, humanSeat = 'player' }: TalliedGame): void {
+  const seatSide = ({ leader, base }: SeatCards) => sideOf(leader, base)
+  const mine = seatSide(sides[humanSeat])
+  const theirs = seatSide(sides[humanSeat === 'player' ? 'opponent' : 'player'])
   if (!mine || !theirs) return
   const against = tally.get(mine.key) ?? new Map<string, Matchup>()
   const matchup = against.get(theirs.key) ?? { opponent: theirs, record: { won: 0, lost: 0, drawn: 0 } }

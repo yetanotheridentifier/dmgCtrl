@@ -124,7 +124,8 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
   `bench/staging.ts`, `bench/pull.ts` and the `GAME_RECORDS` binding. Deleting the KV namespace and
   `collected-games.db` is the user's step. Each stored game keeps its latest replay check, and
   `--refused --delete` removes the refused ones after a backup.
-  **Next: trimming device records once their delivery is confirmed** (#1110).
+  The device keeps a summary of every game and its replay data only until delivered (the two newest
+  delivered stay whole), none for a player who does not share.
   Bench self-play is the second source of records, and needs no consent: `--record` on the
   head-to-head run keeps its completed games in the exported shape, with the bot on each seat named.
   The per-card, per-deck question the epic set out to answer (#407) is a function over those records

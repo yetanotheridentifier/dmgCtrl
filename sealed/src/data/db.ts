@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { GameRecord } from './gameRecords'
+import { pendingIds } from './collectionSend'
+import type { SavedGame } from './gameRecords'
 
 /**
  * One cached card. `json` is the full SWUDB card-detail payload (typed loosely
@@ -17,7 +18,7 @@ export interface CardRecord {
 
 class SealedDB extends Dexie {
   cards!: EntityTable<CardRecord, 'id'>
-  games!: EntityTable<GameRecord, 'id'>
+  games!: EntityTable<SavedGame, 'id'>
 
   constructor() {
     super('dmgctrl-sealed')
@@ -32,6 +33,21 @@ class SealedDB extends Dexie {
       cards: 'id',
       games: 'id, endedAt',
     })
+    // v3: the same tables. A game that may lose its replay data once delivered needs to say it was,
+    // and records saved before then carry no mark. The sender let go of a game once it was settled,
+    // so a game finished while sharing that is no longer owed an attempt is read as delivered. This
+    // runs once, before anything else opens the store.
+    this.version(3)
+      .stores({ cards: 'id', games: 'id, endedAt' })
+      .upgrade(tx => {
+        const waiting = new Set(pendingIds())
+        return tx
+          .table<SavedGame, string>('games')
+          .toCollection()
+          .modify(game => {
+            if (game.consentedAtFinish && !waiting.has(game.id)) game.delivered = true
+          })
+      })
   }
 }
 
