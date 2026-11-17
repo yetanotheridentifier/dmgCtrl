@@ -102,10 +102,11 @@ export function* corpusSchedule(decks: DeckMatchup[], gamesPerDeck: number, seed
  *
  * The head-to-head's deck sources name a list per SEAT (`DeckMatchup`), and under `lockout` the wall
  * stays on the opponent seat whichever AI sits there. This turns that into the per-side decks the runner
- * takes, so the seat keeps its list when the AIs swap.
+ * takes, so the seat keeps its list when the AIs swap. A `sided` matchup compares decks rather than
+ * seats, so its lists stay with their sides.
  */
 export function bySeat(m: DeckMatchup, seats: Seating): { deckA: ParsedDeck; deckB: ParsedDeck } {
-  return seats.swapped ? { deckA: m.opponent, deckB: m.player } : { deckA: m.player, deckB: m.opponent }
+  return seats.swapped && !m.sided ? { deckA: m.opponent, deckB: m.player } : { deckA: m.player, deckB: m.opponent }
 }
 
 /** What every instrumented corpus reports about the games it was read from. */

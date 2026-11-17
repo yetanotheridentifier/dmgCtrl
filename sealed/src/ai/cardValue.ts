@@ -88,10 +88,18 @@ function abilityRichness(cardId: string): number {
 
 /** Build a card valuation for a given set of weights. */
 export function makeCardValue(w: CardValueWeights): (state: GameState, owner: PlayerId, card: EngineCard) => number {
-  return (state, owner, card) => {
-    // Effective, not printed: an off-aspect card really is the more expensive card, and the pool
-    // has to reach that number before it can be played.
-    const cost = effectiveCost(state, owner, card)
+  const at = makeCardValueAt(w)
+  // Effective, not printed: an off-aspect card really is the more expensive card, and the pool
+  // has to reach that number before it can be played.
+  return (state, owner, card) => at(card, effectiveCost(state, owner, card))
+}
+
+/**
+ * The same valuation priced at a cost the caller supplies rather than one read off a game, which is how
+ * a deck builder prices a card at the cost it would be played for before any game exists.
+ */
+export function makeCardValueAt(w: CardValueWeights): (card: EngineCard, cost: number) => number {
+  return (card, cost) => {
     const statTotal = (card.power ?? 0) + (card.hp ?? 0)
     const stats = statTotal > 0 ? statTotal : w.statlessPerCost * cost
 
@@ -107,3 +115,6 @@ export function makeCardValue(w: CardValueWeights): (state: GameState, owner: Pl
 
 /** How good `card` is for `owner` to play, under the default weights. */
 export const cardValue = makeCardValue(DEFAULT_CARD_VALUE)
+
+/** {@link cardValue} at a given cost, under the default weights. */
+export const cardValueAt = makeCardValueAt(DEFAULT_CARD_VALUE)

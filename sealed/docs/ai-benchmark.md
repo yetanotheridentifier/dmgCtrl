@@ -152,8 +152,9 @@ plausible number.
 ### The deck population decides what can be measured at all
 
 `--decks` chooses what a run plays over: `mirror` (the head-to-head's default), `coverage`, `lockout`,
-or `matchup` (the one-base-per-leader set `--matchups` plays, fixed whatever the seed). All but
-`lockout` deal both seats the same list, so they stay mirror matches and deck strength cancels.
+`matchup` (the one-base-per-leader set `--matchups` plays, fixed whatever the seed), or the pair
+`pool-built` and `pool-random` (below). All but `lockout` and `pool-built` deal both seats the same
+list, so they stay mirror matches and deck strength cancels.
 
 It is a parameter of every run that plays a population: the head-to-head (with `--shard` and
 `--control`), `--generalise`, `--decisions`, `--terms` and `--lethal`. The last four default to
@@ -247,6 +248,25 @@ coverage's 54.8%); what this set buys is about five times the volume.
 - **Board-wide rates are roughly halved**, because the wall-holding seat contributes none of them. The
   duration figures (`rounds locked`, `longest lockout`) sample the `player` seat alone and so are
   read directly.
+
+#### `pool-built`: measuring the deck builder
+
+The one source that measures **decks rather than an AI**. Each run seed opens 64 ASH sealed pools, and
+from each pool side A is dealt the deck built as a player would (`buildDeckFromPool`, choosing its own
+leader and base) and side B the pool's deck as it was built before the builder chose: a leader the pool
+opened at random, the plain fill, no deliberate splash (`randomLeaderDeck`). The lists are **sided**: they
+stay with their sides as the seats swap, so seat and first player are still balanced, and with the same
+AI on both sides side A's rate is the built deck's.
+
+Its `--control` changes the decks, not the AI: `pool-random` deals the random-leader deck to both sides
+of the same pools (`CONTROL_DECKS` in `bench/decks.ts`), so the paired difference is what building added
+on matched pools and shuffles.
+
+```bash
+npm run bench --prefix sealed -- --shard 10 --games 40 --seed 2125 --decks pool-built --control greedy greedy
+```
+
+Ten shards of 40 games with `greedy`, arm and control, take about two minutes.
 
 ## Running it
 
@@ -584,7 +604,9 @@ npm run bench --prefix sealed -- --shard 12 --games 168 --seed 9001 --decks cove
 
 Runs the arm, then runs **`aiB` against itself** on the same seeds, the same games per shard and the
 same decks, and reports the **paired difference with its `t`** as the headline. The control gets its
-own run directory, so it banks and resumes independently.
+own run directory, so it banks and resumes independently. A deck comparison (`--decks pool-built`)
+plays its control on its own control decks (`pool-random`) instead, since there the decks differ and
+the AI does not.
 
 **Use it for every A/B.** Reading an arm against a fixed 50% inverts results:
 
@@ -1627,9 +1649,12 @@ of every comparison.
 carry, since a base doubling a leader's aspect is not a deck anyone builds in sealed. That is 52 decks,
 still 13 per aspect. **Each deck is built from its own sealed pool**: six packs opened around its
 leader (`openPool` in `deckgen/packs.ts`, the leader swapped into the first pack), seeded by the suite's
-seed, the leader and the aspect. The deck plays only the copies opened, on any Common base of its
-aspect or a rare one the pool opened, splashing off-aspect cards only when the pool cannot fill it
-otherwise; the shape rules are aimed for but not required. Under one fixed AI model it plays every deck against every deck (mirrors
+seed, the leader and the aspect. The deck plays only the copies opened, built by the pool deck builder
+with its leader and aspect fixed: the builder's scorer picks among the aspect's Common bases and any
+rare one the pool opened, and the deck fills toward the turn-1 and removal guidelines and splashes up
+to 2 cards on purpose, more only when the pool cannot fill it otherwise. The turn-1 veto drops no cell:
+3, 0 and 3 of ASH suites 1 to 3's 52 decks hold fewer than 6 turn-1 plays, and 6, 5 and 4 of HMW's.
+The shape rules are aimed for but not required. Under one fixed AI model it plays every deck against every deck (mirrors
 included). First player is alternated so seat advantage cancels, which means "i vs j" already measures
 "j vs i", so only the upper triangle is played and the rest derived.
 
@@ -2189,13 +2214,14 @@ eight of eighteen modules were missing.
 ### Deck sets and whole-pool work
 
 - `bench/decks.ts` the fixed sealed deck, built deterministically from the ASH snapshot. Both seats
-  play the same list, which removes deck strength as a variable.
+  play the same list, which removes deck strength as a variable. Also every `--decks` population, and
+  the `pool-built` comparison's two decks per pool with its control (`CONTROL_DECKS`).
 - `bench/coverageDecks.ts` the deck set whose union covers the whole card pool.
 - `bench/lockoutDecks.ts` the asymmetric wall set behind `--decks lockout`: every coverage deck facing
   one fixed, hand-built shielded-Sentinel deck (`WALL_DECK`), and the only source where the two seats
   are dealt different lists.
 - `bench/matchupDecks.ts` the leader-by-base deck set the matrix plays: 18 leaders x 4 base aspects,
-  each deck built from its own opened sealed pool.
+  each deck built from its own opened sealed pool by the pool deck builder.
 - `bench/sweep.ts` the whole-pool fuzzing sweep behind `--sweep`, which reports cards **played** rather
   than decked and names anything decked but never drawn.
 - `bench/playCoverage.ts` the per-card play tracking that backs it.

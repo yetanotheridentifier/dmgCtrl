@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { runBench } from '../bench/runBench'
-import { benchDeckSet } from '../bench/decks'
+import { benchDeckSet, CONTROL_DECKS } from '../bench/decks'
 import '../engine/cardDefinitions'
 
 /**
@@ -75,6 +75,26 @@ describe('the A/B harness', () => {
     const lockout = benchDeckSet('lockout', 1)
     expect(lockout.decks.length).toBeGreaterThan(10)
     for (const m of lockout.decks) expect(m.player).not.toBe(m.opponent)
+  })
+
+  /**
+   * **Built decks against random-leader ones, from the same pools.** The comparison is between decks,
+   * so each list belongs to a side rather than a seat: the built deck stays with side A as the seats
+   * swap, and identical bots then read side A's rate as the built deck's. The matched control plays the
+   * random-leader deck on both sides of the same pools.
+   */
+  it('plays built pool decks on side A against random-leader decks from the same pools', () => {
+    const built = benchDeckSet('pool-built', 1).decks
+    const random = benchDeckSet('pool-random', 1).decks
+    expect(built.length).toBeGreaterThanOrEqual(16)
+    expect(random).toHaveLength(built.length)
+    built.forEach((m, i) => {
+      expect(m.sided).toBe(true)
+      expect(m.opponent).toEqual(random[i].player)
+      expect(random[i].opponent).toBe(random[i].player)
+    })
+    expect(built.some(m => m.player.leader !== m.opponent.leader), 'the built decks choose their own leaders').toBe(true)
+    expect(CONTROL_DECKS['pool-built']).toBe('pool-random')
   })
 
   /**

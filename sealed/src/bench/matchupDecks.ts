@@ -12,8 +12,10 @@ import { openPool } from '../deckgen/packs'
  * coverage decks happened to use it.
  *
  * **Each deck is built from its own sealed pool**, six packs opened around its leader (`openPool` with
- * the leader swapped in) and built on a base of its aspect: any Common base, or a rare one the pool
- * opened (`buildDeckFromPool`). So a deck holds what a player could have opened, not the pick of the set.
+ * the leader swapped in) and built by the pool deck builder (`buildDeckFromPool`) with its leader and
+ * aspect fixed: its scorer picks the base among the aspect's Common bases and any rare one the pool
+ * opened. So a deck holds what a player could have opened, not the pick of the set. The builder's
+ * turn-1 veto does not drop a cell: a pairing below it is still built.
  *
  * Deterministic from `seed`. Separate from `coverageDecks` (which optimises for touching every card,
  * for the fuzzing sweep, and so builds from the whole set); this optimises for an even, comparable
@@ -66,7 +68,7 @@ export function buildMatchupDecks(cards: SwuCard[] = POOL, basesPerLeader = 4, s
       const deckSeed = poolSeed(seed, i, aspects.indexOf(baseAspect))
       const pool = openPool(cards, deckSeed, { leader })
       const label = `${leader.Name} (${baseAspect})`
-      const { deck } = buildDeckFromPool(leader, pool, cards, deckSeed, baseAspect)
+      const { deck } = buildDeckFromPool(pool, cards, deckSeed, { leader, baseAspect })
       out.push({ deck: { ...deck, name: label }, label, leaderName: leader.Name, baseAspect })
     }
   })

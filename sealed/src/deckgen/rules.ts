@@ -87,6 +87,14 @@ export function isAlignment(aspect: string): boolean {
  * the ones named.
  */
 export function unpaidAspects(card: SwuCard, leader: SwuCard, base: SwuCard): string[] {
+  return [...new Set(unpaidIcons(card, leader, base))]
+}
+
+/**
+ * The icons a card would take a penalty for, one entry per missing icon: a card showing two Command
+ * with one paid lists Command once, and with none paid, twice. Each costs 2 more to play.
+ */
+export function unpaidIcons(card: SwuCard, leader: SwuCard, base: SwuCard): string[] {
   const unpaidFor = (aspects: string[]): string[] => {
     const supply = new Map<string, number>()
     for (const a of [...(leader.Aspects ?? []), ...(base.Aspects ?? [])]) supply.set(a, (supply.get(a) ?? 0) + 1)
@@ -94,7 +102,7 @@ export function unpaidAspects(card: SwuCard, leader: SwuCard, base: SwuCard): st
     for (const a of aspects) {
       const left = supply.get(a) ?? 0
       if (left > 0) supply.set(a, left - 1)
-      else if (!unpaid.includes(a)) unpaid.push(a)
+      else unpaid.push(a)
     }
     return unpaid
   }
@@ -102,6 +110,16 @@ export function unpaidAspects(card: SwuCard, leader: SwuCard, base: SwuCard): st
   if (printed.length === 0) return printed
   return alternativeAspects(card).some(aspects => unpaidFor(aspects).length === 0) ? [] : printed
 }
+
+/**
+ * Plays a pool deck wants on its first turn, counted at the cost as played (see `isTurnOnePlay`). Fewer
+ * than the minimum vetoes a leader and base pairing; up to the maximum is what the fill aims for.
+ */
+export const TURN_ONE_PLAYS = { min: 6, max: 9 }
+/** Removal a pool deck aims for, exhaust counting for less. A guideline the fill leans toward, never a veto. */
+export const REMOVAL_PLAYS = { min: 3, max: 6 }
+/** Off-aspect cards a pool deck takes on purpose. The fill for a thin pool is not counted, and not capped. */
+export const MAX_SPLASHES = 2
 
 /**
  * Chance that a **whole-set** deck is built on a rare base, where its set prints any: a rare a pool has

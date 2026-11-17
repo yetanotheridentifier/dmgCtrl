@@ -24,7 +24,7 @@ import {
 } from './status'
 import { pairedDifference, renderPaired } from './paired'
 import type { CostReport } from './cost'
-import { DECK_SOURCES, type DeckSource } from './decks'
+import { CONTROL_DECKS, DECK_SOURCES, type DeckSource } from './decks'
 import type { CorpusGames } from './gameRun'
 import { runLethal } from './lethal'
 import type { LethalReport } from './lethal'
@@ -235,7 +235,7 @@ export function parseArgs(argv: string[]): Args {
     else if (arg === '--decks') {
       const v = argv[++i]
       if (!DECK_SOURCES.includes(v as DeckSource)) {
-        throw new Error(`--decks must be mirror, coverage, lockout or matchup, got "${v}"`)
+        throw new Error(`--decks must be one of ${DECK_SOURCES.join(', ')}, got "${v}"`)
       }
       decks = v as DeckSource
     }
@@ -1250,11 +1250,13 @@ async function runShardMode(args: Args): Promise<void> {
 
   // The control is the same baseline played against ITSELF, on the same seeds, the same games per
   // shard and the same decks: one difference between the two runs, which is the arm. It gets its own
-  // run directory (its `aiA` differs), so it banks and resumes independently.
+  // run directory (its `aiA` differs), so it banks and resumes independently. A deck comparison
+  // (`CONTROL_DECKS`) differs in its decks instead, so its control plays the source's own control decks.
+  const controlConfig: ShardConfig = { ...config, aiA: args.aiB, decks: (args.decks && CONTROL_DECKS[args.decks]) ?? args.decks }
   if (args.control) {
     console.log(lines.join('\n'))
-    console.log(`\n  now the control: ${args.aiB} vs ${args.aiB} on the same ${shards} seeds\n`)
-    const controlResults = await runShards({ ...config, aiA: args.aiB })
+    console.log(`\n  now the control: ${args.aiB} vs ${args.aiB} on the same ${shards} seeds, ${controlConfig.decks ?? 'mirror'} decks\n`)
+    const controlResults = await runShards(controlConfig)
     const paired = pairedDifference(results, controlResults)
     const ctlPooled = poolShards(controlResults.filter(r => r.exitCode === 0 || r.completed > 0))
 
@@ -1284,7 +1286,7 @@ async function runShardMode(args: Args): Promise<void> {
 
   if (args.record) {
     // The control is a run of its own (the baseline against itself), recorded to its own files.
-    const runs = args.control ? [config, { ...config, aiA: args.aiB }] : [config]
+    const runs = args.control ? [config, controlConfig] : [config]
     for (const run of runs) lines.push(...recordsLines(run))
   }
 
