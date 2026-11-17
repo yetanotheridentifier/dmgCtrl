@@ -42,6 +42,27 @@ export function isTurnOnePlay(card: SwuCard, leader: SwuCard, base: SwuCard): bo
   return card.Type === 'Unit' || (card.Type === 'Event' && createsUnitToken(card))
 }
 
+const WAIVES_ONE = /ignoring 1 of its ([^.]*?) aspect penalt/i
+
+/**
+ * The aspects a base lets one card ignore the penalty for, once a game ("Epic Action: Play a card from
+ * your hand, ignoring 1 of its Vigilance, Command, Aggression, or Cunning aspect penalties", on LAW's
+ * common bases). Read from the text, so a later set reusing the wording is covered. Empty for any other base.
+ */
+export function waivedAspects(base: SwuCard): string[] {
+  const m = WAIVES_ONE.exec(base.FrontText ?? '')
+  return m ? m[1].split(/,\s*|\s+or\s+/).map(s => s.replace(/^or\s+/, '').trim()).filter(Boolean) : []
+}
+
+/**
+ * Whether the base's waiver makes this card penalty-free: exactly one missing icon, of an aspect the base
+ * waives. Only one card a game benefits, so a builder takes one copy of one such card at its printed cost.
+ */
+export function freeSplashable(card: SwuCard, leader: SwuCard, base: SwuCard): boolean {
+  const missing = unpaidIcons(card, leader, base)
+  return missing.length === 1 && waivedAspects(base).includes(missing[0])
+}
+
 const printed = (card: SwuCard): string => (card.FrontText ?? '').replace(/\([^)]*\)/g, '')
 const sentences = (text: string): string[] => text.split(/[.\n;]/).map(s => s.trim()).filter(Boolean)
 

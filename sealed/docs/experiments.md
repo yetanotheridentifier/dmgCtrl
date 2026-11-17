@@ -315,34 +315,44 @@ The pack model rests on three **estimates** rather than published rates: a rare 
 8, the foil slot's rarity in the pack's own 9:3:1 split, and no repeated common or uncommon within
 one pack.
 
-### Building a pool deck as a player would does not measurably win
+### Building a pool deck as a player would wins on LAW, and is level on ASH
 
 The pool deck builder chooses the leader and base by the pool (a turn-1 veto, then Legendary and Rare
-cards, then removal), fills toward turn-1 plays and removal, and splashes up to 2 strong off-aspect
-cards (see [architecture.md](architecture.md)). Its decks differ from a random-leader pool deck the way
-they were meant to. Over 100 pools a set, built against random-leader:
+cards, then removal), fills toward turn-1 plays and removal, splashes up to 2 strong off-aspect cards,
+and on a base that waives one penalty always takes one more (see [architecture.md](architecture.md)).
+Its decks differ from a random-leader pool deck the way they were meant to. Over 100 pools a set,
+built against random-leader:
 
-| set | turn-1 plays | removal (exhaust half) | Legendary + Rare | pairing under the veto | deliberate splash |
+| set | turn-1 plays | removal (exhaust half) | Legendary + Rare | pairing under the veto | deliberate splash | free splash |
+| --- | --- | --- | --- | --- | --- | --- |
+| ASH | 8.44 / 8.20 | 5.12 / 4.54 | 4.33 / 2.16 | 0 / 5 | 75% of decks, 1.4 cards | none |
+| SOR | 8.53 / 8.36 | 4.23 / 2.77 | 3.82 / 1.60 | 0 / 8 | 68%, 1.4 | none |
+| LOF | 8.19 / 7.64 | 4.67 / 3.73 | 4.07 / 1.82 | 0 / 14 | 72%, 1.5 | none |
+| HMW | 8.05 / 8.48 | 4.79 / 4.13 | 4.35 / 1.66 | 0 / 3 | 93%, 1.8 | none |
+| LAW | 7.71 / 7.76 | 5.00 / 2.81 | 4.16 / 1.39 | 0 / 2 | 89%, 1.7 | every deck |
+
+`--decks pool-built --control`, identical bots, paired against the random-leader deck on both sides of
+the same pools:
+
+| AI | set | games a side | built minus control | se | shards favouring built |
 | --- | --- | --- | --- | --- | --- |
-| ASH | 8.44 / 8.20 | 5.17 / 4.54 | 4.48 / 2.16 | 0 / 5 | 94% of decks, 1.6 cards |
-| SOR | 8.53 / 8.36 | 4.45 / 2.77 | 3.94 / 1.60 | 0 / 8 | 91%, 1.7 |
-| LOF | 8.19 / 7.64 | 4.74 / 3.73 | 4.16 / 1.82 | 0 / 14 | 92%, 1.7 |
-| HMW | 8.05 / 8.48 | 5.00 / 4.13 | 4.27 / 1.66 | 0 / 3 | 98%, 1.9 |
+| `greedy` | LAW | 400 | **+6.00** (t 2.57, significant) | 2.33 | 8 of 10 |
+| `greedy` | ASH | 800 (two blocks of 10 x 40) | +1.38 | 2.4 | 10 of 20 |
+| `beam-reply` | ASH | 120 (10 x 12) | -2.50 | 8.43 | 5 of 10 |
 
-**They do not win more.** `--decks pool-built --control`, ASH, identical bots, paired against the
-random-leader deck on both sides of the same pools:
+The `beam-reply` row is a screen (half an hour for arm and control), wide enough to contain anything
+from a clear loss to a clear gain.
 
-| AI | games a side | built minus control | se | shards favouring built |
-| --- | --- | --- | --- | --- |
-| `greedy` | 800 (two blocks of 10 x 40) | **-2.25** | 2.8 | 8 of 20 |
-| `greedy`, deliberate splashes off | 400 | +0.50 | 3.5 | 4 of 10 |
+**On LAW the built decks win; on ASH they do not measurably.** LAW is where the free splash applies,
+and the random-leader control takes none, so the free card is the likely carrier of the LAW gain; the
+parts were not separated. On ASH, twice the Legendary and Rare cards, more removal and no vetoed
+pairing buy nothing measurable.
 
-Twice the Legendary and Rare cards, more removal and no vetoed pairing buy nothing measurable under
-the bot: the interval runs from about -8 to +4 points. Splashing is not what holds it back, since the
-builder without its splashes reads the same. The deployed model has not been measured on this
-comparison. Whether a stronger player converts these decks better,
-or rarity and the removal count are the wrong proxies for strength here, is open; either is a question
-for the scorer, which is replaceable (`DeckScorer`).
+**A splash must be valued with its penalty paid in full.** Valuing a card at its played cost per
+resource paid let the penalty pay for itself, an event's worth being read off its cost: it splashed in
+91% to 98% of decks and read -2.25 (se 2.8) on ASH over 800 games. At printed cost per resource paid,
+splashing falls to 68% to 93% and ASH reads level. With splashes off entirely, the old valuation read
++0.50 (se 3.5), so splashing was not the whole of it either.
 
 **The removal classifier** reads printed text. Per set, the cards it counts:
 

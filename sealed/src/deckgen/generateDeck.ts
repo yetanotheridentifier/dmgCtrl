@@ -3,7 +3,7 @@ import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { minimumDeckSize } from '../utils/parseProtectThePod'
 import { seededUnit } from '../engine/rng'
 import { settleBase } from './bases'
-import { isTurnOnePlay, playedCost, removalKind, removalWeight } from './cardRoles'
+import { freeSplashable, isTurnOnePlay, playedCost, removalKind, removalWeight } from './cardRoles'
 import { heuristicScorer, summarisePairing, type DeckScorer } from './scorer'
 import {
   deckReport, deckShape, isAlignment, isRareBase, unpaidAspects, unpaidIcons, type DeckReport,
@@ -106,8 +106,9 @@ interface Counts {
  * Off-aspect cards a deck may take on purpose: one missing icon, so the penalty is 2, and a card worth
  * paying it for, a Rare, a Legendary or removal.
  *
- * A known limitation: a leader or base that waives or discounts the penalty (a free splash from some
- * leaders, LAW's bases) is not modelled, so such a deck splashes as though it paid in full.
+ * A known limitation: a leader that waives or discounts the penalty (a free splash from some leaders) is
+ * not modelled, so such a deck splashes as though it paid in full. A base that waives one card's penalty
+ * is, as one extra splash (`freeSplash` below).
  */
 function splashable(card: SwuCard, leader: SwuCard, base: SwuCard): boolean {
   if (unpaidIcons(card, leader, base).length !== 1) return false
@@ -119,7 +120,15 @@ function jitter(seed: number, card: SwuCard): number {
   return seededUnit(((seed ^ (Number(card.Number) * 2654435761)) >>> 0) || 1)
 }
 
-export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report: DeckReport; splashes: string[] } {
+/** A built deck, its report, and the cards it splashed on purpose: the deliberate ones, and the base's free one. */
+export interface BuiltDeck {
+  deck: ParsedDeck
+  report: DeckReport
+  splashes: string[]
+  freeSplash?: string
+}
+
+export function generateDeck(opts: GenerateOptions): BuiltDeck {
   const { leader, base, pool, seed, scorer } = opts
   const prefer = opts.prefer ?? new Set<string>()
   const require = opts.require ?? new Map<string, number>()
@@ -144,7 +153,10 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
     size: 0, cheap: 0, bomb: 0, events: 0, upgrades: 0, align: 0, turnOne: 0, removal: 0,
     rarity: {}, copies: new Map(),
   }
-  const turnOne = (c: SwuCard): boolean => isTurnOnePlay(c, leader, base)
+  // The base's free splash, once taken: played at its printed cost, so a cheap unit is a turn-1 play.
+  let freeCard: SwuCard | undefined
+  const turnOne = (c: SwuCard): boolean =>
+    isTurnOnePlay(c, leader, base) || (c === freeCard && c.Type === 'Unit' && cost(c) < 3)
   const chosen: SwuCard[] = []
 
   const rarityAtMax = (c: SwuCard): boolean => {
@@ -274,34 +286,61 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
    * a unit its cost band as played) when the scorer values it higher. A card the deck needs to stay at a
    * guideline's minimum (a turn-1 play, removal) is not given up for one that is not.
    */
+  /**
+   * Put `c` in, paying `paid` for it, in place of the weakest on-aspect card of its kind, if the scorer
+   * values it higher. `free` marks the base's free splash: taken without the comparison, and counted as
+   * a turn-1 play when it is one at the cost paid.
+   */
+  function swapIn(s: DeckScorer, c: SwuCard, paid: number, free = false): boolean {
+    const value = (d: SwuCard, cost = playedCost(d, leader, base)) => s.card(d, cost)
+    const kind = (d: SwuCard, cost = playedCost(d, leader, base)): string =>
+      d.Type !== 'Unit' ? d.Type : cost <= CHEAP_COST_MAX ? 'cheap' : cost >= BOMB_COST_MIN ? 'bomb' : 'mid'
+    const inTurnOne = free ? c.Type === 'Unit' && paid < 3 : turnOne(c)
+    const spare = (out: SwuCard): boolean =>
+      (!turnOne(out) || inTurnOne || counts.turnOne > TURN_ONE_PLAYS.min)
+      && counts.removal - removalWeight(out) + removalWeight(c) >= Math.min(REMOVAL_PLAYS.min, counts.removal)
+    const weakest = (sameKind: boolean) => chosen
+      .filter(d => (!sameKind || kind(d) === kind(c, paid)) && unpaidAspects(d, leader, base).length === 0 && !require.has(id(d)) && spare(d))
+      .reduce<SwuCard | undefined>((w, d) => (w === undefined || value(d) < value(w) ? d : w), undefined)
+    // The free splash is taken whatever it replaces: of its kind where the deck holds one, else any.
+    const out = free ? weakest(true) ?? weakest(false) : weakest(true)
+    if (!out || (!free && value(c, paid) <= value(out))) return false
+    chosen.splice(chosen.indexOf(out), 1)
+    tally(out, -1)
+    if (free) freeCard = c
+    add(c)
+    return true
+  }
+
+  /** Deliberate splashes, best value first, up to {@link MAX_SPLASHES}. */
   function splash(s: DeckScorer): string[] {
     const value = (c: SwuCard) => s.card(c, playedCost(c, leader, base))
-    const kind = (c: SwuCard): string => {
-      if (c.Type !== 'Unit') return c.Type
-      const played = playedCost(c, leader, base)
-      return played <= CHEAP_COST_MAX ? 'cheap' : played >= BOMB_COST_MIN ? 'bomb' : 'mid'
-    }
-    const spare = (out: SwuCard, inn: SwuCard): boolean =>
-      (!turnOne(out) || turnOne(inn) || counts.turnOne > TURN_ONE_PLAYS.min)
-      && counts.removal - removalWeight(out) + removalWeight(inn) >= Math.min(REMOVAL_PLAYS.min, counts.removal)
     const taken: string[] = []
     const candidates = offAspect.filter(c => splashable(c, leader, base))
       .sort((a, b) => value(b) - value(a) || id(a).localeCompare(id(b)))
     for (const c of candidates) {
-      while (taken.length < MAX_SPLASHES && !copiesAtMax(c)) {
-        const out = chosen
-          .filter(d => kind(d) === kind(c) && unpaidAspects(d, leader, base).length === 0 && !require.has(id(d)) && spare(d, c))
-          .reduce<SwuCard | undefined>((w, d) => (w === undefined || value(d) < value(w) ? d : w), undefined)
-        if (!out || value(c) <= value(out)) break
-        chosen.splice(chosen.indexOf(out), 1)
-        tally(out, -1)
-        add(c)
-        taken.push(id(c))
-      }
+      while (taken.length < MAX_SPLASHES && !copiesAtMax(c) && swapIn(s, c, playedCost(c, leader, base))) taken.push(id(c))
     }
     return taken
   }
+
+  /**
+   * A base's free splash (`freeSplashable`), mandatory where the pool offers one: one more off-aspect
+   * card at its printed cost, beyond the deliberate ones, the best value. Where the deck is short of
+   * {@link TURN_ONE_PLAYS}'s minimum, it is the best cheap unit instead, the one the pairing's turn-1
+   * count relied on. One copy only, of a card not already in the deck.
+   */
+  function freeSplash(s: DeckScorer): string | undefined {
+    const value = (c: SwuCard) => s.card(c, cost(c))
+    const offered = offAspect.filter(c => freeSplashable(c, leader, base) && !counts.copies.get(id(c)) && !copiesAtMax(c))
+    const cheapUnits = offered.filter(c => c.Type === 'Unit' && cost(c) < 3)
+    const from = counts.turnOne < TURN_ONE_PLAYS.min && cheapUnits.length > 0 ? cheapUnits : offered
+    const taken = [...from].sort((a, b) => value(b) - value(a) || id(a).localeCompare(id(b))).find(c => swapIn(s, c, cost(c), true))
+    return taken ? id(taken) : undefined
+  }
+
   const splashes = scorer ? splash(scorer) : []
+  const freeSplashed = scorer ? freeSplash(scorer) : undefined
 
   // Group into { id, count } entries, in a stable order.
   const grouped = new Map<string, number>()
@@ -310,7 +349,7 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
 
   const deck: ParsedDeck = { name: `${leader.Name} (${base.Aspects?.[0] ?? 'base'})`, leader: id(leader), base: id(base), cards }
   const byIdMap = new Map(pool.map(c => [id(c), c]))
-  return { deck, report: deckReport(deck, byIdMap, { fromPool: opts.available !== undefined }), splashes }
+  return { deck, report: deckReport(deck, byIdMap, { fromPool: opts.available !== undefined }), splashes, freeSplash: freeSplashed }
 }
 
 /**
@@ -351,7 +390,7 @@ export interface PoolChoice {
  * allows. A named aspect the pool cannot offer (JTL's rare, colourless Lake Country, unopened) is taken
  * from the set anyway, as a chosen leader is swapped into the pool.
  */
-export function buildDeckFromPool(pool: SwuCard[], cards: SwuCard[], seed: number, choice: PoolChoice = {}): { deck: ParsedDeck; report: DeckReport; splashes: string[] } {
+export function buildDeckFromPool(pool: SwuCard[], cards: SwuCard[], seed: number, choice: PoolChoice = {}): BuiltDeck {
   const { baseAspect } = choice
   const scorer = choice.scorer ?? heuristicScorer
   const available = new Map<string, number>()
@@ -387,5 +426,5 @@ export function buildDeckFromPool(pool: SwuCard[], cards: SwuCard[], seed: numbe
   const known = [...new Map([...pool, ...from].map(c => [id(c), c])).values()]
   const built = generateDeck({ leader: best.leader, base: best.base, pool: known, seed, available, scorer })
   const deck = settleBase(built.deck, known, seed)
-  return { deck, report: deckReport(deck, new Map(known.map(c => [id(c), c])), { fromPool: true }), splashes: built.splashes }
+  return { deck, report: deckReport(deck, new Map(known.map(c => [id(c), c])), { fromPool: true }), splashes: built.splashes, freeSplash: built.freeSplash }
 }

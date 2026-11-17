@@ -26,6 +26,8 @@ export interface BenchConfig {
    * the mirror deck's 30 units. See {@link DeckSource}.
    */
   decks?: DeckSource
+  /** The set a pool source opens its pools from; ASH when absent. */
+  set?: string
   /**
    * Called with the running count after every game, dropped ones included.
    *
@@ -109,7 +111,7 @@ const matchupName = (m: DeckMatchup): string =>
  */
 export function runBench(config: BenchConfig): BenchReport {
   const source = config.decks ?? 'mirror'
-  const { decks, cardDb } = benchDeckSet(source, config.seed)
+  const { decks, cardDb } = benchDeckSet(source, config.seed, config.set)
   const aiA = resolveAi(config.aiA)
   const aiB = resolveAi(config.aiB)
 

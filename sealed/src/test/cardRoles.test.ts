@@ -10,7 +10,8 @@ import shdSet from './fixtures/shdSet.json'
 import sorSet from './fixtures/sorSet.json'
 import twiSet from './fixtures/twiSet.json'
 import type { SwuCard } from '../data/cards'
-import { createsUnitToken, isTurnOnePlay, playedCost, removalKind } from '../deckgen/cardRoles'
+import { createsUnitToken, freeSplashable, isTurnOnePlay, playedCost, removalKind, waivedAspects } from '../deckgen/cardRoles'
+import { heuristicScorer } from '../deckgen/scorer'
 
 /**
  * What a deck builder reads off a card: whether it removes an enemy unit, and whether it is a play for
@@ -129,6 +130,26 @@ describe('turn-1 plays, at the cost as played', () => {
     expect(playedCost(unit(1, ['Command', 'Command']), L, B)).toBe(3)
   })
 
+  /**
+   * LAW's common bases waive one aspect penalty on one card, once a game. Read from the text, so a later
+   * set reusing the wording is covered; a rare base of the same set that prints something else is not.
+   */
+  it('reads a base that waives one aspect penalty, and the aspects it waives', () => {
+    expect(waivedAspects(card('LAW_022'))).toEqual(['Vigilance', 'Command', 'Aggression', 'Cunning'])
+    expect(waivedAspects(card('LAW_026')), 'Shipbreaking Yard').toEqual([])
+    expect(waivedAspects(card('ASH_023')), 'an ASH base').toEqual([])
+  })
+
+  it('lets that base waive one missing colour icon, not an alignment and not two', () => {
+    const garrison = card('LAW_022') // Command
+    const L = leader(['Vigilance', 'Villainy'])
+    expect(freeSplashable(unit(2, ['Aggression']), L, garrison)).toBe(true)
+    expect(freeSplashable(unit(2, ['Heroism']), L, garrison), 'an alignment is not waived').toBe(false)
+    expect(freeSplashable(unit(2, ['Aggression', 'Cunning']), L, garrison), 'two missing icons').toBe(false)
+    expect(freeSplashable(unit(2, ['Command']), L, garrison), 'nothing missing').toBe(false)
+    expect(freeSplashable(unit(2, ['Aggression']), L, card('LAW_026')), 'a base that waives nothing').toBe(false)
+  })
+
   it('counts a cheap event only when it is guaranteed to create a unit token', () => {
     const L = leader(['Villainy', 'Command'])
     const B = base(['Cunning'])
@@ -136,5 +157,23 @@ describe('turn-1 plays, at the cost as played', () => {
     expect(isTurnOnePlay(card('ASH_233'), L, B), 'a cheap exhaust event').toBe(false)
     const rock = card('LAW_206')
     expect(isTurnOnePlay(rock, leader(rock.Aspects ?? []), base([])), 'That\'s a Rock, cheap removal').toBe(false)
+  })
+})
+
+/**
+ * A card is worth what it does at its printed cost, divided by what is paid for it. Pricing the worth at
+ * the penalised cost instead let the penalty pay for itself: an event's worth is read off its cost, so a
+ * penalised event looked nearly as good value as an unpenalised one.
+ */
+describe('a card\'s worth to a deck', () => {
+  it.each([
+    ['ASH_258', 'Grassroots Resistance, an event'],
+    ['ASH_164', 'Alamite Hunter, a unit'],
+  ])('%s at a 2 penalty is its printed worth over the cost paid (%s)', id => {
+    const c = card(id)
+    const printed = Number(c.Cost)
+    const worth = heuristicScorer.card(c, printed) * printed
+    expect(heuristicScorer.card(c, printed + 2)).toBeCloseTo(worth / (printed + 2), 9)
+    expect(heuristicScorer.card(c, printed + 2)).toBeLessThan(heuristicScorer.card(c, printed) * 0.8)
   })
 })

@@ -12,6 +12,7 @@ import { isRareBase } from '../deckgen/rules'
 import { buildCoverageDecks } from './coverageDecks'
 import { buildLockoutDecks } from './lockoutDecks'
 import { buildMatchupDecks } from './matchupDecks'
+import { poolFor } from './setPools'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 
 /**
@@ -122,11 +123,11 @@ export function randomLeaderDeck(pool: SwuCard[], cards: SwuCard[], seed: number
 }
 
 /** The pools of a `pool-built` or `pool-random` set: `POOLS` of them, each seeded by the run's seed and its place. */
-function poolDecks(seed: number): { built: ParsedDeck; random: ParsedDeck }[] {
+function poolDecks(seed: number, cards: SwuCard[]): { built: ParsedDeck; random: ParsedDeck }[] {
   return Array.from({ length: POOLS }, (_, i) => {
     const poolSeed = (Math.imul(seed, 0x9e3779b1) ^ Math.imul(i + 1, 0x85ebca6b)) >>> 0 || 1
-    const pool = openPool(SET, poolSeed)
-    return { built: buildDeckFromPool(pool, SET, poolSeed).deck, random: randomLeaderDeck(pool, SET, poolSeed) }
+    const pool = openPool(cards, poolSeed)
+    return { built: buildDeckFromPool(pool, cards, poolSeed).deck, random: randomLeaderDeck(pool, cards, poolSeed) }
   })
 }
 
@@ -151,15 +152,24 @@ export interface DeckMatchup {
   sided?: boolean
 }
 
-/** The decks a run will play, and the card database behind them. */
-export function benchDeckSet(source: DeckSource, seed: number): { decks: DeckMatchup[]; cardDb: CardDb } {
-  const cardDb = buildCardDb(SET)
+/**
+ * The decks a run will play, and the card database behind them. `set` is the set the pool sources open
+ * their pools from (ASH when absent); every other source is ASH's.
+ */
+export function benchDeckSet(source: DeckSource, seed: number, set = 'ASH'): { decks: DeckMatchup[]; cardDb: CardDb } {
   const mirrored = (list: ParsedDeck[]): DeckMatchup[] => list.map(d => ({ player: d, opponent: d }))
+  if (source === 'pool-built' || source === 'pool-random') {
+    const cards = set === 'ASH' ? SET : poolFor([set])
+    const pools = poolDecks(seed, cards)
+    const decks = source === 'pool-built'
+      ? pools.map(p => ({ player: p.built, opponent: p.random, sided: true }))
+      : mirrored(pools.map(p => p.random))
+    return { decks, cardDb: buildCardDb(cards) }
+  }
+  const cardDb = buildCardDb(SET)
   if (source === 'mirror') return { decks: mirrored([buildBenchDeck(SET)]), cardDb }
   if (source === 'coverage') return { decks: mirrored(buildCoverageDecks(SET, seed).decks), cardDb }
   if (source === 'matchup') return { decks: mirrored(buildMatchupDecks(SET, 1).map(d => d.deck)), cardDb }
-  if (source === 'pool-built') return { decks: poolDecks(seed).map(p => ({ player: p.built, opponent: p.random, sided: true })), cardDb }
-  if (source === 'pool-random') return { decks: mirrored(poolDecks(seed).map(p => p.random)), cardDb }
   // The wall sits on `opponent` so the seat facing it is `player`, which is the seat the decision
   // diagnostic's own duration instrument samples. Lining those up means the deck set and the
   // measurement are talking about the same seat rather than nearly the same seat.

@@ -9,7 +9,8 @@ import { isToken } from '../data/cards'
 import { openPack, openPool, packProfile, type Pack } from '../deckgen/packs'
 import { buildDeckFromPool, NO_ASPECT } from '../deckgen/generateDeck'
 import { heuristicScorer, summarisePairing, TURN_ONE_EXEMPT, type DeckScorer, type PairingSummary } from '../deckgen/scorer'
-import { EXHAUST_WEIGHT, isTurnOnePlay, removalKind } from '../deckgen/cardRoles'
+import lawSet from './fixtures/lawSet.json'
+import { EXHAUST_WEIGHT, freeSplashable, isTurnOnePlay, removalKind, waivedAspects } from '../deckgen/cardRoles'
 import { MAX_SPLASHES, REMOVAL_PLAYS, TURN_ONE_PLAYS, unpaidAspects, unpaidIcons } from '../deckgen/rules'
 import { seededRandom } from '../engine/rng'
 
@@ -321,6 +322,80 @@ describe('building a pool deck as a player would', () => {
     const wanted = leaders[leaders.length - 1]
     const scorer: DeckScorer = { ...heuristicScorer, pairing: p => (p.leader === wanted ? 1 : 0) }
     expect(buildDeckFromPool(pool, ASH, 3, { scorer }).deck.leader).toBe(id(wanted))
+  })
+})
+
+/**
+ * LAW's common bases waive one aspect penalty on one card, once a game. A deck on one takes one extra
+ * off-aspect card for it, priced at its printed cost; a cheap unit taken so counts as a turn-1 play.
+ * Only one copy is free.
+ */
+describe('a base that waives one aspect penalty', () => {
+  const LAW_CARDS = lawSet as unknown as SwuCard[]
+  const garrison = LAW_CARDS.find(c => c.Name === 'Aldhani Garrison')! // Command, waives one penalty
+  const plainCommand: SwuCard = { ...garrison, FrontText: '' }
+  const leader: SwuCard = { Set: 'TST', Number: '1', Name: 'L', Type: 'Leader', Aspects: ['Vigilance', 'Villainy'] }
+  const unit = (n: number, aspects: string[]): SwuCard =>
+    ({ Set: 'TST', Number: String(100 + n), Name: `U${n}`, Type: 'Unit', Cost: '2', Power: '2', HP: '2', Aspects: aspects })
+
+  it('lifts the pairing\'s turn-1 count by the one cheap unit it makes affordable', () => {
+    const pool = [...[1, 2, 3, 4, 5].map(n => unit(n, ['Vigilance'])), unit(6, ['Aggression']), unit(7, ['Aggression'])]
+    expect(summarisePairing(leader, plainCommand, pool).turnOnePlays).toBe(5)
+    expect(summarisePairing(leader, garrison, pool).turnOnePlays, 'one card, however many qualify').toBe(6)
+  })
+
+  const SEEDS = Array.from({ length: 30 }, (_, i) => i + 1)
+  const built = SEEDS.map(seed => {
+    const pool = openPool(LAW_CARDS, seed)
+    return { pool, seed, ...buildDeckFromPool(pool, LAW_CARDS, seed) }
+  })
+  const card = (cid: string) => LAW_CARDS.find(c => id(c) === cid)!
+
+  it('takes one extra card on such a base, beyond the deliberate splashes, one copy only', () => {
+    const freed = built.filter(b => b.freeSplash !== undefined)
+    expect(freed.length, 'no deck took a free splash').toBeGreaterThan(0)
+    for (const { deck, freeSplash, splashes, seed } of freed) {
+      const base = card(deck.base)
+      expect(waivedAspects(base).length, `seed ${seed}`).toBeGreaterThan(0)
+      expect(freeSplashable(card(freeSplash!), card(deck.leader), base), `seed ${seed}`).toBe(true)
+      expect(deck.cards.find(e => e.id === freeSplash)?.count, `seed ${seed}: one copy`).toBe(1)
+      expect(splashes, `seed ${seed}`).not.toContain(freeSplash)
+      expect(splashes.length).toBeLessThanOrEqual(MAX_SPLASHES)
+    }
+    for (const { deck, freeSplash } of built) {
+      if (waivedAspects(card(deck.base)).length === 0) expect(freeSplash).toBeUndefined()
+    }
+  })
+
+  it('finds the waiver on every Common base of LAW, so every LAW deck can have it', () => {
+    const commons = LAW_CARDS.filter(c => c.Type === 'Base' && c.Rarity === 'Common')
+    expect(commons).toHaveLength(8)
+    for (const b of commons) expect(waivedAspects(b), b.Name).toEqual(['Vigilance', 'Command', 'Aggression', 'Cunning'])
+  })
+
+  /**
+   * Mandatory, and on value alone: the best card the waiver covers, at its printed cost. The one
+   * exception is a deck short of 6 turn-1 plays, whose pairing counted a cheap unit the waiver makes
+   * affordable: then it is that unit.
+   */
+  it('always takes the best-value card the waiver covers, or the cheap unit a short deck needs', () => {
+    for (const { pool, deck, freeSplash, seed } of built) {
+      const leader = card(deck.leader)
+      const base = card(deck.base)
+      const others = [...new Set(pool)].filter(c => isDeckCard(c) && freeSplashable(c, leader, base) && !deck.cards.some(e => e.id === id(c)))
+      if (freeSplash === undefined) {
+        expect(others, `seed ${seed}: a card was on offer`).toEqual([])
+        continue
+      }
+      const free = card(freeSplash)
+      const deckCards = deck.cards.flatMap(e => Array.from({ length: e.count }, () => card(e.id)))
+      const turnOne = deckCards.filter(c => c !== free && isTurnOnePlay(c, leader, base)).length
+      const cheap = (c: SwuCard) => c.Type === 'Unit' && Number(c.Cost) < 3
+      const rivals = turnOne < TURN_ONE_PLAYS.min && cheap(free) ? others.filter(cheap) : others
+      const worth = (c: SwuCard) => heuristicScorer.card(c, Number(c.Cost ?? 0))
+      for (const r of rivals) expect(worth(r), `seed ${seed}: ${id(r)} over ${freeSplash}`).toBeLessThanOrEqual(worth(free))
+      if (turnOne < TURN_ONE_PLAYS.min && others.some(cheap)) expect(cheap(free), `seed ${seed}`).toBe(true)
+    }
   })
 })
 

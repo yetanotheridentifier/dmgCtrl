@@ -644,13 +644,17 @@ choice opens a `Sheet`, and the only text box is the import sheet's.
   what a builder needs: removal (an event, or a unit's When Played ability, that damages, defeats,
   captures or returns to hand an enemy unit), exhaust as the weak kind, and turn-1 plays at the cost
   as played. `deckgen/scorer.ts` is the seam: a `DeckScorer` ranks a leader and base pairing from a
-  `PairingSummary` and prices a card at its cost as played, and `heuristicScorer` is the default (a
-  veto under 6 turn-1 plays, Tarfful exempt, then Legendary and Rare cards, removal, the curve). A
-  learned scorer replaces it by being passed in; the builder only compares its numbers.
-  `generateDeck` given a scorer fills toward 6 to 9 turn-1 plays and 3 to 6 removal and then splashes
-  up to 2 off-aspect cards on purpose (one missing icon; a Rare, a Legendary or removal; valued above
-  the on-aspect card of its kind it replaces). A thin pool's fill still splashes what it must,
-  uncapped. A leader or base that waives an aspect penalty is not modelled.
+  `PairingSummary` and prices a card for the cost paid, and `heuristicScorer` is the default (a veto
+  under 6 turn-1 plays, Tarfful exempt, then Legendary and Rare cards, removal, the curve; a card's
+  worth at its printed cost per resource paid). A learned scorer replaces it by being passed in; the
+  builder only compares its numbers. `generateDeck` given a scorer fills toward 6 to 9 turn-1 plays and
+  3 to 6 removal and then splashes up to 2 off-aspect cards on purpose (one missing icon; a Rare, a
+  Legendary or removal; valued above the on-aspect card of its kind it replaces). A base that waives
+  one card's penalty (`waivedAspects`, read from its text: every LAW common base) always adds one
+  more, one copy at its printed cost: the best value the waiver covers, or, for a deck short of 6
+  turn-1 plays, a unit costing under 3, which counts as a turn-1 play. The pairing's turn-1 count may
+  include one such unit. A thin pool's fill still splashes what it must, uncapped. A leader that waives a penalty is
+  not modelled.
 
 ## UI (GameScreen)
 

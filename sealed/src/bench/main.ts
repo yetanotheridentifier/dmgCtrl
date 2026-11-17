@@ -25,6 +25,11 @@ import {
 import { pairedDifference, renderPaired } from './paired'
 import type { CostReport } from './cost'
 import { CONTROL_DECKS, DECK_SOURCES, type DeckSource } from './decks'
+
+const isPoolSource = (d: DeckSource | undefined): boolean => d === 'pool-built' || d === 'pool-random'
+/** The set a pool comparison opens its pools from, which `--set` names; undefined for any other run. */
+const poolSetOf = (args: { decks?: DeckSource; poolSets: string[] }): string | undefined =>
+  isPoolSource(args.decks) ? args.poolSets[0] : undefined
 import type { CorpusGames } from './gameRun'
 import { runLethal } from './lethal'
 import type { LethalReport } from './lethal'
@@ -260,8 +265,8 @@ export function parseArgs(argv: string[]): Args {
       if (v !== 'full' && v !== 'mover') throw new Error(`--view must be full or mover, got "${v}"`)
       view = v
     }
-    // `--set LAW,SEC` names the sweep's pool, or the matrix's one set. A flag, because both modes'
-    // positionals are AI names.
+    // `--set LAW,SEC` names the sweep's pool, or the one set of the matrix or a pool comparison
+    // (`--decks pool-built`). A flag, because these modes' positionals are AI names.
     else if (arg === '--set') {
       const v = argv[++i]
       if (v === undefined || v.startsWith('--')) throw new Error('--set needs a set code, a comma-separated list of them, or all')
@@ -304,6 +309,8 @@ export function parseArgs(argv: string[]): Args {
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
   // The matrix rates one set's leaders against each other; a mixed pool builds decks nobody builds.
   if (matrix && poolSets.length !== 1) throw new Error(`--matrix takes one set, got ${poolSets.join(',')}`)
+  // A pool comparison opens each pool from one set, as a sealed event does.
+  if (isPoolSource(decks) && poolSets.length !== 1) throw new Error(`--decks ${decks} takes one set, got ${poolSets.join(',')}`)
   return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, poolSets, decks, sets: positional.map(s => s.toUpperCase()), rows, legal, view, files: positional, record, delete: del, dryRun, backup, restore, collected, refused, lookedAt: lookedAt ?? [], aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
@@ -1206,7 +1213,7 @@ function runBudgetMode(args: Args): void {
 async function runShardMode(args: Args): Promise<void> {
   const shards = args.shards ?? 1
   const start = Date.now()
-  const config: ShardConfig = { shards, games: args.games, baseSeed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks, record: args.record }
+  const config: ShardConfig = { shards, games: args.games, baseSeed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks, set: poolSetOf(args), record: args.record }
   const dir = join(SHARD_DIR, shardRunKey(config))
   const todo = pendingSeeds(config, loadShardResults(dir))
 
@@ -1938,7 +1945,7 @@ function main(): void {
   const records = recordsFor(args.record && { games: args.games, seed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks })
   try {
     report = runBench({
-      games: args.games, seed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks,
+      games: args.games, seed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks, set: poolSetOf(args),
       onProgress: shardProgress(args.out, args.games),
       onGame: records.onGame,
     })

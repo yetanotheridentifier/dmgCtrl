@@ -1,7 +1,7 @@
 import type { SwuCard } from '../data/cards'
 import { cardValueAt } from '../ai/cardValue'
 import { normaliseCard } from '../engine/cardDb'
-import { isTurnOnePlay, removalWeight } from './cardRoles'
+import { freeSplashable, isTurnOnePlay, removalWeight } from './cardRoles'
 import { BOMB_COST_MIN, CHEAP_COST_MAX, deckShape, TURN_ONE_PLAYS, unpaidAspects } from './rules'
 
 /**
@@ -46,6 +46,13 @@ const isDeckCard = (c: SwuCard): boolean => c.Type === 'Unit' || c.Type === 'Eve
 const isUnit = (c: SwuCard): boolean => c.Type === 'Unit'
 const cost = (c: SwuCard): number => Number(c.Cost ?? 0)
 
+/**
+ * A cheap unit a base's one free splash makes a turn-1 play (`freeSplashable`): one card, however many
+ * would qualify, and only one the penalty keeps off turn 1.
+ */
+export const freeTurnOnePlay = (c: SwuCard, leader: SwuCard, base: SwuCard): boolean =>
+  isUnit(c) && cost(c) < 3 && freeSplashable(c, leader, base) && !isTurnOnePlay(c, leader, base)
+
 export function summarisePairing(leader: SwuCard, base: SwuCard, pool: SwuCard[]): PairingSummary {
   const deckCards = pool.filter(isDeckCard)
   const free = deckCards.filter(c => unpaidAspects(c, leader, base).length === 0)
@@ -55,7 +62,8 @@ export function summarisePairing(leader: SwuCard, base: SwuCard, pool: SwuCard[]
   return {
     leader,
     base,
-    turnOnePlays: deckCards.filter(c => isTurnOnePlay(c, leader, base)).length,
+    turnOnePlays: deckCards.filter(c => isTurnOnePlay(c, leader, base)).length
+      + (deckCards.some(c => freeTurnOnePlay(c, leader, base)) ? 1 : 0),
     rares: free.filter(c => c.Rarity === 'Rare' || c.Rarity === 'Legendary').length,
     removal: free.reduce((n, c) => n + removalWeight(c), 0),
     curveMiss: Math.max(0, shape.cheapUnits.min - cheap) + Math.max(0, shape.bombUnits.min - bomb) + Math.max(0, shape.size - free.length),
@@ -80,9 +88,10 @@ const TURN_ONE_STEP = 1e9
  * one closest to it. Otherwise the most Legendary and Rare cards to play, then the most removal, then
  * the smallest curve shortfall. Turn-1 plays above the veto are left to the fill, as a guideline.
  *
- * **Card**: `cardValue` at the cost as played, per resource paid. `cardValue` rises with cost, reading
- * the cost as the designed measure of a card's strength; dividing by what is paid is what makes the
- * aspect penalty count against a splash rather than for it.
+ * **Card**: `cardValue` at the printed cost, per resource paid. `cardValue` reads cost as the designed
+ * measure of a card's strength, and an event's worth comes from its cost alone, so pricing the worth at
+ * the penalised cost would let the penalty pay for itself. Worth at the printed cost, divided by what
+ * is paid, is what makes the penalty count in full against a splash.
  */
 export const heuristicScorer: DeckScorer = {
   pairing(p) {
@@ -91,6 +100,6 @@ export const heuristicScorer: DeckScorer = {
     return p.rares * RARE_STEP + p.removal * REMOVAL_STEP - p.curveMiss
   },
   card(card, playedCost) {
-    return cardValueAt(normaliseCard(card), playedCost) / Math.max(1, playedCost)
+    return cardValueAt(normaliseCard(card), cost(card)) / Math.max(1, playedCost)
   },
 }

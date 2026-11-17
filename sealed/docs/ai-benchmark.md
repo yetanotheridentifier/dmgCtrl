@@ -251,7 +251,8 @@ coverage's 54.8%); what this set buys is about five times the volume.
 
 #### `pool-built`: measuring the deck builder
 
-The one source that measures **decks rather than an AI**. Each run seed opens 64 ASH sealed pools, and
+The one source that measures **decks rather than an AI**. Each run seed opens 64 sealed pools of one
+set (ASH, or the one `--set` names, which joins the run key), and
 from each pool side A is dealt the deck built as a player would (`buildDeckFromPool`, choosing its own
 leader and base) and side B the pool's deck as it was built before the builder chose: a leader the pool
 opened at random, the plain fill, no deliberate splash (`randomLeaderDeck`). The lists are **sided**: they
@@ -264,6 +265,7 @@ on matched pools and shuffles.
 
 ```bash
 npm run bench --prefix sealed -- --shard 10 --games 40 --seed 2125 --decks pool-built --control greedy greedy
+npm run bench --prefix sealed -- --shard 10 --games 40 --seed 8125 --set LAW --decks pool-built --control greedy greedy
 ```
 
 Ten shards of 40 games with `greedy`, arm and control, take about two minutes.

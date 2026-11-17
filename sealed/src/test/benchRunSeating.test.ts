@@ -97,6 +97,12 @@ describe('the A/B harness', () => {
     expect(CONTROL_DECKS['pool-built']).toBe('pool-random')
   })
 
+  it('opens the pools from the set it is given', () => {
+    const law = benchDeckSet('pool-built', 1, 'LAW')
+    expect(law.decks.every(m => m.player.leader.startsWith('LAW_') && m.opponent.leader.startsWith('LAW_'))).toBe(true)
+    expect(Object.keys(law.cardDb)).toContain(law.decks[0].player.leader)
+  })
+
   /**
    * **Deck and seat must not correlate.** Both cycle, so a naive `i % decks.length` would pin each
    * deck to one seating combination whenever the counts share a factor: 44 decks against a 4-game
