@@ -8,6 +8,10 @@ import { minimumDeckSize } from '../utils/parseProtectThePod'
 import { isToken } from '../data/cards'
 import { openPack, openPool, packProfile, type Pack } from '../deckgen/packs'
 import { buildDeckFromPool, NO_ASPECT } from '../deckgen/generateDeck'
+import { heuristicScorer, summarisePairing, TURN_ONE_EXEMPT, type DeckScorer, type PairingSummary } from '../deckgen/scorer'
+import lawSet from './fixtures/lawSet.json'
+import { EXHAUST_WEIGHT, freeSplashable, isTurnOnePlay, removalKind, waivedAspects } from '../deckgen/cardRoles'
+import { MAX_SPLASHES, REMOVAL_PLAYS, TURN_ONE_PLAYS, unpaidAspects, unpaidIcons } from '../deckgen/rules'
 import { seededRandom } from '../engine/rng'
 
 /**
@@ -151,7 +155,7 @@ describe('buildDeckFromPool', () => {
       for (const seed of SEEDS) {
         const pool = openPool(ASH, seed, { leader })
         const opened = count(pool)
-        const { deck } = buildDeckFromPool(leader, pool, ASH, seed)
+        const { deck } = buildDeckFromPool(pool, ASH, seed, { leader })
         expect(deck.leader).toBe(id(leader))
         for (const e of deck.cards) {
           expect(e.count, `${leader.Name} seed ${seed}: ${e.id}`).toBeLessThanOrEqual(opened.get(e.id) ?? 0)
@@ -168,7 +172,7 @@ describe('buildDeckFromPool', () => {
     const decks = (cards: SwuCard[]) => cards.filter(c => c.Type === 'Leader' && c.Rarity !== 'Special').flatMap(leader =>
       Array.from({ length: 20 }, (_, i) => i + 1).map(seed => {
         const pool = openPool(cards, seed, { leader })
-        return { pool, deck: buildDeckFromPool(leader, pool, cards, seed).deck }
+        return { pool, deck: buildDeckFromPool(pool, cards, seed, { leader }).deck }
       }))
     const jtl = decks(JTL)
     const rarity = (deckBase: string) => JTL.find(c => id(c) === deckBase)!.Rarity
@@ -188,8 +192,8 @@ describe('buildDeckFromPool', () => {
       const lake = JTL.find(c => c.Name === 'Lake Country')!
       for (const seed of SEEDS) {
         const pool = openPool(JTL, seed, { leader }).filter(c => id(c) !== id(lake))
-        expect(buildDeckFromPool(leader, pool, JTL, seed, NO_ASPECT).deck.base).toBe(id(lake))
-        const command = buildDeckFromPool(leader, pool, JTL, seed, 'Command').deck.base
+        expect(buildDeckFromPool(pool, JTL, seed, { leader, baseAspect: NO_ASPECT }).deck.base).toBe(id(lake))
+        const command = buildDeckFromPool(pool, JTL, seed, { leader, baseAspect: 'Command' }).deck.base
         expect(JTL.find(c => id(c) === command)!.Aspects).toEqual(['Command'])
       }
     })
@@ -203,7 +207,7 @@ describe('buildDeckFromPool', () => {
     const anakin = LOF.find(c => c.Type === 'Leader' && c.Name === 'Anakin Skywalker')!
     const reports = SEEDS.flatMap(seed => [ASH, LOF].map(cards => {
       const leader = cards === LOF ? anakin : LEADERS[seed]
-      return buildDeckFromPool(leader, openPool(cards, seed, { leader }), cards, seed).report
+      return buildDeckFromPool(openPool(cards, seed, { leader }), cards, seed, { leader }).report
     }))
     for (const r of reports) {
       expect(r.violations).toEqual([])
@@ -215,7 +219,7 @@ describe('buildDeckFromPool', () => {
   const fills = (cards: SwuCard[], leaders: SwuCard[]) => {
     for (const leader of leaders) {
       for (const seed of SEEDS) {
-        const { deck } = buildDeckFromPool(leader, openPool(cards, seed, { leader }), cards, seed)
+        const { deck } = buildDeckFromPool(openPool(cards, seed, { leader }), cards, seed, { leader })
         const size = deck.cards.reduce((n, e) => n + e.count, 0)
         expect(size, `${leader.Name} seed ${seed} on ${deck.base}`).toBe(minimumDeckSize(deck.base))
       }
@@ -237,7 +241,189 @@ describe('buildDeckFromPool', () => {
   it('draws only on deck cards the pool opened', () => {
     const pool = openPool(ASH, 9, { leader: LEADERS[0] })
     const opened = new Set(pool.filter(isDeckCard).map(id))
-    const { deck } = buildDeckFromPool(LEADERS[0], pool, ASH, 9)
+    const { deck } = buildDeckFromPool(pool, ASH, 9, { leader: LEADERS[0] })
     for (const e of deck.cards) expect(opened.has(e.id)).toBe(true)
+  })
+})
+
+/**
+ * Building a pool deck the way a player does: choose the leader and base the pool supports best, fill
+ * toward turn-1 plays and removal, and splash a strong card on purpose.
+ */
+describe('building a pool deck as a player would', () => {
+  const SEEDS = Array.from({ length: 12 }, (_, i) => i + 1)
+  const built = [ASH, SOR, LOF].flatMap(cards => SEEDS.map(seed => {
+    const pool = openPool(cards, seed)
+    return { cards, pool, seed, ...buildDeckFromPool(pool, cards, seed) }
+  }))
+  const card = (cards: SwuCard[], cid: string) => cards.find(c => id(c) === cid)!
+  const expand = (cards: SwuCard[], deck: { cards: { id: string; count: number }[] }) =>
+    deck.cards.flatMap(e => Array.from({ length: e.count }, () => card(cards, e.id)))
+
+  /** Every pairing the pool offers: a leader it opened, on any Common base of the set or a rare one it opened. */
+  const pairings = (cards: SwuCard[], pool: SwuCard[]) => {
+    const opened = new Set(pool.map(id))
+    const bases = cards.filter(c => c.Type === 'Base' && (c.Rarity === 'Common' || opened.has(id(c))))
+    return [...new Set(pool.filter(c => c.Type === 'Leader'))].flatMap(leader => {
+      const own = bases.filter(b => !(b.Aspects ?? []).some(a => (leader.Aspects ?? []).includes(a)))
+      return (own.length > 0 ? own : bases).map(base => summarisePairing(leader, base, pool))
+    })
+  }
+  const vetoed = (p: PairingSummary) => p.turnOnePlays < TURN_ONE_PLAYS.min && !TURN_ONE_EXEMPT.has(p.leader.Name)
+
+  it('chooses a leader the pool opened, on a pairing the veto allows whenever the pool has one', () => {
+    for (const { cards, pool, deck, seed } of built) {
+      expect(pool.map(id), `seed ${seed}`).toContain(deck.leader)
+      const chosen = summarisePairing(card(cards, deck.leader), card(cards, deck.base), pool)
+      if (pairings(cards, pool).some(p => !vetoed(p))) expect(vetoed(chosen), `${deck.name} seed ${seed}`).toBe(false)
+    }
+  })
+
+  it('chooses, among the pairings the veto allows, one with the most Legendary and Rare cards to play', () => {
+    for (const { cards, pool, deck, seed } of built) {
+      const allowed = pairings(cards, pool).filter(p => !vetoed(p))
+      if (allowed.length === 0) continue
+      const chosen = summarisePairing(card(cards, deck.leader), card(cards, deck.base), pool)
+      expect(chosen.rares, `${deck.name} seed ${seed}`).toBe(Math.max(...allowed.map(p => p.rares)))
+    }
+  })
+
+  it('fills toward six turn-1 plays and three removal, as far as the pool holds them', () => {
+    for (const { cards, pool, deck, seed } of built) {
+      const leader = card(cards, deck.leader)
+      const base = card(cards, deck.base)
+      const free = pool.filter(c => isDeckCard(c) && unpaidAspects(c, leader, base).length === 0)
+      const removal = (xs: SwuCard[]) => xs.reduce((n, c) => n + (removalKind(c) === 'removal' ? 1 : removalKind(c) === 'exhaust' ? EXHAUST_WEIGHT : 0), 0)
+      const turnOne = (xs: SwuCard[]) => xs.filter(c => isTurnOnePlay(c, leader, base)).length
+      const cards30 = expand(cards, deck)
+      expect(turnOne(cards30), `${deck.name} seed ${seed}`).toBeGreaterThanOrEqual(Math.min(TURN_ONE_PLAYS.min, turnOne(free)))
+      expect(removal(cards30), `${deck.name} seed ${seed}`).toBeGreaterThanOrEqual(Math.min(REMOVAL_PLAYS.min, removal(free)))
+    }
+  })
+
+  it('splashes on purpose at most twice: one missing icon, and a Rare, a Legendary or removal', () => {
+    for (const { cards, deck, splashes, seed } of built) {
+      const leader = card(cards, deck.leader)
+      const base = card(cards, deck.base)
+      expect(splashes.length, `${deck.name} seed ${seed}`).toBeLessThanOrEqual(MAX_SPLASHES)
+      for (const sid of splashes) {
+        const c = card(cards, sid)
+        expect(unpaidIcons(c, leader, base), sid).toHaveLength(1)
+        expect(c.Rarity === 'Rare' || c.Rarity === 'Legendary' || removalKind(c) === 'removal', sid).toBe(true)
+        expect(deck.cards.some(e => e.id === sid), sid).toBe(true)
+      }
+    }
+    expect(built.some(b => b.splashes.length > 0), 'no deck splashed on purpose').toBe(true)
+  })
+
+  it('builds with the scorer it is given', () => {
+    const pool = openPool(ASH, 3)
+    const leaders = [...new Set(pool.filter(c => c.Type === 'Leader'))]
+    const wanted = leaders[leaders.length - 1]
+    const scorer: DeckScorer = { ...heuristicScorer, pairing: p => (p.leader === wanted ? 1 : 0) }
+    expect(buildDeckFromPool(pool, ASH, 3, { scorer }).deck.leader).toBe(id(wanted))
+  })
+})
+
+/**
+ * LAW's common bases waive one aspect penalty on one card, once a game. A deck on one takes one extra
+ * off-aspect card for it, priced at its printed cost; a cheap unit taken so counts as a turn-1 play.
+ * Only one copy is free.
+ */
+describe('a base that waives one aspect penalty', () => {
+  const LAW_CARDS = lawSet as unknown as SwuCard[]
+  const garrison = LAW_CARDS.find(c => c.Name === 'Aldhani Garrison')! // Command, waives one penalty
+  const plainCommand: SwuCard = { ...garrison, FrontText: '' }
+  const leader: SwuCard = { Set: 'TST', Number: '1', Name: 'L', Type: 'Leader', Aspects: ['Vigilance', 'Villainy'] }
+  const unit = (n: number, aspects: string[]): SwuCard =>
+    ({ Set: 'TST', Number: String(100 + n), Name: `U${n}`, Type: 'Unit', Cost: '2', Power: '2', HP: '2', Aspects: aspects })
+
+  it('lifts the pairing\'s turn-1 count by the one cheap unit it makes affordable', () => {
+    const pool = [...[1, 2, 3, 4, 5].map(n => unit(n, ['Vigilance'])), unit(6, ['Aggression']), unit(7, ['Aggression'])]
+    expect(summarisePairing(leader, plainCommand, pool).turnOnePlays).toBe(5)
+    expect(summarisePairing(leader, garrison, pool).turnOnePlays, 'one card, however many qualify').toBe(6)
+  })
+
+  const SEEDS = Array.from({ length: 30 }, (_, i) => i + 1)
+  const built = SEEDS.map(seed => {
+    const pool = openPool(LAW_CARDS, seed)
+    return { pool, seed, ...buildDeckFromPool(pool, LAW_CARDS, seed) }
+  })
+  const card = (cid: string) => LAW_CARDS.find(c => id(c) === cid)!
+
+  it('takes one extra card on such a base, beyond the deliberate splashes, one copy only', () => {
+    const freed = built.filter(b => b.freeSplash !== undefined)
+    expect(freed.length, 'no deck took a free splash').toBeGreaterThan(0)
+    for (const { deck, freeSplash, splashes, seed } of freed) {
+      const base = card(deck.base)
+      expect(waivedAspects(base).length, `seed ${seed}`).toBeGreaterThan(0)
+      expect(freeSplashable(card(freeSplash!), card(deck.leader), base), `seed ${seed}`).toBe(true)
+      expect(deck.cards.find(e => e.id === freeSplash)?.count, `seed ${seed}: one copy`).toBe(1)
+      expect(splashes, `seed ${seed}`).not.toContain(freeSplash)
+      expect(splashes.length).toBeLessThanOrEqual(MAX_SPLASHES)
+    }
+    for (const { deck, freeSplash } of built) {
+      if (waivedAspects(card(deck.base)).length === 0) expect(freeSplash).toBeUndefined()
+    }
+  })
+
+  it('finds the waiver on every Common base of LAW, so every LAW deck can have it', () => {
+    const commons = LAW_CARDS.filter(c => c.Type === 'Base' && c.Rarity === 'Common')
+    expect(commons).toHaveLength(8)
+    for (const b of commons) expect(waivedAspects(b), b.Name).toEqual(['Vigilance', 'Command', 'Aggression', 'Cunning'])
+  })
+
+  /**
+   * Mandatory, and on value alone: the best card the waiver covers, at its printed cost. The one
+   * exception is a deck short of 6 turn-1 plays, whose pairing counted a cheap unit the waiver makes
+   * affordable: then it is that unit.
+   */
+  it('always takes the best-value card the waiver covers, or the cheap unit a short deck needs', () => {
+    for (const { pool, deck, freeSplash, seed } of built) {
+      const leader = card(deck.leader)
+      const base = card(deck.base)
+      const others = [...new Set(pool)].filter(c => isDeckCard(c) && freeSplashable(c, leader, base) && !deck.cards.some(e => e.id === id(c)))
+      if (freeSplash === undefined) {
+        expect(others, `seed ${seed}: a card was on offer`).toEqual([])
+        continue
+      }
+      const free = card(freeSplash)
+      const deckCards = deck.cards.flatMap(e => Array.from({ length: e.count }, () => card(e.id)))
+      const turnOne = deckCards.filter(c => c !== free && isTurnOnePlay(c, leader, base)).length
+      const cheap = (c: SwuCard) => c.Type === 'Unit' && Number(c.Cost) < 3
+      const rivals = turnOne < TURN_ONE_PLAYS.min && cheap(free) ? others.filter(cheap) : others
+      const worth = (c: SwuCard) => heuristicScorer.card(c, Number(c.Cost ?? 0))
+      for (const r of rivals) expect(worth(r), `seed ${seed}: ${id(r)} over ${freeSplash}`).toBeLessThanOrEqual(worth(free))
+      if (turnOne < TURN_ONE_PLAYS.min && others.some(cheap)) expect(cheap(free), `seed ${seed}`).toBe(true)
+    }
+  })
+})
+
+describe('the heuristic pairing score', () => {
+  const leader = (name: string): SwuCard => ({ Set: 'TST', Number: '1', Name: name, Type: 'Leader' })
+  const base: SwuCard = { Set: 'TST', Number: '2', Name: 'B', Type: 'Base' }
+  const summary = (over: Partial<PairingSummary>): PairingSummary =>
+    ({ leader: leader('L'), base, turnOnePlays: 7, rares: 3, removal: 4, curveMiss: 0, ...over })
+  const score = heuristicScorer.pairing
+
+  it('vetoes fewer than six turn-1 plays, however many rares', () => {
+    expect(score(summary({ turnOnePlays: 6, rares: 0 }))).toBeGreaterThan(score(summary({ turnOnePlays: 5, rares: 9 })))
+  })
+
+  it('exempts a leader that makes its own turn-1 play', () => {
+    expect(TURN_ONE_EXEMPT.has('Tarfful')).toBe(true)
+    expect(score(summary({ leader: leader('Tarfful'), turnOnePlays: 2, rares: 5 }))).toBeGreaterThan(score(summary({ turnOnePlays: 6, rares: 4 })))
+  })
+
+  it('takes the most turn-1 plays when every pairing is vetoed', () => {
+    expect(score(summary({ turnOnePlays: 5, rares: 0 }))).toBeGreaterThan(score(summary({ turnOnePlays: 4, rares: 9 })))
+  })
+
+  it('ranks rares, then removal, then the curve', () => {
+    expect(score(summary({ rares: 4, removal: 0 }))).toBeGreaterThan(score(summary({ rares: 3, removal: 9 })))
+    expect(score(summary({ removal: 5, curveMiss: 9 }))).toBeGreaterThan(score(summary({ removal: 4, curveMiss: 0 })))
+    expect(score(summary({ curveMiss: 1 }))).toBeGreaterThan(score(summary({ curveMiss: 2 })))
+    // Turn-1 plays above the veto are a guideline, not a ranking.
+    expect(score(summary({ turnOnePlays: 12 }))).toBe(score(summary({ turnOnePlays: 6 })))
   })
 })

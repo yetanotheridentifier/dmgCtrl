@@ -121,7 +121,7 @@ describe('bench argument parsing', () => {
     /** The matchup deck set is a population any game run can name, not only `--matchups`. */
     it('accepts the matchup deck set', () => {
       expect(parseArgs(['--decks', 'matchup']).decks).toBe('matchup')
-      expect(() => parseArgs(['--decks', 'wall'])).toThrow('--decks must be mirror, coverage, lockout or matchup')
+      expect(() => parseArgs(['--decks', 'wall'])).toThrow('--decks must be one of mirror, coverage, lockout, matchup, pool-built, pool-random')
     })
 
     /** A mode that would not read the population says so, rather than quietly playing its own. */

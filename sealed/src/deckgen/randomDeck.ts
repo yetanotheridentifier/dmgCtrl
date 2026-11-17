@@ -1,6 +1,5 @@
 import type { SwuCard } from '../data/cards'
 import type { SavedDeck } from '../data/deckStore'
-import { seededUnit } from '../engine/rng'
 import { buildDeckFromPool, NO_ASPECT } from './generateDeck'
 import { openPool } from './packs'
 import { minimumDeckSize } from '../utils/parseProtectThePod'
@@ -46,7 +45,7 @@ export const GENERATED_DECK_ID = 'generated'
 
 export { NO_ASPECT }
 
-/** What a generated deck is built around. Either one left out is picked at random. */
+/** What a generated deck is built around. Either one left out is chosen from the pool, as a player would. */
 export interface GenerationChoice {
   leaderId?: string
   baseAspect?: string
@@ -79,7 +78,7 @@ function leadersIn(pool: SwuCard[]): SwuCard[] {
 
 /**
  * Open a six-pack sealed pool from a set and build one deck from it, around a leader and a base aspect
- * each either chosen or picked by `seed`.
+ * each either chosen or chosen by the builder as a player would (`buildDeckFromPool`).
  *
  * Seeded rather than `Math.random` so a deck that looks wrong can be reproduced from its seed, which
  * is the difference between a bug report and an anecdote. Returns `null` when the set holds no
@@ -87,27 +86,24 @@ function leadersIn(pool: SwuCard[]): SwuCard[] {
  * deck is not playable at all, since the engine deals a short opening hand from it and the setup AI
  * has nothing to resource.
  *
- * A random leader is one the pool opened. A chosen leader the pool did not open is swapped into it,
- * as the bench builds around a named leader, so the rest of the pool is the one the seed opens anyway.
+ * A leader left to the builder is one the pool opened. A chosen leader the pool did not open is swapped
+ * into it, as the bench builds around a named leader, so the rest of the pool is the one the seed opens
+ * anyway.
  *
- * **Only a deliberate choice pairs a leader with a base sharing its aspect.** A random base already
- * avoids the leader's aspects, and a random leader here avoids a chosen base aspect, so the pairing the
- * generator never builds by accident is still one a player can ask for by choosing both.
+ * **Only a deliberate choice pairs a leader with a base sharing its aspect.** A base left to the builder
+ * avoids the leader's aspects, and so does a leader left to it for a chosen base aspect, so the pairing
+ * the generator never builds by accident is still one a player can ask for by choosing both.
  */
 export function generateRandomDeck(cards: SwuCard[], seed: number, choice: GenerationChoice = {}): GeneratedDeck | null {
   const named = leadersIn(cards).find(l => cardId(l) === choice.leaderId)
   const opened = openPool(cards, seed)
   const pool = named && !opened.includes(named) ? openPool(cards, seed, { leader: named }) : opened
-  const leaders = [...new Set(leadersIn(pool))]
-  if (leaders.length === 0) return null
+  if (leadersIn(pool).length === 0) return null
 
-  const { baseAspect } = choice
-  const avoiding = baseAspect === undefined ? leaders : leaders.filter(l => !(l.Aspects ?? []).includes(baseAspect))
-  const from = avoiding.length > 0 ? avoiding : leaders
-  const leader = named ?? from[Math.floor(seededUnit(seed || 1) * from.length) % from.length]
-  const { deck, report } = buildDeckFromPool(leader, pool, cards, seed, baseAspect)
+  const { deck, report } = buildDeckFromPool(pool, cards, seed, { leader: named, baseAspect: choice.baseAspect })
   if (report.size < minimumDeckSize(deck.base)) return null
   const byId = new Map(cards.map(c => [cardId(c), c]))
+  const leader = byId.get(deck.leader)!
 
   const entries: GeneratedDeckEntry[] = deck.cards.map(c => {
     const card = byId.get(c.id)

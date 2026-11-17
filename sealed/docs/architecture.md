@@ -632,12 +632,29 @@ choice opens a `Sheet`, and the only text box is the import sheet's.
   agree on the orientation.
 - **No aspect** is the generator's `NO_ASPECT` base aspect: `generationOptions` lists it last, and
   only for a set printing a base without an aspect, and `buildDeckFromPool` builds on such a base
-  when it is named, taking it from the set when the pool did not open it.
+  when it is named, taking it from the set when the pool did not open it. A named aspect restricts
+  the builder's bases to that aspect, and its leaders to those not carrying it where the pool allows.
 - **A generated deck** (`generateRandomDeck`) opens a six-pack pool from the set (`deckgen/packs.ts`,
-  `openPool`) and builds from it (`buildDeckFromPool`): only the copies opened, any Common base of the
-  set or a rare one the pool opened, off-aspect cards only to fill a thin pool. A random leader is one
-  the pool opened; a chosen one is swapped into the first pack's leader slot. Its report holds the
-  deck to legality (size) and counts the off-aspect cards, which the deck view shows.
+  `openPool`) and builds from it as a player would (`buildDeckFromPool`): only the copies opened, any
+  Common base of the set or a rare one the pool opened. A chosen leader is swapped into the first
+  pack's leader slot; otherwise every leader the pool opened is scored on every base it may use, and
+  the best pairing builds. Its report holds the deck to legality (size) and counts the off-aspect
+  cards, which the deck view shows.
+- **The pool deck builder** has three parts. `deckgen/cardRoles.ts` reads a card's printed text for
+  what a builder needs: removal (an event, or a unit's When Played ability, that damages, defeats,
+  captures or returns to hand an enemy unit), exhaust as the weak kind, and turn-1 plays at the cost
+  as played. `deckgen/scorer.ts` is the seam: a `DeckScorer` ranks a leader and base pairing from a
+  `PairingSummary` and prices a card for the cost paid, and `heuristicScorer` is the default (a veto
+  under 6 turn-1 plays, Tarfful exempt, then Legendary and Rare cards, removal, the curve; a card's
+  worth at its printed cost per resource paid). A learned scorer replaces it by being passed in; the
+  builder only compares its numbers. `generateDeck` given a scorer fills toward 6 to 9 turn-1 plays and
+  3 to 6 removal and then splashes up to 2 off-aspect cards on purpose (one missing icon; a Rare, a
+  Legendary or removal; valued above the on-aspect card of its kind it replaces). A base that waives
+  one card's penalty (`waivedAspects`, read from its text: every LAW common base) always adds one
+  more, one copy at its printed cost: the best value the waiver covers, or, for a deck short of 6
+  turn-1 plays, a unit costing under 3, which counts as a turn-1 play. The pairing's turn-1 count may
+  include one such unit. A thin pool's fill still splashes what it must, uncapped. A leader that waives a penalty is
+  not modelled.
 
 ## UI (GameScreen)
 

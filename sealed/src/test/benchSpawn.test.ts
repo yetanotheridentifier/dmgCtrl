@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { seedJobs, shardPayloadPath, type ShardConfig } from '../bench/shard'
+import { seedJobs, shardPayloadPath, shardRunKey, type ShardConfig } from '../bench/shard'
 import { heartbeatPathFor } from '../bench/status'
 
 /**
@@ -35,6 +35,15 @@ describe('seedJobs', () => {
     expect(job.args[job.args.indexOf('--seed') + 1]).toBe('100')
     // Positional and last, in order: the CLI reads aiA then aiB from the tail.
     expect(job.args.slice(-2)).toEqual(['beam-reply', 'greedy'])
+  })
+
+  /** The pool comparison builds from a set, so the set reaches each child and keys the run. */
+  it('passes a pool comparison\'s set through, and keys the run on it', () => {
+    const [job] = seedJobs(config({ decks: 'pool-built', set: 'LAW' }), [100], 'dir')
+    expect(job.args[job.args.indexOf('--set') + 1]).toBe('LAW')
+    expect(seedJobs(config(), [100], 'dir')[0].args).not.toContain('--set')
+    expect(shardRunKey(config({ decks: 'pool-built', set: 'LAW' }))).not.toBe(shardRunKey(config({ decks: 'pool-built' })))
+    expect(shardRunKey(config({ decks: 'pool-built', set: 'ASH' })), 'ASH is the default').toBe(shardRunKey(config({ decks: 'pool-built' })))
   })
 
   /**

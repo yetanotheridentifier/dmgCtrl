@@ -107,6 +107,13 @@ describe('the game runner', () => {
     expect(bySeat(m, { swapped: false, firstPlayer: 'player' })).toEqual({ deckA, deckB })
     expect(bySeat(m, { swapped: true, firstPlayer: 'player' })).toEqual({ deckA: deckB, deckB: deckA })
   })
+
+  /** A sided matchup compares decks, so each list stays with its side whichever seat that side takes. */
+  it('deals a sided matchup to its side whatever the seat', () => {
+    const m = { player: deckA, opponent: deckB, sided: true }
+    expect(bySeat(m, { swapped: false, firstPlayer: 'player' })).toEqual({ deckA, deckB })
+    expect(bySeat(m, { swapped: true, firstPlayer: 'opponent' })).toEqual({ deckA, deckB })
+  })
 })
 
 describe('the tally', () => {

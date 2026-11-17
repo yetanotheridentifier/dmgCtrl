@@ -18,8 +18,9 @@ Ordered on one principle: **correctness, then structure, then calibration.** Any
 engine or the horizon invalidates a calibration done before it.
 
 1. **Re-read the leader ratings on pool decks, over several suites.** The matrix suites are now built
-   from opened sealed pools, so the ratings in [experiments.md](experiments.md), measured on whole-set
-   decks, want re-reading before they are relied on. Most of the bottom of that ranking was
+   from opened sealed pools by the pool deck builder (turn-1 and removal guidelines, deliberate
+   splashes), so the ratings in [experiments.md](experiments.md), measured on whole-set decks, want
+   re-measuring on those built decks before they are relied on. Most of the bottom of that ranking was
    **pool-dependent rather than misplayed** (Grogu, Bo-Katan Kryze, Moff Gideon, The Mandalorian, Vane),
    and Sabine Wren's rating predates the closing pass being modelled.
 
@@ -29,12 +30,6 @@ engine or the horizon invalidates a calibration done before it.
    win rates need far more decks than 52 before a card-sized effect clears the noise, and several pool
    suites are how they get them. The pack model's three estimates (rare leader rate, foil rarity, no
    repeats within a pack) are the place to calibrate against real openings.
-
-2. **#1125 build a pool deck as a player would.** Choose the leader and base the pool best supports
-   (most Legendaries and Rares, at least 6 turn-1 plays, then the curve), value removal (counting it
-   is the first step), and splash an off-aspect card because it is strong or combines with the deck,
-   not only to fill a thin pool. Either changes the decks the matrix plays, so it lands before a long
-   multi-suite run or after it, not during.
 
 ## Deferred
 

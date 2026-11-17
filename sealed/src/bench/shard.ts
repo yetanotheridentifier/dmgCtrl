@@ -109,6 +109,11 @@ export interface ShardConfig {
    */
   decks?: DeckSource
   /**
+   * The set a pool source (`pool-built`, `pool-random`) opens its pools from. Part of the run key when
+   * it is not ASH, the default, so an LAW comparison never pools with an ASH one.
+   */
+  set?: string
+  /**
    * Have each shard keep its completed games as records (`records.ts`). Not part of the run key: it
    * changes what a run leaves on disk and nothing it measures, so a recording run resumes the same
    * banked shards a plain one would.
@@ -131,7 +136,8 @@ export function shardRunKey(config: ShardConfig): string {
   // The deck source is only in the key when it is not the default, so every existing run directory
   // keeps its name and remains resumable.
   const decks = config.decks && config.decks !== 'mirror' ? `__d${safe(config.decks)}` : ''
-  return `${safe(config.aiA)}__vs__${safe(config.aiB)}__g${config.games}__s${config.baseSeed}${decks}`
+  const set = config.set && config.set !== 'ASH' ? `__set${safe(config.set)}` : ''
+  return `${safe(config.aiA)}__vs__${safe(config.aiB)}__g${config.games}__s${config.baseSeed}${decks}${set}`
 }
 
 /**
@@ -355,6 +361,7 @@ export function seedJobs(config: ShardConfig, seeds: number[], dir: string): Sha
       'src/bench/main.ts', '--games', String(config.games), '--seed', String(seed),
       '--out', shardPayloadPath(dir, `seed-${seed}`),
       ...(config.decks ? ['--decks', config.decks] : []),
+      ...(config.set ? ['--set', config.set] : []),
       ...(config.record ? ['--record'] : []),
       config.aiA, config.aiB,
     ],
