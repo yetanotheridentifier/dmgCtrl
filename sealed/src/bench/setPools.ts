@@ -10,8 +10,8 @@ import sorSet from '../test/fixtures/sorSet.json'
 import ts26Set from '../test/fixtures/ts26Set.json'
 import ibhSet from '../test/fixtures/ibhSet.json'
 import ic27Set from '../test/fixtures/ic27Set.json'
-import { withArt } from '../data/bundledSets'
-import { cardId, fromSearchRow, isToken, type SwuCard } from '../data/cards'
+import { unpadded, withArt } from '../data/bundledSets'
+import { cardId, fromSearchRow, fromSwuApiRow, isToken, SWUAPI_URL, type SwuApiCard, type SwuCard } from '../data/cards'
 import { SET_PROGRESS } from '../data/implementedCards'
 import { normalPrintings } from '../data/normalPrintings'
 
@@ -124,6 +124,40 @@ export function toFixture(rows: readonly object[]): SwuCard[] {
     }
     return out as unknown as SwuCard
   })
+}
+
+/**
+ * A swu-db set listing with the cards it does not serve yet added from swuapi.com (`--fill-swuapi`),
+ * for a set swu-db is slow to complete. **swu-db's rows are kept exactly as they are**: where the two
+ * sources disagree on a card both serve (IC27's Captain Rex has two subtitles, its Eta-2 two HPs, and
+ * swuapi gives bases no subtitle, which the world trait reads), swu-db stays the source of record, so
+ * filling never changes a card that is already built. A card is matched by set and number, padded or not.
+ */
+export function fillFromSwuApi(listing: readonly SwuCard[], swuapi: readonly SwuCard[]): SwuCard[] {
+  const key = (card: Pick<SwuCard, 'Set' | 'Number'>): string => cardId(card.Set, unpadded(card.Number))
+  const served = new Set(listing.map(key))
+  return [...listing, ...swuapi.filter(card => !served.has(key(card)))]
+}
+
+/**
+ * Every printing of a set from swuapi.com, in swu-db's shape (`fromSwuApiRow`). **Paged by offset**,
+ * up to the total the first page states: swuapi's cursor paging repeats and drops rows (619 rows
+ * against a stated total of 568 for IC27, 21 known cards missing). Network failure is fatal and names the set.
+ */
+export async function fetchSwuApiSet(code: string, pageSize = 100): Promise<SwuCard[]> {
+  const set = code.toUpperCase()
+  const out: SwuCard[] = []
+  let total = Infinity
+  for (let offset = 0; offset < total; offset += pageSize) {
+    const response = await fetch(`${SWUAPI_URL}/cards?set=${set}&variant=all&limit=${pageSize}&offset=${offset}`)
+    if (!response.ok) throw new Error(`Set ${set} could not be fetched from swuapi.com (${response.status})`)
+    const page = (await response.json()) as { cards?: SwuApiCard[]; pagination?: { total?: number } }
+    const cards = page.cards ?? []
+    out.push(...cards.map(fromSwuApiRow))
+    total = page.pagination?.total ?? 0
+    if (cards.length === 0) break
+  }
+  return out
 }
 
 /** The listing rows a fixture keeps, with every field the listing gave them. */
