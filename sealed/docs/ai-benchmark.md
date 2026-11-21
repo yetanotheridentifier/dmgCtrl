@@ -1031,6 +1031,23 @@ the engine reads. The set search wraps aspects and traits as `{ S: value }`, whi
 panel shows. A new set needs its import in `bench/setPools.ts` and its totals in
 `data/implementedCards.ts`, and that test fails until both are there.
 
+**A set swu-db has not finished serving can be filled from api.swuapi.com** with `--fill-swuapi`,
+on `--fixture` or `--triage`:
+
+```bash
+npm run bench --prefix sealed -- --fixture IC27 --fill-swuapi
+```
+
+Every row swu-db serves is kept exactly as it is, and only the cards it lacks (matched by set and
+number) are added, converted by `fromSwuApiRow` in `data/cards.ts` into swu-db's shape: padded
+numbers, traits in capitals, an upgrade's modifiers as its Power and HP, and resource costs as
+`C=N`. swu-db stays the source of record because the two disagree on some cards they both serve: on
+IC27, a subtitle, one unit's HP and the spelling of C-3P0, and swuapi files a base's world as a trait
+rather than as its subtitle. Its structured fields otherwise agree with swu-db's on all 57 shared
+IC27 cards. swuapi is paged by offset, because its cursor paging repeats and drops rows. A filled
+card's art is not yet on swu-db's CDN, so `--fixture` warns that the app would show none for it,
+and a set filled this way is refreshed plainly once swu-db catches up.
+
 **The fixtures are also the sets the app ships** (`data/bundledSets.ts` loads each on demand), so a
 refreshed fixture is what players get on their next visit, and a new set needs its loader there too
 (`bundledSets.test.ts` fails without it). A fixture keeps no art fields: the app names a bundled

@@ -761,7 +761,10 @@ npm run bench --prefix sealed -- --fixture LAW SEC     # or --fixture all
 
 Run it when a set is added, and when upstream corrects a card that the shipped copy still has
 wrong. It warns about any card whose art is not filed under its set and number, which is where the
-app looks for the art of a bundled card. Then:
+app looks for the art of a bundled card. A set swu-db has only partly published can be completed
+from api.swuapi.com with `--fill-swuapi` (see "The card pools" in [ai-benchmark.md](ai-benchmark.md)).
+The cards it adds have no art on swu-db's CDN until swu-db catches up, so the app shows them
+without art. Then:
 
 1. **A new set** needs its loader in `data/bundledSets.ts`, its import in `bench/setPools.ts` and
    its totals in `data/implementedCards.ts`. `bundledSets.test.ts` and `benchSetPools.test.ts` fail

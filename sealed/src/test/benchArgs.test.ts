@@ -195,6 +195,16 @@ describe('bench argument parsing', () => {
     it('needs at least one set code', () => {
       expect(() => parseArgs(['--fixture'])).toThrow('--fixture needs at least one set code')
     })
+
+    it('fills from swuapi.com only when asked, for --fixture or --triage', () => {
+      expect(parseArgs(['--fixture', 'IC27']).fillSwuApi).toBe(false)
+      expect(parseArgs(['--fixture', 'IC27', '--fill-swuapi']).fillSwuApi).toBe(true)
+      expect(parseArgs(['--triage', 'IC27', '--fill-swuapi']).fillSwuApi).toBe(true)
+    })
+
+    it('refuses --fill-swuapi without a mode that fetches a set', () => {
+      expect(() => parseArgs(['--fill-swuapi', 'greedy', 'random'])).toThrow('--fill-swuapi goes with --fixture or --triage')
+    })
   })
 
   /**

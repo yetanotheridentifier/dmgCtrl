@@ -46,8 +46,8 @@ export interface SwuCard {
   VariantType?: string
 }
 
-/** swuapi.com card shape (snake_case) — only the fields we map. */
-interface SwuApiCard {
+/** swuapi.com card shape (snake_case): only the fields we map. */
+export interface SwuApiCard {
   collector_number: string
   name: string
   subtitle: string | null
@@ -58,10 +58,15 @@ interface SwuApiCard {
   cost: number | null
   power: number | null
   hp: number | null
+  /** An upgrade's printed +power/+HP, which swuapi keeps apart from a unit's power and HP. */
+  upgrade_power?: number | null
+  upgrade_hp?: number | null
   front_text: string | null
+  back_text?: string | null
   double_sided: boolean | null
   rarity: string | null
   unique_flag: boolean | null
+  keywords?: string[] | null
   variant_type: string | null
   front_image_url: string | null
 }
@@ -92,8 +97,17 @@ export function isToken(card: SwuCard): boolean {
   return card.Type.startsWith('Token')
 }
 
-function mapSwuApiCard(card: SwuApiCard): SwuCard {
+/**
+ * A swuapi.com card in swu-db's shape, spelling and notation, so the engine reads it exactly as it
+ * would read the same card from swu-db: the number as `collector_number` pads it, traits in capitals
+ * (swu-db's spelling, which the engine's trait checks compare against), an upgrade's printed modifiers
+ * as its Power and HP, and a resource cost as `C=N` (`[1 resource, Exhaust]` becomes `[C=1, Exhaust]`),
+ * the form the Smuggle and Piloting parser reads. A Standard printing is the Normal one.
+ */
+export function fromSwuApiRow(card: SwuApiCard): SwuCard {
   const [set, number] = card.collector_number.split('_')
+  const power = card.power ?? card.upgrade_power
+  const hp = card.hp ?? card.upgrade_hp
   return {
     Set: set,
     Number: number,
@@ -102,16 +116,24 @@ function mapSwuApiCard(card: SwuApiCard): SwuCard {
     Type: card.type,
     ...(card.arena != null && { Arenas: [card.arena] }),
     ...(card.cost != null && { Cost: String(card.cost) }),
-    ...(card.power != null && { Power: String(card.power) }),
-    ...(card.hp != null && { HP: String(card.hp) }),
+    ...(power != null && { Power: String(power) }),
+    ...(hp != null && { HP: String(hp) }),
     Aspects: card.aspects ?? [],
-    Traits: card.traits ?? [],
-    ...(card.front_text != null && { FrontText: card.front_text }),
+    Traits: (card.traits ?? []).map(t => t.toUpperCase()),
+    ...(card.keywords?.length && { Keywords: card.keywords }),
+    ...(card.front_text != null && { FrontText: swuDbCosts(card.front_text) }),
+    ...(card.back_text != null && { BackText: swuDbCosts(card.back_text) }),
     DoubleSided: card.double_sided ?? false,
     Unique: card.unique_flag ?? false,
     ...(card.front_image_url != null && { FrontArt: card.front_image_url }),
     ...(card.rarity != null && { Rarity: card.rarity }),
+    ...(card.variant_type != null && { VariantType: card.variant_type === 'Standard' ? 'Normal' : card.variant_type }),
   }
+}
+
+/** A bracketed resource cost in swu-db's notation: `[2 resources, ...` reads `[C=2, ...`. */
+function swuDbCosts(text: string): string {
+  return text.replace(/\[(\d+) resources?\b/g, '[C=$1')
 }
 
 /**
@@ -141,7 +163,7 @@ async function fetchBaseFromSwuApi(set: string, number: string): Promise<SwuCard
     const hit = json.cards.find(
       c => c.collector_number?.toUpperCase() === id && (c.variant_type == null || c.variant_type === 'Standard' || c.variant_type === 'Normal'),
     )
-    if (hit) return mapSwuApiCard(hit)
+    if (hit) return fromSwuApiRow(hit)
     cursor = json.pagination?.next_cursor ?? null
   } while (cursor)
   return null

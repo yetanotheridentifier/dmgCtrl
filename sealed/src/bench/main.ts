@@ -48,7 +48,7 @@ import { saveMatrix, deckStrength, leaderStrength, baseStrength, firstPlayerAdva
 import type { FirstPlayerSplit } from './stats'
 import { resolveAi } from '../ai/registry'
 import { fetchSets, formatTriage, triage } from './triage'
-import { artOffRule, fixtureFile, poolFor, resolveSealedSets, SET_CODES, toFixture } from './setPools'
+import { artOffRule, fetchSwuApiSet, fillFromSwuApi, fixtureFile, poolFor, resolveSealedSets, SET_CODES, toFixture } from './setPools'
 import { ROWS_FORMAT_VERSION, trainingCardDb, type RowView } from './trainingRows'
 import { benchRecord, missingRecords, recordsPath, recordsWriter, RECORDS_DIR, type GameRecorder, type RecordedRun } from './records'
 import { inputsFromArchive, inputsFromFile, writeRows, type RowInput } from './rowSources'
@@ -122,6 +122,8 @@ interface Args {
   triage: boolean
   /** Write the named sets' bundled fixtures from the card API. */
   fixture: boolean
+  /** `--fill-swuapi`: add the cards swu-db does not serve yet from swuapi.com (`fillFromSwuApi`), for `--fixture` or `--triage`. */
+  fillSwuApi: boolean
   /** The sets the sweep's pool is drawn from (`--set`), resolved to canonical order. ASH when absent. */
   poolSets: string[]
   /** Deck population for the A/B: `mirror` (default) or `coverage`. See `DeckSource`. */
@@ -192,6 +194,7 @@ export function parseArgs(argv: string[]): Args {
   let shardCount: number | undefined
   let triage = false
   let fixture = false
+  let fillSwuApi = false
   let rows = false
   let legal = false
   let view: RowView = 'full'
@@ -246,6 +249,7 @@ export function parseArgs(argv: string[]): Args {
     }
     else if (arg === '--triage') triage = true
     else if (arg === '--fixture') fixture = true
+    else if (arg === '--fill-swuapi') fillSwuApi = true
     else if (arg === '--rows') rows = true
     else if (arg === '--legal') legal = true
     else if (arg === '--record') record = true
@@ -282,6 +286,7 @@ export function parseArgs(argv: string[]): Args {
   assertPositiveInt(deckCount, '--deck-count')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
   if (fixture && positional.length === 0) throw new Error('--fixture needs at least one set code, e.g. --fixture LAW SEC, or --fixture all')
+  if (fillSwuApi && !fixture && !triage) throw new Error('--fill-swuapi goes with --fixture or --triage, e.g. --fixture IC27 --fill-swuapi')
   if (rows && positional.length === 0 && !collected) throw new Error('--rows needs at least one export file, or --collected for the D1 store, e.g. --rows games.json --out rows.jsonl')
   // No default and no standard output: `npm run` prints its own lines there, which are not rows.
   if (rows && out === undefined) throw new Error('--rows needs --out, the file to write the rows to')
@@ -311,7 +316,7 @@ export function parseArgs(argv: string[]): Args {
   if (matrix && poolSets.length !== 1) throw new Error(`--matrix takes one set, got ${poolSets.join(',')}`)
   // A pool comparison opens each pool from one set, as a sealed event does.
   if (isPoolSource(decks) && poolSets.length !== 1) throw new Error(`--decks ${decks} takes one set, got ${poolSets.join(',')}`)
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, poolSets, decks, sets: positional.map(s => s.toUpperCase()), rows, legal, view, files: positional, record, delete: del, dryRun, backup, restore, collected, refused, lookedAt: lookedAt ?? [], aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, fillSwuApi, poolSets, decks, sets: positional.map(s => s.toUpperCase()), rows, legal, view, files: positional, record, delete: del, dryRun, backup, restore, collected, refused, lookedAt: lookedAt ?? [], aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 /**
@@ -1695,9 +1700,9 @@ function matrixReport(
  * it releases. Network failure is fatal and says which set failed.
  */
 async function runTriageMode(args: Args): Promise<void> {
-  let pool
+  const pool = []
   try {
-    pool = await fetchSets(args.sets)
+    for (const code of args.sets) pool.push(...await fetchListing(code, args.fillSwuApi))
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     process.exit(2)
@@ -1706,6 +1711,18 @@ async function runTriageMode(args: Args): Promise<void> {
   console.log('')
   console.log(formatTriage(triage(pool)).join('\n'))
   console.log('')
+}
+
+/**
+ * One set's listing from swu-db, and with `fill` the cards it does not serve yet from swuapi.com
+ * (`fillFromSwuApi`), saying how many were added so a filled run is never mistaken for a plain one.
+ */
+async function fetchListing(code: string, fill: boolean): ReturnType<typeof fetchSets> {
+  const listing = await fetchSets([code])
+  if (!fill) return listing
+  const filled = fillFromSwuApi(listing, await fetchSwuApiSet(code))
+  console.log(row(code.toUpperCase(), `${filled.length - listing.length} printings added from swuapi.com to ${listing.length} from swu-db`))
+  return filled
 }
 
 /**
@@ -1720,7 +1737,7 @@ async function runFixtureMode(args: Args): Promise<void> {
   for (const code of codes) {
     let listing
     try {
-      listing = await fetchSets([code])
+      listing = await fetchListing(code, args.fillSwuApi)
     } catch (err) {
       console.error(`bench: ${(err as Error).message}`)
       process.exit(2)

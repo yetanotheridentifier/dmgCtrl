@@ -1,12 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import ashSet from './fixtures/ashSet.json'
-import type { SwuCard } from '../data/cards'
+import { fromSwuApiRow, type SwuApiCard, type SwuCard } from '../data/cards'
 import { SET_PROGRESS } from '../data/implementedCards'
 import { CARD_DATA_CORRECTIONS } from '../engine/cardDataCorrections'
 import {
-  SEALED_MIN_CARDS, SEALED_SET_CODES, SET_CODES, artOffRule, fixtureFile, poolFor, resolveSealedSets, resolveSetCodes, toFixture,
+  SEALED_MIN_CARDS, SEALED_SET_CODES, SET_CODES, artOffRule, fetchSwuApiSet, fillFromSwuApi, fixtureFile, poolFor,
+  resolveSealedSets, resolveSetCodes, toFixture,
 } from '../bench/setPools'
 
 /**
@@ -245,5 +246,120 @@ describe('poolFor', () => {
     expect(pool).toHaveLength(poolFor(['ASH']).length + poolFor(['LAW']).length)
     expect(pool[0].Set).toBe('ASH')
     expect(pool[pool.length - 1].Set).toBe('LAW')
+  })
+})
+
+/**
+ * Filling a set from api.swuapi.com while swu-db lags. Three real IC27 rows as swuapi serves them
+ * (trimmed to the fields read), and what the fixture must hold for each: swu-db's shape, spelling and
+ * notation, so the engine and triage read a filled card exactly as they would read it from swu-db.
+ */
+describe('filling a fixture from swuapi.com', () => {
+  const swuapi = (over: Partial<SwuApiCard> = {}): SwuApiCard => ({
+    collector_number: 'IC27_013', name: 'Nute Gunray', subtitle: 'Ring Ring, Space Calling', type: 'Unit',
+    aspects: ['Vigilance', 'Villainy'], traits: ['Separatist', 'Official'], arena: 'Ground', cost: 1, power: 1, hp: 4,
+    upgrade_power: null, upgrade_hp: null,
+    front_text: 'Each other friendly Separatist unit gains Restore 1. (When it attacks, heal 1 damage from your base.)',
+    back_text: null, double_sided: false, rarity: 'Rare', unique_flag: true, keywords: ['Restore'], variant_type: 'Standard',
+    front_image_url: 'https://cdn.starwarsunlimited.com//card_IC_27010013_EN_Nute_Gunray_b5b2b5de78.png',
+    ...over,
+  })
+  const academyTraining = swuapi({
+    collector_number: 'IC27_093', name: 'Academy Training', subtitle: null, type: 'Upgrade', aspects: ['Command'],
+    traits: ['Learned'], arena: null, cost: 2, power: null, hp: null, upgrade_power: 2, upgrade_hp: 2, front_text: null,
+    rarity: 'Common', unique_flag: false, keywords: [],
+  })
+  const kyloRen = swuapi({
+    collector_number: 'IC27_003', name: 'Kylo Ren', subtitle: 'Supreme Leader', type: 'Leader', aspects: ['Command', 'Villainy'],
+    traits: ['Force', 'First Order', 'Official'], cost: 5, power: 5, hp: 3,
+    front_text: 'Action [Exhaust, discard a card from your hand]: Give an Experience token to a unit.',
+    back_text: 'When Deployed: You may return a unit from your discard pile to your hand.', double_sided: true,
+    rarity: 'Common', keywords: [],
+  })
+
+  it('writes a unit as swu-db does: padded number, text fields, traits in capitals', () => {
+    expect(JSON.stringify(toFixture([fromSwuApiRow(swuapi())]))).toBe(JSON.stringify([{
+      Set: 'IC27', Number: '013', Name: 'Nute Gunray', Subtitle: 'Ring Ring, Space Calling', Type: 'Unit',
+      Cost: '1', Power: '1', HP: '4', Arenas: ['Ground'], Aspects: ['Vigilance', 'Villainy'], Traits: ['SEPARATIST', 'OFFICIAL'],
+      Keywords: ['Restore'], Unique: true,
+      FrontText: 'Each other friendly Separatist unit gains Restore 1. (When it attacks, heal 1 damage from your base.)',
+      Rarity: 'Rare',
+    }]))
+  })
+
+  it("takes an upgrade's printed modifiers from swuapi's upgrade fields", () => {
+    const [card] = toFixture([fromSwuApiRow(academyTraining)])
+    expect(card).toMatchObject({ Type: 'Upgrade', Cost: '2', Power: '2', HP: '2', Traits: ['LEARNED'] })
+    expect('Keywords' in card).toBe(false)
+    expect('FrontText' in card).toBe(false)
+  })
+
+  it("keeps a leader's back text and multi-word traits", () => {
+    const [card] = toFixture([fromSwuApiRow(kyloRen)])
+    expect(card.BackText).toBe('When Deployed: You may return a unit from your discard pile to your hand.')
+    expect(card.Traits).toEqual(['FORCE', 'FIRST ORDER', 'OFFICIAL'])
+  })
+
+  it("writes a resource cost in swu-db's C=N notation, which the Smuggle and Piloting parser reads", () => {
+    const card = fromSwuApiRow(swuapi({
+      front_text: 'Action [1 resource, Exhaust, defeat a friendly unit]: Draw a card.',
+      back_text: 'Smuggle [4 resources, Cunning]',
+    }))
+    expect(card.FrontText).toBe('Action [C=1, Exhaust, defeat a friendly unit]: Draw a card.')
+    expect(card.BackText).toBe('Smuggle [C=4, Cunning]')
+  })
+
+  it('reads only Standard printings as the Normal row, and tokens as tokens', () => {
+    const rows = [
+      fromSwuApiRow(swuapi()),
+      fromSwuApiRow(swuapi({ variant_type: 'Hyperspace', collector_number: 'IC27_213' })),
+      fromSwuApiRow(swuapi({ collector_number: 'IC27_T002', name: 'Shield', subtitle: null, type: 'Token Upgrade' })),
+    ]
+    expect(toFixture(rows).map(c => c.Number)).toEqual(['013'])
+  })
+
+  describe('fillFromSwuApi', () => {
+    /** swu-db's own row for a card both sources serve, which disagrees with swuapi's (IC27's Rex does). */
+    const swuDbRex = { Set: 'IC27', Number: '041', Name: 'Captain Rex', Subtitle: 'Unwavering Belief', Type: 'Unit', VariantType: 'Normal' }
+    const swuApiRex = fromSwuApiRow(swuapi({ collector_number: 'IC27_041', name: 'Captain Rex', subtitle: 'Staunch Advocate' }))
+
+    it("keeps every swu-db row as it is and adds only the cards swu-db does not serve", () => {
+      const filled = fillFromSwuApi([swuDbRex], [swuApiRex, fromSwuApiRow(swuapi())])
+      expect(filled).toEqual([swuDbRex, fromSwuApiRow(swuapi())])
+    })
+
+    it('matches a card by its set and number, whichever source pads it', () => {
+      const unpadded = { ...swuDbRex, Number: '41' }
+      expect(fillFromSwuApi([unpadded], [swuApiRex])).toEqual([unpadded])
+    })
+
+    it('adds nothing for a set swu-db serves in full', () => {
+      expect(fillFromSwuApi([swuDbRex], [swuApiRex])).toEqual([swuDbRex])
+    })
+  })
+
+  describe('fetchSwuApiSet', () => {
+    afterEach(() => { vi.unstubAllGlobals() })
+
+    /** swuapi's cursor paging repeats and drops rows (619 rows against a total of 568), so the set is paged by offset. */
+    it('pages by offset until the stated total, and maps each row', async () => {
+      const page = (offset: number, cards: SwuApiCard[]) => ({ cards, pagination: { limit: 2, offset, total: 3, next_cursor: 'ignored' } })
+      const urls: string[] = []
+      vi.stubGlobal('fetch', vi.fn((url: string) => {
+        urls.push(url)
+        const offset = Number(new URL(url).searchParams.get('offset'))
+        const body = offset === 0 ? page(0, [swuapi(), academyTraining]) : page(2, [kyloRen])
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) })
+      }))
+      const cards = await fetchSwuApiSet('ic27', 2)
+      expect(cards.map(c => c.Number)).toEqual(['013', '093', '003'])
+      expect(urls.every(u => u.includes('set=IC27') && u.includes('variant=all') && !u.includes('after='))).toBe(true)
+      expect(urls).toHaveLength(2)
+    })
+
+    it('fails naming the set when swuapi answers with an error', async () => {
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}) })))
+      await expect(fetchSwuApiSet('IC27')).rejects.toThrow('IC27 could not be fetched from swuapi.com (503)')
+    })
   })
 })
